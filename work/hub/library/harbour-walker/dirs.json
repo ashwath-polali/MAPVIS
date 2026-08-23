@@ -1,0 +1,69 @@
+{
+  "dirs": {
+    "west": [
+      "/work/hub/library/harbour-walker/west-0.png",
+      "/work/hub/library/harbour-walker/west-1.png",
+      "/work/hub/library/harbour-walker/west-2.png",
+      "/work/hub/library/harbour-walker/west-3.png",
+      "/work/hub/library/harbour-walker/west-4.png",
+      "/work/hub/library/harbour-walker/west-5.png"
+    ],
+    "east": [
+      "/work/hub/library/harbour-walker/east-0.png",
+      "/work/hub/library/harbour-walker/east-1.png",
+      "/work/hub/library/harbour-walker/east-2.png",
+      "/work/hub/library/harbour-walker/east-3.png",
+      "/work/hub/library/harbour-walker/east-4.png",
+      "/work/hub/library/harbour-walker/east-5.png"
+    ],
+    "north": [
+      "/work/hub/library/harbour-walker/north-0.png",
+      "/work/hub/library/harbour-walker/north-1.png",
+      "/work/hub/library/harbour-walker/north-2.png",
+      "/work/hub/library/harbour-walker/north-3.png",
+      "/work/hub/library/harbour-walker/north-4.png",
+      "/work/hub/library/harbour-walker/north-5.png"
+    ],
+    "south": [
+      "/work/hub/library/harbour-walker/south-0.png",
+      "/work/hub/library/harbour-walker/south-1.png",
+      "/work/hub/library/harbour-walker/south-2.png",
+      "/work/hub/library/harbour-walker/south-3.png",
+      "/work/hub/library/harbour-walker/south-4.png",
+      "/work/hub/library/harbour-walker/south-5.png"
+    ],
+    "north-west": [
+      "/work/hub/library/harbour-walker/north-west-0.png",
+      "/work/hub/library/harbour-walker/north-west-1.png",
+      "/work/hub/library/harbour-walker/north-west-2.png",
+      "/work/hub/library/harbour-walker/north-west-3.png",
+      "/work/hub/library/harbour-walker/north-west-4.png",
+      "/work/hub/library/harbour-walker/north-west-5.png"
+    ],
+    "south-east": [
+      "/work/hub/library/harbour-walker/south-east-0.png",
+      "/work/hub/library/harbour-walker/south-east-1.png",
+      "/work/hub/library/harbour-walker/south-east-2.png",
+      "/work/hub/library/harbour-walker/south-east-3.png",
+      "/work/hub/library/harbour-walker/south-east-4.png",
+      "/work/hub/library/harbour-walker/south-east-5.png"
+    ],
+    "south-west": [
+      "/work/hub/library/harbour-walker/south-west-0.png",
+      "/work/hub/library/harbour-walker/south-west-1.png",
+      "/work/hub/library/harbour-walker/south-west-2.png",
+      "/work/hub/library/harbour-walker/south-west-3.png",
+      "/work/hub/library/harbour-walker/south-west-4.png",
+      "/work/hub/library/harbour-walker/south-west-5.png"
+    ],
+    "north-east": [
+      "/work/hub/library/harbour-walker/north-east-0.png",
+      "/work/hub/library/harbour-walker/north-east-1.png",
+      "/work/hub/library/harbour-walker/north-east-2.png",
+      "/work/hub/library/harbour-walker/north-east-3.png",
+      "/work/hub/library/harbour-walker/north-east-4.png",
+      "/work/hub/library/harbour-walker/north-east-5.png"
+    ]
+  },
+  "fps": 8
+}

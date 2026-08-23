@@ -1,0 +1,24 @@
+{
+  "type": "swirl",
+  "params": {
+    "width": 56,
+    "height": 42,
+    "frames": 16,
+    "speed": 1.5,
+    "size": 1,
+    "count": 5,
+    "direction": 0,
+    "spread": 0.85,
+    "intensity": 0.95,
+    "seed": 1
+  },
+  "palette": "own",
+  "colors": [
+    "#d580ff",
+    "#a020d0",
+    "#6008a0",
+    "#300060"
+  ],
+  "fps": 9,
+  "frames": 16
+}

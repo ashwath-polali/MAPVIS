@@ -1,0 +1,107 @@
+[
+  {
+    "name": "crab-beach-wander",
+    "kind": "effect",
+    "ask": "wandering around the map / beach",
+    "prompt": "written",
+    "at": "2026-08-23T02:38:36.928Z"
+  },
+  {
+    "name": "gen-walking-crab",
+    "kind": "asset",
+    "ask": "walking crab",
+    "prompt": "A hermit crab in three-quarter isometric view, warm brick-orange chitin shell with darker rust banding, chunky low-resolution pixels, hard black outline on every edge, flat cel shading in three tones, lit from the upper left so the left claw and upper carapace catch a pale cream highlight while the right side falls to deep umber shadow, muted earthy saturation, two thick raised pincers, four jointed walking legs, small black bead eyes on short stalks",
+    "at": "2026-08-22T22:30:48.650Z"
+  },
+  {
+    "name": "gen-bleached-driftwood-log",
+    "kind": "asset",
+    "ask": "bleached driftwood log",
+    "prompt": "A long bleached driftwood log lying flat, split hollow trunk of pale grey and warm tan wood, knotted stubs of snapped branches along its length, one end frayed into pale fibres. Isometric pixel art, chunky pixels, limited warm palette, dark warm-brown outline, sunlight from the upper left, shaded underside, dithered grain, muted saturation.",
+    "at": "2026-08-22T22:27:06.710Z"
+  },
+  {
+    "name": "gen-wrecked-wooden-rowboat",
+    "kind": "asset",
+    "ask": "wrecked wooden rowboat",
+    "prompt": "A small wooden rowboat listing on its side, hull of overlapping planks in faded red-brown and bleached tan with peeling paint, one cracked oar laid across the gunwale, coil of frayed rope at the bow, a plank missing amidships. Isometric pixel art, chunky pixels, limited warm palette, dark brown outline, lit from the upper left, shaded right, muted saturation.",
+    "at": "2026-08-22T22:26:48.646Z"
+  },
+  {
+    "name": "gen-tipped-over-barrel",
+    "kind": "asset",
+    "ask": "tipped-over barrel",
+    "prompt": "A single old barrel tipped onto its side, oak staves split and bleached pale grey-brown, three rusted iron hoops, the lid boards loose and half sprung. Isometric pixel art, chunky pixels, limited warm palette of tan and burnt orange, dark warm-brown outline, sunlight from the upper left, shaded lower-right side, dithered wood grain, muted saturation.",
+    "at": "2026-08-22T22:26:24.651Z"
+  },
+  {
+    "name": "gen-old-hand-cart",
+    "kind": "asset",
+    "ask": "old hand-cart",
+    "prompt": "An old wooden hand-cart, two plank sides, a single iron-rimmed spoked wheel, long worn handles tipped down, planks in warm brown with pale bleached highlights and dark rusted iron bands, one burlap sack slumped inside. Isometric pixel art, chunky pixels, limited warm palette, dark brown outline, lit from the upper left, shaded on the right, muted saturation.",
+    "at": "2026-08-22T22:26:00.626Z"
+  },
+  {
+    "name": "gen-weathered-boulder-cluster",
+    "kind": "asset",
+    "ask": "weathered boulder cluster",
+    "prompt": "A low cluster of three weathered sandstone boulders, cracked flat tops and banded strata of rusty orange and pale tan, one small broken chip leaning against the largest, a dry brown tuft wedged between them. Isometric pixel art, chunky blocky pixels, limited warm palette, dark warm-brown outline, sunlight from the upper left, shaded right faces, dithered midtones, muted saturation.",
+    "at": "2026-08-22T22:25:36.410Z"
+  },
+  {
+    "name": "gen-windswept-dead-tree",
+    "kind": "asset",
+    "ask": "windswept dead tree",
+    "prompt": "A small windswept dead tree, bare crooked trunk of grey-brown weathered wood leaning to the left, a few thin forked branches, one sparse tuft of dry olive leaves clinging near the top. Isometric pixel art, chunky pixels, limited warm palette of ochre and burnt umber, dark brown outline, lit from the upper left, shaded on its lower right, muted saturation.",
+    "at": "2026-08-22T22:25:12.143Z"
+  },
+  {
+    "name": "nether-gate-veil",
+    "kind": "effect",
+    "ask": "dark / quite translucent purple colored animated thing, nether portal like. beautiful and grand, but also subtle",
+    "prompt": "written",
+    "at": "2026-08-21T06:31:08.326Z"
+  },
+  {
+    "name": "palm-island-trees-animated-3",
+    "kind": "asset",
+    "ask": "palm island trees. animated swaying. beautiful trees, grand, maybe in 3s. no ugly base at the bottom, like stone or stand circle.",
+    "prompt": "A trio of tall coconut palms with slender curved trunks, three grand crowns of long arching fronds. Warm sandy-tan and burnt-orange trunk bark ringed with darker brown notches, olive and mossy green fronds with deep brown shadow undersides, small brown coconut clusters at the crown. Sunlight from the upper left, warm highlights on the left of each trunk, cool brown shade right. Chunky pixels, dark brown outline, muted warm palette, isometric, transparent background.",
+    "at": "2026-08-20T07:10:06.848Z"
+  },
+  {
+    "name": "palm-island-trees-animated-2",
+    "kind": "asset",
+    "ask": "palm island trees. animated swaying. beautiful trees, grand, maybe in 3s. no ugly base at the bottom, like stone or stand circle.",
+    "prompt": "A trio of tall coconut palms with slender curved trunks, three grand crowns of long arching fronds. Warm sandy-tan and burnt-orange trunk bark ringed with darker brown notches, olive and mossy green fronds with deep brown shadow undersides, small brown coconut clusters at the crown. Sunlight from the upper left, warm highlights on the left of each trunk, cool brown shade right. Chunky pixels, dark brown outline, muted warm palette, isometric, transparent background.",
+    "at": "2026-08-20T07:08:08.493Z"
+  },
+  {
+    "name": "palm-island-trees-animated-1",
+    "kind": "asset",
+    "ask": "palm island trees. animated swaying. beautiful trees, grand, maybe in 3s. no ugly base at the bottom, like stone or stand circle.",
+    "prompt": "A trio of tall coconut palms with slender curved trunks, three grand crowns of long arching fronds. Warm sandy-tan and burnt-orange trunk bark ringed with darker brown notches, olive and mossy green fronds with deep brown shadow undersides, small brown coconut clusters at the crown. Sunlight from the upper left, warm highlights on the left of each trunk, cool brown shade right. Chunky pixels, dark brown outline, muted warm palette, isometric, transparent background.",
+    "at": "2026-08-20T07:04:59.682Z"
+  },
+  {
+    "name": "island-palm-trees-dark-3",
+    "kind": "asset",
+    "ask": "island palm trees. dark green leaves, maybe with a little different color tinge, beautiful trees, swaying animation slowly. slightly golden hour atmosphere but not too much, also a bit damper",
+    "prompt": "a cluster of tall island palm trees in strict 2:1 isometric pixel art, slender curved trunks in warm tan and grey-brown with stacked ring segments, wide arching fronds in deep forest green shading to teal and olive at the tips, a few yellowed lower fronds, small clusters of green-brown coconuts at the crown, damp glossy highlights along the leaf spines, warm golden-hour sunlight from the upper left, blue-tinted shadow on the right side, painterly 6-8 value shading, muted palette of deep green, teal, tan and soft gold, one unified structure, warm sandy-tan and earthy-brown palette, cool grey stone, desaturated muted tones, dark 1px outlines, chunky isometric pixel forms, upper-left daylight, the object alone as a cut-out sprite on a fully transparent background, the base of the object is where its own material ends",
+    "at": "2026-08-20T02:24:23.916Z"
+  },
+  {
+    "name": "island-palm-trees-dark-2",
+    "kind": "asset",
+    "ask": "island palm trees. dark green leaves, maybe with a little different color tinge, beautiful trees, swaying animation slowly. slightly golden hour atmosphere but not too much, also a bit damper",
+    "prompt": "a cluster of tall island palm trees in strict 2:1 isometric pixel art, slender curved trunks in warm tan and grey-brown with stacked ring segments, wide arching fronds in deep forest green shading to teal and olive at the tips, a few yellowed lower fronds, small clusters of green-brown coconuts at the crown, damp glossy highlights along the leaf spines, warm golden-hour sunlight from the upper left, blue-tinted shadow on the right side, painterly 6-8 value shading, muted palette of deep green, teal, tan and soft gold, one unified structure, warm sandy-tan and earthy-brown palette, cool grey stone, desaturated muted tones, dark 1px outlines, chunky isometric pixel forms, upper-left daylight, the object alone as a cut-out sprite on a fully transparent background, the base of the object is where its own material ends",
+    "at": "2026-08-20T02:21:06.994Z"
+  },
+  {
+    "name": "island-palm-trees-dark-1",
+    "kind": "asset",
+    "ask": "island palm trees. dark green leaves, maybe with a little different color tinge, beautiful trees, swaying animation slowly. slightly golden hour atmosphere but not too much, also a bit damper",
+    "prompt": "a cluster of tall island palm trees in strict 2:1 isometric pixel art, slender curved trunks in warm tan and grey-brown with stacked ring segments, wide arching fronds in deep forest green shading to teal and olive at the tips, a few yellowed lower fronds, small clusters of green-brown coconuts at the crown, damp glossy highlights along the leaf spines, warm golden-hour sunlight from the upper left, blue-tinted shadow on the right side, painterly 6-8 value shading, muted palette of deep green, teal, tan and soft gold, one unified structure, warm sandy-tan and earthy-brown palette, cool grey stone, desaturated muted tones, dark 1px outlines, chunky isometric pixel forms, upper-left daylight, the object alone as a cut-out sprite on a fully transparent background, the base of the object is where its own material ends",
+    "at": "2026-08-20T02:19:26.810Z"
+  }
+]

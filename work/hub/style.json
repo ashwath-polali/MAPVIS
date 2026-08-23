@@ -1,0 +1,7 @@
+{
+  "palette": "warm sandy tans and earthy mid-browns dominant, cool blue-grey stone paving, muted olive greens, terracotta rooftops, desaturated throughout",
+  "light": "clear neutral daylight, mid-day to early afternoon, source upper-left, soft shadows falling right and lower-right of every form",
+  "outline": "consistent 1px near-black dark outline on all forms and edges, no hue-shift",
+  "scale": "chunky isometric pixel art, moderate-coarse pixel clusters, forms are blocky and readable at a glance, no sub-pixel detail",
+  "clause": "warm sandy-tan and earthy-brown palette, cool grey stone, desaturated muted tones, dark 1px outlines, chunky isometric pixel forms, upper-left daylight"
+}

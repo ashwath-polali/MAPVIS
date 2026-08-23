@@ -1,0 +1,51 @@
+# --- the new tool ---
+node_modules/
+dist/
+dist-ssr/
+.vite/
+.vite-cache/
+.tmp-refute/
+*.local
+.env
+.env.local
+
+# Map bundles and PixelLab output the tool writes. Mostly regenerable, often large.
+# Written as work/** with re-includes below, not work/, because git cannot
+# re-include a file once its parent directory is excluded.
+work/**
+public/work/
+
+# The parts of work/ that cost money or hours and cannot be regenerated: a map's
+# asset library is PixelLab output, asks.json is the prompt history that taught us
+# what works, style.json is the cached read of the painting.
+!work/*/
+!work/*/library/
+!work/*/library/**
+!work/*/asks.json
+!work/*/style.json
+!work/*/keeps.json
+!work/*/map.json
+# .prev holds pre-edit bytes so an in-place edit can be undone. Scratch, not history.
+work/*/library/**/.prev/**
+
+# --- archive/: the dead 3D era, kept on disk, mostly out of git ---
+# Only its markdown and its python stay in history. Every render, .blend,
+# asset pack and cache is on disk only and is not worth 8 GB of history.
+archive/*
+!archive/docs/
+!archive/pipeline/
+archive/pipeline/*.png
+archive/pipeline/*.txt
+
+# --- general ---
+# Anchored so a future src/assets/ or src/export/out/ is not swallowed by them.
+/out/
+/_out/
+/_tmp/
+/assets/
+__pycache__/
+*.pyc
+*.blend
+*.blend1
+.cache/
+.DS_Store

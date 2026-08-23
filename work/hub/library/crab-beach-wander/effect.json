@@ -1,0 +1,60 @@
+{
+  "type": "custom",
+  "params": {
+    "width": 320,
+    "height": 120,
+    "frames": 16,
+    "speed": 1,
+    "size": 1,
+    "count": 8,
+    "direction": 0,
+    "spread": 1,
+    "intensity": 1,
+    "seed": 1,
+    "custom": {
+      "drift": 0.8,
+      "bob": 1.5,
+      "turn": 14
+    }
+  },
+  "palette": "map",
+  "colors": [
+    "#f1e2c4",
+    "#f7d580",
+    "#e7ac6b",
+    "#8e8393",
+    "#9c5f3a",
+    "#763b36",
+    "#3f2b36",
+    "#281c27"
+  ],
+  "fps": 6,
+  "frames": 16,
+  "code": "if (!api.hasSprite) return;\nvar T = 2 * Math.PI * api.t;\nvar sw = api.spriteW, sh = api.spriteH;\nvar marginX = sw * 0.5 + 2;\nvar spanX = (api.w - sw - 4) * p.drift;\nvar cx = api.w * 0.5;\n// figure-eight-ish wander: x is one cycle, y is two, so it loops seamlessly\nvar x = cx + Math.sin(T) * (spanX * 0.5);\nvar baseY = api.h - 6 - p.turn * 0.5;\nvar y = baseY + Math.sin(2 * T) * p.turn * 0.5;\n// bob: tiny vertical hop tied to the leg cycle\nvar hop = Math.round(Math.sin(T * 4) * p.bob * 0.5);\n// heading: derivative of x tells us which way it is going\nvar dx = Math.cos(T);\nvar flip = dx < 0;\n// scale the leg cycle with how fast it is actually moving\nvar legs = Math.floor(api.t * api.frames * 1.5) % 9;\nif (legs < 0) legs += 9;\nvar px = Math.round(x);\nvar py = Math.round(y) - hop;\nif (px < marginX) px = Math.round(marginX);\nif (px > api.w - marginX) px = Math.round(api.w - marginX);\n// faint drag shadow of kicked sand behind the trailing side\nvar back = flip ? 1 : -1;\nfor (var i = 0; i < 5; i++) {\n  var g = api.rnd(i * 7 + 3);\n  var sx = px + back * (sw * 0.35 + i * 3 + g * 3);\n  var sy = py - 1 - Math.round(api.rnd(i * 5 + 11) * 2);\n  var fade = (1 - i / 5) * 0.28 * p.intensity;\n  api.px(Math.round(sx), sy, '#e7ac6b', fade);\n  if (i % 2 === 0) api.px(Math.round(sx) + 1, sy - 1, '#f1e2c4', fade * 0.7);\n}\napi.sprite(px, py, { flip: flip, frame: legs, alpha: p.intensity });",
+  "controls": [
+    {
+      "key": "drift",
+      "label": "path width",
+      "min": 0.2,
+      "max": 1,
+      "step": 0.05,
+      "value": 0.8
+    },
+    {
+      "key": "bob",
+      "label": "bob",
+      "min": 0,
+      "max": 4,
+      "step": 0.5,
+      "value": 1.5
+    },
+    {
+      "key": "turn",
+      "label": "vertical wander",
+      "min": 0,
+      "max": 30,
+      "step": 1,
+      "value": 14
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "type": "flow",
+  "params": {
+    "width": 36,
+    "height": 64,
+    "frames": 16,
+    "speed": 1.5,
+    "size": 1,
+    "count": 20,
+    "direction": 0,
+    "spread": 1.2,
+    "intensity": 0.9,
+    "seed": 1
+  },
+  "colors": [
+    "#7c5f50",
+    "#614b4d",
+    "#433741",
+    "#2d282b",
+    "#150c1d"
+  ],
+  "fps": 9,
+  "frames": 16
+}

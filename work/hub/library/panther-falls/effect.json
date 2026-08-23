@@ -1,0 +1,27 @@
+{
+  "type": "flow",
+  "params": {
+    "width": 20,
+    "height": 40,
+    "frames": 12,
+    "speed": 1.2,
+    "size": 1,
+    "count": 18,
+    "direction": 180,
+    "spread": 0.6,
+    "intensity": 0.85,
+    "seed": 1
+  },
+  "colors": [
+    "#fcfefe",
+    "#cad4dd",
+    "#aac7af",
+    "#8e8393",
+    "#a47a56",
+    "#907d36",
+    "#675258",
+    "#544146"
+  ],
+  "fps": 7,
+  "frames": 12
+}

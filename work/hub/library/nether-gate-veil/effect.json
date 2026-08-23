@@ -1,0 +1,67 @@
+{
+  "type": "custom",
+  "params": {
+    "width": 26,
+    "height": 40,
+    "frames": 16,
+    "speed": 0.7,
+    "size": 1,
+    "count": 8,
+    "direction": 0,
+    "spread": 1,
+    "intensity": 0.6,
+    "seed": 1,
+    "custom": {
+      "threads": 18,
+      "drift": 1,
+      "warp": 1.2,
+      "core": 0.9
+    }
+  },
+  "palette": "own",
+  "colors": [
+    "#c9a6f0",
+    "#9d6ae0",
+    "#7a3fbe",
+    "#4d2384",
+    "#2c1148",
+    "#150c1d"
+  ],
+  "fps": 4,
+  "frames": 16,
+  "code": "const W = api.w, H = api.h, t = api.t, TAU = Math.PI * 2;\nconst A = p.intensity;\nconst cx = (W - 1) / 2, cy = (H - 1) / 2;\nconst rx = Math.max(3, W * 0.40), ry = Math.max(4, H * 0.46);\nconst breathe = 0.5 + 0.5 * Math.sin(TAU * t);\n\n// oval field. wider than before so it reads as a doorway, not an egg.\n// no dark ring: the edge is a soft purple falloff that thins into the sheet.\nfor (let y = 0; y < H; y++) {\n  for (let x = 0; x < W; x++) {\n    const dx = (x - cx) / rx, dy = (y - cy) / ry;\n    const d = Math.sqrt(dx * dx + dy * dy);\n    if (d > 1.02) continue;\n    const ang = Math.atan2((y - cy) / ry, (x - cx) / rx);\n    // bands sweep inward and around, so the interior is always moving\n    const swirl = 0.5 + 0.5 * Math.sin(TAU * (d * 2.2 - t + ang / TAU));\n    const edge = d > 0.82 ? (1.02 - d) / 0.20 : 1;\n    const f = 1 - d;\n    // 3 and 4 are the mid purples, 2 lifts the brightest band so it glows\n    const c = swirl > 0.80 ? 2 : swirl > 0.52 ? 3 : 4;\n    const a = (0.30 + 0.26 * f + 0.30 * swirl + 0.08 * breathe) * edge * A;\n    api.px(x, y, c, a);\n  }\n}\n\n// dark core: a narrow vertical void down the middle, pulsing\nfor (let y = 0; y < H; y++) {\n  const dy = (y - cy) / (ry * 0.90);\n  if (Math.abs(dy) >= 1) continue;\n  const v = Math.sqrt(1 - dy * dy);\n  const cw = Math.round(v * rx * 0.44 * p.core * (0.84 + 0.16 * breathe));\n  if (cw > 0) api.rect(Math.round(cx - cw / 2), y, cw, 1, 5, (0.50 + 0.16 * breathe) * A);\n}\n\n// rising threads, spread across the full width so the whole oval churns\nconst n = Math.max(1, Math.round(p.threads));\nfor (let i = 0; i < n; i++) {\n  const r = api.rnd(i), r2 = api.rnd(i + 91), r3 = api.rnd(i + 311);\n  const cyc = Math.max(1, Math.round(p.drift) * (1 + Math.floor(r2 * 2)));\n  const ph = (t * cyc + r) % 1;\n  const len = 4 + Math.round(6 * r3);\n  const wob = Math.sin(TAU * (t + r)) * p.warp * (0.4 + r2);\n  const bx = Math.round(cx + (r * 2 - 1) * rx * 0.86 + wob);\n  for (let s = 0; s < len; s++) {\n    const y = cy + ry - ((ph * (ry * 2) + s) % (ry * 2));\n    const yy = Math.round(y);\n    const dx = (bx - cx) / rx, dy = (yy - cy) / ry;\n    if (dx * dx + dy * dy > 0.94) continue;\n    const f = 1 - s / len;\n    const c = f > 0.76 ? 1 : f > 0.42 ? 2 : 3;\n    api.px(bx, yy, c, (0.22 + 0.60 * f) * A);\n  }\n}\n\n// bright motes riding up the throat\nfor (let k = 0; k < 10; k++) {\n  const r = api.rnd(k + 700), r2 = api.rnd(k + 811), r3 = api.rnd(k + 907);\n  const ph = (t * (1 + Math.floor(r3 * 3)) + r) % 1;\n  const gy = Math.round(cy + ry - ph * (ry * 2));\n  const gx = Math.round(cx + (r2 * 2 - 1) * rx * 0.66 + Math.sin(TAU * (t + r2)) * 1.2);\n  const dx = (gx - cx) / rx, dy = (gy - cy) / ry;\n  if (dx * dx + dy * dy > 0.88) continue;\n  const fade = 0.35 + 0.65 * Math.sin(Math.PI * ph);\n  api.px(gx, gy, 0, (0.30 + 0.55 * fade) * A);\n  if (fade > 0.7) api.px(gx, gy + 1, 1, 0.34 * fade * A);\n}",
+  "controls": [
+    {
+      "key": "threads",
+      "label": "threads",
+      "min": 4,
+      "max": 40,
+      "step": 1,
+      "value": 18
+    },
+    {
+      "key": "drift",
+      "label": "rise speed",
+      "min": 1,
+      "max": 4,
+      "step": 1,
+      "value": 1
+    },
+    {
+      "key": "warp",
+      "label": "warp",
+      "min": 0,
+      "max": 3,
+      "step": 0.1,
+      "value": 1.2
+    },
+    {
+      "key": "core",
+      "label": "dark core",
+      "min": 0,
+      "max": 1.5,
+      "step": 0.05,
+      "value": 0.9
+    }
+  ]
+}

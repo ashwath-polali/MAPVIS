@@ -1,0 +1,16 @@
+[
+  {
+    "ask": "dark / quite translucent purple colored animated thing, nether portal like. beautiful and grand, but also subtle",
+    "prompt": "a written renderer",
+    "name": "nether-gate-veil",
+    "kind": "effect",
+    "when": "2026-08-21"
+  },
+  {
+    "ask": "wandering around the map / beach",
+    "prompt": "a written renderer",
+    "name": "crab-beach-wander",
+    "kind": "effect",
+    "when": "2026-08-23"
+  }
+]

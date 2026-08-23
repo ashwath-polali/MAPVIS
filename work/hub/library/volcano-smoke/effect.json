@@ -1,0 +1,27 @@
+{
+  "type": "rise",
+  "params": {
+    "width": 72,
+    "height": 112,
+    "frames": 16,
+    "speed": 0.5,
+    "size": 2.5,
+    "count": 28,
+    "direction": 0,
+    "spread": 1.8,
+    "intensity": 0.9,
+    "seed": 1
+  },
+  "colors": [
+    "#db9e62",
+    "#c09774",
+    "#ae8163",
+    "#8f6d53",
+    "#614b4d",
+    "#433741",
+    "#2d282b",
+    "#150c1d"
+  ],
+  "fps": 3,
+  "frames": 16
+}

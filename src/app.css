@@ -1,0 +1,2314 @@
+/* One dark surface, one accent, five steps.
+ *
+ * The accent is an iris blue-violet on purpose: it is the one hue family the
+ * map's own data never uses (levels are red through pink, the cut is magenta,
+ * occluders are lilac on canvas), so accent always means "this is the tool
+ * talking", never "this is map data". Motion is CSS only, 150-200ms.
+ */
+
+:root {
+  --bg: #101214;
+  --panel: #16181b;
+  --raised: #1d2126;
+  --edge: #272b31;
+  --ink: #e7eaee;
+  --dim: #8a919b;
+  --acc: #8f93f5;
+  --acc-soft: #8f93f52a;
+  --acc-ink: #131328;
+  --ok: #6fd08c;
+  --stage: #0a0b0d;
+  --font-ui: 'Inter', 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+html,
+body,
+#root {
+  height: 100%;
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 13px/1.5 var(--font-ui);
+  overflow: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+button {
+  font: inherit;
+  color: var(--ink);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+:focus-visible {
+  outline: 2px solid var(--acc);
+  outline-offset: 1px;
+  border-radius: 4px;
+}
+input {
+  font: inherit;
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--edge);
+  border-radius: 8px;
+  padding: 8px 10px;
+  transition: border-color 160ms ease;
+}
+input:focus {
+  outline: none;
+  border-color: var(--acc);
+}
+kbd {
+  font: 10px/1 var(--font-mono);
+  color: var(--dim);
+  background: var(--bg);
+  border: 1px solid var(--edge);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  padding: 2px 5px;
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+:hover > kbd,
+.row:hover kbd,
+.chip:hover kbd {
+  opacity: 1;
+}
+
+.app {
+  display: grid;
+  grid-template-rows: 48px 1fr 30px;
+  height: 100%;
+}
+
+/* ---- header: brand, the workflow, the scene ------------------------- */
+
+header {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 16px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--edge);
+}
+.brand {
+  font: 600 12px/1 var(--font-mono);
+  letter-spacing: 0.14em;
+  color: var(--dim);
+}
+.stepper {
+  display: flex;
+  gap: 2px;
+  margin: 0 auto;
+}
+.step {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  color: var(--dim);
+  transition: color 160ms ease, background 160ms ease;
+}
+.step:hover {
+  color: var(--ink);
+  background: var(--raised);
+}
+.step-n {
+  display: grid;
+  place-items: center;
+  width: 17px;
+  height: 17px;
+  border: 1px solid var(--edge);
+  border-radius: 50%;
+  font: 600 10px/1 var(--font-mono);
+  transition: all 160ms ease;
+}
+.step.on {
+  color: var(--ink);
+}
+.step.on .step-n {
+  background: var(--acc);
+  border-color: var(--acc);
+  color: var(--acc-ink);
+}
+.step::after {
+  content: '';
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 2px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--acc);
+  transform: scaleX(0);
+  transition: transform 180ms ease;
+}
+.step.on::after {
+  transform: scaleX(1);
+}
+header .meta {
+  min-width: 120px;
+  text-align: right;
+  color: var(--dim);
+  font: 11px/1.3 var(--font-mono);
+  white-space: nowrap;
+}
+.busy {
+  display: inline-block;
+  margin-right: 10px;
+  padding: 3px 9px;
+  border-radius: 20px;
+  background: var(--acc-soft);
+  color: var(--acc);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+@keyframes pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+/* ---- the two columns -------------------------------------------------- */
+
+main {
+  display: flex;
+  min-height: 0;
+}
+
+.panel {
+  width: 272px;
+  flex: 0 0 272px;
+  padding: 14px 12px 18px;
+  background: var(--panel);
+  border-right: 1px solid var(--edge);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  overflow-y: auto;
+  animation: panel-in 180ms ease;
+}
+@keyframes panel-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+/* The panel is a scrolling flex column, and a flex child shrinks before it
+   overflows. So a tall block (the effect tuner, a long library) got squeezed
+   under its own content instead of making the panel taller, and there was
+   nothing to scroll to: the parts below simply had no height. Nothing in here
+   shrinks; the panel grows and scrolls, which is what a side panel does. */
+.panel > * {
+  flex-shrink: 0;
+}
+.panel::-webkit-scrollbar {
+  width: 8px;
+}
+.panel::-webkit-scrollbar-thumb {
+  background: var(--edge);
+  border-radius: 4px;
+}
+
+.panel-cap {
+  padding: 0 4px 8px;
+  color: var(--dim);
+  font-size: 12px;
+}
+.panel-foot {
+  padding: 8px 4px 0;
+  color: var(--dim);
+  font: 11px/1.4 var(--font-mono);
+}
+.panel-empty {
+  display: grid;
+  gap: 10px;
+  justify-items: center;
+  padding: 42px 0;
+  color: var(--dim);
+}
+.panel-empty p {
+  margin: 0;
+}
+
+/* a row: one action or one tool, a big target with a plain sentence under */
+.row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 10px;
+  border-radius: 9px;
+  text-align: left;
+  border: 1px solid transparent;
+  transition: background 160ms ease, border-color 160ms ease;
+}
+.row:hover:not(:disabled) {
+  background: var(--raised);
+}
+.row.on {
+  background: var(--acc-soft);
+  border-color: var(--acc);
+}
+.row-ic {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
+  border-radius: 7px;
+  background: var(--raised);
+  color: var(--dim);
+  transition: color 160ms ease;
+}
+.row.on .row-ic,
+.row:hover .row-ic {
+  color: var(--acc);
+}
+.row-tx {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+.row-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+}
+.row-desc {
+  color: var(--dim);
+  font-size: 11.5px;
+  line-height: 1.4;
+}
+
+/* sliders, fields */
+.slider {
+  display: grid;
+  gap: 4px;
+  padding: 2px 12px 8px 46px;
+  color: var(--dim);
+  font-size: 11.5px;
+}
+.slider em {
+  font-style: normal;
+  color: var(--ink);
+  font-family: var(--font-mono);
+}
+.slider input {
+  width: 100%;
+  padding: 0;
+  accent-color: var(--acc);
+  border: none;
+  background: none;
+}
+.field {
+  display: grid;
+  gap: 6px;
+  padding: 2px 4px;
+}
+.field > span:first-child {
+  font-weight: 500;
+}
+.field-desc {
+  color: var(--dim);
+  font-size: 11.5px;
+}
+.field.inline {
+  grid-template-columns: 1fr 78px;
+  align-items: center;
+  padding: 6px 10px;
+}
+.field.inline input {
+  padding: 5px 8px;
+  font-family: var(--font-mono);
+}
+
+/* the compact tool row in levels */
+.toolrow {
+  display: flex;
+  gap: 4px;
+  padding: 2px 4px 6px;
+}
+.tbtn {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  color: var(--dim);
+  transition: all 160ms ease;
+}
+.tbtn:hover {
+  background: var(--raised);
+  color: var(--ink);
+}
+.tbtn.on {
+  background: var(--acc-soft);
+  border-color: var(--acc);
+  color: var(--acc);
+}
+[data-tip]:hover::after {
+  content: attr(data-tip);
+  position: absolute;
+  top: calc(100% + 5px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: #050608f0;
+  border: 1px solid var(--edge);
+  color: var(--ink);
+  font-size: 11px;
+  white-space: nowrap;
+  z-index: 6;
+  pointer-events: none;
+}
+
+/* the level chips: large, named, keyed */
+.chips {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+  padding: 4px;
+}
+.chip {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 8px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  font-size: 12px;
+  transition: background 160ms ease, border-color 160ms ease;
+}
+.chip:hover {
+  background: var(--raised);
+}
+.chip.on {
+  background: var(--acc-soft);
+  border-color: var(--acc);
+}
+.chip-sw {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 15px;
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px #0006;
+}
+.chip-name {
+  flex: 1;
+  text-align: left;
+  white-space: nowrap;
+}
+.lawhint {
+  margin: 4px 4px 0;
+  padding: 8px 10px;
+  border-left: 2px solid var(--acc);
+  border-radius: 0 8px 8px 0;
+  background: var(--raised);
+  color: var(--dim);
+  font-size: 11.5px;
+}
+.walkstat {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 12px 8px 4px;
+}
+.walkpct {
+  font: 600 24px/1 var(--font-mono);
+  color: var(--acc);
+  font-variant-numeric: tabular-nums;
+}
+.walklabel {
+  color: var(--dim);
+  font-size: 11.5px;
+}
+
+/* the fold for rare things */
+.more {
+  margin-top: auto;
+  padding-top: 10px;
+}
+.more summary {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 10px;
+  border-radius: 8px;
+  color: var(--dim);
+  font-size: 12px;
+  cursor: pointer;
+  list-style: none;
+  transition: background 160ms ease;
+}
+.more summary::-webkit-details-marker {
+  display: none;
+}
+.more summary:hover {
+  background: var(--raised);
+  color: var(--ink);
+}
+.more[open] > *:not(summary) {
+  animation: panel-in 160ms ease;
+}
+
+/* primary actions */
+.primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 9px 16px;
+  border-radius: 9px;
+  background: var(--acc);
+  color: var(--acc-ink);
+  font-weight: 600;
+  transition: filter 160ms ease, transform 160ms ease;
+}
+.primary:hover:not(:disabled) {
+  filter: brightness(1.12);
+}
+.primary:active {
+  transform: translateY(1px);
+}
+.primary.big {
+  width: calc(100% - 8px);
+  margin: 10px 4px 2px;
+  padding: 12px;
+  font-size: 14px;
+}
+
+/* load step */
+.cands {
+  display: grid;
+  gap: 6px;
+  padding: 6px 4px;
+}
+.cand {
+  padding: 0;
+  border-radius: 8px;
+  border: 1px solid var(--edge);
+  background: var(--stage);
+  overflow: hidden;
+  min-height: 64px;
+  display: grid;
+  place-items: center;
+  transition: border-color 160ms ease;
+}
+.cand:hover:not(:disabled) {
+  border-color: var(--acc);
+}
+.cand img {
+  display: block;
+  width: 100%;
+  image-rendering: pixelated;
+}
+.cand.wait {
+  background: repeating-linear-gradient(45deg, #14171b, #14171b 8px, #191d23 8px, #191d23 16px);
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+@keyframes shimmer {
+  to {
+    background-position: -46px 0;
+  }
+}
+.cand span {
+  color: var(--dim);
+  font-size: 11px;
+}
+.drophint {
+  margin: 0 4px;
+  padding: 16px 12px;
+  border: 1px dashed var(--edge);
+  border-radius: 9px;
+  color: var(--dim);
+  text-align: center;
+  font-size: 12px;
+}
+.loaded {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 4px 0;
+  padding: 9px 12px;
+  border-radius: 8px;
+  background: var(--raised);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+}
+.dotok {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ok);
+}
+
+/* a section header. Every panel groups its rows under one of these, so the
+   eye learns one shape instead of six. */
+.asec {
+  padding: 12px 4px 4px;
+  color: var(--dim);
+  font: 600 10px/1 var(--font-mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.panel > .asec:first-of-type {
+  padding-top: 2px;
+}
+
+/* the keys line: one collapsed row at the foot of a panel, open it if you
+   want the list. It replaces the standing block of shortcut text. */
+.keys {
+  margin-top: auto;
+  padding-top: 8px;
+}
+.more + .keys {
+  margin-top: 0;
+}
+.keys summary {
+  padding: 5px 8px;
+  border-radius: 7px;
+  color: var(--dim);
+  font: 10px/1 var(--font-mono);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  cursor: pointer;
+  list-style: none;
+  transition: background 160ms ease, color 160ms ease;
+}
+.keys summary::-webkit-details-marker {
+  display: none;
+}
+.keys summary::before {
+  content: '⌘ ';
+  opacity: 0.6;
+}
+.keys summary:hover {
+  background: var(--raised);
+  color: var(--ink);
+}
+.keys-body {
+  padding: 4px 10px 2px;
+  color: var(--dim);
+  font: 11px/1.6 var(--font-mono);
+  animation: panel-in 160ms ease;
+}
+
+/* assets step */
+
+/* the two halves of the assets panel: place what exists, or make something
+   new. Nothing is hidden, it is one press away. */
+.seg.tabs {
+  margin: 2px 4px 6px;
+}
+.seg.tabs .seg-opt {
+  padding: 7px 8px;
+  text-transform: lowercase;
+}
+
+/* the selection inspector: what is selected, and every number about it
+   typeable. It sits above both halves, because it is about the map, not
+   about which half you are in.
+
+   Everything in here is built to survive any panel width rather than tuned to
+   one. It rendered clean at 272px and broke on a wider system font, which is
+   the same bug as a narrower panel: a fixed track plus a child that refuses to
+   shrink. So every grid track is minmax(0, ...), every child gets min-width 0,
+   long labels clip with an ellipsis, and the button rows wrap instead of
+   running out the side. It holds from 240px to 400px. */
+.insp {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  margin: 2px 4px 4px;
+  padding: 8px 8px 9px;
+  border: 1px solid var(--edge);
+  border-radius: 10px;
+  background: var(--raised);
+  animation: panel-in 160ms ease;
+}
+.insp > * {
+  min-width: 0;
+}
+.insp-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.insp-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 500;
+}
+.insp-row {
+  display: grid;
+  grid-template-columns: minmax(0, 52px) minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: var(--dim);
+  font-size: 11.5px;
+}
+.insp-row > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.insp-row select {
+  width: 100%;
+  min-width: 0;
+  padding: 5px 8px;
+  border: 1px solid var(--edge);
+  border-radius: 7px;
+  background: var(--bg);
+  color: var(--ink);
+  font: 12px var(--font-ui);
+  transition: border-color 160ms ease;
+}
+.insp-row select:focus {
+  outline: none;
+  border-color: var(--acc);
+}
+/* two columns while two fit and one when they do not, so the numbers never
+   decide to overlap instead of stacking */
+.numgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+  gap: 4px 6px;
+  min-width: 0;
+}
+/* grid children default to min-width auto, so an input refuses to shrink under
+   its own content and the number gets clipped: every level of this needs the
+   min-width 0 escape or the digits run under the next column */
+.numf {
+  display: grid;
+  grid-template-columns: minmax(0, 38px) minmax(0, 1fr);
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  color: var(--dim);
+  font-size: 11px;
+}
+.numf > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.numf input {
+  width: 100%;
+  min-width: 0;
+  padding: 4px 5px;
+  border-radius: 6px;
+  font: 11.5px var(--font-mono);
+  text-align: right;
+}
+.flips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  min-width: 0;
+  padding: 2px 2px 0;
+  color: var(--dim);
+  font-size: 11.5px;
+}
+.flips label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+.flips input {
+  width: 13px;
+  height: 13px;
+  padding: 0;
+  accent-color: var(--acc);
+}
+.insp .actrow {
+  padding: 0;
+}
+/* what the clipboard holds. It outlives the painting, so it is not part of
+   the inspector and does not vanish with the selection. */
+.clipline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 4px;
+  padding: 4px 4px 4px 10px;
+  border: 1px dashed var(--edge);
+  border-radius: 8px;
+  color: var(--dim);
+  font-size: 11.5px;
+}
+.clipline span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.clipline .abtn {
+  flex: 0 0 auto;
+  padding: 4px 10px;
+}
+/* ---- the asset column ---------------------------------------------------
+   Three parts, in order: the make strip, one context zone, a small foot. The
+   zone shows exactly ONE thing, so whatever you are doing gets the whole
+   column instead of a squeezed slice of it. */
+.make {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  padding: 0 0 8px;
+  border-bottom: 1px solid var(--edge);
+}
+.makewhat {
+  width: 100%;
+}
+.makewhat .seg-opt {
+  flex: 1 1 0;
+  min-width: 0;
+  white-space: nowrap;
+}
+/* the sparkle and the box it opens. One round button on the selected thing,
+   and everything else appears only after it is pressed. */
+.lifedot {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  border: 1px solid var(--edge);
+  border-radius: 50%;
+  background: transparent;
+  color: var(--dim);
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+.lifedot svg {
+  width: 13px;
+  height: 13px;
+}
+.lifedot:hover {
+  color: var(--acc);
+  border-color: var(--acc);
+}
+.lifedot.on {
+  background: var(--acc-soft);
+  border-color: var(--acc);
+  color: var(--acc);
+}
+.lifedot.has {
+  color: var(--ok);
+  border-color: var(--ok);
+}
+.lifebox {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  margin: 2px 0 4px;
+  padding: 8px;
+  border: 1px solid var(--acc);
+  border-radius: 8px;
+  background: var(--raised);
+  animation: panel-in 140ms ease;
+}
+.lifebox input {
+  width: 100%;
+  min-width: 0;
+  padding: 6px 8px;
+  font-size: 11.5px;
+}
+.liferow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.liferow .abtn {
+  flex: 1 1 auto;
+  justify-content: center;
+}
+.lifehint {
+  color: var(--dim);
+  font-size: 10px;
+  line-height: 1.45;
+}
+.lifeline {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin: 0 0 2px;
+  padding: 4px 8px;
+  border: 1px dashed var(--edge);
+  border-radius: 7px;
+  color: var(--dim);
+  font-size: 10.5px;
+}
+.lifeline > span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lifeline .abtn {
+  flex: 0 0 auto;
+}
+/* the two halves of the account: props and people. They are different things
+   in pixellab and behave differently here, so the browser says which. */
+.acctabs {
+  width: 100%;
+  margin-bottom: 4px;
+}
+.acctabs .seg-opt {
+  flex: 1 1 0;
+}
+.acc {
+  display: grid;
+  gap: 2px;
+  padding: 5px;
+  border: 1px solid var(--edge);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+.acc:hover:not(:disabled) {
+  border-color: var(--acc);
+}
+.acc.on {
+  border-color: var(--acc);
+  background: var(--acc-soft);
+}
+.acc-th {
+  display: grid;
+  place-items: center;
+  height: 54px;
+  background: var(--bg);
+  border-radius: 5px;
+  overflow: hidden;
+}
+.acc-th img {
+  max-width: 100%;
+  max-height: 100%;
+  image-rendering: pixelated;
+}
+.acc-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10.5px;
+}
+.acc-sub {
+  color: var(--dim);
+  font-size: 9.5px;
+}
+.zone {
+  display: grid;
+  gap: 6px;
+  align-content: start;
+  min-width: 0;
+  padding: 2px 0 4px;
+}
+/* the count for a fill: a label, a rail and the number, on its own line */
+.fillnum {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) 2ch;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin: 0 4px;
+  padding: 6px 10px;
+  border: 1px solid var(--edge);
+  border-radius: 8px;
+}
+.fillnum > span {
+  color: var(--dim);
+  font-size: 10.5px;
+}
+.fillnum > b {
+  color: var(--ink);
+  font-size: 11.5px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.fillnum input {
+  width: 100%;
+  min-width: 0;
+  accent-color: #8f93f5;
+}
+/* what a fill is about to draw, one row each, click to strike one out */
+.scenelist {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  max-height: 190px;
+  overflow-y: auto;
+}
+.scenerow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 11.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.scenerow:hover {
+  background: var(--raised);
+}
+.scenerow.off {
+  color: var(--dim);
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+.scenewhat {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.scenemeta {
+  color: var(--dim);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+/* groups as one wrapping line of chips, not a stacked list with nested rows */
+.grpstrip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  min-width: 0;
+  padding-top: 6px;
+  border-top: 1px solid var(--edge);
+}
+.grpchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 7px;
+  border: 1px solid var(--edge);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 10.5px;
+  cursor: pointer;
+}
+.grpchip svg {
+  width: 12px;
+  height: 12px;
+  opacity: 0.7;
+}
+.grpchip:hover {
+  background: var(--raised);
+}
+.grpchip.off {
+  color: var(--dim);
+  opacity: 0.55;
+}
+.grpnone {
+  color: var(--dim);
+  font-size: 10.5px;
+}
+
+/* many at once: the arranging verbs, on the set. Rows wrap rather than squeeze,
+   so a narrow panel drops a button to the next line instead of clipping it. */
+.insp.many .insp-head {
+  justify-content: space-between;
+}
+.insp.many .insp-head .abtn {
+  flex: 0 0 auto;
+}
+.manygrid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 3px;
+  min-width: 0;
+}
+.manygrid .abtn {
+  justify-content: center;
+  padding: 5px 0;
+}
+.manyrow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  min-width: 0;
+}
+.manyrow .abtn {
+  flex: 1 1 auto;
+  justify-content: center;
+  white-space: nowrap;
+}
+.abtn.tiny {
+  padding: 5px 8px;
+  font-size: 10.5px;
+}
+.abtn.danger:hover {
+  border-color: #d0596b;
+  color: #ff9aa8;
+}
+.manyfoot {
+  color: var(--dim);
+  font-size: 10px;
+  line-height: 1.5;
+}
+.grainrow {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.grainlab {
+  color: var(--dim);
+  font-size: 10.5px;
+}
+.grainrow .seg {
+  min-width: 0;
+}
+.grainrow .seg-opt {
+  padding: 4px 6px;
+  font-size: 10.5px;
+  white-space: nowrap;
+}
+
+/* box-the-area, and what the model wrote after looking. Both sit between the
+   ask and the spend, so nothing here shouts: the reading is the quiet step. */
+.areabtn {
+  width: 100%;
+  margin: 0 0 2px;
+  justify-content: center;
+}
+.areabtn.on {
+  border-color: #8f93f5;
+  color: #b9bcff;
+}
+.genrow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: stretch;
+}
+.genrow .genbtn {
+  margin: 0;
+}
+.stopbtn {
+  flex: 0 0 auto;
+  padding: 0 14px;
+}
+.planbox {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  margin: 2px 0 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--edge);
+  border-radius: 8px;
+  background: var(--raised);
+}
+.plannote {
+  min-width: 0;
+  color: var(--ink);
+  font-size: 11.5px;
+  line-height: 1.45;
+}
+.planmeta {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  color: var(--dim);
+  font-size: 10.5px;
+}
+.planshow {
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--dim);
+  font: inherit;
+  font-size: 10.5px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.planshow:hover {
+  color: var(--ink);
+}
+.planprompt {
+  min-width: 0;
+  max-height: 120px;
+  overflow-y: auto;
+  color: var(--dim);
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+/* the record of what he typed, shut by default behind one small line. Open, it
+   scrolls rather than growing the panel: forty asks must cost the same height
+   as six. */
+.askwrap {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  margin: 6px 4px 0;
+}
+.asktoggle {
+  justify-self: start;
+  padding: 3px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--dim);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.asktoggle:hover {
+  color: var(--ink);
+  background: var(--raised);
+}
+.asklog {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  max-height: 132px;
+  overflow-y: auto;
+}
+.askrow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: baseline;
+  gap: 8px;
+  padding: 5px 8px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 11.5px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 140ms ease;
+}
+.askrow:hover {
+  background: var(--raised);
+}
+.askwords {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.askmade {
+  max-width: 11ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--dim);
+  font-size: 10.5px;
+}
+.grps {
+  display: grid;
+  gap: 2px;
+}
+.grp {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-radius: 8px;
+  transition: background 160ms ease;
+}
+.grp:hover {
+  background: var(--raised);
+}
+.grp.bare {
+  opacity: 0.45;
+}
+.grp-eye,
+.grp-clear {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 30px;
+  flex: 0 0 28px;
+  border-radius: 7px;
+  color: var(--dim);
+  transition: color 160ms ease, background 160ms ease;
+}
+.grp-eye:hover:not(:disabled),
+.grp-clear:hover {
+  color: var(--ink);
+  background: var(--acc-soft);
+}
+.grp-eye.off {
+  color: var(--acc);
+}
+.grp-name {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 6px;
+  border-radius: 7px;
+  text-align: left;
+  font-weight: 500;
+}
+.grp-n {
+  color: var(--dim);
+  font: 11px var(--font-mono);
+}
+.grp.open .grp-name {
+  color: var(--acc);
+}
+.arows {
+  display: grid;
+  gap: 2px;
+  padding: 2px 0 6px 14px;
+  animation: panel-in 160ms ease;
+}
+.arow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease;
+}
+.arow:hover {
+  background: var(--raised);
+}
+.arow.sel {
+  background: var(--acc-soft);
+  border-color: var(--acc);
+}
+.arow-th {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  flex: 0 0 26px;
+  border-radius: 5px;
+  background: var(--stage);
+  overflow: hidden;
+}
+.arow-th img {
+  max-width: 24px;
+  max-height: 24px;
+  image-rendering: pixelated;
+}
+.arow-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.badge {
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--raised);
+  color: var(--dim);
+  font: 9.5px/1.2 var(--font-mono);
+  letter-spacing: 0.06em;
+}
+.badge.anim {
+  background: var(--acc-soft);
+  color: var(--acc);
+}
+.arow-x {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
+  color: var(--dim);
+  transition: color 160ms ease, background 160ms ease;
+}
+.arow-x:hover {
+  color: #ff8f9e;
+  background: var(--raised);
+}
+.libgrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  padding: 2px 4px;
+}
+.lib {
+  position: relative;
+  display: grid;
+  gap: 3px;
+  justify-items: center;
+  min-width: 0;
+  padding: 7px 3px 6px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  transition: background 160ms ease, border-color 160ms ease;
+}
+.lib:hover {
+  background: var(--raised);
+}
+.lib.on {
+  background: var(--acc-soft);
+  border-color: var(--acc);
+}
+.lib-th {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  max-width: 100%;
+  height: 44px;
+}
+.lib-th img {
+  max-width: 100%;
+  max-height: 44px;
+  image-rendering: pixelated;
+}
+.lib-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--dim);
+  font-size: 10.5px;
+}
+.lib.on .lib-name {
+  color: var(--acc);
+}
+.lib-empty {
+  padding: 10px 8px;
+  color: var(--dim);
+  font-size: 11.5px;
+}
+.lib-cap {
+  padding: 0 4px 4px;
+  color: var(--dim);
+  font-size: 11px;
+}
+
+/* a section header with one quiet action on its right. The action is the way
+   out of generating, so it sits where the eye already is. */
+.sechead {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+.sechead .asec {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.seclink {
+  position: relative;
+  flex: 0 0 auto;
+  padding: 4px 8px;
+  border-radius: 7px;
+  border: 1px solid var(--edge);
+  background: transparent;
+  color: var(--dim);
+  font-size: 11px;
+  transition: color 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+.seclink:hover {
+  color: var(--acc);
+  border-color: var(--acc);
+}
+.seclink.on {
+  color: var(--acc);
+  border-color: var(--acc);
+  background: var(--acc-soft);
+}
+
+/* the objects already on the account. Same grid shape as the library, because
+   it is the same act: pick one, then the map. It is the cheap half of this
+   step, so its foot says plainly that nothing in here spends. */
+.accpanel {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  margin: 2px 4px 4px;
+  padding: 8px 8px 6px;
+  border: 1px solid var(--edge);
+  border-radius: 10px;
+  background: var(--raised);
+  animation: panel-in 160ms ease;
+}
+.accfind {
+  width: 100%;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid var(--edge);
+  border-radius: 7px;
+  background: var(--bg);
+  color: var(--ink);
+  font: 12px var(--font-ui);
+  transition: border-color 160ms ease;
+}
+.accfind:focus {
+  outline: none;
+  border-color: var(--acc);
+}
+.accgrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  max-height: 236px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--edge) transparent;
+}
+.accgrid::-webkit-scrollbar {
+  width: 6px;
+}
+.accgrid::-webkit-scrollbar-thumb {
+  background: var(--edge);
+  border-radius: 3px;
+}
+.accgrid .lib:disabled {
+  opacity: 0.5;
+}
+.accfoot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  color: var(--dim);
+  font: 11px var(--font-mono);
+}
+.accfoot span {
+  flex: 1 1 auto;
+  min-width: 0;
+  text-align: center;
+}
+.accfoot .abtn {
+  flex: 0 0 auto;
+  padding: 4px 10px;
+}
+/* the library lives in a capped frame and scrolls inside it, so a long
+   library never pushes the generate section off the panel */
+.libpanel {
+  max-height: 220px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--edge) transparent;
+}
+.libpanel::-webkit-scrollbar {
+  width: 6px;
+}
+.libpanel::-webkit-scrollbar-thumb {
+  background: var(--edge);
+  border-radius: 3px;
+}
+.libpanel::-webkit-scrollbar-track {
+  background: transparent;
+}
+.libwrap {
+  position: relative;
+}
+.libwrap .lib {
+  width: 100%;
+}
+/* the two corner affordances: delete for good on the right, reopen the
+   effect's knobs on the left. Hover only, so a full library reads as art. */
+.lib-x,
+.lib-edit {
+  position: absolute;
+  top: 2px;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 5px;
+  background: var(--panel);
+  border: 1px solid var(--edge);
+  color: var(--dim);
+  opacity: 0;
+  transition: opacity 160ms ease, color 160ms ease, border-color 160ms ease;
+}
+.lib-x {
+  right: 2px;
+}
+.lib-edit {
+  left: 2px;
+}
+.libwrap:hover .lib-x,
+.libwrap:hover .lib-edit,
+.lib-x:focus-visible,
+.lib-edit:focus-visible {
+  opacity: 1;
+}
+.lib-x:hover {
+  color: #ff8f9e;
+  border-color: #e84660;
+}
+.lib-edit:hover {
+  color: var(--acc);
+  border-color: var(--acc);
+}
+/* armed: the icon becomes the word, so the second click is never a surprise */
+.lib-x.armed,
+.arow-x.armed,
+.grp-clear.armed {
+  width: auto;
+  flex: 0 0 auto;
+  padding: 0 7px;
+  opacity: 1;
+  color: #ff8f9e;
+  border-color: #e84660;
+  font: 10px/1 var(--font-mono);
+}
+.arow-x.armed {
+  border: 1px solid #e84660;
+  height: 20px;
+}
+/* the generate section's segmented selectors: type, then how many. The on
+   state speaks the same accent language as the chips and tool buttons. */
+.seg {
+  display: flex;
+  gap: 2px;
+  margin: 2px 4px 4px;
+  padding: 2px;
+  border: 1px solid var(--edge);
+  border-radius: 9px;
+  background: var(--bg);
+}
+/* two selectors that belong to one decision sit on one line */
+.segrow {
+  display: flex;
+  gap: 4px;
+}
+.segrow .seg {
+  flex: 1;
+  min-width: 0;
+  margin: 2px 0 4px;
+}
+.segrow .seg:first-child {
+  margin-left: 4px;
+}
+.segrow .seg:last-child {
+  margin-right: 4px;
+  flex: 0 0 84px;
+}
+.seg-opt {
+  flex: 1;
+  padding: 5px 8px;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  color: var(--dim);
+  font-size: 12px;
+  transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+.seg-opt:hover {
+  color: var(--ink);
+  background: var(--raised);
+}
+.seg-opt.on {
+  background: var(--acc-soft);
+  border-color: var(--acc);
+  color: var(--acc);
+}
+.genbtn {
+  width: calc(100% - 8px);
+  margin: 6px 4px 0;
+}
+.genbtn.armed {
+  background: #ffd166;
+  color: #2b2005;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+.placebadge {
+  border-color: var(--acc);
+  color: var(--acc);
+  background: #14142ad9;
+}
+
+/* ---- the effect engine: the live preview and its knobs ------------------
+   Nothing in here costs anything, so the panel is a workbench rather than a
+   confirm: the animation plays while the sliders move, and the two buttons at
+   the bottom are the only moment anything is written. */
+/* The tuning panel measured 41px WIDER than the space it sits in: a grid whose
+   column defaults to min-content, inside a column that is really 231px after
+   the panel's own padding and its scrollbar, not the 272px the panel is
+   nominally wide. Every child spilled off the right edge together, which is
+   why the toggle read "own co" and the frame row read "12 frames | 1". The
+   fix is the track, not any one child. */
+.fxpanel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
+  margin: 8px 4px 2px;
+  padding: 8px 6px 6px;
+  min-width: 0;
+  max-width: 100%;
+  /* No overflow:hidden here. It was added to stop the sliders spilling
+     sideways, and it also clipped everything below the preview — the tuning
+     controls and the keep buttons were rendered, inside the box, unreachable,
+     with nothing to scroll because the box itself was the wrong height. The
+     sideways fix is the minmax track and the min-width:0 below; clipping was
+     never doing that work. */
+  border: 1px solid var(--edge);
+  border-radius: 10px;
+  background: var(--raised);
+  animation: panel-in 160ms ease;
+}
+.fxpanel > *,
+.fxpanel .seg,
+.fxpanel .slider,
+.fxpanel .fxstage {
+  min-width: 0;
+  max-width: 100%;
+}
+.fxpanel .slider input,
+.fxpanel .seg-opt {
+  min-width: 0;
+}
+.fxhead {
+  display: flex;
+  align-items: baseline;
+  gap: 7px;
+  padding: 0 4px 2px;
+}
+.fxrule {
+  font: 600 11px/1 var(--font-mono);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--acc);
+}
+.fxdesc {
+  color: var(--dim);
+  font-size: 11px;
+  line-height: 1.3;
+}
+.fxstage {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 12px;
+  padding: 8px 4px 6px;
+  border-radius: 8px;
+  background: var(--stage);
+}
+.fxcell {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+}
+.fxcell em {
+  font: 10px/1 var(--font-mono);
+  font-style: normal;
+  color: var(--dim);
+}
+.fxcv {
+  display: block;
+  image-rendering: pixelated;
+}
+/* the colours the click read off the painting, in the order the rules use */
+.fxpal {
+  display: flex;
+  gap: 2px;
+  padding: 2px 4px 4px;
+}
+.fxpal span {
+  flex: 1;
+  height: 8px;
+  border-radius: 2px;
+  border: 1px solid #0006;
+}
+/* whose colours the effect is made of. A thing made OF the place takes the
+   painting's; a thing with its own identity brings its own, and then the ramp
+   itself has to be reachable, so the strip becomes swatches you can open. */
+.fxwhose {
+  margin: 2px 4px 3px;
+}
+.fxpal.edit input {
+  flex: 1;
+  height: 14px;
+  min-width: 0;
+  padding: 0;
+  border: 1px solid #0006;
+  border-radius: 2px;
+  background: none;
+  cursor: pointer;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.fxpal.edit input::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+.fxpal.edit input::-webkit-color-swatch {
+  border: none;
+  border-radius: 1px;
+}
+.fxpal.edit input:hover {
+  border-color: var(--acc);
+}
+.fxslider {
+  padding: 0 6px 4px;
+}
+/* the panel is open on something that already exists on disk: say so, because
+   one of the two buttons writes over it */
+.fxedit {
+  margin: 0 4px 2px;
+  padding: 4px 8px;
+  border-left: 2px solid var(--acc);
+  border-radius: 0 6px 6px 0;
+  background: var(--acc-soft);
+  color: var(--acc);
+  font: 10.5px/1.4 var(--font-mono);
+}
+/* What the confirmed translation will actually draw. It is the WHOLE prompt,
+   which now runs to sixty or eighty words, so it gets its own capped frame and
+   scrolls: nothing is hidden before a spend, and nothing pushes the confirm
+   button off the panel either. */
+.gen-will {
+  display: block;
+  max-height: 132px;
+  overflow-y: auto;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--acc) !important;
+  scrollbar-width: thin;
+  scrollbar-color: var(--edge) transparent;
+}
+.gen-will::-webkit-scrollbar {
+  width: 6px;
+}
+.gen-will::-webkit-scrollbar-thumb {
+  background: var(--edge);
+  border-radius: 3px;
+}
+/* a written effect that renders but does not wrap. Quiet on purpose: it is a
+   fact about the loop, not a refusal, and he may not care on a slow drift. */
+.fxwarn {
+  margin: 4px 4px 0;
+  padding: 4px 8px;
+  border-left: 2px solid #c9a227;
+  border-radius: 0 6px 6px 0;
+  background: #c9a2271f;
+  color: #d9bb55;
+  font: 10.5px/1.4 var(--font-mono);
+}
+/* the recipe fold: what was written for this ask, read-only, so the panel is
+   not a black box. There is no editor here on purpose. */
+.fxrecipe {
+  display: grid;
+  gap: 4px;
+  padding: 2px 4px 0;
+}
+.fxshow {
+  justify-self: start;
+  padding: 2px 0;
+  color: var(--dim);
+  font: 10.5px/1.4 var(--font-mono);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.fxshow:hover {
+  color: var(--acc);
+}
+.fxrecipe pre {
+  max-height: 190px;
+  margin: 0;
+  padding: 7px 8px;
+  overflow: auto;
+  border: 1px solid var(--edge);
+  border-radius: 6px;
+  background: var(--stage);
+  color: var(--dim);
+  font: 10.5px/1.5 var(--font-mono);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.fxfoot {
+  padding: 4px 4px 0;
+  color: var(--dim);
+  font: 10.5px/1.4 var(--font-mono);
+}
+
+/* ---- the doors (test step): the inline form and the event rows --------- */
+.doorform {
+  display: grid;
+  gap: 6px;
+  margin: 2px 4px;
+  padding: 10px;
+  border: 1px solid var(--edge);
+  border-radius: 10px;
+  background: var(--raised);
+  animation: panel-in 160ms ease;
+}
+.doorform input {
+  padding: 6px 9px;
+  font-size: 12px;
+}
+.doorrad {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--dim);
+  font-size: 11.5px;
+}
+.doorrad em {
+  font-style: normal;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  min-width: 36px;
+  text-align: center;
+}
+.doorrad .mbtn {
+  position: relative;
+  width: 22px;
+  height: 20px;
+  border-radius: 5px;
+  border: 1px solid var(--edge);
+  background: var(--panel);
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1;
+  transition: all 160ms ease;
+}
+.doorrad .mbtn:hover {
+  border-color: var(--acc);
+  color: var(--acc);
+}
+.doorhint {
+  color: var(--dim);
+  font-size: 11px;
+}
+.dooracts {
+  display: flex;
+  gap: 4px;
+}
+.evrows {
+  display: grid;
+  gap: 2px;
+  padding: 2px 0;
+}
+.evrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 4px;
+  padding: 5px 8px;
+  border-radius: 7px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease;
+}
+.evrow:hover {
+  background: var(--raised);
+}
+.evrow.sel {
+  background: var(--acc-soft);
+  border-color: var(--acc);
+}
+.ev-glyph {
+  flex: 0 0 auto;
+  color: var(--acc);
+  font-size: 12px;
+}
+.ev-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-family: var(--font-mono);
+}
+
+/* export step */
+.manifest {
+  margin: 2px 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--edge);
+  border-radius: 10px;
+  background: var(--raised);
+  font-size: 12px;
+}
+.manifest-to {
+  color: var(--dim);
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  padding-bottom: 8px;
+}
+.manifest-to b {
+  color: var(--ink);
+}
+.manifest ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 5px;
+}
+.manifest li {
+  color: var(--dim);
+  line-height: 1.4;
+}
+.manifest li b {
+  color: var(--ink);
+  font: 500 11.5px var(--font-mono);
+  margin-right: 6px;
+}
+
+/* ---- the stage -------------------------------------------------------- */
+
+.stage {
+  flex: 1;
+  position: relative;
+  min-width: 0;
+  background: var(--stage);
+}
+.stage canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  touch-action: none;
+  cursor: crosshair;
+}
+.empty {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  display: grid;
+  place-items: center;
+  color: var(--dim);
+  pointer-events: none;
+}
+.walkbadge {
+  position: absolute;
+  left: 14px;
+  top: 14px;
+  padding: 5px 12px;
+  border: 1px solid var(--ok);
+  border-radius: 20px;
+  color: var(--ok);
+  background: #0b1a12d9;
+  font-size: 12px;
+  pointer-events: none;
+  animation: panel-in 180ms ease;
+}
+
+/* toasts: every result announces itself, bottom centre, never silent */
+.toasts {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+  z-index: 5;
+}
+.toast {
+  max-width: 520px;
+  padding: 8px 16px;
+  border-radius: 20px;
+  background: #16181bf2;
+  border: 1px solid var(--edge);
+  box-shadow: 0 6px 24px #00000066;
+  color: var(--ink);
+  font-size: 12.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  animation: toast-in 200ms cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.97);
+  }
+}
+
+/* ---- footer: the readout ---------------------------------------------- */
+
+footer {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 14px;
+  background: var(--panel);
+  border-top: 1px solid var(--edge);
+  font-size: 11px;
+  color: var(--ink);
+}
+footer .grow {
+  flex: 1;
+}
+.read {
+  white-space: nowrap;
+}
+.mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.dim {
+  color: var(--dim);
+}
+footer .hint {
+  padding-left: 6px;
+}
+
+/* ---- the selected placement's action row (step 5) ---------------------- */
+/* a row of actions that wraps onto a second line rather than running out the
+   side of the panel. A label like "match to the map" is wider than a third of
+   272px, and the width it takes depends on the machine's font, which is how
+   this row broke on his screen and not on mine. */
+.actrow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  min-width: 0;
+  padding: 2px 4px;
+}
+/* the basis is what decides when the row wraps, and it is small enough that
+   three still sit on one line in a 272px panel. Below that they wrap. The
+   label itself wraps inside the button rather than being clipped, because
+   these buttons carry data-tip and an overflow:hidden would cut the tooltip
+   off at the button's own edge. */
+.abtn {
+  position: relative;
+  flex: 1 1 76px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 6px 4px;
+  border-radius: 7px;
+  border: 1px solid var(--edge);
+  background: var(--raised);
+  color: var(--ink);
+  font-size: 11.5px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+  transition: all 160ms ease;
+}
+.abtn:hover {
+  border-color: var(--acc);
+  color: var(--acc);
+}
+.abtn.danger:hover {
+  border-color: #e84660;
+  color: #ff8fa0;
+}
+.abtn.on {
+  border-color: var(--acc);
+  background: var(--acc-soft);
+  color: var(--acc);
+}
+.abtn.armed {
+  border-color: #e84660;
+  color: #ff8fa0;
+}
+
+/* ---- the map size control (footer): transparent margin growth ---------- */
+.mapsize {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+.mapsize .mbtn {
+  position: relative;
+  width: 22px;
+  height: 20px;
+  border-radius: 5px;
+  border: 1px solid var(--edge);
+  background: var(--raised);
+  color: var(--ink);
+  font-size: 11px;
+  line-height: 1;
+  transition: all 160ms ease;
+}
+.mapsize .mbtn:hover {
+  border-color: var(--acc);
+  color: var(--acc);
+}
+.mapsize .mpx {
+  width: 46px;
+  padding: 2px 4px;
+  border-radius: 5px;
+  border: 1px solid var(--edge);
+  background: var(--panel);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+/* footer tooltips open upward, or they would fall off the screen */
+footer [data-tip]:hover::after {
+  top: auto;
+  bottom: calc(100% + 5px);
+}
+
+/* ---- the style card and the palette lock (step 5) ----------------------
+   Two quiet pieces. The style line says what every ask is about to carry, and
+   it is read once per painting, so it never asks for anything. The compare
+   rows show the raw take beside the matched one; nothing in either costs a
+   generation, which is why neither wears the armed red the spend buttons do. */
+.styleline {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0 4px 2px;
+  padding: 5px 8px;
+  border-left: 2px solid var(--edge);
+  border-radius: 0 6px 6px 0;
+  background: var(--raised);
+}
+.style-tx {
+  flex: 1;
+  min-width: 0;
+  color: var(--dim);
+  font: 10.5px/1.4 var(--font-mono);
+}
+.style-re {
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  border-radius: 5px;
+  border: 1px solid var(--edge);
+  color: var(--dim);
+  font-size: 10.5px;
+  transition: all 160ms ease;
+}
+.style-re:hover:not(:disabled) {
+  border-color: var(--acc);
+  color: var(--acc);
+}
+.plrows {
+  display: grid;
+  gap: 8px;
+  padding: 8px 4px 6px;
+  border-radius: 8px;
+  background: var(--stage);
+}
+.plrow {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 10px;
+}
+/* the candidates after they have been looked at: the chosen one is outlined,
+   every other row is one click away, and nothing is decided until a button */
+.plrow.pickable {
+  padding: 4px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.plrow.pickable:hover {
+  border-color: var(--edge);
+}
+.plrow.chosen {
+  border-color: var(--acc);
+  background: var(--acc-soft);
+}
+.plnum {
+  align-self: flex-start;
+  font: 10px/1 var(--font-mono);
+  color: var(--dim);
+}
+.plrow.chosen .plnum {
+  color: var(--acc);
+}
+.plwhy {
+  padding: 3px 8px 0;
+  color: var(--acc);
+  font: 10.5px/1.4 var(--font-mono);
+}
+.plfix {
+  margin: 4px 4px 0;
+}
+.pllook {
+  padding: 2px 4px;
+}
+
+/* ---- the review loop: the tool judging its own render, in the open ------
+   Quiet by design. It is not a result, it is the tool saying what it already
+   did, and the buttons underneath are still the only thing that decides. */
+.fxlook {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-height: 16px;
+  padding: 2px 4px;
+}
+.fxlooking {
+  color: var(--acc);
+  font: 10.5px/1.4 var(--font-mono);
+}
+.fxsaid {
+  flex: 1;
+  min-width: 0;
+  color: var(--dim);
+  font: 10.5px/1.4 var(--font-mono);
+  overflow-wrap: anywhere;
+}
+.fxuse {
+  flex: 0 0 auto;
+  padding: 2px 7px;
+  border: 1px solid var(--edge);
+  border-radius: 5px;
+  color: var(--dim);
+  font-size: 10.5px;
+  transition: all 160ms ease;
+}
+.fxuse:hover {
+  border-color: var(--acc);
+  color: var(--acc);
+}
+.fxlook .fxshow:disabled {
+  opacity: 0.4;
+  text-decoration: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}
