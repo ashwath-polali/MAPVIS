@@ -24,7 +24,20 @@ public/work/
 !work/*/asks.json
 !work/*/style.json
 !work/*/keeps.json
+
+# The exported bundle itself. This is the hand-drawn deliverable: the cut and
+# the levels are the thing a human spends hours on and a generator cannot make.
+# Leaving these ignored means a post-export commit saves map.json and drops the
+# mask, which is the whole point of committing.
 !work/*/map.json
+!work/*/assets.json
+!work/*/scene.png
+!work/*/scene-cut.png
+!work/*/levels.png
+!work/*/occluders.png
+!work/*/cut.png
+!work/*/assets/
+!work/*/assets/**
 # .prev holds pre-edit bytes so an in-place edit can be undone. Scratch, not history.
 work/*/library/**/.prev/**
 
