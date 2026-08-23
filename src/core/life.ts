@@ -212,9 +212,12 @@ export type LifeFacing =
   | 'north-east'
 
 /* the same mapping the walk test uses (core/walk.ts dirFrom), so a walking
- * figure and Thor pick the same frame for the same heading. yScale squashes the
- * vertical before the angle is taken, because the map is drawn 2:1. */
-export function facingFrom(dx: number, dy: number, yScale = 2): LifeFacing {
+ * figure and Thor pick the same frame for the same heading. The deltas coming
+ * in are painting pixels, and the map's foreshortening is already inside them:
+ * Thor's facing is read off the pixels he MOVED, dirFrom(dx, dy * yScale), so
+ * squashing again here would pick a different frame for the same heading. That
+ * is what a yScale of 1 means; 0.72 or 2 would both be that second squash. */
+export function facingFrom(dx: number, dy: number, yScale = 1): LifeFacing {
   if (Math.abs(dx) < 0.001 && Math.abs(dy) < 0.001) return 'south'
   const a = (Math.atan2(dy * yScale, dx) * 180) / Math.PI
   if (a >= -22.5 && a < 22.5) return 'east'

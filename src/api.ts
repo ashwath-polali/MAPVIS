@@ -41,6 +41,13 @@ export interface SavedAssetEntry {
   src?: string
   frames?: string[]
   fps?: number
+  /* one view per heading, keyed by the eight names Thor's own frames use, each
+   * one a list of bundle-relative paths inside a single folder. Written for
+   * anything that has to face where it is going. */
+  dirs?: Record<string, string[]>
+  /* how it MOVES, if it does: a core/life.ts Life, written through untouched by
+   * the exporter. Off the wire, so it is only a Life once cleanLife says so. */
+  life?: unknown
   x?: number
   y?: number
   scale?: number

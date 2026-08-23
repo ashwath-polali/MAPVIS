@@ -4,7 +4,7 @@
  * Everything that happens per frame or per pixel happens here, outside React,
  * so a brush stroke never runs a render pass.
  */
-import { lifeAt, type Life } from './life'
+import { cleanLife, lifeAt, type Life } from './life'
 import { MaskDoc, PAL, colOf, nameOf, mkCanvas, bresenham, assetLabel, migrateEvent, type Pt, type PlacedAsset, type MapEvent } from './mask'
 import { Walker, canStand, checkReach, defaultCfg, type WalkCfg, type ReachResult } from './walk'
 import { savedScene, type LibItem } from '../api'
@@ -1956,14 +1956,19 @@ export class Editor {
       }
     return seen ? walk / seen : 0
   }
-  /* the floor probe a behaviour is fenced by, in painting pixels. The feet are
-   * what stands, so this asks about the pixel under them the same way the walk
-   * test does. */
+  /* the floor probe a behaviour is fenced by, in painting pixels.
+   *
+   * It has to be the SAME answer the game gives, not a near one: walkOnly
+   * wander takes the first standable candidate out of a fixed random sequence,
+   * so one disagreement about one candidate forks every leg after it and the
+   * two sides never come back together. That means the body test, feet plus two
+   * hips, not a single pixel, and it means reading the plane the export
+   * actually writes: levelsCanvas zeroes every cut pixel, so ground that is
+   * both levelled and cut stands here and is blocked there. */
   standsAt = (x: number, y: number): boolean => {
-    const xi = Math.round(x)
-    const yi = Math.round(y)
-    if (xi < 0 || yi < 0 || xi >= this.doc.W || yi >= this.doc.H) return false
-    return this.doc.lvl[yi * this.doc.W + xi] > 0
+    if (!canStand(this.doc, this.cfg, x, y)) return false
+    const cut = (px: number, py: number) => this.doc.cutAt(Math.round(px), Math.round(py)) > 0
+    return !cut(x, y) && !cut(x - this.cfg.hip, y - this.cfg.hipDY) && !cut(x + this.cfg.hip, y - this.cfg.hipDY)
   }
 
   /* A copy of a moving placement must not march in step with its original.
@@ -2676,6 +2681,16 @@ export class Editor {
       if (listed && listed.length) {
         const out: PlacedAsset[] = []
         let next = 1
+        // anything with frames or views lives in a FOLDER inside assets/, so the
+        // folder segment has to survive the trip back. Keeping only the basename
+        // 404s the png and the placement falls back to the placeholder box.
+        const workURL = (p: unknown): string => {
+          const rel = String(p || '')
+            .split('?')[0]
+            .replace(/^\/?assets\//, '')
+            .replace(/^\//, '')
+          return rel ? `/work/${this.sceneId}/assets/${rel}` : ''
+        }
         for (const d of listed) {
           const x = Number(d.x)
           const y = Number(d.y)
@@ -2701,6 +2716,32 @@ export class Editor {
             fx: !!d.flipX,
             fy: !!d.flipY,
           }
+          // how it MOVES comes back too, through the same guard every other
+          // caller uses. Dropping it was what silently deleted every behaviour
+          // on a reopen-and-re-export.
+          const life = cleanLife(d.life)
+          if (life) base.life = life
+          // a placement with VIEWS is decided first: it carries a src as well,
+          // pointing at one heading inside the folder, so the src branch below
+          // would otherwise claim it and lose the other seven views
+          if (d.dirs && typeof d.dirs === 'object') {
+            const views: Record<string, string[]> = {}
+            for (const [k, arr] of Object.entries(d.dirs)) {
+              if (!Array.isArray(arr) || !arr.length) continue
+              // one path per heading from the old exporter, a whole walk cycle
+              // from a newer one; both are just the list that was written
+              const set = arr.map(workURL).filter(Boolean)
+              if (set.length) views[k] = set
+            }
+            const keys = Object.keys(views)
+            if (keys.length) {
+              base.dirs = views
+              base.src = (views.south || views[keys[0]])[0]
+              if (Number(d.fps) > 0) base.fps = Number(d.fps)
+              out.push(base)
+              continue
+            }
+          }
           if (Array.isArray(d.frames) && d.frames.length) {
             const parts = String(d.frames[0]).split('/')
             const dirName = parts[parts.length - 2]
@@ -2709,9 +2750,9 @@ export class Editor {
             base.frames = d.frames.map((_, i) => `/work/${this.sceneId}/assets/${dirName}/${i}.png`)
             base.fps = Number(d.fps) > 0 ? Number(d.fps) : 6
           } else if (d.src) {
-            const file = String(d.src).split('/').pop()
-            if (!file) continue
-            base.src = `/work/${this.sceneId}/assets/${file}`
+            const url = workURL(d.src)
+            if (!url) continue
+            base.src = url
           } else {
             continue
           }
