@@ -1,5 +1,19 @@
 [
   {
+    "name": "boats-moored",
+    "kind": "asset",
+    "ask": "Three small wooden dinghies nosed together in a row, hulls of overlapping planks in faded red-brown, bleached tan and chalky blue-grey, paint flaking to bare wood, low gunwales, two stubby oars stowed inside one, a heap of folded canvas in another, frayed mooring ropes trailing from each bow. Isometric pixel art, chunky pixels, limited palette of faded red-brown, bleached tan, chalky blue-grey and dark teal, dark brown outline, lit from the upper left, shaded lower right, muted saturation.",
+    "prompt": "Three small wooden dinghies nosed together in a row, hulls of overlapping planks in faded red-brown, bleached tan and chalky blue-grey, paint flaking to bare wood, low gunwales, two stubby oars stowed inside one, a heap of folded canvas in another, frayed mooring ropes trailing from each bow. Isometric pixel art, chunky pixels, limited palette of faded red-brown, bleached tan, chalky blue-grey and dark teal, dark brown outline, lit from the upper left, shaded lower right, muted saturation.",
+    "at": "2026-08-24T23:03:29.554Z"
+  },
+  {
+    "name": "boat-house-style",
+    "kind": "asset",
+    "ask": "A small open wooden rowboat floating at its mooring, hull of overlapping planks in faded red-brown and bleached tan, two oars shipped inside across the thwarts, a coil of frayed rope at the bow, worn gunwale and a shallow puddle in the bilge. Isometric pixel art, chunky pixels, limited warm palette, dark warm-brown outline, sunlight from the upper left, shaded lower-right side, dithered wood grain, muted saturation.",
+    "prompt": "A small open wooden rowboat floating at its mooring, hull of overlapping planks in faded red-brown and bleached tan, two oars shipped inside across the thwarts, a coil of frayed rope at the bow, worn gunwale and a shallow puddle in the bilge. Isometric pixel art, chunky pixels, limited warm palette, dark warm-brown outline, sunlight from the upper left, shaded lower-right side, dithered wood grain, muted saturation.",
+    "at": "2026-08-24T23:00:49.520Z"
+  },
+  {
     "name": "boat-rowing-ctx",
     "kind": "asset",
     "ask": "a small open wooden rowboat with a curved hull, pale worn planks, two oars shipped inside, a coil of rope at the bow, floating empty",
@@ -264,19 +278,5 @@
     "ask": "a market woman in a vivid magenta skirt and cream blouse, a woven basket of bread on her arm, gold headscarf, warm brown skin, chunky readable pixel art, few colours, strong dark outline, saturated warm palette, golden-hour light from the left",
     "prompt": "a market woman in a vivid magenta skirt and cream blouse, a woven basket of bread on her arm, gold headscarf, warm brown skin, chunky readable pixel art, few colours, strong dark outline, saturated warm palette, golden-hour light from the left",
     "at": "2026-08-24T19:05:04.630Z"
-  },
-  {
-    "name": "dock-porter",
-    "kind": "character",
-    "ask": "a stocky dock porter in a bright teal sleeveless shirt and sand canvas trousers, a wooden crate braced on one shoulder, thick leather belt, sun-dark skin, chunky readable pixel art, few colours, strong dark outline, saturated warm palette, golden-hour light from the left",
-    "prompt": "a stocky dock porter in a bright teal sleeveless shirt and sand canvas trousers, a wooden crate braced on one shoulder, thick leather belt, sun-dark skin, chunky readable pixel art, few colours, strong dark outline, saturated warm palette, golden-hour light from the left",
-    "at": "2026-08-24T19:01:58.896Z"
-  },
-  {
-    "name": "net-mender",
-    "kind": "character",
-    "ask": "a woman kneeling forward mending a fishing net, a bright scarlet headscarf, ochre tunic, weathered hands working the mesh, olive skin, chunky readable pixel art, few colours, strong dark outline, saturated warm palette, golden-hour light from the left",
-    "prompt": "a woman kneeling forward mending a fishing net, a bright scarlet headscarf, ochre tunic, weathered hands working the mesh, olive skin, chunky readable pixel art, few colours, strong dark outline, saturated warm palette, golden-hour light from the left",
-    "at": "2026-08-24T18:58:53.469Z"
   }
 ]
