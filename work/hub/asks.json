@@ -1,5 +1,19 @@
 [
   {
+    "name": "dockhand-barrels",
+    "kind": "motion",
+    "ask": "breathes slowly with arms crossed, shifting weight now and then",
+    "prompt": "stands with arms crossed, breathing slowly, chest rising and settling, shifting weight from one foot to the other now and then",
+    "at": "2026-08-24T20:26:21.103Z"
+  },
+  {
+    "name": "gate-guard",
+    "kind": "motion",
+    "ask": "breathes slowly at attention, chest rising and falling",
+    "prompt": "stands at attention, breathing slowly, chest rising and falling",
+    "at": "2026-08-24T20:22:12.699Z"
+  },
+  {
     "name": "net-mender",
     "kind": "motion",
     "ask": "works the net through her hands, shoulders shifting",
@@ -264,19 +278,5 @@
     "ask": "palm island trees. animated swaying. beautiful trees, grand, maybe in 3s. no ugly base at the bottom, like stone or stand circle.",
     "prompt": "A trio of tall coconut palms with slender curved trunks, three grand crowns of long arching fronds. Warm sandy-tan and burnt-orange trunk bark ringed with darker brown notches, olive and mossy green fronds with deep brown shadow undersides, small brown coconut clusters at the crown. Sunlight from the upper left, warm highlights on the left of each trunk, cool brown shade right. Chunky pixels, dark brown outline, muted warm palette, isometric, transparent background.",
     "at": "2026-08-20T07:04:59.682Z"
-  },
-  {
-    "name": "island-palm-trees-dark-3",
-    "kind": "asset",
-    "ask": "island palm trees. dark green leaves, maybe with a little different color tinge, beautiful trees, swaying animation slowly. slightly golden hour atmosphere but not too much, also a bit damper",
-    "prompt": "a cluster of tall island palm trees in strict 2:1 isometric pixel art, slender curved trunks in warm tan and grey-brown with stacked ring segments, wide arching fronds in deep forest green shading to teal and olive at the tips, a few yellowed lower fronds, small clusters of green-brown coconuts at the crown, damp glossy highlights along the leaf spines, warm golden-hour sunlight from the upper left, blue-tinted shadow on the right side, painterly 6-8 value shading, muted palette of deep green, teal, tan and soft gold, one unified structure, warm sandy-tan and earthy-brown palette, cool grey stone, desaturated muted tones, dark 1px outlines, chunky isometric pixel forms, upper-left daylight, the object alone as a cut-out sprite on a fully transparent background, the base of the object is where its own material ends",
-    "at": "2026-08-20T02:24:23.916Z"
-  },
-  {
-    "name": "island-palm-trees-dark-2",
-    "kind": "asset",
-    "ask": "island palm trees. dark green leaves, maybe with a little different color tinge, beautiful trees, swaying animation slowly. slightly golden hour atmosphere but not too much, also a bit damper",
-    "prompt": "a cluster of tall island palm trees in strict 2:1 isometric pixel art, slender curved trunks in warm tan and grey-brown with stacked ring segments, wide arching fronds in deep forest green shading to teal and olive at the tips, a few yellowed lower fronds, small clusters of green-brown coconuts at the crown, damp glossy highlights along the leaf spines, warm golden-hour sunlight from the upper left, blue-tinted shadow on the right side, painterly 6-8 value shading, muted palette of deep green, teal, tan and soft gold, one unified structure, warm sandy-tan and earthy-brown palette, cool grey stone, desaturated muted tones, dark 1px outlines, chunky isometric pixel forms, upper-left daylight, the object alone as a cut-out sprite on a fully transparent background, the base of the object is where its own material ends",
-    "at": "2026-08-20T02:21:06.994Z"
   }
 ]

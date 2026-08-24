@@ -1,7 +1,34 @@
 {
   "dirs": {
+    "south-west": [
+      "/work/hub/library/gate-guard/south-west-0.png",
+      "/work/hub/library/gate-guard/south-west-1.png",
+      "/work/hub/library/gate-guard/south-west-2.png",
+      "/work/hub/library/gate-guard/south-west-3.png",
+      "/work/hub/library/gate-guard/south-west-4.png",
+      "/work/hub/library/gate-guard/south-west-5.png",
+      "/work/hub/library/gate-guard/south-west-6.png",
+      "/work/hub/library/gate-guard/south-west-7.png"
+    ],
+    "south-east": [
+      "/work/hub/library/gate-guard/south-east-0.png",
+      "/work/hub/library/gate-guard/south-east-1.png",
+      "/work/hub/library/gate-guard/south-east-2.png",
+      "/work/hub/library/gate-guard/south-east-3.png",
+      "/work/hub/library/gate-guard/south-east-4.png",
+      "/work/hub/library/gate-guard/south-east-5.png",
+      "/work/hub/library/gate-guard/south-east-6.png",
+      "/work/hub/library/gate-guard/south-east-7.png"
+    ],
     "south": [
-      "/work/hub/library/gate-guard/south-0.png"
+      "/work/hub/library/gate-guard/south-0.png",
+      "/work/hub/library/gate-guard/south-1.png",
+      "/work/hub/library/gate-guard/south-2.png",
+      "/work/hub/library/gate-guard/south-3.png",
+      "/work/hub/library/gate-guard/south-4.png",
+      "/work/hub/library/gate-guard/south-5.png",
+      "/work/hub/library/gate-guard/south-6.png",
+      "/work/hub/library/gate-guard/south-7.png"
     ],
     "west": [
       "/work/hub/library/gate-guard/west-0.png"
@@ -12,17 +39,11 @@
     "north": [
       "/work/hub/library/gate-guard/north-0.png"
     ],
-    "south-east": [
-      "/work/hub/library/gate-guard/south-east-0.png"
-    ],
     "north-east": [
       "/work/hub/library/gate-guard/north-east-0.png"
     ],
     "north-west": [
       "/work/hub/library/gate-guard/north-west-0.png"
-    ],
-    "south-west": [
-      "/work/hub/library/gate-guard/south-west-0.png"
     ]
   },
   "fps": 8,

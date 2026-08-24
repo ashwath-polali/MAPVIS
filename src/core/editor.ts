@@ -3075,7 +3075,11 @@ export class Editor {
       // now, off the same maths the game runs, so what is on screen here is
       // what will be on screen there
       const L = this.lifePlay && a.life ? lifeAt(a.life, now - this.lifeT0, { x: a.x, y: a.y }, this.standsAt) : null
-      const img = this.assetFrame(a, now, L ? L.facing : undefined)
+      /* A walk cycle is a GAIT. A wander is mostly pauses, and running the cycle
+       * off the clock alone made a figure stood at the end of a leg march on the
+       * spot. Frozen on its first frame while it waits, which is the standing
+       * pose the cycle was drawn from. */
+      const img = this.assetFrame(a, L && !L.moving ? 0 : now, L ? L.facing : undefined)
       // an unaccepted sparkle group rides ghosted until the check keeps it
       const ghost = this.proposedGroups.has(a.group)
       if (ghost) g.globalAlpha = 0.55

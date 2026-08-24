@@ -200,6 +200,14 @@ export interface LifeAt {
    * that carries directional frames is drawn with this; one that does not
    * ignores it and keeps flipping, so nothing had to change to gain it. */
   facing: LifeFacing
+  /* Whether it is travelling right now, as opposed to standing through a pause.
+   *
+   * A walk cycle is a GAIT: it is what the legs do while the thing is moving,
+   * and a wander is mostly pauses. Without this the caller ran the cycle from
+   * the clock alone and a figure standing at the end of a leg marched on the
+   * spot until the next one. The frames are right, the question is when to run
+   * them. A caller with a single-frame sprite can ignore it. */
+  moving: boolean
 }
 export type LifeFacing =
   | 'east'
@@ -252,8 +260,28 @@ export function lifeAt(
   // the phase is what keeps two copies of one behaviour out of step
   const t = t0 + (life.phase || 0)
   const floor = life.walkOnly && canStand ? canStand : null
-  const still: LifeAt = { dx: 0, dy: 0, flip: false, alpha: 1, facing: 'south' }
+  const still: LifeAt = { dx: 0, dy: 0, flip: false, alpha: 1, facing: 'south', moving: false }
   if (!life) return still
+  /* THE PATH, not only where it ends.
+   *
+   * The floor test used to ask whether the far end of a leg was standable and
+   * nothing about the line to it, so a walker cut the corner off a quay and
+   * crossed stone it could never step on. On a map whose walkable ground is thin
+   * paths that reads as walking through a wall.
+   *
+   * Sampled every two pixels, which is finer than a foot is wide here, and it
+   * runs on the same fixed candidate sequence as before, so the editor and the
+   * game still choose the identical leg. */
+  const clearPath = (ax: number, ay: number, bx: number, by: number) => {
+    if (!floor) return true
+    const d = Math.hypot(bx - ax, by - ay)
+    const n = Math.max(1, Math.ceil(d / 2))
+    for (let i = 1; i <= n; i++) {
+      const u = i / n
+      if (!floor(ax + (bx - ax) * u, ay + (by - ay) * u)) return false
+    }
+    return true
+  }
 
   if (life.kind === 'wander') {
     /* Walk the legs from the start rather than simulating: leg k has a fixed
@@ -280,12 +308,12 @@ export function lifeAt(
        * floor, which they do, it is the same mask. If none of the tries land on
        * floor the thing simply stays put for that leg, which is what a creature
        * boxed into a wall would do anyway. */
-      if (floor && !floor(tx, ty)) {
+      if (floor && (!floor(tx, ty) || !clearPath(px, py, tx, ty))) {
         let found = false
         for (let try_ = 0; try_ < 12; try_++) {
           const ax = cx + (rnd(k * 40 + try_ * 2 + 3001, seed) * 2 - 1) * halfW
           const ay = cy + (rnd(k * 40 + try_ * 2 + 3002, seed) * 2 - 1) * halfH
-          if (floor(ax, ay)) {
+          if (floor(ax, ay) && clearPath(px, py, ax, ay)) {
             tx = ax
             ty = ay
             found = true
@@ -313,6 +341,7 @@ export function lifeAt(
           flip: (life.faceMotion ?? true) && flip,
           alpha: 1,
           facing: facingFrom(tx - px, ty - py),
+          moving: true,
         }
       }
       clock += moveT
@@ -325,6 +354,7 @@ export function lifeAt(
           flip: (life.faceMotion ?? true) && flip,
           alpha: 1,
           facing: facingFrom(tx - px, ty - py),
+          moving: false,
         }
       }
       clock += pause
@@ -338,7 +368,7 @@ export function lifeAt(
     const cycle = life.cycle ?? 35
     const travel = Math.min(life.travel ?? 9, cycle)
     const u = (t % cycle) / travel
-    if (u > 1) return { dx: 0, dy: 0, flip: false, alpha: 0, facing: 'south' }
+    if (u > 1) return { dx: 0, dy: 0, flip: false, alpha: 0, facing: 'south', moving: false }
     const b = life.bounds
     const fx = life.fromX ?? (b ? b.x - 20 : home.x - 200)
     const fy = life.fromY ?? (b ? b.y + b.h * 0.3 : home.y)
@@ -354,6 +384,8 @@ export function lifeAt(
       flip: (life.faceMotion ?? true) && tx < fx,
       alpha: Math.max(0, a),
       facing: facingFrom(tx - fx, ty - fy),
+      // a pass is travel end to end; there is no standing about in it
+      moving: true,
     }
   }
 
@@ -370,6 +402,8 @@ export function lifeAt(
       alpha: 1,
       // the tangent of the circle is where it is heading
       facing: facingFrom(-Math.sin(a) * rx, Math.cos(a) * ry),
+      // an orbit never stops going round
+      moving: true,
     }
   }
 
@@ -381,5 +415,7 @@ export function lifeAt(
     flip: false,
     alpha: 1,
     facing: 'south',
+    // a drift is a sway that never settles, so its frames keep running
+    moving: true,
   }
 }
