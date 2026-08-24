@@ -4,10 +4,10 @@
  * Everything that happens per frame or per pixel happens here, outside React,
  * so a brush stroke never runs a render pass.
  */
-import { lifeAt, type Life } from './life'
+import { cleanLife, lifeAt, type Life } from './life'
 import { MaskDoc, PAL, colOf, nameOf, mkCanvas, bresenham, assetLabel, migrateEvent, type Pt, type PlacedAsset, type MapEvent } from './mask'
 import { Walker, canStand, checkReach, defaultCfg, type WalkCfg, type ReachResult } from './walk'
-import { savedScene, type LibItem } from '../api'
+import { savedScene, saveDoc, loadDoc, type LibItem } from '../api'
 
 export type Tool =
   | 'region'
@@ -267,6 +267,13 @@ export class Editor {
   private last = 0
   private saveT = 0
   private changed = false
+  // loadPainting replaces this.doc and then awaits a restore. Without this the
+  // autosave beat can fire inside that gap and write the empty replacement over
+  // a good save, which is a way to lose a map by opening another one.
+  private loading = false
+  // set once a disk save has failed, so the failure is said once and not every
+  // four seconds forever
+  private diskWarned = false
   private listener: ((s: EditorStatus) => void) | null = null
   private detachers: (() => void)[] = []
 
@@ -406,6 +413,11 @@ export class Editor {
     this.basePainting = img
     this.sceneId = id
     this.doc = new MaskDoc(img.naturalWidth, img.naturalHeight)
+    // the replacement is empty and the restore below is async, so the autosave
+    // beat has to be held off until this doc is the real one
+    this.loading = true
+    this.changed = false
+    this.diskWarned = false
     this.walker = new Walker(this.doc.spawn)
     this.natMask = mkCanvas(this.doc.W, this.doc.H)
     this.natOcc = mkCanvas(this.doc.W, this.doc.H)
@@ -432,7 +444,13 @@ export class Editor {
       g.drawImage(img, 0, 0)
       this.pix = g.getImageData(0, 0, this.doc.W, this.doc.H).data
     }
-    if (!this.restoreLocal()) await this.restoreFromDisk()
+    // this browser first, then the doc mirrored to disk, then a bundle if one
+    // was exported under this id. Newest and most complete first.
+    try {
+      if (!this.restoreLocal() && !(await this.restoreDoc())) await this.restoreFromDisk()
+    } finally {
+      this.loading = false
+    }
     this.fit()
     this.dirtyMask = true
     this.dirty = true
@@ -1956,14 +1974,19 @@ export class Editor {
       }
     return seen ? walk / seen : 0
   }
-  /* the floor probe a behaviour is fenced by, in painting pixels. The feet are
-   * what stands, so this asks about the pixel under them the same way the walk
-   * test does. */
+  /* the floor probe a behaviour is fenced by, in painting pixels.
+   *
+   * It has to be the SAME answer the game gives, not a near one: walkOnly
+   * wander takes the first standable candidate out of a fixed random sequence,
+   * so one disagreement about one candidate forks every leg after it and the
+   * two sides never come back together. That means the body test, feet plus two
+   * hips, not a single pixel, and it means reading the plane the export
+   * actually writes: levelsCanvas zeroes every cut pixel, so ground that is
+   * both levelled and cut stands here and is blocked there. */
   standsAt = (x: number, y: number): boolean => {
-    const xi = Math.round(x)
-    const yi = Math.round(y)
-    if (xi < 0 || yi < 0 || xi >= this.doc.W || yi >= this.doc.H) return false
-    return this.doc.lvl[yi * this.doc.W + xi] > 0
+    if (!canStand(this.doc, this.cfg, x, y)) return false
+    const cut = (px: number, py: number) => this.doc.cutAt(Math.round(px), Math.round(py)) > 0
+    return !cut(x, y) && !cut(x - this.cfg.hip, y - this.cfg.hipDY) && !cut(x + this.cfg.hip, y - this.cfg.hipDY)
   }
 
   /* A copy of a moving placement must not march in step with its original.
@@ -2603,11 +2626,21 @@ export class Editor {
     return `mapvis:${this.sceneId}`
   }
   private saveLocal() {
+    const s = this.doc.serialize()
     try {
-      localStorage.setItem(this.key(), this.doc.serialize())
+      localStorage.setItem(this.key(), s)
     } catch {
-      /* a full quota is not worth an error in the face */
+      // a full quota used to be swallowed here. One map is about two megabytes
+      // of utf-16 at 688x384 and a browser gives roughly five, so the third map
+      // in one browser stops saving. Silently, which is the part that cost work.
+      this.say('this browser is full · saving to disk only')
     }
+    // the copy that survives a cleared browser or a different machine
+    void saveDoc(this.sceneId, s).catch(() => {
+      if (this.diskWarned) return
+      this.diskWarned = true
+      this.say('could not save to disk · this browser is the only copy')
+    })
   }
   private restoreLocal() {
     const legacyKey = `mapvis:${this.sceneId}:${this.doc.W}x${this.doc.H}`
@@ -2647,6 +2680,36 @@ export class Editor {
     return false
   }
 
+  /* The disk mirror, read when this browser has nothing. That is a new machine,
+   * a cleared browser, or the quota having eaten the local copy. Same string
+   * and the same grow-then-unpack order restoreLocal uses, because deserialize
+   * ignores the envelope's w/h and unpack refuses a length mismatch. */
+  private async restoreDoc() {
+    try {
+      const { doc: raw } = await loadDoc(this.sceneId)
+      if (!raw) return false
+      if (raw.startsWith('{')) {
+        const d = JSON.parse(raw) as {
+          w?: number
+          h?: number
+          base?: { w: number; h: number; ox: number; oy: number }
+        }
+        if (typeof d.w === 'number' && typeof d.h === 'number' && (d.w !== this.doc.W || d.h !== this.doc.H)) {
+          const b = d.base
+          if (!b || b.w !== this.doc.W || b.h !== this.doc.H) return false // saved against another painting
+          this.relayCanvas(b.ox, b.oy, d.w, d.h)
+        }
+      }
+      if (this.doc.deserialize(raw)) {
+        this.say('restored from disk')
+        return true
+      }
+    } catch {
+      /* no mirror yet, or the server is not up */
+    }
+    return false
+  }
+
   // an exported bundle is the other place a mask lives, so reopening a scene
   // that was exported under this id picks it back up
   private async restoreFromDisk() {
@@ -2676,6 +2739,16 @@ export class Editor {
       if (listed && listed.length) {
         const out: PlacedAsset[] = []
         let next = 1
+        // anything with frames or views lives in a FOLDER inside assets/, so the
+        // folder segment has to survive the trip back. Keeping only the basename
+        // 404s the png and the placement falls back to the placeholder box.
+        const workURL = (p: unknown): string => {
+          const rel = String(p || '')
+            .split('?')[0]
+            .replace(/^\/?assets\//, '')
+            .replace(/^\//, '')
+          return rel ? `/work/${this.sceneId}/assets/${rel}` : ''
+        }
         for (const d of listed) {
           const x = Number(d.x)
           const y = Number(d.y)
@@ -2701,6 +2774,32 @@ export class Editor {
             fx: !!d.flipX,
             fy: !!d.flipY,
           }
+          // how it MOVES comes back too, through the same guard every other
+          // caller uses. Dropping it was what silently deleted every behaviour
+          // on a reopen-and-re-export.
+          const life = cleanLife(d.life)
+          if (life) base.life = life
+          // a placement with VIEWS is decided first: it carries a src as well,
+          // pointing at one heading inside the folder, so the src branch below
+          // would otherwise claim it and lose the other seven views
+          if (d.dirs && typeof d.dirs === 'object') {
+            const views: Record<string, string[]> = {}
+            for (const [k, arr] of Object.entries(d.dirs)) {
+              if (!Array.isArray(arr) || !arr.length) continue
+              // one path per heading from the old exporter, a whole walk cycle
+              // from a newer one; both are just the list that was written
+              const set = arr.map(workURL).filter(Boolean)
+              if (set.length) views[k] = set
+            }
+            const keys = Object.keys(views)
+            if (keys.length) {
+              base.dirs = views
+              base.src = (views.south || views[keys[0]])[0]
+              if (Number(d.fps) > 0) base.fps = Number(d.fps)
+              out.push(base)
+              continue
+            }
+          }
           if (Array.isArray(d.frames) && d.frames.length) {
             const parts = String(d.frames[0]).split('/')
             const dirName = parts[parts.length - 2]
@@ -2709,9 +2808,9 @@ export class Editor {
             base.frames = d.frames.map((_, i) => `/work/${this.sceneId}/assets/${dirName}/${i}.png`)
             base.fps = Number(d.fps) > 0 ? Number(d.fps) : 6
           } else if (d.src) {
-            const file = String(d.src).split('/').pop()
-            if (!file) continue
-            base.src = `/work/${this.sceneId}/assets/${file}`
+            const url = workURL(d.src)
+            if (!url) continue
+            base.src = url
           } else {
             continue
           }
@@ -2812,7 +2911,7 @@ export class Editor {
       if (wasBlocked && this.showHits) this.dirtyMask = true
       this.dirty = true
     }
-    if (this.changed && now - this.saveT > 4000) {
+    if (this.changed && !this.loading && now - this.saveT > 4000) {
       this.saveLocal()
       this.changed = false
       this.saveT = now

@@ -1146,23 +1146,44 @@ async function route(req, res, p, url) {
         // rebuilt further down, so anything written straight to disk here would
         // be deleted by its own export
         const outDirs = {}
-        let folder = ''
+        let metaFile = ''
         for (const [k, arr] of Object.entries(a.dirs)) {
           if (!Array.isArray(arr) || !arr[0]) continue
-          const abs = resolveAssetFile(arr[0], dir)
-          if (!abs) continue
-          if (!folder) folder = path.basename(path.dirname(abs))
-          const fname = path.basename(abs)
-          const rel = folder + '/' + fname
-          writes.set(rel, fs.readFileSync(abs))
-          outDirs[k] = ['assets/' + rel]
+          /* EVERY frame of the heading, not the first one alone. A character is
+           * a walk cycle, six frames to a heading, so keeping frame 0 handed the
+           * game a statue that slid across the ground: the exact moon-walk the
+           * views were added to stop. A stop at the first missing file, the way
+           * the animated branch below stops, keeps the run contiguous. */
+          const out = []
+          for (const u of arr) {
+            const abs = resolveAssetFile(u, dir)
+            if (!abs) break
+            const rel = path.basename(path.dirname(abs)) + '/' + path.basename(abs)
+            writes.set(rel, fs.readFileSync(abs))
+            out.push('assets/' + rel)
+            if (!metaFile) metaFile = path.join(path.dirname(abs), 'dirs.json')
+          }
+          if (out.length) outDirs[k] = out
         }
         if (Object.keys(outDirs).length) {
+          // the rate those frames play at, off the item's own dirs.json the way
+          // an animated item carries its fps. A set of single views has nothing
+          // to cycle, so the number only ever matters to a walker.
+          let fps = Number(a.fps) > 0 ? Math.round(Number(a.fps)) : 8
+          try {
+            const meta = JSON.parse(fs.readFileSync(metaFile, 'utf8'))
+            if (Number(meta.fps) > 0) fps = Math.round(Number(meta.fps))
+          } catch {
+            /* no dirs.json beside the views, or unreadable: the default stands */
+          }
           outAssets.push({
             id: String(a.id),
             group: String(a.group || 'props'),
             dirs: outDirs,
+            // frame 0 of the front view: a reader that knows nothing about
+            // headings still gets a picture rather than a blank
             src: outDirs.south ? outDirs.south[0] : Object.values(outDirs)[0][0],
+            fps,
             x,
             y,
             ...tf,
@@ -1231,6 +1252,32 @@ async function route(req, res, p, url) {
       files.push('cut.png')
     }
     return send(res, 200, { dir, files })
+  }
+
+  /* The doc exactly as the editor holds it, written on the same beat as the
+   * browser autosave. A map used to live in one localStorage key on one machine
+   * behind a quota failure that says nothing, so hours of masking had no second
+   * copy anywhere. The body is the string Doc.serialize() already produces,
+   * stored verbatim, so there is no second format to keep in step with it. */
+  if (p === '/api/doc' && req.method === 'POST') {
+    const b = await body(req)
+    if (typeof b.doc !== 'string' || !b.doc) return send(res, 400, { error: 'no doc' })
+    const id = safeId(b.id)
+    const dir = path.join(WORK, id)
+    fs.mkdirSync(dir, { recursive: true })
+    // written beside and renamed, because a write killed halfway through leaves
+    // a truncated doc that reads as valid until the moment it is needed
+    const tmp = path.join(dir, 'doc.json.tmp')
+    fs.writeFileSync(tmp, b.doc)
+    fs.renameSync(tmp, path.join(dir, 'doc.json'))
+    return send(res, 200, { bytes: b.doc.length })
+  }
+
+  if (p.startsWith('/api/doc/') && req.method === 'GET') {
+    const id = safeId(decodeURIComponent(p.slice('/api/doc/'.length)))
+    const f = path.join(WORK, id, 'doc.json')
+    if (!f.startsWith(WORK) || !fs.existsSync(f)) return send(res, 200, { doc: '' })
+    return send(res, 200, { doc: fs.readFileSync(f, 'utf8') })
   }
 
   return notFound(res)

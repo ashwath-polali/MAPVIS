@@ -41,6 +41,13 @@ export interface SavedAssetEntry {
   src?: string
   frames?: string[]
   fps?: number
+  /* one view per heading, keyed by the eight names Thor's own frames use, each
+   * one a list of bundle-relative paths inside a single folder. Written for
+   * anything that has to face where it is going. */
+  dirs?: Record<string, string[]>
+  /* how it MOVES, if it does: a core/life.ts Life, written through untouched by
+   * the exporter. Off the wire, so it is only a Life once cleanLife says so. */
+  life?: unknown
   x?: number
   y?: number
   scale?: number
@@ -489,3 +496,12 @@ export const saveCutPNG = (id: string, image: string, cut: string) =>
   jpost<{ dir: string; files: string[] }>('/api/savecut', { id, image, cut })
 
 export const exportBundle = (b: unknown) => jpost<{ dir: string; files: string[] }>('/api/export', b)
+
+/* The map's own state, mirrored to disk on the same beat as the browser
+ * autosave. Export is a different job: it is the bundle the game reads, it is
+ * lossy about the editor's state, and it should not be the only way work leaves
+ * the browser. This is the save. The payload is the exact string the doc
+ * serializes to, so nothing here has to understand the format. */
+export const saveDoc = (id: string, doc: string) => jpost<{ bytes: number }>('/api/doc', { id, doc })
+
+export const loadDoc = (id: string) => jget<{ doc: string }>('/api/doc/' + encodeURIComponent(id))
