@@ -17,9 +17,8 @@ export default defineConfig({
       },
     },
   ],
-  // 5275 for the platform worktree, so the tool Ash is editing on 5274 keeps
-  // running untouched while this branch is built and tested. A private dep
-  // cache so two dev servers never share node_modules/.vite through the junction.
+  // 5274, one above the live MAPVIS instance, and a private dep cache so two
+  // dev servers never share node_modules/.vite through the junction
   cacheDir: '.vite-cache',
-  server: { port: 5275, strictPort: true },
+  server: { port: 5274 },
 })
