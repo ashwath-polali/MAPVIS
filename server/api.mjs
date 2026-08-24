@@ -745,28 +745,93 @@ async function route(req, res, p, url) {
       // the last free moment. Past this line the png is bought whatever happens
       // next, so everything below still writes it to disk.
       halt()
-      // the confirmed prompt rides through verbatim: what the button showed is
-      // the whole of what is sent, with nothing appended behind it
-      const b64 = await raceStop(
-        gate,
-        pixellab.mapObject({
-          description: t.thing,
-          w: useBg ? bgSize.w : w,
-          h: useBg ? bgSize.h : h,
-          view: OBJECT_VIEW,
-          ...(useBg
-            ? {
-                background: bg,
-                // the sprite's intended footprint as a share of the crop, held so
-                // the surrounding art always frames it
-                fraction: Math.max(0.15, Math.min(0.8, (w * h) / (bgSize.w * bgSize.h))),
-              }
-            : {}),
-          seed: seedOf(b),
-        }),
-      )
+
+      /* PAINTED, NOT ILLUSTRATED, and this is the whole route now rather than a
+       * lane beside it.
+       *
+       * The object endpoint draws each ask as an independent illustration with
+       * nothing anchoring its angle. Asked four times for a boat it gave a side
+       * elevation, a straight overhead, a flat raft and a rectangular trough.
+       * Painting with the MAP as the style image inherits its palette, outline,
+       * detail and shading, and everything inside one image shares a vanishing
+       * point because it was all drawn at once. That is not a trick for boats,
+       * it is why cand-1, wave23 and the hub all worked.
+       *
+       * One thing or twenty is the same call: a sheet of one is a painting of
+       * one. So there is no separate sheet route, and fill is this with a bigger
+       * canvas and more nouns.
+       *
+       * The style reference is whatever the client already sends to give context:
+       * a boxed crop when there is one, the cut painting otherwise. Both are the
+       * map, which is the only thing that has to be true here.
+       *
+       * The object endpoint stays as the fallback, because a paint can fail and
+       * something is better than an error, and because painting is about two
+       * minutes against thirty seconds. */
+      const styleRef = bg || stripDataURL(String(b.style || ''))
+      const styleSize = styleRef ? pngSizeBuf(Buffer.from(styleRef, 'base64')) : null
+      let b64 = ''
+      let painted = false
+      if (styleSize && styleSize.w > 0) {
+        try {
+          const jobId = await raceStop(
+            gate,
+            pixellab.paintSheet({
+              description: t.thing,
+              // painted at MAP SCALE and placed at 1:1. A bigger canvas does not
+              // buy detail, it buys a pixel finer than the painting's own, which
+              // is the exact look of a thing sitting on top of a map rather than
+              // in it.
+              w: Math.max(64, Math.min(320, w)),
+              h: Math.max(64, Math.min(320, h)),
+              style: styleRef,
+              styleW: styleSize.w,
+              styleH: styleSize.h,
+              seed: seedOf(b),
+            }),
+          )
+          const png = await raceStop(gate, pixellab.awaitImage(jobId, { timeoutMs: 600000 }))
+          /* One ask can paint several things, and they arrive apart from each
+           * other on transparency. Cut them into one library row each: asking
+           * for "a few boats" and getting a single png with four boats welded
+           * into it is not an asset, it is a picture of assets. */
+          const parts = splitSheet(png, Number(b.minPx) || 120)
+          if (parts.length > 1) {
+            const base = b.name ? cleanName(b.name) : slugName(prompt)
+            const items = parts.map((pt, i) => saveStatic(id, pt.png.toString('base64'), `${base}-${i + 1}`, prompt, t.thing))
+            return send(res, 200, { item: items[0], items, painted: true })
+          }
+          if (parts.length === 1) {
+            b64 = parts[0].png.toString('base64')
+            painted = true
+          }
+        } catch (e) {
+          if (String((e && e.message) || e) === 'stopped') throw e
+          // and fall through to the illustrator rather than answering an error
+        }
+      }
+      if (!b64) {
+        b64 = await raceStop(
+          gate,
+          pixellab.mapObject({
+            description: t.thing,
+            w: useBg ? bgSize.w : w,
+            h: useBg ? bgSize.h : h,
+            view: OBJECT_VIEW,
+            ...(useBg
+              ? {
+                  background: bg,
+                  // the sprite's intended footprint as a share of the crop, held
+                  // so the surrounding art always frames it
+                  fraction: Math.max(0.15, Math.min(0.8, (w * h) / (bgSize.w * bgSize.h))),
+                }
+              : {}),
+            seed: seedOf(b),
+          }),
+        )
+      }
       const item = saveStatic(id, b64, b.name ? cleanName(b.name) : 'gen-' + slugName(prompt), prompt, t.thing)
-      return send(res, 200, { item })
+      return send(res, 200, { item, painted })
     } catch (e) {
       const m = String((e && e.message) || e)
       return send(res, m === 'stopped' ? 499 : 502, { error: m.slice(0, 300) })
@@ -1593,61 +1658,6 @@ async function route(req, res, p, url) {
       files.push('cut.png')
     }
     return send(res, 200, { dir, files })
-  }
-
-  /* A SHEET: several things PAINTED TOGETHER in the map's own hand, then cut apart.
-   *
-   * This exists because the object endpoint cannot be relied on for projection.
-   * Asked four times for a boat it returned a side elevation, a straight
-   * overhead, a flat raft and a rectangular trough, none of them at the island's
-   * angle. Every piece of art on this project that has ever been accepted came
-   * out of ONE painting, and the reason is structural rather than lucky: inside a
-   * single image everything shares a vanishing point, a light and a palette
-   * because it was all drawn at once.
-   *
-   * So it paints instead of generating objects. /v2/generate-image-v2 takes a
-   * style_image, and style_options carries the palette, the outline, the detail
-   * and the shading across, so the reference is the map itself. no_background
-   * gives transparency, the things come back separated, and a flood fill takes
-   * them apart into one library item each.
-   *
-   * THE SHEET IS PAINTED AT MAP SCALE, which is the whole trick and the same law
-   * the characters taught: four boats that will occupy a 144x128 patch of harbour
-   * are painted as a 144x128 sheet. Nothing is ever scaled down afterwards,
-   * because a thing drawn finer than its map is exactly what looks pasted on.
-   *
-   * One call buys the whole set, which is also why it is cheaper than asking
-   * four times and throwing three away. */
-  if (p === '/api/sheet-gen' && req.method === 'POST') {
-    const b = await body(req)
-    const id = safeId(b.id)
-    const desc = String(b.prompt || '').replace(/\s+/g, ' ').trim().slice(0, PROMPT_MAX)
-    if (!desc) return send(res, 400, { error: 'no prompt' })
-    if (!b.style) return send(res, 400, { error: 'no style image: the map is what makes it match' })
-    // nothing above this line costs anything
-    if (b.confirm !== true) return send(res, 400, { error: 'this spends generations: send confirm true' })
-    const w = Math.max(64, Math.min(320, Math.round(Number(b.w) || 144)))
-    const h = Math.max(64, Math.min(320, Math.round(Number(b.h) || 128)))
-    const style = stripDataURL(String(b.style))
-    const sz = pngSizeBuf(Buffer.from(style, 'base64'))
-    if (!(sz.w > 0)) return send(res, 400, { error: 'the style image did not read as a png' })
-    const { gate, halt, done } = gateFor(String(b.job || '').slice(0, 64))
-    try {
-      halt()
-      const jobId = await raceStop(gate, pixellab.paintSheet({ description: desc, w, h, style, styleW: sz.w, styleH: sz.h, seed: seedOf(b) }))
-      const png = await raceStop(gate, pixellab.awaitImage(jobId, { timeoutMs: 600000 }))
-      // past here the painting is bought, so the split runs whatever a stop says
-      const parts = splitSheet(png, Number(b.minPx) || 120)
-      if (!parts.length) return send(res, 200, { items: [], note: 'nothing separable came back: the things may be touching, ask for clear space between them' })
-      const base = b.name ? cleanName(b.name) : slugName(desc)
-      const items = parts.map((p, i) => saveStatic(id, p.png.toString('base64'), `${base}-${i + 1}`, desc, desc))
-      return send(res, 200, { items, sheet: parts.length })
-    } catch (e) {
-      const m = String((e && e.message) || e)
-      return send(res, m === 'stopped' ? 499 : 502, { error: m.slice(0, 300) })
-    } finally {
-      done()
-    }
   }
 
   /* The doc exactly as the editor holds it, written on the same beat as the

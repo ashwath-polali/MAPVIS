@@ -1,5 +1,12 @@
 [
   {
+    "name": "ship-paw-painted",
+    "kind": "asset",
+    "ask": "A proud single-masted sailing ship moored alongside, deep curved hull of overlapping planks in warm red-brown with a bleached tan strake, a tall upright mast, one broad square sail spread full in cream canvas carrying ONE LARGE DARK PANTHER PAW PRINT as its emblem, rope rigging fore and aft, a small raised stern deck, empty of crew. Isometric pixel art, chunky pixels, limited warm palette, dark brown outline, lit from the upper left, shaded lower right, muted saturation.",
+    "prompt": "A proud single-masted sailing ship moored alongside, deep curved hull of overlapping planks in warm red-brown with a bleached tan strake, a tall upright mast, one broad square sail spread full in cream canvas carrying ONE LARGE DARK PANTHER PAW PRINT as its emblem, rope rigging fore and aft, a small raised stern deck, empty of crew. Isometric pixel art, chunky pixels, limited warm palette, dark brown outline, lit from the upper left, shaded lower right, muted saturation.",
+    "at": "2026-08-24T23:55:57.454Z"
+  },
+  {
     "name": "boats-moored",
     "kind": "asset",
     "ask": "Three small wooden dinghies nosed together in a row, hulls of overlapping planks in faded red-brown, bleached tan and chalky blue-grey, paint flaking to bare wood, low gunwales, two stubby oars stowed inside one, a heap of folded canvas in another, frayed mooring ropes trailing from each bow. Isometric pixel art, chunky pixels, limited palette of faded red-brown, bleached tan, chalky blue-grey and dark teal, dark brown outline, lit from the upper left, shaded lower right, muted saturation.",
@@ -271,12 +278,5 @@
     "ask": "a barefoot child in a bright yellow tunic, tousled dark hair, arms swinging wide, mid stride, chunky readable pixel art, few colours, strong dark outline, saturated warm palette, golden-hour light from the left",
     "prompt": "a barefoot child in a bright yellow tunic, tousled dark hair, arms swinging wide, mid stride, chunky readable pixel art, few colours, strong dark outline, saturated warm palette, golden-hour light from the left",
     "at": "2026-08-24T19:08:31.753Z"
-  },
-  {
-    "name": "market-woman",
-    "kind": "character",
-    "ask": "a market woman in a vivid magenta skirt and cream blouse, a woven basket of bread on her arm, gold headscarf, warm brown skin, chunky readable pixel art, few colours, strong dark outline, saturated warm palette, golden-hour light from the left",
-    "prompt": "a market woman in a vivid magenta skirt and cream blouse, a woven basket of bread on her arm, gold headscarf, warm brown skin, chunky readable pixel art, few colours, strong dark outline, saturated warm palette, golden-hour light from the left",
-    "at": "2026-08-24T19:05:04.630Z"
   }
 ]
