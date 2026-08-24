@@ -1,5 +1,82 @@
 [
   {
+    "name": "water-carrier",
+    "kind": "character",
+    "ask": "a water carrier balancing a yoke across the shoulders with a clay jar hanging at each end, moss green tunic, bare arms, dark skin, chunky readable pixel art, few colours, strong dark outline, saturated warm palette, golden-hour light from the left",
+    "prompt": "a water carrier balancing a yoke across the shoulders with a clay jar hanging at each end, moss green tunic, bare arms, dark skin, chunky readable pixel art, few colours, strong dark outline, saturated warm palette, golden-hour light from the left",
+    "at": "2026-08-24T19:14:42.501Z"
+  },
+  {
+    "name": "sailor",
+    "kind": "character",
+    "ask": "a young sailor in a blue and white striped shirt, navy trousers, a coil of rope over one shoulder, red kerchief at the neck, chunky readable pixel art, few colours, strong dark outline, saturated warm palette, golden-hour light from the left",
+    "prompt": "a young sailor in a blue and white striped shirt, navy trousers, a coil of rope over one shoulder, red kerchief at the neck, chunky readable pixel art, few colours, strong dark outline, saturated warm palette, golden-hour light from the left",
+    "at": "2026-08-24T19:11:39.452Z"
+  },
+  {
+    "name": "running-child",
+    "kind": "character",
+    "ask": "a barefoot child in a bright yellow tunic, tousled dark hair, arms swinging wide, mid stride, chunky readable pixel art, few colours, strong dark outline, saturated warm palette, golden-hour light from the left",
+    "prompt": "a barefoot child in a bright yellow tunic, tousled dark hair, arms swinging wide, mid stride, chunky readable pixel art, few colours, strong dark outline, saturated warm palette, golden-hour light from the left",
+    "at": "2026-08-24T19:08:31.753Z"
+  },
+  {
+    "name": "market-woman",
+    "kind": "character",
+    "ask": "a market woman in a vivid magenta skirt and cream blouse, a woven basket of bread on her arm, gold headscarf, warm brown skin, chunky readable pixel art, few colours, strong dark outline, saturated warm palette, golden-hour light from the left",
+    "prompt": "a market woman in a vivid magenta skirt and cream blouse, a woven basket of bread on her arm, gold headscarf, warm brown skin, chunky readable pixel art, few colours, strong dark outline, saturated warm palette, golden-hour light from the left",
+    "at": "2026-08-24T19:05:04.630Z"
+  },
+  {
+    "name": "dock-porter",
+    "kind": "character",
+    "ask": "a stocky dock porter in a bright teal sleeveless shirt and sand canvas trousers, a wooden crate braced on one shoulder, thick leather belt, sun-dark skin, chunky readable pixel art, few colours, strong dark outline, saturated warm palette, golden-hour light from the left",
+    "prompt": "a stocky dock porter in a bright teal sleeveless shirt and sand canvas trousers, a wooden crate braced on one shoulder, thick leather belt, sun-dark skin, chunky readable pixel art, few colours, strong dark outline, saturated warm palette, golden-hour light from the left",
+    "at": "2026-08-24T19:01:58.896Z"
+  },
+  {
+    "name": "net-mender",
+    "kind": "character",
+    "ask": "a woman kneeling forward mending a fishing net, a bright scarlet headscarf, ochre tunic, weathered hands working the mesh, olive skin, chunky readable pixel art, few colours, strong dark outline, saturated warm palette, golden-hour light from the left",
+    "prompt": "a woman kneeling forward mending a fishing net, a bright scarlet headscarf, ochre tunic, weathered hands working the mesh, olive skin, chunky readable pixel art, few colours, strong dark outline, saturated warm palette, golden-hour light from the left",
+    "at": "2026-08-24T18:58:53.469Z"
+  },
+  {
+    "name": "old-fisherman",
+    "kind": "character",
+    "ask": "a lean old fisherman in a faded sea blue tunic and rolled trousers, wide straw hat, grey beard, a long bamboo rod held out over the water, bare feet, chunky readable pixel art, few colours, strong dark outline, saturated warm palette, golden-hour light from the left",
+    "prompt": "a lean old fisherman in a faded sea blue tunic and rolled trousers, wide straw hat, grey beard, a long bamboo rod held out over the water, bare feet, chunky readable pixel art, few colours, strong dark outline, saturated warm palette, golden-hour light from the left",
+    "at": "2026-08-24T18:57:52.447Z"
+  },
+  {
+    "name": "fruit-seller",
+    "kind": "character",
+    "ask": "a young fruit seller in a vivid marigold blouse and deep indigo skirt, a woven basket of red and green fruit on one hip, headscarf, deep brown skin, chunky readable pixel art, few colours, strong dark outline, saturated warm palette, golden-hour light from the left",
+    "prompt": "a young fruit seller in a vivid marigold blouse and deep indigo skirt, a woven basket of red and green fruit on one hip, headscarf, deep brown skin, chunky readable pixel art, few colours, strong dark outline, saturated warm palette, golden-hour light from the left",
+    "at": "2026-08-24T18:56:22.076Z"
+  },
+  {
+    "name": "fishmonger",
+    "kind": "character",
+    "ask": "a broad fishmonger in a bright coral apron over a cream shirt, sleeves shoved up, a silver fish held in one hand, dark curly hair, warm brown skin, chunky readable pixel art, few colours, strong dark outline, saturated warm palette, golden-hour light from the left",
+    "prompt": "a broad fishmonger in a bright coral apron over a cream shirt, sleeves shoved up, a silver fish held in one hand, dark curly hair, warm brown skin, chunky readable pixel art, few colours, strong dark outline, saturated warm palette, golden-hour light from the left",
+    "at": "2026-08-24T18:54:35.755Z"
+  },
+  {
+    "name": "knight-watch",
+    "kind": "character",
+    "ask": "a knight in full plate armour, blackened steel with warm rim light, a crimson tabard bearing a pale panther crest, one gauntlet on the hilt of a longsword sheathed at the hip, visor raised, weathered face, chunky readable pixel art, few colours, strong dark outline, saturated warm palette, golden-hour light from the left",
+    "prompt": "a knight in full plate armour, blackened steel with warm rim light, a crimson tabard bearing a pale panther crest, one gauntlet on the hilt of a longsword sheathed at the hip, visor raised, weathered face, chunky readable pixel art, few colours, strong dark outline, saturated warm palette, golden-hour light from the left",
+    "at": "2026-08-24T18:53:41.837Z"
+  },
+  {
+    "name": "knight-gate",
+    "kind": "character",
+    "ask": "a knight in full plate armour, polished steel with warm highlights, a deep teal tabard bearing a pale panther crest, both gauntlets resting on the pommel of a longsword planted point-down in front of him, visor raised showing a weathered face, chunky readable pixel art, few colours, strong dark outline, saturated warm palette, golden-hour light from the left",
+    "prompt": "a knight in full plate armour, polished steel with warm highlights, a deep teal tabard bearing a pale panther crest, both gauntlets resting on the pommel of a longsword planted point-down in front of him, visor raised showing a weathered face, chunky readable pixel art, few colours, strong dark outline, saturated warm palette, golden-hour light from the left",
+    "at": "2026-08-24T18:51:06.385Z"
+  },
+  {
     "name": "child-barefoot",
     "kind": "character",
     "ask": "a barefoot child in a short tan tunic, tousled dark hair, arms swinging, warm golden-hour light from the left, terracotta and sand palette, clean pixel art, limited palette",

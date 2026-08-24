@@ -1,0 +1,30 @@
+{
+  "dirs": {
+    "south": [
+      "/work/hub/library/knight-watch/south-0.png"
+    ],
+    "west": [
+      "/work/hub/library/knight-watch/west-0.png"
+    ],
+    "east": [
+      "/work/hub/library/knight-watch/east-0.png"
+    ],
+    "north": [
+      "/work/hub/library/knight-watch/north-0.png"
+    ],
+    "south-east": [
+      "/work/hub/library/knight-watch/south-east-0.png"
+    ],
+    "north-east": [
+      "/work/hub/library/knight-watch/north-east-0.png"
+    ],
+    "north-west": [
+      "/work/hub/library/knight-watch/north-west-0.png"
+    ],
+    "south-west": [
+      "/work/hub/library/knight-watch/south-west-0.png"
+    ]
+  },
+  "fps": 8,
+  "characterId": "f8d8caf7-1272-4a7a-b052-ec601c2649c0"
+}

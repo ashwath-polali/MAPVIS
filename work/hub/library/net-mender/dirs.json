@@ -1,0 +1,30 @@
+{
+  "dirs": {
+    "south": [
+      "/work/hub/library/net-mender/south-0.png"
+    ],
+    "west": [
+      "/work/hub/library/net-mender/west-0.png"
+    ],
+    "east": [
+      "/work/hub/library/net-mender/east-0.png"
+    ],
+    "north": [
+      "/work/hub/library/net-mender/north-0.png"
+    ],
+    "south-east": [
+      "/work/hub/library/net-mender/south-east-0.png"
+    ],
+    "north-east": [
+      "/work/hub/library/net-mender/north-east-0.png"
+    ],
+    "north-west": [
+      "/work/hub/library/net-mender/north-west-0.png"
+    ],
+    "south-west": [
+      "/work/hub/library/net-mender/south-west-0.png"
+    ]
+  },
+  "fps": 8,
+  "characterId": "027aea53-db83-4337-ae02-77cb49ab8eec"
+}

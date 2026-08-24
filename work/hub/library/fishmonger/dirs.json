@@ -1,0 +1,30 @@
+{
+  "dirs": {
+    "south": [
+      "/work/hub/library/fishmonger/south-0.png"
+    ],
+    "west": [
+      "/work/hub/library/fishmonger/west-0.png"
+    ],
+    "east": [
+      "/work/hub/library/fishmonger/east-0.png"
+    ],
+    "north": [
+      "/work/hub/library/fishmonger/north-0.png"
+    ],
+    "south-east": [
+      "/work/hub/library/fishmonger/south-east-0.png"
+    ],
+    "north-east": [
+      "/work/hub/library/fishmonger/north-east-0.png"
+    ],
+    "north-west": [
+      "/work/hub/library/fishmonger/north-west-0.png"
+    ],
+    "south-west": [
+      "/work/hub/library/fishmonger/south-west-0.png"
+    ]
+  },
+  "fps": 8,
+  "characterId": "c01f3ebe-5813-4365-afc4-948d4dfd98ed"
+}

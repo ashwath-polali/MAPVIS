@@ -1,0 +1,30 @@
+{
+  "dirs": {
+    "south": [
+      "/work/hub/library/fruit-seller/south-0.png"
+    ],
+    "west": [
+      "/work/hub/library/fruit-seller/west-0.png"
+    ],
+    "east": [
+      "/work/hub/library/fruit-seller/east-0.png"
+    ],
+    "north": [
+      "/work/hub/library/fruit-seller/north-0.png"
+    ],
+    "south-east": [
+      "/work/hub/library/fruit-seller/south-east-0.png"
+    ],
+    "north-east": [
+      "/work/hub/library/fruit-seller/north-east-0.png"
+    ],
+    "north-west": [
+      "/work/hub/library/fruit-seller/north-west-0.png"
+    ],
+    "south-west": [
+      "/work/hub/library/fruit-seller/south-west-0.png"
+    ]
+  },
+  "fps": 8,
+  "characterId": "7bd3b0c0-45c0-4c11-92ff-2acfa493727e"
+}

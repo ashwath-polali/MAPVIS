@@ -1,0 +1,86 @@
+{
+  "dirs": {
+    "east": [
+      "/work/hub/library/dock-porter/east-0.png",
+      "/work/hub/library/dock-porter/east-1.png",
+      "/work/hub/library/dock-porter/east-2.png",
+      "/work/hub/library/dock-porter/east-3.png",
+      "/work/hub/library/dock-porter/east-4.png",
+      "/work/hub/library/dock-porter/east-5.png",
+      "/work/hub/library/dock-porter/east-6.png",
+      "/work/hub/library/dock-porter/east-7.png"
+    ],
+    "north-east": [
+      "/work/hub/library/dock-porter/north-east-0.png",
+      "/work/hub/library/dock-porter/north-east-1.png",
+      "/work/hub/library/dock-porter/north-east-2.png",
+      "/work/hub/library/dock-porter/north-east-3.png",
+      "/work/hub/library/dock-porter/north-east-4.png",
+      "/work/hub/library/dock-porter/north-east-5.png",
+      "/work/hub/library/dock-porter/north-east-6.png",
+      "/work/hub/library/dock-porter/north-east-7.png"
+    ],
+    "west": [
+      "/work/hub/library/dock-porter/west-0.png",
+      "/work/hub/library/dock-porter/west-1.png",
+      "/work/hub/library/dock-porter/west-2.png",
+      "/work/hub/library/dock-porter/west-3.png",
+      "/work/hub/library/dock-porter/west-4.png",
+      "/work/hub/library/dock-porter/west-5.png",
+      "/work/hub/library/dock-porter/west-6.png",
+      "/work/hub/library/dock-porter/west-7.png"
+    ],
+    "south-west": [
+      "/work/hub/library/dock-porter/south-west-0.png",
+      "/work/hub/library/dock-porter/south-west-1.png",
+      "/work/hub/library/dock-porter/south-west-2.png",
+      "/work/hub/library/dock-porter/south-west-3.png",
+      "/work/hub/library/dock-porter/south-west-4.png",
+      "/work/hub/library/dock-porter/south-west-5.png",
+      "/work/hub/library/dock-porter/south-west-6.png",
+      "/work/hub/library/dock-porter/south-west-7.png"
+    ],
+    "north-west": [
+      "/work/hub/library/dock-porter/north-west-0.png",
+      "/work/hub/library/dock-porter/north-west-1.png",
+      "/work/hub/library/dock-porter/north-west-2.png",
+      "/work/hub/library/dock-porter/north-west-3.png",
+      "/work/hub/library/dock-porter/north-west-4.png",
+      "/work/hub/library/dock-porter/north-west-5.png",
+      "/work/hub/library/dock-porter/north-west-6.png",
+      "/work/hub/library/dock-porter/north-west-7.png"
+    ],
+    "south-east": [
+      "/work/hub/library/dock-porter/south-east-0.png",
+      "/work/hub/library/dock-porter/south-east-1.png",
+      "/work/hub/library/dock-porter/south-east-2.png",
+      "/work/hub/library/dock-porter/south-east-3.png",
+      "/work/hub/library/dock-porter/south-east-4.png",
+      "/work/hub/library/dock-porter/south-east-5.png",
+      "/work/hub/library/dock-porter/south-east-6.png",
+      "/work/hub/library/dock-porter/south-east-7.png"
+    ],
+    "south": [
+      "/work/hub/library/dock-porter/south-0.png",
+      "/work/hub/library/dock-porter/south-1.png",
+      "/work/hub/library/dock-porter/south-2.png",
+      "/work/hub/library/dock-porter/south-3.png",
+      "/work/hub/library/dock-porter/south-4.png",
+      "/work/hub/library/dock-porter/south-5.png",
+      "/work/hub/library/dock-porter/south-6.png",
+      "/work/hub/library/dock-porter/south-7.png"
+    ],
+    "north": [
+      "/work/hub/library/dock-porter/north-0.png",
+      "/work/hub/library/dock-porter/north-1.png",
+      "/work/hub/library/dock-porter/north-2.png",
+      "/work/hub/library/dock-porter/north-3.png",
+      "/work/hub/library/dock-porter/north-4.png",
+      "/work/hub/library/dock-porter/north-5.png",
+      "/work/hub/library/dock-porter/north-6.png",
+      "/work/hub/library/dock-porter/north-7.png"
+    ]
+  },
+  "fps": 8,
+  "characterId": "b74fb79c-5e82-4a23-a1fb-839abedeaae7"
+}

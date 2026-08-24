@@ -2161,6 +2161,21 @@ async function characterFor(it, given) {
     // a character deleted on their side would 422 after the price had been
     // shown, and finding that out here costs nothing
     if (row) return { ...sized(row), from: looksId(given) ? 'asked' : 'dirs' }
+    /* Absent from the listing is not the same as gone. The listing is a page of
+     * what existed when it was read, so a character made a minute ago is not on
+     * it yet, and three of the hub's people were called deleted while their art
+     * sat on disk beside the id that drew it. Ask about the one id directly,
+     * which is free and authoritative. */
+    try {
+      const d = await pixellab.characterDetail(pinned)
+      const rot = (d && d.rotation_urls) || {}
+      if (Object.keys(rot).length) {
+        const s = (d && d.size) || {}
+        return { id: pinned, w: Number(s.width) || 48, h: Number(s.height) || 48, from: 'detail' }
+      }
+    } catch {
+      /* falls through to the honest answer below */
+    }
     return { why: 'the character this was drawn from is no longer on the account' }
   }
   const asks = readAsks(it.id).filter((a) => a && a.kind === 'character' && a.prompt)
@@ -2227,8 +2242,19 @@ async function runCharacterMotion(plan, seed, gate, halt) {
   const rot = d.rotation_urls && typeof d.rotation_urls === 'object' ? d.rotation_urls : {}
   // only headings the character actually has: naming one it does not is a
   // generation asked for and thrown away
-  const heads = plan.headings.filter((k) => typeof rot[k] === 'string' && rot[k])
-  if (heads.length < 4) throw new Error('the character on the account has fewer than four headings, so nothing was asked for')
+  /* Two different questions, and conflating them broke every stander.
+   *
+   * Whether the CHARACTER is usable is about how many rotations it has, and
+   * under four it is not a view set at all. How many to ANIMATE is a separate
+   * choice: someone standing at a stall is placed facing one way, so paying for
+   * eight breathing loops buys seven nobody sees. Asking for three used to trip
+   * the usability guard and fail the whole job. */
+  const has = Object.keys(rot).filter((k) => typeof rot[k] === 'string' && rot[k])
+  if (has.length < 4) throw new Error('the character on the account has fewer than four headings, so nothing was asked for')
+  // only headings it actually has: naming one it does not is a generation asked
+  // for and thrown away
+  const heads = plan.headings.filter((k) => has.includes(k))
+  if (!heads.length) throw new Error('none of the headings asked for are on this character')
   /* A name nothing else on it carries, so the frames that come back are
    * unmistakably the ones just paid for. Reusing a name leaves two groups
    * called the same thing and the reader takes whichever it meets first. */

@@ -1,0 +1,30 @@
+{
+  "dirs": {
+    "south": [
+      "/work/hub/library/old-fisherman/south-0.png"
+    ],
+    "west": [
+      "/work/hub/library/old-fisherman/west-0.png"
+    ],
+    "east": [
+      "/work/hub/library/old-fisherman/east-0.png"
+    ],
+    "north": [
+      "/work/hub/library/old-fisherman/north-0.png"
+    ],
+    "south-east": [
+      "/work/hub/library/old-fisherman/south-east-0.png"
+    ],
+    "north-east": [
+      "/work/hub/library/old-fisherman/north-east-0.png"
+    ],
+    "north-west": [
+      "/work/hub/library/old-fisherman/north-west-0.png"
+    ],
+    "south-west": [
+      "/work/hub/library/old-fisherman/south-west-0.png"
+    ]
+  },
+  "fps": 8,
+  "characterId": "dc098314-989b-45f0-bdb8-4e22a4a1eeaa"
+}

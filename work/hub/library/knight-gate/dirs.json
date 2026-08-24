@@ -1,0 +1,30 @@
+{
+  "dirs": {
+    "south": [
+      "/work/hub/library/knight-gate/south-0.png"
+    ],
+    "west": [
+      "/work/hub/library/knight-gate/west-0.png"
+    ],
+    "east": [
+      "/work/hub/library/knight-gate/east-0.png"
+    ],
+    "north": [
+      "/work/hub/library/knight-gate/north-0.png"
+    ],
+    "south-east": [
+      "/work/hub/library/knight-gate/south-east-0.png"
+    ],
+    "north-east": [
+      "/work/hub/library/knight-gate/north-east-0.png"
+    ],
+    "north-west": [
+      "/work/hub/library/knight-gate/north-west-0.png"
+    ],
+    "south-west": [
+      "/work/hub/library/knight-gate/south-west-0.png"
+    ]
+  },
+  "fps": 8,
+  "characterId": "e3bceb4f-9921-4b4b-9505-0e77920b5156"
+}
