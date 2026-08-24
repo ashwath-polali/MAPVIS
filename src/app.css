@@ -1656,6 +1656,20 @@ input[type='range']:disabled {
 .lib.on .lib-name {
   color: var(--acc);
 }
+/* one dot on a row whose art moves. A walk cycle and a still are both kind
+   'static' when they are a set of headings, so without this the list showed a
+   walker and a statue as the same thing. Corner, not inline, so it never
+   competes with the name for width. */
+.lib-moves {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--acc);
+  opacity: 0.75;
+}
 .lib-empty {
   padding: 10px var(--pan-in);
   color: var(--dim);

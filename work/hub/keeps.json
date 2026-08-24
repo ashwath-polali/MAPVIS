@@ -7,10 +7,10 @@
     "when": "2026-08-21"
   },
   {
-    "ask": "wandering around the map / beach",
-    "prompt": "a written renderer",
+    "ask": "crab-beach-wander",
+    "prompt": "the rise rule",
     "name": "crab-beach-wander",
     "kind": "effect",
-    "when": "2026-08-23"
+    "when": "2026-08-24"
   }
 ]

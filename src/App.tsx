@@ -3323,18 +3323,24 @@ export default function App() {
   // the library calls a static png (basename) and an animated folder alike
   const selItem = selA ? (lib || []).find((it) => it.name === assetLabel(selA)) : undefined
   const selIsFx = !!(selItem && selItem.kind === 'animated' && selItem.effect)
+  /* Animating is about the LIBRARY ROW, never about one copy on the map: it
+   * rewrites the art in place under its own name, so every placement of it
+   * changes at once. Asking for a placement first was backwards, and it meant
+   * clicking a thing in the library and finding nothing there. */
+  const libItem = st?.placing ? (lib || []).find((it) => it.name === st.placing) : undefined
+  const animItem = selItem || libItem
   /* Does the selected thing MOVE today.
    *
    * kind cannot answer it. A set of headings is kind 'static' whether each
    * heading holds one frame or a whole walk cycle, so the only honest test is
    * how many frames a heading has. Getting this wrong would put "replaces what
    * it does now" on a still and hide it from a walker. */
-  const selWays = selItem?.dirs ? Object.keys(selItem.dirs).length : 0
+  const selWays = animItem?.dirs ? Object.keys(animItem.dirs).length : 0
   const selMoves = !!(
-    selItem &&
-    (selItem.kind === 'animated'
-      ? (selItem.frames?.length ?? 0) > 1
-      : (Object.values(selItem.dirs ?? {})[0]?.length ?? 0) > 1)
+    animItem &&
+    (animItem.kind === 'animated'
+      ? (animItem.frames?.length ?? 0) > 1
+      : (Object.values(animItem.dirs ?? {})[0]?.length ?? 0) > 1)
   )
   /* The price, before the read as well as on the button after it.
    *
@@ -3375,6 +3381,58 @@ export default function App() {
       : animPlan
         ? `${animPlan.note || animPlan.motion} · ${animPlan.frames} frames · ${animWait}`
         : `${selWays ? `${selWays} headings` : 'one picture'} · at most ${animMost} generation${animMost === 1 ? '' : 's'}, none if the words need it to travel${selMoves ? ' · replaces what it does now' : ''}${usd ? ` · ${usd} left` : ''}`
+  /* The ask, in the make strip's own language: one free-text line, the honest
+   * cost under it, and one armed button. Nothing here enumerates what an
+   * animation can be. Whatever is typed is what the router has to find a way to
+   * draw, the same way the sprite box works.
+   *
+   * Held as one value because it belongs in two places: beside the other edits
+   * to the art when a placement is selected, and under the library grid when a
+   * row is, which is where a person actually looks for it. */
+  const animBox = animOpen && animItem && (
+    <div className="animbox">
+      <label className="field">
+        <input
+          autoFocus
+          value={animAsk}
+          placeholder={selMoves ? 'e.g. breathes while it stands' : 'e.g. casts the rod out over the water'}
+          onChange={(ev) => {
+            setAnimAsk(ev.target.value)
+            // the plan was priced against the words that were there
+            setAnimPlan(null)
+          }}
+          onKeyDown={(ev) => {
+            if (ev.key === 'Enter') void doAnim(animItem)
+            if (ev.key === 'Escape') {
+              setAnimOpen(false)
+              ev.currentTarget.blur()
+            }
+          }}
+          spellCheck={false}
+        />
+        <span className="field-desc">{animDesc}</span>
+      </label>
+      <div className="genrow">
+        {/* the yellow arm is the money colour and it stays that way: a free
+            answer is a second press too, but it is not a spend and must not
+            shout like one */}
+        <button
+          className={'primary genbtn' + (animPlan && animPlan.price > 0 ? ' armed' : '')}
+          onClick={() => void doAnim(animItem)}
+          disabled={!animAsk.trim() || animBusy || !!animRun || animBlocked}
+        >
+          {animLabel}
+        </button>
+        {(animBusy || !!animRun) && (
+          <button className="abtn stopbtn" onClick={doStop}>
+            stop
+          </button>
+        )}
+      </div>
+      {animNote && <div className="lifehint">{animNote}</div>}
+    </div>
+  )
+
   // how far this one placement is above the map's pixel size; 1 means it is
   // already there and the button has no work to offer
   const selBit =
@@ -3382,6 +3440,11 @@ export default function App() {
       ? bitFactor(selItem.w, selItem.h, selItem.w * Math.abs(selA.sx), selItem.h * Math.abs(selA.sy))
       : 1
   const thumbSrc = (it: api.LibItem) => thumbOf(it) + (bust[it.name] ? `?t=${bust[it.name]}` : '')
+  /* Does this row's art move at all. kind cannot answer it: a set of headings
+   * is 'static' whether each heading holds one still or eight frames of a walk,
+   * so the only honest test is how many frames a heading has. */
+  const libMoves = (it: api.LibItem) =>
+    it.kind === 'animated' ? (it.frames?.length ?? 0) > 1 : (Object.values(it.dirs ?? {})[0]?.length ?? 0) > 1
 
   // the selected placement, in numbers you can type. Every field commits on
   // enter or blur and each commit is one undo step, so a typed 0.62 walks back
@@ -3563,7 +3626,7 @@ export default function App() {
         {/* it sits with the other edits to the ART, because that is what it is:
             the pixels get rewritten in place under the same name, the way
             trim and pixelate rewrite them. It offers no list of animations. */}
-        {selItem && (
+        {animItem && (
           <button
             className={'abtn' + (animOpen ? ' on' : '')}
             data-tip={selMoves ? 'say what it should do instead' : 'say what it should do'}
@@ -3616,53 +3679,7 @@ export default function App() {
         </button>
       </div>
       {selItem && selA && selBit >= 1.25 && grainRow}
-      {/* The ask, in the make strip's own language: one free-text line, the
-          honest cost under it, and one armed button. Nothing here enumerates
-          what an animation can be. Whatever is typed is what the router has to
-          find a way to draw, the same way the sprite box works. */}
-      {animOpen && selItem && (
-        <div className="animbox">
-          <label className="field">
-            <input
-              autoFocus
-              value={animAsk}
-              placeholder={selMoves ? 'e.g. breathes while it stands' : 'e.g. casts the rod out over the water'}
-              onChange={(ev) => {
-                setAnimAsk(ev.target.value)
-                // the plan was priced against the words that were there
-                setAnimPlan(null)
-              }}
-              onKeyDown={(ev) => {
-                if (ev.key === 'Enter') void doAnim(selItem)
-                if (ev.key === 'Escape') {
-                  setAnimOpen(false)
-                  ev.currentTarget.blur()
-                }
-              }}
-              spellCheck={false}
-            />
-            <span className="field-desc">{animDesc}</span>
-          </label>
-          <div className="genrow">
-            {/* the yellow arm is the money colour and it stays that way: a
-                free answer is a second press too, but it is not a spend and
-                must not shout like one */}
-            <button
-              className={'primary genbtn' + (animPlan && animPlan.price > 0 ? ' armed' : '')}
-              onClick={() => void doAnim(selItem)}
-              disabled={!animAsk.trim() || animBusy || !!animRun || animBlocked}
-            >
-              {animLabel}
-            </button>
-            {(animBusy || !!animRun) && (
-              <button className="abtn stopbtn" onClick={doStop}>
-                stop
-              </button>
-            )}
-          </div>
-          {animNote && <div className="lifehint">{animNote}</div>}
-        </div>
-      )}
+      {animBox}
     </div>
   )
 
@@ -4007,6 +4024,25 @@ export default function App() {
       ) : (
         <>
           <div className="lib-cap">click one, then the map</div>
+          {/* the animate ask, under the row it belongs to. It rewrites the art
+              in place under the same name, so it was always about the library
+              row rather than about one copy sitting on the map. */}
+          {libItem && !selA && (
+            <div className="actrow">
+              <button
+                className={'abtn' + (animOpen ? ' on' : '')}
+                data-tip={selMoves ? 'say what it should do instead' : 'say what it should do'}
+                onClick={() => {
+                  setAnimOpen((v) => !v)
+                  setAnimPlan(null)
+                }}
+                disabled={plBusy || !!animRun}
+              >
+                animate {libItem.name}
+              </button>
+            </div>
+          )}
+          {!selA && animBox}
           <div className="libpanel">
             <div className="libgrid">
               {lib.map((it) => (
@@ -4017,12 +4053,18 @@ export default function App() {
                       stopPick()
                       ed?.armPlace(it)
                     }}
-                    data-tip={`${it.w}×${it.h}${it.kind === 'animated' ? ' · animated' : ''}`}
+                    data-tip={`${it.w}×${it.h}${libMoves(it) ? ' · moves' : ''}${
+                      it.dirs ? ` · ${Object.keys(it.dirs).length} ways` : ''
+                    }`}
                   >
                     <span className="lib-th">
                       <img src={thumbSrc(it)} alt="" />
                     </span>
                     <span className="lib-name">{it.name}</span>
+                    {/* a set of headings is kind 'static' whether each heading
+                        holds one frame or a whole walk cycle, so nothing in this
+                        row told them apart and a walker looked like a statue */}
+                    {libMoves(it) && <span className="lib-moves" aria-label="moves" />}
                   </button>
                   {it.effect && (
                     <button className="lib-edit" data-tip="edit effect" onClick={() => openFx(it)}>
