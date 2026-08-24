@@ -9,7 +9,7 @@
  * previous MAPVIS: this file only changes how a human reaches them.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { DragEvent, ReactNode } from 'react'
+import type { CSSProperties, DragEvent, ReactNode } from 'react'
 import { Editor, isCutTool, loadImage, groupFor, type EditorStatus, type Tool } from './core/editor'
 import { PAL, mkCanvas, nameOf, assetLabel, type PlacedAsset } from './core/mask'
 import { computeRegions } from './core/regions'
@@ -111,32 +111,38 @@ interface FxState {
 // it. Every pass is free: the render is local and the look generates nothing.
 const FX_PASSES = 3
 
-/* What a made character is, before anyone touches a control.
+/* The one thing about a made sprite that is not a creative choice.
  *
  * Eight views because life.ts works out an eight-way facing and four makes the
- * diagonals snap to the wrong one. Low top-down because that is the angle the
- * island paintings are at. Standard mode because pro is twenty to forty
- * generations and can never be what a first press buys. The size is pixellab's
- * own default and it comes back on a canvas about 40% larger, which is the
- * padding a base trim takes off.
+ * diagonals snap to the wrong one. That is an engine requirement, so it is a
+ * constant and never a routing answer.
  *
- * The walk template is eight frames, one generation per direction, so the
- * default spend here is one plus eight.
- *
- * walking-8-frames is a HUMANOID template name. Pixellab's own note is that
- * quadruped animations vary by body template and are only listed per character,
- * so an animal may come back refusing it. Unverified, and it is not worth a
- * generation to find out: the server keeps a character whose walk failed, so
- * the worst an animal costs is the one the body cost, and the reason is said in
- * the line under the button. */
+ * Everything else about a sprite used to be constants and dropdowns here: the
+ * body type, the animal template, the view, the size, one walk cycle name. Each
+ * one was a list, and a list is always shorter than what somebody wants to
+ * make. A dragon is not on it, a robot is not on it, and neither of them walks.
+ * So the ask goes to the router whole and it answers the skeleton, the view,
+ * the size and what moving MEANS for that thing. See MakePlan in api.ts. */
 const CHAR_DIRS = 8
-const CHAR_SIZE = 48
-const CHAR_VIEW = 'low top-down'
-const CHAR_WALK = 'walking-8-frames'
-const CHAR_ANIMALS = ['bear', 'cat', 'dog', 'horse', 'lion'] as const
 
 // a running wait, said the way a clock says it
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+
+/* Where the filled part of a rail ends.
+ *
+ * Firefox works this out on its own through ::-moz-range-progress. Webkit has
+ * no such part and never will, so the position is handed over as a custom
+ * property and the gradient in app.css reads it. A range that skips this draws
+ * its rail empty at every value, which is why every one of them goes through
+ * here rather than only the two that were noticed. */
+const rail = (v: number, lo: number, hi: number): CSSProperties => ({
+  ['--pct' as string]: `${hi > lo ? Math.max(0, Math.min(1, (v - lo) / (hi - lo))) * 100 : 0}%`,
+})
+
+/* The handle a stop is posted against. One per gesture, minted here so every
+ * long call in the tool carries one and none of them can run to a timeout with
+ * nothing to press. The prefix is only there to read in a log. */
+const newJob = (what: string) => `${what}-${Date.now()}-${Math.floor(Math.random() * 1e6)}`
 
 const slug = (s: string) =>
   s
@@ -453,39 +459,35 @@ export default function App() {
     err: string
   }>({ open: false, q: '', page: 0, items: [], total: 0, pages: 1, busy: false, taking: '', err: '' })
   /* The account has two kinds of thing and they are not interchangeable.
-   * OBJECTS are props: crates, wells, trees. CHARACTERS are people and animals
-   * — a skeleton, four or eight directions, and walk cycles. Someone wandering
-   * a harbour is the second kind, so the browser shows both and says which. */
+   * OBJECTS are props: crates, wells, trees. SPRITES are built on a skeleton,
+   * with four or eight directions and cycles hung on it. Anything that walks a
+   * harbour is the second kind, so the browser shows both and says which. */
   const [chars, setChars] = useState<{ items: api.AccountCharacter[]; busy: boolean; err: string } | null>(null)
-  const [accTab, setAccTab] = useState<'objects' | 'people'>('objects')
+  const [accTab, setAccTab] = useState<'objects' | 'sprites'>('objects')
   const [genPrompt, setGenPrompt] = useState('')
   const [genType, setGenType] = useState<'static' | 'animated'>('static')
-  const [genMode, setGenMode] = useState<'single' | 'batch'>('single')
   /* What the one ask box is for. There used to be two boxes stacked in the
    * column, an object one and an effect one, running the same gesture twice:
-   * type, point at the map, get a thing. One box and a three-way says the same
+   * type, point at the map, get a thing. One box and a four-way says the same
    * with half the controls. */
-  const [makeWhat, setMakeWhat] = useState<'object' | 'effect' | 'fill' | 'character'>('object')
-  /* The whole settings panel a character needs, which is three answers.
-   *
-   * Person or animal, because pixellab builds the two on different skeletons and
-   * an animal has to name which one. Walk or stand, because the walk is what
-   * costs eight of the nine generations. Everything else is decided in the
-   * constants above and is not worth a control.
-   */
-  const [charBody, setCharBody] = useState<'humanoid' | 'quadruped'>('humanoid')
-  const [charAnimal, setCharAnimal] = useState<(typeof CHAR_ANIMALS)[number]>('dog')
-  const [charWalk, setCharWalk] = useState(true)
-  /* A character is the longest wait in the tool by a wide margin: minutes for
-   * the body, minutes again for eight walking directions, all inside one
-   * request. So the button counts out loud, because a still label for six
-   * minutes is indistinguishable from a hang.
+  const [makeWhat, setMakeWhat] = useState<'object' | 'effect' | 'fill' | 'sprite'>('object')
+  /* A sprite is the longest wait in the tool by a wide margin: minutes for the
+   * body, minutes again for eight directions of motion, all inside one request.
+   * So the button counts out loud, because a still label for six minutes is
+   * indistinguishable from a hang.
    */
   const [charRun, setCharRun] = useState<{ at: number } | null>(null)
   const [charSecs, setCharSecs] = useState(0)
   // how many things a fill plans. A range, because "populate this" means
   // something different for a courtyard than for a whole beach.
   const [fillCount, setFillCount] = useState(6)
+  /* How many takes on ONE thing. Not fill's slider, which means a set of
+   * different things: this is the same core asset drawn again from a different
+   * seed, so what comes back is four palms rather than a palm, a barrel and a
+   * crate. Starts at 1, because the default press has to be the cheap one, and
+   * stops at 8, because a moving sprite is nine generations a take and the gate
+   * below is the only reason even that is safe. */
+  const [genCount, setGenCount] = useState(1)
   const [scene, setScene] = useState<api.ScenePlan | null>(null)
   // which of the planned things are still wanted, by index: a plan you can
   // edit before spending beats a plan you accept whole or throw away
@@ -497,7 +499,7 @@ export default function App() {
   const [genBox, setGenBox] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
   // what the model wrote after looking. Held so the words and the size can be
   // seen BEFORE anything is bought; the second press spends it.
-  const [genPlan, setGenPlan] = useState<api.AssetPlan | null>(null)
+  const [genPlan, setGenPlan] = useState<api.MakePlan | null>(null)
   const [genBusy, setGenBusy] = useState(false)
   // the prompt behind the take he did not keep, fed into the next reading so
   // pressing again is a correction rather than a reroll of the same idea
@@ -515,6 +517,19 @@ export default function App() {
   // steps so a batch ends after the generation already in flight
   const jobRef = useRef('')
   const stopRef = useRef(false)
+  /* The first take of a multi-take run that LANDED, held up for a yes.
+   *
+   * A moving sprite is nine generations, so four of them is thirty-six and
+   * about half an hour. Finding out at the end that the first one was wrong
+   * costs all of it. So the run pauses after the first, puts the actual picture
+   * on the panel, and asks. The resolver is a ref because the loop is awaiting
+   * it and a re-render must not mint a second promise.
+   *
+   * done is which take it is, not always one: a take that failed has no picture
+   * to hold up, so the gate falls through to the next one rather than letting
+   * the rest of the run past unseen. */
+  const [gate, setGate] = useState<{ item: api.LibItem; done: number; total: number } | null>(null)
+  const gateRef = useRef<((go: boolean) => void) | null>(null)
   // the confirmed static generate is waiting for a spot on the map
   const [genPick, setGenPick] = useState(false)
   // the add-door flow: armed for a map click, then which door's form is open
@@ -744,6 +759,12 @@ export default function App() {
     setMapPal([])
     setPl(null)
     setPlOut([])
+    // a run paused on the gate is awaiting a promise nobody is left to answer,
+    // so the swap answers it: no, and what was already drawn stays
+    if (gateRef.current) {
+      stopRef.current = true
+      gateRef.current(false)
+    }
   }, [sceneKey])
 
   // leaving the test step drops an armed door pick without spending it
@@ -811,6 +832,19 @@ export default function App() {
     edRef.current?.pickPoint(null)
   }, [])
 
+  /* The answer to the gate. stop sets the run's flag BEFORE it resolves, so the
+   * loop's own break and the flag it checks at the top of the next turn agree
+   * with each other. Nothing already drawn is thrown away: it is paid for and
+   * it stays in the library. */
+  const closeGate = useCallback((go: boolean) => {
+    if (!go) {
+      stopRef.current = true
+      const j = jobRef.current
+      if (j) void api.stop(j).catch(() => {})
+    }
+    gateRef.current?.(go)
+  }, [])
+
   // ---- picking from what he already owns --------------------------------
   // The account holds hundreds of objects and the ones written in the house
   // style are better than what a fresh ask comes back with, so browsing them
@@ -837,7 +871,7 @@ export default function App() {
 
   // the people half, read once per session. Free, like the objects listing.
   useEffect(() => {
-    if (!acc.open || accTab !== 'people' || chars) return
+    if (!acc.open || accTab !== 'sprites' || chars) return
     setChars({ items: [], busy: true, err: '' })
     api
       .accountCharacters()
@@ -867,7 +901,7 @@ export default function App() {
     [acc.taking, push],
   )
 
-  // the clock under the character button. One second is enough resolution for
+  // the clock under the sprite button. One second is enough resolution for
   // a wait measured in minutes.
   useEffect(() => {
     if (!charRun) {
@@ -879,67 +913,137 @@ export default function App() {
     return () => window.clearInterval(t)
   }, [charRun])
 
-  /* A character made to order, after the price has been confirmed.
+  /* Hold a multi-take run after the first one and put the actual picture on the
+   * panel. Answers whether to carry on.
    *
-   * One request holds the whole job: the body, then a walk template run once
-   * per direction. Stopping is still worth having even though the body is paid
-   * for the moment it is asked for, because a stop that lands in the minutes
-   * before the walk keeps eight generations from ever being asked for. So it
-   * carries a job id like the planners do.
+   * This is the whole reason the take slider can go to eight. A moving sprite
+   * is nine generations and the best part of five minutes, so four of them is
+   * half an hour, and finding out at the end that the first one was wrong costs
+   * every minute of it. What has already been drawn is in the library before
+   * this opens, so a no here throws nothing away. */
+  const askGate = useCallback(async (item: api.LibItem, done: number, total: number) => {
+    setGate({ item, done, total })
+    const go = await new Promise<boolean>((res) => {
+      gateRef.current = res
+    })
+    gateRef.current = null
+    setGate(null)
+    return go
+  }, [])
+
+  /* Sprites made to order, after the price has been confirmed.
+   *
+   * Nothing here was chosen off a control. The skeleton, the view, the size and
+   * what moving MEANS for this thing all came back in the plan the button
+   * showed, so a dragon can hover and a robot can stand its servos idling
+   * without either of them being on a list somewhere.
+   *
+   * One request holds one whole take: the body, then the motion run once per
+   * direction. Stopping is still worth having even though the body is paid for
+   * the moment it is asked for, because a stop that lands in the minutes before
+   * the motion keeps eight generations from ever being asked for. So the run
+   * carries a job id like the planners do, and every take reuses it: the
+   * requests are sequential, so there is never two of them registered at once.
    *
    * A scene swap mid-run drops the result rather than filing it under the wrong
    * map, the same as every other spend here.
    */
-  const runCharGen = useCallback(async () => {
-    const e = edRef.current
-    const p = genPrompt.trim()
-    if (!e || !p || charRun) return
-    const sid = e.sceneId
-    const job = 'char-' + Date.now() + '-' + Math.floor(Math.random() * 1e6)
-    jobRef.current = job
-    stopRef.current = false
-    setCharRun({ at: Date.now() })
-    e.setBusy(charWalk ? 'drawing them, then the walk' : 'drawing them')
-    try {
-      const r = await api.characterGen(sid, {
-        description: p,
-        // the server will not spend without this, and only this press sends it
-        confirm: true,
-        job,
-        size: CHAR_SIZE,
-        view: CHAR_VIEW,
-        bodyType: charBody,
-        template: charBody === 'quadruped' ? charAnimal : undefined,
-        nDirections: CHAR_DIRS,
-        walk: charWalk ? CHAR_WALK : '',
-        mode: 'standard',
-      })
-      if (e.sceneId !== sid) return
-      setLib((prev) => [...(prev || []).filter((x) => x.name !== r.item.name), r.item])
+  const runSpriteGen = useCallback(
+    async (p: string, plan: api.MakePlan) => {
+      const e = edRef.current
+      const route = plan.sprite
+      if (!e || !route || charRun) return
+      const sid = e.sceneId
+      const job = newJob('gen')
+      jobRef.current = job
+      stopRef.current = false
+      const seed0 = 1 + Math.floor(Math.random() * 1e9)
+      const runs: { name?: string; seed?: number }[] =
+        genCount > 1
+          ? Array.from({ length: genCount }, (_, i) => ({ name: `${slug(p)}-${i + 1}`, seed: seed0 + i + 1 }))
+          : [{}]
+      const moves = route.anim.how !== 'none'
+      setCharRun({ at: Date.now() })
+      setGenRun({ done: 0, total: runs.length })
+      const made: api.LibItem[] = []
+      // asked once per run, and only once something is on screen to ask about
+      let gated = false
+      try {
+        for (let i = 0; i < runs.length; i++) {
+          if (e.sceneId !== sid || stopRef.current) break
+          e.setBusy(
+            runs.length > 1
+              ? `sprite ${i + 1}/${runs.length}`
+              : moves
+                ? 'drawing it, then the motion'
+                : 'drawing it',
+          )
+          try {
+            const r = await api.characterGen(sid, {
+              description: plan.prompt,
+              // the server will not spend without this, and only the confirmed
+              // press sends it
+              confirm: true,
+              job,
+              ...runs[i],
+              size: route.size,
+              view: route.view,
+              skeleton: route.skeleton,
+              nDirections: CHAR_DIRS,
+              anim: route.anim,
+              mode: 'standard',
+            })
+            if (e.sceneId !== sid) break
+            setLib((prev) => [...(prev || []).filter((x) => x.name !== r.item.name), r.item])
+            made.push(r.item)
+            // a motion that did not happen is said out loud. It still lands,
+            // standing, because the body was bought before the motion was ever
+            // asked for.
+            if (r.note) push(`${r.item.name} · ${r.note}`)
+          } catch (err) {
+            const m = String(err instanceof Error ? err.message : err)
+            push(
+              m.includes('stopped')
+                ? 'stopped · the body was already paid for, the motion was not asked for'
+                : 'that one did not come back · ' + m.slice(0, 120),
+            )
+          }
+          setGenRun({ done: i + 1, total: runs.length })
+          /* After the first take that LANDED, not after the first attempt.
+           *
+           * Keying this on i === 0 meant a take that failed took the gate with
+           * it, and the other seven ran unseen: at nine generations each that
+           * is sixty-three nobody looked at, which is the one thing this whole
+           * feature exists to stop. i < last is the other half, because asking
+           * when there is nothing left to buy is a card with no question in
+           * it. */
+          if (!gated && made.length && i < runs.length - 1 && !stopRef.current) {
+            gated = true
+            if (!(await askGate(made[0], i + 1, runs.length))) break
+          }
+        }
+      } finally {
+        setCharRun(null)
+        setGenRun(null)
+        edRef.current?.setBusy('')
+      }
+      if (!made.length) return
       setGenPrompt('')
       api
         .asks(sid)
         .then((q) => setAsks(q.asks))
         .catch(() => {})
-      // a walk that did not happen is said out loud. It still lands, standing,
-      // because the body was bought before the walk was ever asked for.
+      const ways = Object.keys(made[0].dirs || {}).length
       push(
-        `${r.item.name} added · ${Object.keys(r.item.dirs || {}).length} ways` +
-          `${(r.item.dirs?.south?.length || 1) > 1 ? ', walking' : ''}` +
-          `${r.note ? ' · ' + r.note : ' · click it, then the map'}`,
+        stopRef.current && made.length < runs.length
+          ? `stopped after ${made.length} of ${runs.length} · ${made.length === 1 ? 'it stays' : 'they stay'}`
+          : made.length === 1
+            ? `${made[0].name} added · ${ways} ways${moves ? ', moving' : ''} · click it, then the map`
+            : `${made.length} sprites added · click one, then the map`,
       )
-    } catch (err) {
-      const m = String(err instanceof Error ? err.message : err)
-      push(
-        m.includes('stopped')
-          ? 'stopped · the character was already paid for, the walk was not asked for'
-          : 'that one did not come back · ' + m.slice(0, 120),
-      )
-    } finally {
-      setCharRun(null)
-      edRef.current?.setBusy('')
-    }
-  }, [genPrompt, charRun, charBody, charAnimal, charWalk, push])
+    },
+    [genCount, charRun, askGate, push],
+  )
 
   // the search box, one call behind the typing so a full listing is not walked
   // per keystroke
@@ -1431,8 +1535,12 @@ export default function App() {
       } catch {
         return clear()
       }
+      // the look runs after the spend, so the job that bought them is finished
+      // and stop has nothing to post against. It gets its own.
+      const job = newJob('look')
+      jobRef.current = job
       try {
-        const v = await api.objReview(sid, ask, prompt, shots)
+        const v = await api.objReview(sid, ask, prompt, shots, job)
         setPl((q) =>
           q && q.mode === 'gen' && q.items.length === shots.length
             ? { ...q, pick: Math.max(0, Math.min(q.items.length - 1, v.best - 1)), why: v.why, fix: v.fix, looking: false }
@@ -1575,12 +1683,18 @@ export default function App() {
    * Two rules hold it together. Nothing is committed until it has been rendered
    * successfully, so a bad revision leaves the last good frames on screen
    * instead of blanking the panel. And the loop reads fxStop between every step,
-   * so use this one takes whatever is on screen and ends it. */
+   * so use this one takes whatever is on screen and ends it.
+   *
+   * fxStop only lands BETWEEN passes, and one pass is two minutes, so the look
+   * itself carries a job as well: three passes with nothing to press is six
+   * minutes of staring at a spinner. */
   const reviewFx = useCallback(
     async (f0: FxState, p0: EffectParams, first: HTMLCanvasElement[]) => {
       const e = edRef.current
       if (!e) return
       const sid = e.sceneId
+      const job = newJob('fx')
+      jobRef.current = job
       fxStop.current = false
       let f = f0
       let p = p0
@@ -1603,6 +1717,7 @@ export default function App() {
           v = await api.fxReview(sid, {
             ask: f.ask,
             pass,
+            job,
             kind: f.type === 'custom' ? 'custom' : 'builtin',
             type: f.type,
             params: flatParams(p),
@@ -1647,9 +1762,12 @@ export default function App() {
   )
 
   // use this one: whatever is on screen right now is the render, and the loop
-  // ends where it stands rather than making him wait out a check
+  // ends where it stands rather than making him wait out a check. The pass in
+  // flight gets killed too, or the flag would only take effect after it.
   const stopReview = useCallback(() => {
     fxStop.current = true
+    const j = jobRef.current
+    if (j) void api.stop(j).catch(() => {})
     setFxRev((r) => (r ? { ...r, running: false } : r))
   }, [])
 
@@ -1676,6 +1794,11 @@ export default function App() {
       const sid = e.sceneId
       const patch = e.patchAround(at[0], at[1], 24)
       const mapColors = patch ? samplePalette(patch, 8) : ['#ffffff']
+      // two reads in a row at a minute each, so the stop button has to have
+      // something to post against for the whole of it
+      const job = newJob('fx')
+      jobRef.current = job
+      stopRef.current = false
       setFxBusy(true)
       e.setBusy('reading the ask')
       // Writing a renderer takes a real 25-30s, and a dropped request used to
@@ -1685,16 +1808,23 @@ export default function App() {
       // back as two galaxies. Ask twice, and if it still will not answer, say
       // so instead of substituting a rule behind his back.
       let plan: api.EffectPlan | null = null
-      for (let attempt = 0; attempt < 2 && !plan; attempt++) {
+      for (let attempt = 0; attempt < 2 && !plan && !stopRef.current; attempt++) {
         if (attempt) e.setBusy('reading the ask again')
         try {
-          plan = (await api.effectPlan(ask, mapColors, sid)).plan
+          plan = (await api.effectPlan(ask, mapColors, sid, job)).plan
         } catch {
           plan = null
         }
       }
       e.setBusy('')
       setFxBusy(false)
+      /* Stopped mid-read, so there is no answer to work from.
+       *
+       * Everything below treats a null plan as "the planner could not be
+       * reached" and falls through to the keyword guess, which is precisely
+       * what the note above says must never happen quietly. A stop is not a
+       * failed read, it is a change of mind, and it gets nothing. */
+      if (stopRef.current) return
       // a scene swap while the ask was being read drops the whole thing
       if (e.sceneId !== sid) return
       // the eighth answer: no rule fitted, so the plan carries a renderer
@@ -1978,19 +2108,29 @@ export default function App() {
   // path's context: the clicked painting pixel and a crop of the cut painting
   // around it, which the server hands to pixellab as the background, so the
   // asset comes back drawn in that spot's palette and light. With a spot the
-  // result also lands ON the map right there (one undo); a batch fans out
-  // beside the spot so all three stay visible. Animated has no spot: its
+  // result also lands ON the map right there (one undo); a run of takes fans
+  // out beside the spot so all of them stay visible. Animated has no spot: its
   // animate endpoint needs a standalone first frame.
+  //
+  // One job for the whole run, minted here. It used to mint none, so a stop
+  // mid-run posted a finished planner's id and the server answered that there
+  // was nothing to stop; only the flag between generations did anything.
   const runGen = useCallback(
-    async (p: string, t: api.AssetPlan, bg: string) => {
+    async (p: string, t: api.MakePlan, bg: string) => {
       const e = edRef.current
       if (!e) return
       const sid = e.sceneId
+      const job = newJob('gen')
+      jobRef.current = job
       const seed0 = 1 + Math.floor(Math.random() * 1e9)
       const runs: { name?: string; seed?: number }[] =
-        genMode === 'batch' ? [1, 2, 3].map((i) => ({ name: `${slug(p)}-${i}`, seed: seed0 + i })) : [{}]
+        genCount > 1
+          ? Array.from({ length: genCount }, (_, i) => ({ name: `${slug(p)}-${i + 1}`, seed: seed0 + i + 1 }))
+          : [{}]
       setGenRun({ done: 0, total: runs.length })
       const made: api.LibItem[] = []
+      // asked once per run, and only once something is on screen to ask about
+      let gated = false
       for (let i = 0; i < runs.length; i++) {
         // a scene swap mid-run stops the spend where it stands
         if (e.sceneId !== sid) break
@@ -2007,6 +2147,7 @@ export default function App() {
             genType === 'animated'
               ? await api.assetAnim(sid, p, '', {
                   ...runs[i],
+                  job,
                   thing: t.prompt,
                   tmotion: t.motion,
                   tw: t.w,
@@ -2014,6 +2155,7 @@ export default function App() {
                 })
               : await api.assetGen(sid, p, {
                   ...runs[i],
+                  job,
                   thing: t.prompt,
                   tw: t.w,
                   th: t.h,
@@ -2025,12 +2167,23 @@ export default function App() {
           setLib((prev) => [...(prev || []).filter((x) => x.name !== r.item.name), r.item])
           made.push(r.item)
         } catch (err) {
+          const m = String(err instanceof Error ? err.message : err)
           push(
-            (genType === 'animated' ? 'animation failed · ' : 'generation failed · ') +
-              String(err instanceof Error ? err.message : err).slice(0, 120),
+            m.includes('stopped')
+              ? 'stopped'
+              : (genType === 'animated' ? 'animation failed · ' : 'generation failed · ') + m.slice(0, 120),
           )
         }
         setGenRun({ done: i + 1, total: runs.length })
+        // The first take that LANDED, held up for a yes. Seven more of
+        // something he does not want is minutes and generations spent proving
+        // the same point twice. Keyed on what came back rather than on the
+        // index, because a first take that failed would otherwise carry the
+        // gate away with it and let the rest through unseen.
+        if (!gated && made.length && i < runs.length - 1 && !stopRef.current) {
+          gated = true
+          if (!(await askGate(made[0], i + 1, runs.length))) break
+        }
       }
       e.setBusy('')
       setGenRun(null)
@@ -2043,16 +2196,18 @@ export default function App() {
           .then((r) => setAsks(r.asks))
           .catch(() => {})
         push(
-          made.length === 1
-            ? 'added to the library · click it, then the map'
-            : `${made.length} added to the library · click one, then the map`,
+          stopRef.current && made.length < runs.length
+            ? `stopped after ${made.length} of ${runs.length} · ${made.length === 1 ? 'it stays' : 'they stay'}`
+            : made.length === 1
+              ? 'added to the library · click it, then the map'
+              : `${made.length} added to the library · click one, then the map`,
         )
         // what came back carries the generator's colours, not the map's. The
         // compare opens on it; nothing changes until somebody clicks. The
         // slider starts where the thing's relatedness says it should: a palm
         // opens matched, an alien artifact opens raw, and either can be dragged.
-        // and it is looked at before he is asked to choose: a batch comes back
-        // with one of them picked and a line saying why, a single one comes
+        // and it is looked at before he is asked to choose: a run of takes comes
+        // back with one of them picked and a line saying why, a single one comes
         // back confirmed or with a corrected prompt to try. Looking is free.
         if (genType === 'static') {
           // the prompt was written against this map's own pixels, so the take
@@ -2062,7 +2217,7 @@ export default function App() {
         }
       }
     },
-    [genMode, genType, reviewMade, push],
+    [genCount, genType, askGate, reviewMade, push],
   )
 
   /* Box the area this thing will stand in. Optional, and skipping is a real
@@ -2088,11 +2243,15 @@ export default function App() {
 
   /* One press ends whatever is thinking or drawing. The planner is a process
    * on the server, so it takes a round trip to kill; a generation already sent
-   * to pixellab cannot be recalled, but the run stops before the next one. */
+   * to pixellab cannot be recalled, but the run stops before the next one, and
+   * a run held on the gate is answered no on the way past. */
   const doStop = useCallback(() => {
     stopRef.current = true
     const j = jobRef.current
     if (j) void api.stop(j).catch(() => {})
+    gateRef.current?.(false)
+    setFxBusy(false)
+    fxStop.current = true
     setGenBusy(false)
     edRef.current?.setBusy('')
     push('stopped')
@@ -2159,6 +2318,11 @@ export default function App() {
       return
     }
     const sid = e.sceneId
+    // one job for the whole fill. Without it a stop mid-fill posted the id of
+    // the planner that had already finished, so only the flag between items did
+    // anything and the generation in flight ran to the end.
+    const job = newJob('fill')
+    jobRef.current = job
     stopRef.current = false
     setScene(null)
     setFillRun({ done: 0, total: wanted.length, what: wanted[0].what })
@@ -2171,8 +2335,8 @@ export default function App() {
       try {
         const r =
           genType === 'animated'
-            ? await api.assetAnim(sid, it.what, '', { thing: it.prompt, tmotion: it.motion, tw: it.w, th: it.h })
-            : await api.assetGen(sid, it.what, { thing: it.prompt, tw: it.w, th: it.h })
+            ? await api.assetAnim(sid, it.what, '', { job, thing: it.prompt, tmotion: it.motion, tw: it.w, th: it.h })
+            : await api.assetGen(sid, it.what, { job, thing: it.prompt, tw: it.w, th: it.h })
         if (e.sceneId !== sid) break
         setLib((prev) => [...(prev || []).filter((x) => x.name !== r.item.name), r.item])
         // straight onto the map at the planned spot, so a run cut short still
@@ -2216,11 +2380,17 @@ export default function App() {
    * There is no translator, no style card, no assembled house prompt and no
    * ground-word filter in this path any more. All four existed to carry a
    * description of the map through a pipeline made of text. The model looks at
-   * the map instead. */
+   * the map instead.
+   *
+   * A sprite goes through the same two presses, and that is the change: it used
+   * to be one armed press against a row of dropdowns. The read is where the
+   * skeleton, the view, the size and the meaning of moving get decided, so the
+   * card can say "lion rig, hovering, wings beating" before a penny is spent. */
   const doGen = useCallback(async () => {
     const e = edRef.current
     const p = genPrompt.trim()
-    if (!e || !p || genRun || genBusy) return
+    if (!e || !p || genRun || genBusy || charRun) return
+    const what = makeWhat === 'sprite' ? 'sprite' : 'object'
 
     if (!genPlan) {
       const map = e.cutSceneDataURL()
@@ -2228,7 +2398,7 @@ export default function App() {
         push('no painting to read')
         return
       }
-      const job = 'plan-' + Date.now() + '-' + Math.floor(Math.random() * 1e6)
+      const job = newJob('plan')
       jobRef.current = job
       stopRef.current = false
       setGenBusy(true)
@@ -2236,6 +2406,7 @@ export default function App() {
       try {
         const r = await api.assetPlan(e.sceneId, p, {
           map,
+          what,
           kind: genType,
           box: genBox,
           boxImage: genBox ? e.areaDataURL(genBox, 2) : '',
@@ -2257,14 +2428,25 @@ export default function App() {
     }
 
     const plan = genPlan
+    // a sprite mode holding an object plan has nowhere to send it, so it reads
+    // again rather than spending on the wrong endpoint
+    if (what === 'sprite' && !plan.sprite) {
+      setGenPlan(null)
+      push('that read came back as a thing · press again to read it as a sprite')
+      return
+    }
     setGenPlan(null)
     setGenLast(plan.prompt)
     stopRef.current = false
+    if (what === 'sprite') {
+      void runSpriteGen(p, plan)
+      return
+    }
     // pixellab takes the background at 32..192 per side, so the box is fitted
     // into that before it is sent; without a box it generates on bare canvas
     const bg = genBox ? e.areaDataURL(genBox, 0, 192) : ''
     runGen(p, plan, bg)
-  }, [genPrompt, genRun, genBusy, genPlan, genBox, genType, genLast, push, runGen])
+  }, [genPrompt, genRun, genBusy, charRun, makeWhat, genPlan, genBox, genType, genLast, push, runGen, runSpriteGen])
 
   // deleting a library item: the file goes for good, and every placement of
   // it comes off the canvas in one undo step (z restores the placements)
@@ -2601,7 +2783,14 @@ export default function App() {
           <span>
             colour reach <em>{st?.cutTol}</em>
           </span>
-          <input type="range" min={0} max={120} value={st?.cutTol || 0} onChange={(e) => ed?.setCutTol(Number(e.target.value))} />
+          <input
+            type="range"
+            min={0}
+            max={120}
+            value={st?.cutTol || 0}
+            style={rail(st?.cutTol || 0, 0, 120)}
+            onChange={(e) => ed?.setCutTol(Number(e.target.value))}
+          />
         </label>
       )}
       <Row
@@ -2633,7 +2822,14 @@ export default function App() {
           <span>
             brush size <em>{st?.brush}px</em>
           </span>
-          <input type="range" min={1} max={16} value={st?.brush || 1} onChange={(e) => ed?.setBrush(Number(e.target.value))} />
+          <input
+            type="range"
+            min={1}
+            max={16}
+            value={st?.brush || 1}
+            style={rail(st?.brush || 1, 1, 16)}
+            onChange={(e) => ed?.setBrush(Number(e.target.value))}
+          />
         </label>
       )}
       <div className="panel-foot">
@@ -2700,7 +2896,14 @@ export default function App() {
           <span>
             brush size <em>{st?.brush}px</em>
           </span>
-          <input type="range" min={1} max={16} value={st?.brush || 1} onChange={(e) => ed?.setBrush(Number(e.target.value))} />
+          <input
+            type="range"
+            min={1}
+            max={16}
+            value={st?.brush || 1}
+            style={rail(st?.brush || 1, 1, 16)}
+            onChange={(e) => ed?.setBrush(Number(e.target.value))}
+          />
         </label>
       )}
       <Sec>what you are painting</Sec>
@@ -2910,15 +3113,29 @@ export default function App() {
   const groupNames = [...SUGGESTED_GROUPS]
   for (const a of assets) if (!groupNames.includes(a.group)) groupNames.push(a.group)
   const thumbOf = (a: { src?: string; frames?: string[] }) => a.src || (a.frames && a.frames[0]) || ''
-  /* the real price of the armed click: an animated item is two generations
-   * (base sprite + animation), a batch is three items, and a character is one
-   * for the body plus ONE PER DIRECTION for its walk, so eight ways walking is
-   * nine. The walk is eight of the nine, which is why turning it off is a
-   * control and the direction count is not. */
-  const genCost =
-    makeWhat === 'character'
-      ? 1 + (charWalk ? CHAR_DIRS : 0)
-      : (genType === 'animated' ? 2 : 1) * (genMode === 'batch' ? 3 : 1)
+  // one picture off any library item, whichever of the three shapes it is: a
+  // png, a folder of frames, or a set of headings
+  const shotOf = (a: api.LibItem) => a.src || a.frames?.[0] || a.dirs?.south?.[0] || ''
+  /* The real price of the armed click, per take.
+   *
+   * An animated object is two generations, a base sprite then its animation. A
+   * sprite is one for the body plus ONE PER DIRECTION for its motion, so eight
+   * ways moving is nine. It assumes standard mode, which is the only mode this
+   * client ever sends; pro is twenty to forty and this line would be a lie
+   * about it.
+   *
+   * Once the plan exists it is the truth. A sprite the router decided not to
+   * animate costs one whatever the still/moving segment says, so the number on
+   * the button at the moment of spending is the number that gets bought. */
+  const spriteDirs = genPlan?.sprite
+    ? genPlan.sprite.anim.how === 'none'
+      ? 0
+      : CHAR_DIRS
+    : genType === 'animated'
+      ? CHAR_DIRS
+      : 0
+  const perTake = makeWhat === 'sprite' ? 1 + spriteDirs : genType === 'animated' ? 2 : 1
+  const genCost = genCount * perTake
   // the big preview's zoom: the largest whole multiple that still fits the
   // panel, so a tall plume and a wide splash both land inside the column
   const fxBig = fxP ? ([4, 3, 2, 1].find((z) => Math.max(fxP.width, fxP.height) * z <= 208) ?? 1) : 4
@@ -3225,6 +3442,7 @@ export default function App() {
           max={100}
           step={5}
           value={plStr}
+          style={rail(plStr, 0, 100)}
           onChange={(e) => setPlStr(Number(e.target.value))}
         />
       </label>
@@ -3258,11 +3476,11 @@ export default function App() {
 
   const accPanel = (
     <div className="accpanel">
-      {/* two kinds of thing, said out loud. A prop and a person are different
+      {/* two kinds of thing, said out loud. A prop and a sprite are different
           in pixellab and behave differently here: only the second turns to face
-          where it walks. */}
+          where it goes. */}
       <div className="seg acctabs" role="radiogroup" aria-label="what to browse">
-        {(['objects', 'people'] as const).map((t) => (
+        {(['objects', 'sprites'] as const).map((t) => (
           <button
             key={t}
             className={'seg-opt' + (accTab === t ? ' on' : '')}
@@ -3284,7 +3502,7 @@ export default function App() {
         }}
         spellCheck={false}
       />
-      {accTab === 'people' ? (
+      {accTab === 'sprites' ? (
         chars?.err ? (
           <div className="lib-empty">{chars.err}</div>
         ) : chars?.busy ? (
@@ -3541,24 +3759,14 @@ export default function App() {
   const doMake = useCallback(() => {
     if (makeWhat === 'effect') return void armFx()
     if (makeWhat === 'fill') return scene ? void doFill() : void doScenePlan()
-    // a character has nothing free to read first, so the price stands on the
-    // button and the second press is what buys it
-    if (makeWhat === 'character') {
-      if (arm('char-gen', 20000)) void runCharGen()
-      return
-    }
+    // a sprite runs the same two presses a thing does now. It used to be one
+    // armed press against a row of dropdowns, which is what the router replaced.
     return void doGen()
-  }, [makeWhat, scene, armFx, doFill, doScenePlan, doGen, arm, runCharGen])
+  }, [makeWhat, scene, armFx, doFill, doScenePlan, doGen])
 
   const wantedInScene = scene ? scene.items.length - sceneOff.size : 0
   const makeArmed =
-    makeWhat === 'fill'
-      ? !!scene
-      : makeWhat === 'object'
-        ? !!genPlan
-        : makeWhat === 'character'
-          ? armed === 'char-gen'
-          : fxPick
+    makeWhat === 'fill' ? !!scene : makeWhat === 'effect' ? fxPick : !!genPlan
   const makeOff =
     genBusy ||
     !!genRun ||
@@ -3566,14 +3774,16 @@ export default function App() {
     !!charRun ||
     (makeWhat === 'effect'
       ? !fxAsk.trim() || fxBusy || !!fx
-      : makeWhat === 'object'
-        ? !genPrompt.trim() || genPick
-        : makeWhat === 'character'
-          ? !genPrompt.trim()
-          : false)
+      : makeWhat === 'fill'
+        ? false
+        : !genPrompt.trim() || (makeWhat === 'object' && genPick))
+  // the sprite plan's own words for what it decided to make move, so the busy
+  // line says hovering rather than walking when that is what it bought
+  const spriteMoves = genPlan?.sprite && genPlan.sprite.anim.how !== 'none'
+  const takes = genRun && genRun.total > 1 ? `${Math.min(genRun.done + 1, genRun.total)}/${genRun.total} · ` : ''
   const makeLabel = charRun
     ? // the one wait long enough to look broken, so it counts
-      `${charWalk ? 'drawing them, then the walk' : 'drawing them'} · ${mmss(charSecs)}`
+      `${takes}${spriteMoves ? 'drawing it, then the motion' : 'drawing it'} · ${mmss(charSecs)}`
     : fillRun
       ? `${fillRun.done + 1}/${fillRun.total} · ${fillRun.what}…`
       : genRun
@@ -3590,35 +3800,36 @@ export default function App() {
               ? 'click where it goes'
               : makeWhat === 'effect'
                 ? 'make it move'
-                : makeWhat === 'character'
-                  ? // the price is on the button before the first press, not
-                    // revealed by it
-                    `${genCost} generation${genCost === 1 ? '' : 's'} · ${armed === 'char-gen' ? 'sure?' : 'make them'}`
-                  : makeWhat === 'fill'
-                    ? scene
-                      ? `${wantedInScene} generation${wantedInScene === 1 ? '' : 's'} · draw them`
-                      : genBox
-                        ? 'read the area · free'
-                        : 'box the area first'
-                    : genPlan
-                      ? `${genCost} generation${genCost === 1 ? '' : 's'} · draw it`
-                      : 'read the map · free'
+                : makeWhat === 'fill'
+                  ? scene
+                    ? `${wantedInScene * (genType === 'animated' ? 2 : 1)} generation${wantedInScene * (genType === 'animated' ? 2 : 1) === 1 ? '' : 's'} · draw them`
+                    : genBox
+                      ? 'read the area · free'
+                      : 'box the area first'
+                  : genPlan
+                    ? `${genCost} generation${genCost === 1 ? '' : 's'} · ${genCount > 1 ? 'draw them' : 'draw it'}`
+                    : 'read the map · free'
+  /* The multiplication is the part nobody does in their head: four takes of a
+   * moving sprite is thirty-six generations. Said before the read as well as
+   * on the button after it, because the read is where he decides whether four
+   * was a sensible number and by then it is too late to be told. */
+  const takeWord = genCount === 1 ? '' : `, ${genCount} takes · ${genCost} generations`
   const makeDesc =
     makeWhat === 'effect'
       ? 'free · built from this map’s colours'
-      : makeWhat === 'character'
+      : makeWhat === 'sprite'
         ? charRun
           ? /* what a stop is still worth: the body is paid for the moment it is
-             * asked for, the eight walking directions are not */
-            charWalk
-            ? 'pixellab is drawing · stopping before the walk saves eight'
+             * asked for, the eight directions of motion are not */
+            spriteMoves
+            ? 'pixellab is drawing · stopping before the motion saves eight'
             : 'pixellab is drawing · already paid for'
           : /* said honestly: this is minutes, not the seconds an object takes,
-             * and the walk is what most of them go on */
-            `${CHAR_DIRS} ways${charWalk ? ' + a walk' : ''} · ${charWalk ? 'five to fifteen minutes' : 'two to five minutes'}${usd ? ` · ${usd} left` : ''}`
+             * and the motion is what most of them go on */
+            `${CHAR_DIRS} ways${genType === 'animated' ? ' + motion' : ''} · ${genType === 'animated' ? 'five to fifteen minutes' : 'two to five minutes'}${takeWord}${usd ? ` · ${usd} left` : ''}`
         : makeWhat === 'fill'
-          ? `${genBox ? `the boxed ${genBox.w}×${genBox.h}` : 'box an area'} · ${fillCount} thing${fillCount === 1 ? '' : 's'}${usd ? ` · ${usd} left` : ''}`
-          : `${genBox ? `reads the boxed ${genBox.w}×${genBox.h}` : 'reads the whole map'} · ${genType === 'animated' ? 'sprite + 8 frames' : 'one png'}${genMode === 'batch' ? ', ×3' : ''}${usd ? ` · ${usd} left` : ''}`
+          ? `${genBox ? `the boxed ${genBox.w}×${genBox.h}` : 'box an area'} · ${fillCount} different thing${fillCount === 1 ? '' : 's'}${usd ? ` · ${usd} left` : ''}`
+          : `${genBox ? `reads the boxed ${genBox.w}×${genBox.h}` : 'reads the whole map'} · ${genType === 'animated' ? 'sprite + 8 frames' : 'one png'}${takeWord}${usd ? ` · ${usd} left` : ''}`
 
   /* ---- the make strip -------------------------------------------------
    *
@@ -3637,7 +3848,9 @@ export default function App() {
         {(
           [
             ['object', 'a thing'],
-            ['character', 'a person'],
+            // not "a person". A person is one of the things this can be, and
+            // naming the mode after it told everybody the rest were not allowed.
+            ['sprite', 'a sprite'],
             ['effect', 'motion'],
             ['fill', 'fill an area'],
           ] as const
@@ -3669,12 +3882,10 @@ export default function App() {
               ? 'e.g. water splashing where the fall lands'
               : makeWhat === 'fill'
                 ? 'anything to steer it, or leave empty'
-                : makeWhat === 'character'
-                  ? // one box for both, because a person is described the same
-                    // way a thing is
-                    charBody === 'quadruped'
-                    ? 'e.g. a scruffy harbour dog'
-                    : 'e.g. a fisherman in a yellow coat'
+                : makeWhat === 'sprite'
+                  ? // deliberately not a person and not an animal. Whatever is
+                    // typed here is what the router has to find a rig for.
+                    'e.g. a hooded figure with a lantern'
                   : genType === 'animated'
                     ? 'e.g. a campfire'
                     : 'e.g. a stone well'
@@ -3701,10 +3912,11 @@ export default function App() {
         />
         <span className="field-desc">{makeDesc}</span>
       </label>
-      {/* still or moving says nothing about a character: it is always a set of
-          views, and its motion is a walk cycle rather than frames of a still.
-          So this row belongs to the two modes it means something to. */}
-      {(makeWhat === 'object' || makeWhat === 'fill') && (
+      {/* still or moving, and it means the same thing in all three modes that
+          have it. For a sprite it does not mean a walk cycle: it means the
+          router decides what moving IS for that thing, which is one foot in
+          front of the other for a fisherman and wings beating for a dragon. */}
+      {makeWhat !== 'effect' && (
         <div className="segrow">
           <div className="seg" role="radiogroup" aria-label="still or moving">
             {(['static', 'animated'] as const).map((t) => (
@@ -3715,6 +3927,10 @@ export default function App() {
                 aria-checked={genType === t}
                 onClick={() => {
                   setGenType(t)
+                  // the plan was written for the other answer, so it is not the
+                  // plan for this one
+                  setGenPlan(null)
+                  setScene(null)
                   stopPick()
                 }}
               >
@@ -3722,103 +3938,13 @@ export default function App() {
               </button>
             ))}
           </div>
-          {makeWhat === 'object' && (
-            <div className="seg" role="radiogroup" aria-label="how many">
-              {(['single', 'batch'] as const).map((m) => (
-                <button
-                  key={m}
-                  className={'seg-opt' + (genMode === m ? ' on' : '')}
-                  role="radio"
-                  aria-checked={genMode === m}
-                  onClick={() => {
-                    setGenMode(m)
-                    stopPick()
-                  }}
-                >
-                  {m === 'batch' ? '×3' : 'one'}
-                </button>
-              ))}
-            </div>
-          )}
         </div>
       )}
-      {/* Everything a character needs answered, and nothing more. There is no
-          settings panel here on purpose: the view, the size and the eight
-          directions are decided once in the constants, and the two things that
-          are genuinely a choice are what kind of body it is and whether it
-          walks. */}
-      {makeWhat === 'character' && (
-        <>
-          <div className="seg" role="radiogroup" aria-label="person or animal">
-            {(
-              [
-                ['humanoid', 'a person'],
-                ['quadruped', 'an animal'],
-              ] as const
-            ).map(([b, label]) => (
-              <button
-                key={b}
-                className={'seg-opt' + (charBody === b ? ' on' : '')}
-                role="radio"
-                aria-checked={charBody === b}
-                onClick={() => {
-                  setCharBody(b)
-                  disarm()
-                }}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          {/* pixellab will not build an animal without one of its five body
-              templates, so this list is a requirement rather than a nicety */}
-          {charBody === 'quadruped' && (
-            <div className="seg" role="radiogroup" aria-label="which body">
-              {CHAR_ANIMALS.map((a) => (
-                <button
-                  key={a}
-                  className={'seg-opt' + (charAnimal === a ? ' on' : '')}
-                  role="radio"
-                  aria-checked={charAnimal === a}
-                  onClick={() => {
-                    setCharAnimal(a)
-                    disarm()
-                  }}
-                >
-                  {a}
-                </button>
-              ))}
-            </div>
-          )}
-          {/* the walk is eight of the nine, so this is the control that moves
-              the price and the button has to be re-armed after it */}
-          <div className="seg" role="radiogroup" aria-label="walks or stands">
-            {(
-              [
-                [true, 'walks'],
-                [false, 'stands still'],
-              ] as const
-            ).map(([w, label]) => (
-              <button
-                key={label}
-                className={'seg-opt' + (charWalk === w ? ' on' : '')}
-                role="radio"
-                aria-checked={charWalk === w}
-                onClick={() => {
-                  setCharWalk(w)
-                  disarm()
-                }}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
-      {/* the count gets its own line. Sharing one with still/moving put a range
-          input beside a segment that would not give up any width, and the two
-          ended up drawn on top of each other. */}
-      {makeWhat === 'fill' && (
+      {/* Two sliders, same rail, and they do not mean the same thing. Fill's
+          count is a set of DIFFERENT things planned into one area. This one is
+          takes on ONE thing, the same core asset drawn again from another seed,
+          which is why the words under it say so. */}
+      {makeWhat === 'fill' ? (
         <label className="fillnum">
           <span>how many</span>
           <input
@@ -3826,6 +3952,7 @@ export default function App() {
             min={1}
             max={24}
             value={fillCount}
+            style={rail(fillCount, 1, 24)}
             onChange={(ev) => {
               setFillCount(Number(ev.target.value))
               setScene(null)
@@ -3833,9 +3960,27 @@ export default function App() {
           />
           <b>{fillCount}</b>
         </label>
-      )}
-      {/* a box is context for a drawing on the map, and the character endpoint
-          has nowhere to put one */}
+      ) : makeWhat !== 'effect' ? (
+        <label className="fillnum">
+          <span>takes</span>
+          <input
+            type="range"
+            min={1}
+            max={8}
+            value={genCount}
+            style={rail(genCount, 1, 8)}
+            onChange={(ev) => {
+              setGenCount(Number(ev.target.value))
+              // the price on the button changes, so the confirm it was armed
+              // for is no longer the confirm he agreed to
+              setGenPlan(null)
+            }}
+          />
+          <b>{genCount}</b>
+        </label>
+      ) : null}
+      {/* a box is context for a drawing on the map, and the sprite endpoint has
+          nowhere to put one */}
       {(makeWhat === 'object' || makeWhat === 'fill') && (
         <button
           className={'abtn areabtn' + (genBox ? ' on' : '')}
@@ -3849,7 +3994,10 @@ export default function App() {
         <button className={'primary genbtn' + (makeArmed ? ' armed' : '')} onClick={doMake} disabled={makeOff}>
           {makeLabel}
         </button>
-        {(genBusy || !!genRun || !!fillRun || fxBusy || !!charRun) && (
+        {/* everything that can be running is listed here on purpose. A wait
+            with nothing to press is the failure this button exists for, so a
+            new one must be added to this line the day it is written. */}
+        {(genBusy || !!genRun || !!fillRun || fxBusy || !!charRun || lifeBusy || !!pl?.looking || !!fxRev?.running) && (
           <button className="abtn stopbtn" onClick={doStop}>
             stop
           </button>
@@ -3861,10 +4009,33 @@ export default function App() {
   /* ---- the plan cards -------------------------------------------------
    * What the model decided, before anything is bought. One for a single thing,
    * one for a whole area; the area's is a list you can strike items out of, so
-   * a plan that is nine-tenths right costs one click rather than a re-read. */
+   * a plan that is nine-tenths right costs one click rather than a re-read.
+   *
+   * A sprite's card carries the routing as well as the words, because that is
+   * where the decisions that used to be dropdowns now live: which rig, which
+   * angle, how big, and what moving means for this particular thing. He should
+   * be able to read "lion rig · hovering, wings beating slowly" and know the
+   * dragon is not about to try walking. */
+  const spriteRoute = genPlan?.sprite
   const planCard = genPlan && (
     <div className="planbox">
       <div className="plannote">{genPlan.note || 'read the map'}</div>
+      {spriteRoute && (
+        <>
+          <div className="planmeta">
+            {spriteRoute.skeleton} rig · {spriteRoute.view} · {spriteRoute.size}px · {CHAR_DIRS} ways
+          </div>
+          <div className="planmeta">
+            {spriteRoute.anim.how === 'none'
+              ? 'stands still'
+              : spriteRoute.anim.how === 'template'
+                ? `moves: ${spriteRoute.anim.template}`
+                : `moves: ${spriteRoute.anim.action} (written, ${spriteRoute.anim.frames || 8} frames)`}
+          </div>
+          {spriteRoute.why && <div className="plannote">{spriteRoute.why}</div>}
+        </>
+      )}
+      {genPlan.crossing && <div className="planmeta">{genPlan.crossing}</div>}
       <div className="planmeta">
         {genPlan.w}×{genPlan.h}
         {genPlan.motion ? ` · ${genPlan.motion}` : ''}
@@ -3873,6 +4044,37 @@ export default function App() {
         </button>
       </div>
       {genShow && <div className="planprompt">{genPlan.prompt}</div>}
+    </div>
+  )
+
+  /* The first take, on screen, with the run held. Continue or stop.
+   *
+   * Nothing here undoes anything: what is in the picture is already paid for
+   * and already in the library. The only question is whether the REST gets
+   * bought, and it is asked at the one moment where the answer is still worth
+   * money. */
+  const gateCard = gate && (
+    <div className="planbox gatebox">
+      <div className="plannote">
+        take {gate.done} of {gate.total} · keep going?
+      </div>
+      <div className="gateshot">
+        <img src={shotOf(gate.item)} alt="" />
+      </div>
+      <div className="planmeta">
+        {gate.item.name} · {gate.item.w}×{gate.item.h}
+      </div>
+      <div className="actrow">
+        <button className="abtn" onClick={() => closeGate(true)}>
+          continue
+        </button>
+        <button className="abtn danger" onClick={() => closeGate(false)}>
+          stop · keep this one
+        </button>
+      </div>
+      <div className="fxfoot">
+        {gate.total - gate.done} more · {perTake * (gate.total - gate.done)} generations · what is drawn already stays
+      </div>
     </div>
   )
 
@@ -3991,6 +4193,7 @@ export default function App() {
                       max={c.max}
                       step={c.step}
                       value={v}
+                      style={rail(v, c.min, c.max)}
                       onChange={(e) => {
                         const n = Number(e.target.value)
                         setFxP((q) => (q ? { ...q, custom: { ...(q.custom || {}), [c.key]: n } } : q))
@@ -4018,6 +4221,7 @@ export default function App() {
                     max={hi}
                     step={st2}
                     value={Number(fxP[k])}
+                    style={rail(Number(fxP[k]), lo, hi)}
                     onChange={(e) => {
                       const v = Number(e.target.value)
                       setFxP((q) => (q ? { ...q, [k]: v } : q))
@@ -4093,9 +4297,10 @@ export default function App() {
                   setMakeWhat('effect')
                   setFxAsk(a.ask)
                 } else {
-                  // a person put back in the object box comes out a prop of a
-                  // person, so the mode has to come back with the words
-                  setMakeWhat(a.kind === 'character' ? 'character' : 'object')
+                  // a sprite put back in the object box comes out a prop shaped
+                  // like one, so the mode has to come back with the words. The
+                  // on-disk word is still 'character', so old rows replay.
+                  setMakeWhat(a.kind === 'character' ? 'sprite' : 'object')
                   setGenPrompt(a.ask)
                 }
                 disarm()
@@ -4129,7 +4334,11 @@ export default function App() {
           fill cost no vertical space at all. */}
       {makeStrip}
       <div className="zone">
-        {matchPanel ? (
+        {/* the gate goes first. Nothing else can be open while a run is held,
+            but saying so here makes it true by construction. */}
+        {gateCard ? (
+          gateCard
+        ) : matchPanel ? (
           matchPanel
         ) : fxTuner ? (
           fxTuner

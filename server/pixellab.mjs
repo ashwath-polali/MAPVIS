@@ -16,7 +16,8 @@
  *   POST /v2/create-character-with-4-directions -> the same, when four headings are enough
  *   POST /v2/create-character-pro      -> the same, 20-40 generations, can style-match a character you own
  *   POST /v2/create-character-v3       -> the same, 2-9 generations, the only one taking a reference image
- *   POST /v2/animate-character         -> { background_job_ids, directions }, one generation PER direction
+ *   POST /v2/animate-character         -> { background_job_ids, directions }, one generation PER direction,
+ *                                         mode template off a named walk, or mode v3 off written motion words
  *   GET  /v2/characters                -> { characters, total }, every character on the account
  *   GET  /v2/characters/{id}           -> status, rotation_urls, and animations carrying frame urls
  *   GET  /v1/balance                   -> { usd }
@@ -151,18 +152,23 @@ export async function mapObject({ description, w, h, view = 'low top-down', back
   throw new Error('generation timed out')
 }
 
-/* CHARACTERS, which is what pixellab calls a person or an animal.
+/* CHARACTERS, which is what pixellab calls anything built on a skeleton.
  *
  * Not the same thing as an object. An object is a prop: a crate, a well, a
- * tree, and MAPVIS has only ever made those. A character has a skeleton, comes
- * in 4 or 8 directions, and can be given walk cycles from a library of template
- * animations, one generation per direction.
+ * tree, drawn flat and once. A character is rigged, comes in 4 or 8 directions
+ * of the SAME body, and can be given motion, one generation per direction.
  *
- * That distinction is pixellab's, not ours, and it matters: their own docs say
- * do NOT use the eight-direction OBJECT endpoint for a person, because the
- * identity transfer is unreliable on humanoids and it comes back a generic
- * character instead of yours. An earlier version of this file wired exactly
- * that, for exactly that use, and it was wrong.
+ * The skeleton is a RIG, not a species. There are six of them, mannequin and
+ * five four-legged bodies, and that is all there will ever be: no dragon, no
+ * robot, no bird. Anything outside the six is drawn on the nearest rig by body
+ * plan and made itself by the words of the prompt. Deciding which rig is the
+ * router's job in api.mjs; nothing in this file has an opinion about it.
+ *
+ * The object/character split is pixellab's, not ours, and it matters: their own
+ * docs say do NOT use the eight-direction OBJECT endpoint for something with a
+ * body, because the identity transfer is unreliable and it comes back a generic
+ * figure instead of yours. An earlier version of this file wired exactly that,
+ * for exactly that use, and it was wrong.
  *
  * Both of these are reads and cost nothing.
  */
@@ -201,7 +207,11 @@ export async function allCharacters() {
  */
 const DONE = ['completed', 'success', 'succeeded', 'done', 'ready']
 const DEAD = ['failed', 'error', 'cancelled', 'canceled']
-const VIEWS = ['low top-down', 'high top-down', 'side', 'oblique']
+// the four the live v2 schema names on the standard create routes. oblique used
+// to sit here and is not in that schema at all: read off /v2/openapi.json
+// 2026-08-23, every create-character route says "side, low top-down, high
+// top-down, perspective". pro and v3 name only the first three.
+const VIEWS = ['low top-down', 'high top-down', 'side', 'perspective']
 const QUADRUPEDS = ['bear', 'cat', 'dog', 'horse', 'lion']
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -234,6 +244,7 @@ export async function createCharacter({
   proportions,
   styleCharacterId,
   mode = 'standard',
+  seed,
 }) {
   const say = String(description || '').trim()
   if (!say) throw new Error('a character needs a description')
@@ -247,9 +258,9 @@ export async function createCharacter({
     tpl = String(template || '')
     if (!QUADRUPEDS.includes(tpl)) throw new Error('an animal needs one of ' + QUADRUPEDS.join(', '))
   }
-  // oblique is a standard-mode beta; pro and v3 name three views and refuse it
+  // perspective is standard only; pro and v3 enumerate three views and refuse it
   let v = VIEWS.includes(view) ? view : 'low top-down'
-  if (m !== 'standard' && v === 'oblique') v = 'low top-down'
+  if (m !== 'standard' && v === 'perspective') v = 'low top-down'
 
   const req = {
     description: say,
@@ -257,6 +268,9 @@ export async function createCharacter({
     view: v,
     template_id: tpl,
   }
+  // every one of the four create routes carries seed. Two variants of one ask
+  // are only reliably different when the noise they start from is.
+  if (seed != null) req.seed = seed
   let route
   if (m === 'pro') {
     route = '/v2/create-character-pro'
@@ -333,7 +347,7 @@ export async function awaitCharacter(characterId, { timeoutMs = 600000 } = {}) {
  * /v2/characters/animations is the same handler under a second path. This one
  * is the name the tooling uses.
  */
-export async function animateCharacter({ characterId, templateAnimationId, directions }) {
+export async function animateCharacter({ characterId, templateAnimationId, directions, seed }) {
   if (!characterId) throw new Error('no character to animate')
   const tpl = String(templateAnimationId || '').trim()
   if (!tpl) throw new Error('no animation template to walk with')
@@ -345,13 +359,64 @@ export async function animateCharacter({ characterId, templateAnimationId, direc
     animation_name: tpl,
   }
   if (want.length) req.directions = want
+  if (seed != null) req.seed = seed
+  return startAnimation(req, want, tpl)
+}
+
+/* THE SAME ENDPOINT, MOTION WRITTEN INSTEAD OF PICKED.
+ *
+ * mode v3 takes action_description in place of a template id, so the movement
+ * is a sentence rather than a name off a list. That is the whole reason this
+ * exists: a dragon does not walk, it hovers and beats its wings, and there is
+ * no hovering template and never will be one. The same goes for a ghoul that
+ * lurches and a robot whose servos idle. A quadruped needs it too, because the
+ * four-legged templates are named per body and cannot be known before the body
+ * has been drawn.
+ *
+ * directions is NOT optional here and that is measured, not assumed: the live
+ * schema says template mode defaults to every direction the character has and
+ * CUSTOM MODE DEFAULTS TO SOUTH ONLY. Leave it out and a dragon comes back
+ * facing one way with the budget for eight still unspent and the sprite
+ * useless. So the caller names all eight.
+ *
+ * keep_first_frame false stores exactly frameCount frames instead of
+ * frameCount + the reference pose, so the loop has no duplicate at its seam.
+ *
+ * Priced at ceil(w * h * frames / 65536) per direction, which is one per
+ * direction at 96px and under. That is why the sprite size is capped there.
+ */
+export async function animateCharacterAction({ characterId, action, frameCount = 8, directions, name = 'motion', seed }) {
+  if (!characterId) throw new Error('no character to animate')
+  const act = String(action || '').replace(/\s+/g, ' ').trim()
+  if (!act) throw new Error('no motion words to animate with')
+  const want = Array.isArray(directions) ? directions.map((k) => String(k).toLowerCase().trim()).filter(Boolean) : []
+  if (!want.length) throw new Error('written motion has to name its directions or only south comes back')
+  // 4 to 16 and even, the schema's own bounds
+  const n = Math.max(4, Math.min(16, Math.round(Number(frameCount) || 8)))
+  const req = {
+    character_id: String(characterId),
+    mode: 'v3',
+    action_description: act.slice(0, 300),
+    animation_name: String(name || 'motion').slice(0, 60),
+    frame_count: n % 2 ? n + 1 : n,
+    keep_first_frame: false,
+    directions: want,
+  }
+  if (seed != null) req.seed = seed
+  return startAnimation(req, want, req.animation_name)
+}
+
+// both modes answer the same way and are waited on the same way, so the post
+// and the handle it turns into are written once. group is what awaitAnimation
+// matches the frames by: the template's id, or the name a written one was given.
+async function startAnimation(req, want, group) {
   const out = await call('POST', '/v2/animate-character', req)
   const jobIds = Array.isArray(out.background_job_ids) ? out.background_job_ids.filter(Boolean) : []
   const going = Array.isArray(out.directions) && out.directions.length ? out.directions.map((k) => String(k).toLowerCase()) : want
   if (!jobIds.length && !going.length) throw new Error('the animation did not start')
   // the reply says which jobs and which headings but not which group, so the
-  // template is carried on the handle for awaitAnimation to recognise it by
-  return { ...out, jobIds, directions: going, templateAnimationId: tpl }
+  // group's name is carried on the handle for awaitAnimation to recognise it by
+  return { ...out, jobIds, directions: going, templateAnimationId: group }
 }
 
 // heading to frame urls, in order, for the group named after the template.

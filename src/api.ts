@@ -133,8 +133,8 @@ export interface StyleCard {
   scale: string
   clause: string
 }
-export const styleCard = (id: string, image: string, refresh = false) =>
-  jpost<{ card: StyleCard; cached: boolean }>('/api/style-card', { id, image, refresh })
+export const styleCard = (id: string, image: string, refresh = false, job?: string) =>
+  jpost<{ card: StyleCard; cached: boolean }>('/api/style-card', { id, image, refresh, job })
 
 // the ask interpreter alone, free: called at arm time so the confirm button
 // can show exactly what will be drawn before anything spends. styleClause is
@@ -153,14 +153,19 @@ export interface AskTranslation {
 }
 // id rides along so the rewrite can be shaped by what he has already KEPT on
 // this map: the last few keeps go into the prompt as taste, never the discards.
-export const translate = (ask: string, kind: 'static' | 'animated', styleClause?: string, id?: string) =>
-  jpost<{ t: AskTranslation }>('/api/translate', { ask, kind, styleClause, id })
+export const translate = (
+  ask: string,
+  kind: 'static' | 'animated',
+  styleClause?: string,
+  id?: string,
+  job?: string,
+) => jpost<{ t: AskTranslation }>('/api/translate', { ask, kind, styleClause, id, job })
 
 // ONE pixellab generation into this map's library. Only ever called after an
-// explicit cost confirm. name pins the library filename (a batch run passes
-// <slug>-1/-2/-3) and seed pins the starting noise, so a batch of the same
-// prompt lands three distinct takes. thing/tw/th carry the CONFIRMED
-// translation through verbatim — what the button showed is what runs.
+// explicit cost confirm. name pins the library filename (a run of takes passes
+// <slug>-1 up to <slug>-8) and seed pins the starting noise, so several takes
+// of the same prompt land as distinct pictures. thing/tw/th carry the CONFIRMED
+// translation through verbatim, so what the button showed is what runs.
 export const assetGen = (
   id: string,
   prompt: string,
@@ -175,6 +180,9 @@ export const assetGen = (
     // the boxed area of the painting, already inside 32..192 per side. When it
     // rides along pixellab draws INTO that art instead of onto a bare canvas.
     background?: string
+    // a generation already asked for is already paid for, so what a stop buys
+    // is the one NOT yet asked for. The server checks the job before it sends.
+    job?: string
   },
 ) => jpost<{ item: LibItem }>('/api/asset-gen', { id, prompt, ...o })
 
@@ -205,29 +213,33 @@ export const accountCharacters = () =>
 export const characterImport = (id: string, sceneId: string, o?: { name?: string; animation?: string }) =>
   jpost<{ item: LibItem }>('/api/character-import', { id, sceneId, ...o })
 
-/* A NEW character, made rather than picked. The only paid call on this half.
+/* A NEW sprite, made rather than picked. The only paid call on this half.
  *
- * Not an object with more sides. An object endpoint given a person answers with
- * a generic character instead of the one that was asked for, which is pixellab's
- * own warning and not a guess; a character is generated off a skeleton, which is
- * what makes eight views of the SAME body possible and what a walk template
- * hangs on. So the two live on different endpoints and this one is theirs.
+ * Not an object with more sides. An object endpoint given a body answers with a
+ * generic character instead of the one that was asked for, which is pixellab's
+ * own warning and not a guess; a sprite is generated off a skeleton, which is
+ * what makes eight views of the SAME body possible and what a motion hangs on.
+ * So the two live on different endpoints and this one is theirs.
  *
- * The price is the thing to say out loud. One generation for the character in
- * standard mode, then ONE PER DIRECTION for a walk cycle, so the eight-way
- * default with a walk is nine. It is also slow: two to five minutes for the
- * character and longer again for the walk, all inside this one request.
+ * The price is the thing to say out loud. One generation for the body in
+ * standard mode, then ONE PER DIRECTION for the motion, so eight-way moving is
+ * nine. It is also slow: two to five minutes for the body and longer again for
+ * the motion, all inside this one request.
  *
  * confirm true is the server's own gate and only the confirmed press sends it,
  * so a reload or a retry cannot spend. job makes the wait stoppable, and a stop
- * that lands between the character and its walk is worth eight generations.
+ * that lands between the body and its motion is worth eight generations.
  *
- * walk is a template animation id, or '' for a character that only stands.
+ * Nothing here is picked off a control. skeleton, view, size and anim are the
+ * router's answer, carried through verbatim from the plan the button showed.
+ * The server splits skeleton into pixellab's bodyType and template, because a
+ * four-legged rig has to name which body it is and mannequin must not.
+ *
  * What lands is the same on-disk shape the account import writes, so placement,
  * facing, life and the export never learn that it was generated.
  *
- * note carries a walk that did not happen. The body is bought the moment it is
- * asked for, so a walk that fails or is stopped leaves the character standing
+ * note carries a motion that did not happen. The body is bought the moment it
+ * is asked for, so a motion that fails or is stopped leaves the sprite standing
  * rather than losing it, and this is where the reason comes back. */
 export const characterGen = (
   id: string,
@@ -236,19 +248,23 @@ export const characterGen = (
     confirm: true
     job?: string
     name?: string
+    // pins the starting noise so two variants of one ask are distinct takes
+    // rather than the same roll twice
+    seed?: number
     // pixellab pads the canvas about 40% past this to leave room for the
     // animation, so 48 comes back near 68 and arrives needing its base trimmed
     size?: number
-    view?: string
-    // quadruped REQUIRES a template, one of bear, cat, dog, horse, lion
-    bodyType?: 'humanoid' | 'quadruped'
-    template?: string
+    view?: SpriteRoute['view']
+    // one of the six rigs. The server turns mannequin into humanoid and the
+    // other five into quadruped + that template.
+    skeleton?: SpriteRoute['skeleton']
     // eight, because life.ts works out an eight-way facing and four makes the
-    // diagonals snap to the wrong view
+    // diagonals snap to the wrong view. An engine requirement, so it is not a
+    // routing answer.
     nDirections?: 4 | 8
-    walk?: string
+    anim?: SpriteAnim
     // standard is one generation. pro is twenty to forty and can never be a
-    // default here.
+    // default here, and the price on the button assumes standard.
     mode?: 'standard' | 'pro' | 'v3'
   },
 ) => jpost<{ item: LibItem; note?: string }>('/api/character-gen', { id, ...o })
@@ -265,26 +281,68 @@ export const characterGen = (
  * was compressed to eighteen words of text before anything could use it. It is
  * not compressed any more.
  *
+ * It is also the ROUTER. A sprite has a body, so somebody has to answer which
+ * skeleton, which view, how big, and what moving MEANS for that thing. None of
+ * those belong in a dropdown: a list of creatures is always shorter than what
+ * somebody wants to make, and a dragon does not walk. So the ask goes in whole
+ * and the model, holding the painting, answers the routing as well as the
+ * words.
+ *
  * FREE, and stoppable: job is any string, and stop(job) ends it mid-thought. */
-export interface AssetPlan {
+
+// how the sprite moves. template is one of pixellab's named humanoid cycles;
+// action is written prose for anything a template cannot say, which is most of
+// what is interesting: hovering, lurching, servos idling. none is a sprite that
+// stands.
+export interface SpriteAnim {
+  how: 'none' | 'template' | 'action'
+  template?: string
+  action?: string
+  // only on the written path. 4..16, even.
+  frames?: number
+}
+/* Pixellab builds a sprite off a skeleton and there are exactly six: the
+ * upright mannequin and five four-legged bodies. There is no dragon rig and no
+ * robot rig, so anything else is mapped onto the NEAREST one by body plan. That
+ * decision is the router's, and the skeleton never leaks into the words: a
+ * mannequin-rigged patrol robot still reads as a machine because the prompt
+ * says plating and a lens where a face would be. */
+export interface SpriteRoute {
+  skeleton: 'mannequin' | 'bear' | 'cat' | 'dog' | 'horse' | 'lion'
+  view: 'low top-down' | 'high top-down' | 'side' | 'perspective'
+  // the sprite's own pixel height, 32..96. Above 96 a written animation costs
+  // more than one generation per direction, so bigger is a scale-up on the map.
+  size: number
+  anim: SpriteAnim
+  why: string
+}
+export interface MakePlan {
+  kind: 'object' | 'sprite'
   prompt: string
   motion: string
   note: string
   w: number
   h: number
+  // one line when the OTHER mode would have suited it better. The router never
+  // switches on its own, because a switch changes the price.
+  crossing?: string
+  sprite?: SpriteRoute
 }
 export const assetPlan = (
   id: string,
   ask: string,
   o: {
     map: string
+    // which of the two spending modes is open. The router answers for that one
+    // and says so in crossing if the other one fits better.
+    what: 'object' | 'sprite'
     kind: 'static' | 'animated'
     box?: { x: number; y: number; w: number; h: number } | null
     boxImage?: string
     previous?: string
     job?: string
   },
-) => jpost<{ plan: AssetPlan }>('/api/asset-plan', { id, ask, ...o })
+) => jpost<{ plan: MakePlan }>('/api/asset-plan', { id, ask, ...o })
 
 /* ---- give a placement life ----------------------------------------------
  *
@@ -366,6 +424,8 @@ export const assetGenHere = (
     tmotion?: string
     tw?: number
     th?: number
+    // a stop landing between the base and its animation saves the second half
+    job?: string
   },
 ) => jpost<{ item: LibItem }>('/api/asset-gen-here', { id, prompt, ...o })
 
@@ -381,7 +441,16 @@ export const assetAnim = (
   id: string,
   prompt: string,
   motion: string,
-  o?: { name?: string; seed?: number; thing?: string; tmotion?: string; tw?: number; th?: number },
+  o?: {
+    name?: string
+    seed?: number
+    thing?: string
+    tmotion?: string
+    tw?: number
+    th?: number
+    // two spends behind one request, so a stop between them is worth one
+    job?: string
+  },
 ) => jpost<{ item: LibItem }>('/api/asset-anim', { id, prompt, motion, ...o })
 
 // ---- the effect engine --------------------------------------------------
@@ -407,8 +476,8 @@ export interface EffectPlan {
   code?: string
   controls?: CustomControl[]
 }
-export const effectPlan = (ask: string, colors: string[], id?: string) =>
-  jpost<{ plan: EffectPlan }>('/api/effect-plan', { ask, colors, id })
+export const effectPlan = (ask: string, colors: string[], id?: string, job?: string) =>
+  jpost<{ plan: EffectPlan }>('/api/effect-plan', { ask, colors, id, job })
 
 // ---- the review loop ----------------------------------------------------
 
@@ -435,6 +504,9 @@ export const fxReview = (
     code?: string
     controls?: CustomControl[]
     pass?: number
+    // three passes at two minutes each is six minutes of nothing to press, so
+    // the look carries a job like every other planner
+    job?: string
   },
 ) => jpost<FxVerdict>('/api/fx-review', { id, ...o })
 
@@ -448,8 +520,8 @@ export interface ObjVerdict {
   why: string
   fix: string
 }
-export const objReview = (id: string, ask: string, prompt: string, frames: string[]) =>
-  jpost<ObjVerdict>('/api/obj-review', { id, ask, prompt, frames })
+export const objReview = (id: string, ask: string, prompt: string, frames: string[], job?: string) =>
+  jpost<ObjVerdict>('/api/obj-review', { id, ask, prompt, frames, job })
 
 // one KEPT thing, appended to work/<id>/keeps.json. Only keeps, never discards.
 export const keepNote = (
@@ -476,7 +548,9 @@ export const effectSave = (
 export interface Ask {
   name: string
   // character is here so a past ask reopens in the mode that made it. Without
-  // it a person came back in the object box, which draws a prop of a person.
+  // it a sprite came back in the object box, which draws a prop of a body. The
+  // on-disk word stays 'character' so old asks.json rows still replay; the ui
+  // calls that mode a sprite.
   kind?: 'asset' | 'effect' | 'character'
   ask: string
   prompt: string

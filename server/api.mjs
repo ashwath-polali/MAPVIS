@@ -12,7 +12,8 @@
  *   POST /api/account-import   { id, sceneId } -> copies one of them into this map's library. FREE
  *   GET  /api/account-characters  every person and animal on the account. FREE
  *   POST /api/character-import { id, sceneId, name, animation } -> one of them, walk and all. FREE
- *   POST /api/character-gen    { id, description, confirm, walk, ... } -> a NEW one. SPENDS 1 + one per direction
+ *   POST /api/character-gen    { id, description, confirm, skeleton, anim, ... } -> a NEW one. SPENDS 1 + one per direction
+ *   POST /api/asset-plan       { id, ask, what, kind, map, box } -> { plan } the whole routing decision. FREE
  *   POST /api/style-card       { id, image, refresh } -> { card } this map's own look, read ONCE and cached. FREE
  *   POST /api/asset-gen        { id, prompt, w, h, name, seed } -> ONE object png into work/<id>/library
  *   POST /api/asset-gen-here   { id, prompt, thing, tw, th, cx, cy, crop } -> ONE map-object png, the crop as context
@@ -127,7 +128,13 @@ async function route(req, res, p, url) {
     if (!ask) return send(res, 400, { error: 'no ask' })
     // the id rides along so the ask can be shaped by what he has kept on THIS
     // map; a client that never sends one just gets the cold rewrite
-    const t = await translateAsk(ask, b.kind === 'animated' ? 'animated' : 'static', b.styleClause, b.id ? safeId(b.id) : '')
+    const t = await translateAsk(
+      ask,
+      b.kind === 'animated' ? 'animated' : 'static',
+      b.styleClause,
+      b.id ? safeId(b.id) : '',
+      String(b.job || ''),
+    )
     return send(res, 200, { t })
   }
 
@@ -156,7 +163,7 @@ async function route(req, res, p, url) {
     fs.mkdirSync(sdir, { recursive: true })
     const file = path.join(sdir, 'painting.png')
     fs.writeFileSync(file, Buffer.from(stripDataURL(b.image), 'base64'))
-    const card = await readStyleCard(file)
+    const card = await readStyleCard(file, String(b.job || ''))
     if (!card) return send(res, 502, { error: 'the map did not read' })
     fs.writeFileSync(cacheFile, JSON.stringify(card, null, 2))
     return send(res, 200, { card, cached: false })
@@ -266,6 +273,13 @@ async function route(req, res, p, url) {
    * holding (and the boxed area, if one was drawn) as data urls; both land in
    * work/<id>/.ask so the planner can read them off disk.
    *
+   * It is also THE ROUTER. what says which of the two spending modes is open,
+   * and for a sprite the answer carries the whole routing decision as well as
+   * the prompt: which of the six skeletons, which camera angle, what size, and
+   * whether the motion is a named template or written out for v3. Those four
+   * used to be dropdowns, and a dropdown is a list of what can exist, which is
+   * always shorter than what someone can imagine. See planMake.
+   *
    * Nothing is generated here. What comes back is shown, and only a second,
    * deliberate press spends anything. */
   if (p === '/api/asset-plan' && req.method === 'POST') {
@@ -287,8 +301,11 @@ async function route(req, res, p, url) {
       fs.writeFileSync(boxFile, Buffer.from(boxB64, 'base64'))
     }
     try {
-      const plan = await planAsset({
+      const plan = await planMake({
         ask,
+        // which of the two spending modes is open. A client that sends nothing
+        // is asking for a prop, which is what this route has always answered.
+        what: b.what === 'sprite' ? 'sprite' : 'object',
         kind: b.kind === 'animated' ? 'animated' : 'static',
         id,
         mapFile,
@@ -511,13 +528,27 @@ async function route(req, res, p, url) {
     return send(res, 200, { item })
   }
 
-  /* ONE CHARACTER, DRAWN TO ORDER. The only route in this file that spends with
-   * no free read in front of it, so the ui's armed press is the gate and the
-   * confirm field below is the fence behind it.
+  /* ONE SPRITE, DRAWN TO ORDER. One variant per call: the client runs this once
+   * for each variant it wants, so it can show the first one and ask before
+   * buying the rest. name and seed are what make two calls two different takes
+   * of the same ask rather than one row overwritten twice.
    *
-   * The price is one generation for the character in standard mode plus one per
-   * direction for the walk cycle, so the default ask, eight directions with a
-   * walk, is nine. Pro is 20-40 on its own and is never the default.
+   * WHAT IT NO LONGER TAKES. This route used to be handed bodyType, template,
+   * walk and nDirections straight off four dropdowns, and a dropdown is a list
+   * of what can exist, which is always shorter than what someone can imagine.
+   * Now it takes skeleton and anim, which the ROUTER decided by reading the ask
+   * against the map (see planMake). The old fields are still accepted so an
+   * older client keeps working, but nothing sends them by choice.
+   *
+   * The price is one generation for the body in standard mode plus one per
+   * direction for the motion, so a moving sprite is nine and a still one is
+   * one. Pro is 20-40 on its own and is never the default.
+   *
+   * Motion has two paths and the second one is the point. A named template is
+   * the cheap, proven walk cycle for a two-legged thing. Written motion is
+   * mode v3, which takes any words at all, and it is the only way a dragon
+   * hovers, a ghoul lurches or a robot idles its servos. Neither could be
+   * expressed by a list.
    *
    * What lands is what /api/character-import lands, through the same writer:
    * work/<id>/library/<name>/<heading>-<frame>.png beside a dirs.json carrying
@@ -537,78 +568,106 @@ async function route(req, res, p, url) {
     if (b.confirm !== true) return send(res, 400, { error: 'this spends generations: send confirm true' })
 
     const mode = CHAR_MODES.includes(String(b.mode)) ? String(b.mode) : 'standard'
-    // pro and v3 come back eight ways whatever is asked for, and the walk is
+    // pro and v3 come back eight ways whatever is asked for, and the motion is
     // priced per direction, so the count has to be the real one
     const nDirections = mode === 'standard' && Number(b.nDirections) === 4 ? 4 : 8
     const view = CHAR_VIEWS.includes(String(b.view)) ? String(b.view) : OBJECT_VIEW
-    const bodyType = String(b.bodyType) === 'quadruped' ? 'quadruped' : 'humanoid'
-    // an animal has no skeleton of its own on this endpoint: pixellab wants one
-    // of its five body templates to hang the walk on, and refuses without it
-    const template = QUADRUPEDS.includes(String(b.template)) ? String(b.template) : ''
-    if (bodyType === 'quadruped' && !template)
-      return send(res, 400, { error: 'an animal needs a body: ' + QUADRUPEDS.join(', ') })
-    // v3 draws up to 256, standard and pro stop at 128
-    const size = Math.max(16, Math.min(mode === 'v3' ? 256 : 128, Math.round(Number(b.size) || 48)))
-    const walk = String(b.walk || '')
-      .toLowerCase()
-      .replace(/[^a-z0-9-]/g, '')
-      .slice(0, 40)
+    /* The rig, from the router, or worked back out of the old two fields.
+     *
+     * mannequin and the five four-legged bodies are the whole of what exists.
+     * The router picks the nearest by body plan and the description carries
+     * what the thing actually is, so a robot is a mannequin that reads as a
+     * machine and a dragon is a lion that hovers. */
+    const skeleton = SKELETONS.includes(String(b.skeleton)) ? String(b.skeleton) : legacySkeleton(b)
+    if (!skeleton) return send(res, 400, { error: 'an animal needs a body: ' + QUADRUPEDS.join(', ') })
+    const bodyType = skeleton === 'mannequin' ? 'humanoid' : 'quadruped'
+    // written motion is priced by pixel budget per direction, and at or under
+    // this it is one generation per direction, which is what the button said
+    const size = Math.max(SPRITE_MIN, Math.min(SPRITE_MAX, Math.round(Number(b.size) || 48)))
+    /* How it moves, held to what the endpoint will take.
+     *
+     * The router's clamps are applied again here, because this route is
+     * reachable without going through it and an invented template id is a 422
+     * that arrives after the body has been paid for.
+     *
+     * Only a named how counts as moving. spriteAnim's job inside the router is
+     * to rescue a garbled answer to a MOVING ask, so it falls through to
+     * written motion; here there is no ask to read, so an anim with no how is
+     * simply a malformed request and lands standing. A garbled request costs
+     * one generation, not nine. */
+    const want = b.anim && typeof b.anim === 'object' ? b.anim : legacyAnim(b)
+    const moving = want.how === 'template' || want.how === 'action'
+    const anim = spriteAnim(want, moving ? 'animated' : 'static', skeleton, '')
+    const seed = seedOf(b)
     // pixellab's own look controls, passed through only when the ui sent one
     const look = {}
     for (const k of ['outline', 'detail', 'proportions']) if (b[k]) look[k] = String(b[k]).slice(0, 40)
     if (mode === 'pro' && b.styleCharacterId) look.styleCharacterId = String(b.styleCharacterId).slice(0, 64)
 
-    const job = String(b.job || '').slice(0, 64)
-    const gate = job ? { off: false } : null
-    if (gate) WAITING.set(job, gate)
-    // a stop lands between two awaits as often as during one, so it is read at
-    // every point where the next step would cost money
-    const halt = () => {
-      if (gate && gate.off) throw new Error('stopped')
-    }
+    const { gate, halt, done } = gateFor(String(b.job || '').slice(0, 64))
     let folder = ''
     try {
+      halt()
       const cid = await pixellab.createCharacter({
         description,
         size,
         view,
         nDirections,
         bodyType,
-        template: bodyType === 'quadruped' ? template : '',
+        template: bodyType === 'quadruped' ? skeleton : '',
         mode,
+        seed,
         ...look,
       })
       if (!cid) throw new Error('no character came back')
       let d = await raceStop(gate, pixellab.awaitCharacter(cid, { timeoutMs: CHAR_WAIT }))
-      // the walk is eight more generations. The minutes the character took are
-      // the one window in which they can still be saved, so this is where a
-      // change of mind is worth the most.
+      // the motion is eight more generations. The minutes the body took are the
+      // one window in which they can still be saved, so this is where a change
+      // of mind is worth the most.
       halt()
       let note = ''
-      if (walk) {
-        /* The body is paid for by the time the walk is asked for, so nothing
-         * about the walk is allowed to take it down with it. The case that
-         * bites is an animal: quadruped templates are named per body, so a
-         * humanoid template id can come straight back 422 and a run that let
-         * that through would bin a character that was already bought. It lands
+      if (anim.how !== 'none') {
+        /* The body is paid for by the time the motion is asked for, so nothing
+         * about the motion is allowed to take it down with it. The case that
+         * bites is a four-legged rig: quadruped templates are named per body,
+         * so a humanoid template id comes straight back 422 and a run that let
+         * that through would bin a body that was already bought. It lands
          * standing instead and the reason travels with it.
          *
-         * The still rotations are kept rather than whatever the walk half
+         * The still rotations are kept rather than whatever the motion half
          * landed, so every heading has the same number of frames. */
         try {
-          // no directions asked for: the endpoint's default is every direction
-          // the character has, which is exactly what the button priced
-          const h = await pixellab.animateCharacter({ characterId: cid, templateAnimationId: walk })
+          /* The one place the two paths part.
+           *
+           * A template names its own directions by default, every heading the
+           * character has, which is what the button priced. Written motion
+           * does NOT: the schema defaults custom mode to south only, so the
+           * headings are named out loud or seven of the eight never happen.
+           *
+           * They are read off the body that just landed rather than assumed,
+           * because a four-direction character has four and naming a heading
+           * it does not have is a generation asked for and thrown away. */
+          const h =
+            anim.how === 'template'
+              ? await pixellab.animateCharacter({ characterId: cid, templateAnimationId: anim.template, seed })
+              : await pixellab.animateCharacterAction({
+                  characterId: cid,
+                  action: anim.action,
+                  frameCount: anim.frames,
+                  directions: headingsOf(d, nDirections),
+                  seed,
+                })
           d = await raceStop(gate, pixellab.awaitAnimation(cid, h, { timeoutMs: WALK_WAIT }))
         } catch (e) {
           const m = String((e && e.message) || e)
-          note = m === 'stopped' ? 'stopped mid walk, so it stands still' : 'no walk cycle · ' + m.slice(0, 140)
+          note = m === 'stopped' ? 'stopped mid motion, so it stands still' : 'no motion · ' + m.slice(0, 140)
         }
       }
-      // Two readings, both deliberate. Every animation on it is the walk, because
-      // this route just paid for the only one it has and the template's name is
-      // not always a word with walk in it. Unnamed, the library row is the first
-      // few words of the ask, the way a generated object is named.
+      // Two readings, both deliberate. Every animation on it is the one just
+      // paid for, because this route bought the only one it has, and its name is
+      // a template id or the word motion rather than anything with walk in it.
+      // Unnamed, the library row is the first few words of the ask, the way a
+      // generated object is named; a variant run passes its own name in.
       const plan = saveFrames(id, characterDirs(d, '*'), b.name ? cleanName(b.name) : slugName(description), 8)
       if (!plan) throw new Error('it came back with fewer than four directions')
       folder = plan.dir
@@ -634,7 +693,7 @@ async function route(req, res, p, url) {
       const m = String((e && e.message) || e)
       return send(res, m === 'stopped' ? 499 : 502, { error: m.slice(0, 300) })
     } finally {
-      if (gate) WAITING.delete(job)
+      done()
     }
   }
 
@@ -651,49 +710,57 @@ async function route(req, res, p, url) {
     const id = safeId(b.id)
     const prompt = String(b.prompt || '').trim()
     if (!prompt) return send(res, 400, { error: 'no prompt' })
-    // a translation confirmed in the ui rides in as b.thing and wins; only a
-    // bare ask (older client, direct api use) translates here
-    const t = b.thing
-      ? { thing: String(b.thing).slice(0, PROMPT_MAX), motion: '', w: clampPx(b.tw), h: clampPx(b.th) }
-      : await translateAsk(prompt, 'static', '', id)
-    const w = clampPx(b.w || t.w)
-    const h = clampPx(b.h || t.h)
-    // The boxed area rides along as background when there is one. This is
-    // pixellab's own cohesion tool and it was sitting on a side route nobody
-    // reached: bare-canvas generation turns small props to mush and has no way
-    // to know what light or palette they are joining. The client sends it
-    // already inside the endpoint's 32..192 per side.
-    const bg = stripDataURL(String(b.background || ''))
-    const bgSize = bg ? pngSizeBuf(Buffer.from(bg, 'base64')) : null
-    const useBg = !!(bgSize && bgSize.w >= 32 && bgSize.h >= 32 && bgSize.w * bgSize.h <= 192 * 192)
-    // the confirmed prompt rides through verbatim: what the button showed is
-    // the whole of what is sent, with nothing appended behind it
-    const b64 = await pixellab.mapObject({
-      description: t.thing,
-      w: useBg ? bgSize.w : w,
-      h: useBg ? bgSize.h : h,
-      view: OBJECT_VIEW,
-      ...(useBg
-        ? {
-            background: bg,
-            // the sprite's intended footprint as a share of the crop, held so
-            // the surrounding art always frames it
-            fraction: Math.max(0.15, Math.min(0.8, (w * h) / (bgSize.w * bgSize.h))),
-          }
-        : {}),
-      seed: seedOf(b),
-    })
-    const dir = libDirOf(id)
-    fs.mkdirSync(dir, { recursive: true })
-    const base = b.name ? cleanName(b.name) : 'gen-' + slugName(prompt)
-    let file = base + '.png'
-    for (let i = 2; fs.existsSync(path.join(dir, file)); i++) file = `${base}-${i}.png`
-    fs.writeFileSync(path.join(dir, file), Buffer.from(b64, 'base64'))
-    const size = pngSize(path.join(dir, file))
-    noteAsk(id, file.replace(/\.png$/i, ''), prompt, t.thing)
-    return send(res, 200, {
-      item: { name: file.replace(/\.png$/i, ''), kind: 'static', src: `/work/${id}/library/${file}`, w: size.w, h: size.h },
-    })
+    // one job for the whole run of variants, so a stop between two of them ends
+    // the one in flight and the client's own loop stops asking for more
+    const job = String(b.job || '').slice(0, 64)
+    const { gate, halt, done } = gateFor(job)
+    try {
+      // a translation confirmed in the ui rides in as b.thing and wins; only a
+      // bare ask (older client, direct api use) translates here
+      const t = b.thing
+        ? { thing: String(b.thing).slice(0, PROMPT_MAX), motion: '', w: clampPx(b.tw), h: clampPx(b.th) }
+        : await translateAsk(prompt, 'static', '', id, job)
+      const w = clampPx(b.w || t.w)
+      const h = clampPx(b.h || t.h)
+      // The boxed area rides along as background when there is one. This is
+      // pixellab's own cohesion tool and it was sitting on a side route nobody
+      // reached: bare-canvas generation turns small props to mush and has no way
+      // to know what light or palette they are joining. The client sends it
+      // already inside the endpoint's 32..192 per side.
+      const bg = stripDataURL(String(b.background || ''))
+      const bgSize = bg ? pngSizeBuf(Buffer.from(bg, 'base64')) : null
+      const useBg = !!(bgSize && bgSize.w >= 32 && bgSize.h >= 32 && bgSize.w * bgSize.h <= 192 * 192)
+      // the last free moment. Past this line the png is bought whatever happens
+      // next, so everything below still writes it to disk.
+      halt()
+      // the confirmed prompt rides through verbatim: what the button showed is
+      // the whole of what is sent, with nothing appended behind it
+      const b64 = await raceStop(
+        gate,
+        pixellab.mapObject({
+          description: t.thing,
+          w: useBg ? bgSize.w : w,
+          h: useBg ? bgSize.h : h,
+          view: OBJECT_VIEW,
+          ...(useBg
+            ? {
+                background: bg,
+                // the sprite's intended footprint as a share of the crop, held so
+                // the surrounding art always frames it
+                fraction: Math.max(0.15, Math.min(0.8, (w * h) / (bgSize.w * bgSize.h))),
+              }
+            : {}),
+          seed: seedOf(b),
+        }),
+      )
+      const item = saveStatic(id, b64, b.name ? cleanName(b.name) : 'gen-' + slugName(prompt), prompt, t.thing)
+      return send(res, 200, { item })
+    } catch (e) {
+      const m = String((e && e.message) || e)
+      return send(res, m === 'stopped' ? 499 : 502, { error: m.slice(0, 300) })
+    } finally {
+      done()
+    }
   }
 
   // ONE pixellab spend behind the same armed confirm, WITH context: a crop of
@@ -716,57 +783,66 @@ async function route(req, res, p, url) {
     // inpainting. The client sends up to 160 square, clamped to the canvas.
     if (!(cs.w >= 32 && cs.h >= 32 && cs.w * cs.h <= 192 * 192))
       return send(res, 400, { error: `crop must be 32..192 per side, got ${cs.w}x${cs.h}` })
-    const t = b.thing
-      ? { thing: String(b.thing).slice(0, 480), motion: String(b.tmotion || ''), w: clampPx(b.tw), h: clampPx(b.th) }
-      : await translateAsk(prompt, b.kind === 'animated' ? 'animated' : 'static', '', id)
-    // the oval mask: the sprite's intended footprint as a share of the crop,
-    // held inside 0.15..0.8 so surrounding art always frames the object
-    const fraction = Math.max(0.15, Math.min(0.8, (t.w * t.h) / (cs.w * cs.h)))
-    const b64 = await pixellab.mapObject({
-      description: t.thing,
-      w: cs.w,
-      h: cs.h,
-      view: OBJECT_VIEW,
-      background: crop,
-      fraction,
-      seed: seedOf(b),
-    })
-    // animated-with-context: the style-matched cutout becomes the FIRST FRAME
-    // and the animation endpoint drives it with the motion words. The frames
-    // land as a folder, the library's animated shape. The animate endpoint
-    // caps first_frame at 256 and the frame budget at w*h*8 <= 524288 — a
-    // 192-cap crop fits both.
-    if (b.kind === 'animated') {
-      const motion = String(b.tmotion || b.motion || '').trim() || t.motion || t.thing
-      const frames = await pixellab.animate({ base64: b64, action: motion, frameCount: 8, seed: seedOf(b) })
-      const adir = libDirOf(id)
-      const abase = b.name ? cleanName(b.name) : 'gen-' + slugName(prompt)
-      let aname = abase
-      for (let i = 2; fs.existsSync(path.join(adir, aname)); i++) aname = `${abase}-${i}`
-      const fdir = path.join(adir, aname)
-      fs.mkdirSync(fdir, { recursive: true })
-      const rel = []
-      for (let i = 0; i < frames.length; i++) {
-        fs.writeFileSync(path.join(fdir, i + '.png'), Buffer.from(frames[i], 'base64'))
-        rel.push(`/work/${id}/library/${aname}/${i}.png`)
+    const job = String(b.job || '').slice(0, 64)
+    const { gate, halt, done } = gateFor(job)
+    const wantName = b.name ? cleanName(b.name) : 'gen-' + slugName(prompt)
+    try {
+      const t = b.thing
+        ? { thing: String(b.thing).slice(0, 480), motion: String(b.tmotion || ''), w: clampPx(b.tw), h: clampPx(b.th) }
+        : await translateAsk(prompt, b.kind === 'animated' ? 'animated' : 'static', '', id, job)
+      // the oval mask: the sprite's intended footprint as a share of the crop,
+      // held inside 0.15..0.8 so surrounding art always frames the object
+      const fraction = Math.max(0.15, Math.min(0.8, (t.w * t.h) / (cs.w * cs.h)))
+      halt()
+      const b64 = await raceStop(
+        gate,
+        pixellab.mapObject({
+          description: t.thing,
+          w: cs.w,
+          h: cs.h,
+          view: OBJECT_VIEW,
+          background: crop,
+          fraction,
+          seed: seedOf(b),
+        }),
+      )
+      // animated-with-context: the style-matched cutout becomes the FIRST FRAME
+      // and the animation endpoint drives it with the motion words. The frames
+      // land as a folder, the library's animated shape. The animate endpoint
+      // caps first_frame at 256 and the frame budget at w*h*8 <= 524288, and a
+      // 192-cap crop fits both.
+      if (b.kind === 'animated') {
+        // the second spend, and the one a stop is worth a whole generation at.
+        // The cutout above is already bought either way, so a stop before or
+        // during the animation files it standing rather than binning it.
+        const motion = String(b.tmotion || b.motion || '').trim() || t.motion || t.thing
+        const frames = await stillOnStop(gate, () =>
+          pixellab.animate({ base64: b64, action: motion, frameCount: 8, seed: seedOf(b) }),
+        )
+        if (!frames) return send(res, 200, { item: saveStatic(id, b64, wantName, prompt, t.thing), note: STOPPED_STILL })
+        const adir = libDirOf(id)
+        let aname = wantName
+        for (let i = 2; fs.existsSync(path.join(adir, aname)); i++) aname = `${wantName}-${i}`
+        const fdir = path.join(adir, aname)
+        fs.mkdirSync(fdir, { recursive: true })
+        const rel = []
+        for (let i = 0; i < frames.length; i++) {
+          fs.writeFileSync(path.join(fdir, i + '.png'), Buffer.from(frames[i], 'base64'))
+          rel.push(`/work/${id}/library/${aname}/${i}.png`)
+        }
+        const fsize = pngSize(path.join(fdir, '0.png'))
+        noteAsk(id, aname, prompt, t.thing)
+        return send(res, 200, {
+          item: { name: aname, kind: 'animated', frames: rel, fps: 6, w: fsize.w, h: fsize.h },
+        })
       }
-      const fsize = pngSize(path.join(fdir, '0.png'))
-      noteAsk(id, aname, prompt, t.thing)
-      return send(res, 200, {
-        item: { name: aname, kind: 'animated', frames: rel, fps: 6, w: fsize.w, h: fsize.h },
-      })
+      return send(res, 200, { item: saveStatic(id, b64, wantName, prompt, t.thing) })
+    } catch (e) {
+      const m = String((e && e.message) || e)
+      return send(res, m === 'stopped' ? 499 : 502, { error: m.slice(0, 300) })
+    } finally {
+      done()
     }
-    const dir = libDirOf(id)
-    fs.mkdirSync(dir, { recursive: true })
-    const base = b.name ? cleanName(b.name) : 'gen-' + slugName(prompt)
-    let file = base + '.png'
-    for (let i = 2; fs.existsSync(path.join(dir, file)); i++) file = `${base}-${i}.png`
-    fs.writeFileSync(path.join(dir, file), Buffer.from(b64, 'base64'))
-    const size = pngSize(path.join(dir, file))
-    noteAsk(id, file.replace(/\.png$/i, ''), prompt, t.thing)
-    return send(res, 200, {
-      item: { name: file.replace(/\.png$/i, ''), kind: 'static', src: `/work/${id}/library/${file}`, w: size.w, h: size.h },
-    })
   }
 
   // TWO pixellab spends behind the same armed confirm: a transparent base
@@ -782,43 +858,59 @@ async function route(req, res, p, url) {
     const id = safeId(b.id)
     const prompt = String(b.prompt || '').trim()
     if (!prompt) return send(res, 400, { error: 'no prompt' })
-    // the motion rides separately from the thing: one merged prompt let scene
-    // words bleed into the sprite (a smoke prompt that mentioned its volcano
-    // generated a volcano, twice, 2026-08-16). The interpreter splits the ask
-    // when the user leaves the motion empty; an explicit motion wins.
-    const t = b.thing
-      ? { thing: String(b.thing).slice(0, PROMPT_MAX), motion: String(b.tmotion || ''), w: clampPx(b.tw), h: clampPx(b.th) }
-      : await translateAsk(prompt, 'animated', '', id)
-    const motion = String(b.motion || '').trim() || t.motion || t.thing
-    const seed = seedOf(b)
-    // the interpreter's canvas choice holds for animation too, capped so the
-    // 8 frames stay inside pixellab's one-generation pixel budget (w*h*8)
-    const aw = Math.min(128, clampPx(t.w))
-    const ah = Math.min(128, clampPx(t.h))
-    const b64 = await pixellab.mapObject({
-      description: t.thing,
-      w: aw,
-      h: ah,
-      view: OBJECT_VIEW,
-      seed,
-    })
-    const frames = await pixellab.animate({ base64: b64, action: motion, frameCount: 8, seed })
-    const dir = libDirOf(id)
-    const base = b.name ? cleanName(b.name) : 'gen-' + slugName(prompt)
-    let name = base
-    for (let i = 2; fs.existsSync(path.join(dir, name)); i++) name = `${base}-${i}`
-    const fdir = path.join(dir, name)
-    fs.mkdirSync(fdir, { recursive: true })
-    const rel = []
-    for (let i = 0; i < frames.length; i++) {
-      fs.writeFileSync(path.join(fdir, i + '.png'), Buffer.from(frames[i], 'base64'))
-      rel.push(`/work/${id}/library/${name}/${i}.png`)
+    const job = String(b.job || '').slice(0, 64)
+    const { gate, halt, done } = gateFor(job)
+    const wantName = b.name ? cleanName(b.name) : 'gen-' + slugName(prompt)
+    try {
+      // the motion rides separately from the thing: one merged prompt let scene
+      // words bleed into the sprite (a smoke prompt that mentioned its volcano
+      // generated a volcano, twice, 2026-08-16). The interpreter splits the ask
+      // when the user leaves the motion empty; an explicit motion wins.
+      const t = b.thing
+        ? { thing: String(b.thing).slice(0, PROMPT_MAX), motion: String(b.tmotion || ''), w: clampPx(b.tw), h: clampPx(b.th) }
+        : await translateAsk(prompt, 'animated', '', id, job)
+      const motion = String(b.motion || '').trim() || t.motion || t.thing
+      const seed = seedOf(b)
+      // the interpreter's canvas choice holds for animation too, capped so the
+      // 8 frames stay inside pixellab's one-generation pixel budget (w*h*8)
+      const aw = Math.min(128, clampPx(t.w))
+      const ah = Math.min(128, clampPx(t.h))
+      halt()
+      const b64 = await raceStop(
+        gate,
+        pixellab.mapObject({
+          description: t.thing,
+          w: aw,
+          h: ah,
+          view: OBJECT_VIEW,
+          seed,
+        }),
+      )
+      // the base is bought. A stop between the two halves saves the second
+      // generation, and the first one still lands, as a still object.
+      const frames = await stillOnStop(gate, () => pixellab.animate({ base64: b64, action: motion, frameCount: 8, seed }))
+      if (!frames) return send(res, 200, { item: saveStatic(id, b64, wantName, prompt, t.thing), note: STOPPED_STILL })
+      const dir = libDirOf(id)
+      let name = wantName
+      for (let i = 2; fs.existsSync(path.join(dir, name)); i++) name = `${wantName}-${i}`
+      const fdir = path.join(dir, name)
+      fs.mkdirSync(fdir, { recursive: true })
+      const rel = []
+      for (let i = 0; i < frames.length; i++) {
+        fs.writeFileSync(path.join(fdir, i + '.png'), Buffer.from(frames[i], 'base64'))
+        rel.push(`/work/${id}/library/${name}/${i}.png`)
+      }
+      const size = pngSize(path.join(fdir, '0.png'))
+      noteAsk(id, name, prompt, t.thing)
+      return send(res, 200, {
+        item: { name, kind: 'animated', frames: rel, fps: 6, w: size.w, h: size.h },
+      })
+    } catch (e) {
+      const m = String((e && e.message) || e)
+      return send(res, m === 'stopped' ? 499 : 502, { error: m.slice(0, 300) })
+    } finally {
+      done()
     }
-    const size = pngSize(path.join(fdir, '0.png'))
-    noteAsk(id, name, prompt, t.thing)
-    return send(res, 200, {
-      item: { name, kind: 'animated', frames: rel, fps: 6, w: size.w, h: size.h },
-    })
   }
 
   // What he typed, back to him. The library only ever kept a four-word slug of
@@ -851,7 +943,7 @@ async function route(req, res, p, url) {
       .map((c) => String(c).trim())
       .filter((c) => /^#[0-9a-f]{6}$/i.test(c))
       .slice(0, 12)
-    return send(res, 200, { plan: await effectPlan(ask, colors, b.id ? safeId(b.id) : '') })
+    return send(res, 200, { plan: await effectPlan(ask, colors, b.id ? safeId(b.id) : '', String(b.job || '')) })
   }
 
   // The rendered frames, written exactly like an animated library item:
@@ -969,9 +1061,10 @@ async function route(req, res, p, url) {
     }
     const custom = String(b.kind || '') === 'custom'
     const type = String(b.type || '')
+    const job = String(b.job || '')
     const v = custom
-      ? await reviewWritten(file, ask, frames.length, cleanCode(b.code), cleanControls(b.controls), b.params)
-      : await reviewRule(file, ask, frames.length, type, b.params)
+      ? await reviewWritten(file, ask, frames.length, cleanCode(b.code), cleanControls(b.controls), b.params, job)
+      : await reviewRule(file, ask, frames.length, type, b.params, job)
     if (!v) return send(res, 502, { error: 'the planner did not answer', strip: file })
     return send(res, 200, { strip: file, ...v })
   }
@@ -993,7 +1086,7 @@ async function route(req, res, p, url) {
     } catch (e) {
       return send(res, 500, { error: 'the sheet did not write · ' + String(e.message || e).slice(0, 160) })
     }
-    const v = await reviewObjects(file, ask, String(b.prompt || ''), frames.length)
+    const v = await reviewObjects(file, ask, String(b.prompt || ''), frames.length, String(b.job || ''))
     if (!v) return send(res, 502, { error: 'the planner did not answer', strip: file })
     return send(res, 200, { strip: file, ...v })
   }
@@ -1640,6 +1733,86 @@ function characterDirs(detail, want) {
   return byDir
 }
 
+/* ---- what a stop leaves behind ------------------------------------------
+ *
+ * Stopping is not undoing. Every generation already asked for is already paid
+ * for, so the rule everywhere is that whatever landed gets written and the run
+ * ends there. What a stop buys is the NEXT generation, not the last one back.
+ *
+ * The animated routes are two spends: a base object, then the frames driven
+ * off it. A stop between them, or during the second, saves one generation and
+ * leaves a base nobody would otherwise see. It files as a still object instead
+ * of being thrown away. */
+const STOPPED_STILL = 'stopped before the motion, so it lands still'
+
+// the second half of a two-spend route, or null if a stop landed. Anything
+// other than a stop is a real fault and travels up.
+async function stillOnStop(gate, start) {
+  if (gate && gate.off) return null
+  try {
+    return await raceStop(gate, start())
+  } catch (e) {
+    if (String((e && e.message) || e) !== 'stopped') throw e
+    return null
+  }
+}
+
+/* one png into this map's library under a name nothing else has taken. Written
+ * once because three paths land here: the still answer of both object routes,
+ * and the base of an animated one whose motion half never happened. */
+function saveStatic(id, b64, wantName, ask, prompt) {
+  const dir = libDirOf(id)
+  fs.mkdirSync(dir, { recursive: true })
+  const base = cleanName(wantName)
+  let file = base + '.png'
+  for (let i = 2; fs.existsSync(path.join(dir, file)); i++) file = `${base}-${i}.png`
+  fs.writeFileSync(path.join(dir, file), Buffer.from(b64, 'base64'))
+  const size = pngSize(path.join(dir, file))
+  const name = file.replace(/\.png$/i, '')
+  noteAsk(id, name, ask, prompt)
+  return { name, kind: 'static', src: `/work/${id}/library/${file}`, w: size.w, h: size.h }
+}
+
+/* ---- the two fields that used to be four dropdowns ----------------------
+ *
+ * A client that has not been updated still posts bodyType, template and walk.
+ * These turn that into the skeleton and the motion the route now works in, so
+ * nothing that used to work stops working. Nothing sends these by choice.
+ *
+ * legacySkeleton answers '' for the one case the old route refused: bodyType
+ * quadruped with no body named. */
+function legacySkeleton(b) {
+  if (String(b.bodyType) !== 'quadruped') return 'mannequin'
+  return QUADRUPEDS.includes(String(b.template)) ? String(b.template) : ''
+}
+
+function legacyAnim(b) {
+  const walk = String(b.walk || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9-]/g, '')
+    .slice(0, 40)
+  return walk ? { how: 'template', template: walk } : { how: 'none' }
+}
+
+/* Which headings written motion has to name, and how many of them.
+ *
+ * Naming a heading the character does not have is a generation asked for and
+ * thrown away, so rotation_urls gets read rather than assumed. But the read is
+ * only trusted when it is COMPLETE: awaitCharacter answers the moment four
+ * rotations are real, because that is a whole four-way character, so an
+ * eight-way body is often read back half drawn. Believing a short read there
+ * would buy motion for half the sprite after the button had said nine.
+ *
+ * n is the count that was ordered, and it is also the ceiling: what gets
+ * animated can never be more than what was priced. */
+function headingsOf(detail, n) {
+  const rot = detail && typeof detail.rotation_urls === 'object' && detail.rotation_urls ? detail.rotation_urls : {}
+  const got = Object.entries(rot)
+    .filter(([, u]) => typeof u === 'string' && u)
+    .map(([k]) => k.toLowerCase())
+  return got.length >= n ? got.slice(0, n) : n === 4 ? DIRS4 : DIRS8
+}
+
 // the alpha a pixel needs to count as drawn. The same floor the client's own
 // trim uses, src/core/debase.ts:29, so the two agree about where a sprite ends
 const ALPHA_MIN = 20
@@ -1798,13 +1971,78 @@ const OBJECT_VIEW = 'low top-down'
  *
  * standard is one generation and the only mode that honours a direction count.
  * pro is 20 to 40 for the character alone, so it is offered and never assumed.
- * v3 is 2 to 9 and the only one that takes a reference image. A quadruped has no
- * skeleton of its own here and must name one of five bodies. */
+ * v3 is 2 to 9 and the only one that takes a reference image.
+ *
+ * CHAR_VIEWS used to carry oblique. It is not in the live v2 openapi and never
+ * was: read 2026-08-23, every create-character route describes its view as
+ * "side, low top-down, high top-down, perspective". Sending oblique to the
+ * standard route was sending a word the schema does not know. */
 const CHAR_MODES = ['standard', 'pro', 'v3']
-const CHAR_VIEWS = ['low top-down', 'high top-down', 'side', 'oblique']
+const CHAR_VIEWS = ['low top-down', 'high top-down', 'side', 'perspective']
 const QUADRUPEDS = ['bear', 'cat', 'dog', 'horse', 'lion']
-// standard draws in two to five minutes and a walk is eight directions behind
-// it, so these are long on purpose. The stop button is the way out, not a clock.
+
+/* THE SIX RIGS, AND WHY THE LIST IS ALLOWED TO EXIST HERE.
+ *
+ * Every other list in the make panel died, because a list of kinds of thing is
+ * always shorter than what a person can imagine. This one is different: it is
+ * not a list of what can EXIST, it is the complete set of skeletons pixellab
+ * has. There is no dragon rig, no robot rig, no bird, no serpent, and asking
+ * for one is a 422 that costs the body it was hung on.
+ *
+ * So the list stays and the NARROWING goes somewhere else: the router picks
+ * the nearest rig by body plan and the prompt carries what the thing actually
+ * is. A patrol robot is a mannequin that reads as a machine. A dragon is a lion
+ * rig that hovers. Nothing in the ui ever offers these six to anybody. */
+const SKELETONS = ['mannequin', ...QUADRUPEDS]
+
+/* The humanoid template animations, for the cheap path.
+ *
+ * A named template is one generation per direction and is exactly right for the
+ * ordinary case, a two-legged thing putting one foot in front of the other.
+ * Everything else is written motion instead, because a template list cannot say
+ * "hovers with its wings beating" and v3 can.
+ *
+ * The four-legged templates are deliberately absent. They are named per body,
+ * so the right id for a lion is not the right id for a horse and neither can be
+ * known before the body exists. A quadruped always takes the written path.
+ *
+ * A name that is not on this list is demoted to written motion rather than
+ * sent: an unknown template id comes back 422 AFTER the body is paid for. */
+const WALK_TEMPLATES = [
+  'walk', 'walk-1', 'walk-2', 'walking', 'walking-2', 'walking-3', 'walking-4', 'walking-5',
+  'walking-6', 'walking-7', 'walking-8', 'walking-9', 'walking-10',
+  'walking-4-frames', 'walking-6-frames', 'walking-8-frames',
+  'running-4-frames', 'running-6-frames', 'running-8-frames',
+  'sad-walk', 'scary-walk', 'crouched-walking',
+  'breathing-idle', 'crouching', 'drinking', 'picking-up', 'pushing', 'pull-heavy-object',
+  'jumping-1', 'jumping-2', 'two-footed-jump', 'getting-up', 'throw-object',
+]
+
+/* Eight headings, named out loud, and this is not decoration.
+ *
+ * Template mode defaults to every direction the character has. WRITTEN motion
+ * defaults to SOUTH ONLY, which is in the live schema in those words. A written
+ * animation that forgets this comes back facing one way, unusable on a map
+ * where life.ts works out an eight-way facing, with the budget for the other
+ * seven still sitting unspent. */
+const DIRS8 = ['south', 'south-east', 'east', 'north-east', 'north', 'north-west', 'west', 'south-west']
+// the four a four-direction body has. Nothing in the ui asks for one, but the
+// route accepts nDirections 4 and a written motion still has to name them.
+const DIRS4 = ['south', 'east', 'north', 'west']
+
+/* The sprite canvas ceiling, and it is a price not a taste.
+ *
+ * Written motion is billed ceil(w * h * frames / 65536) per direction, which is
+ * one per direction at 96 and two above it. The cost line on the button says
+ * nine and it has to mean nine, so nothing here draws bigger than this. A thing
+ * that should look bigger on the map is scaled at its placement, which is free:
+ * placements already carry sx/sy. */
+const SPRITE_MIN = 32
+const SPRITE_MAX = 96
+
+// standard draws in two to five minutes and the motion is eight directions
+// behind it, so these are long on purpose. The stop button is the way out, not
+// a clock.
 const CHAR_WAIT = 600000
 const WALK_WAIT = 900000
 
@@ -1907,7 +2145,8 @@ function housePrompt({ subject, detail, palette, clause }) {
  * because a prompt assembled in code cannot respond to what the map looks
  * like, and every clause that used to be bolted on is something a model
  * looking at the picture can decide better. */
-async function planAsset({ ask, kind, id, mapFile, boxFile, box, previous, job }) {
+async function planMake({ ask, what, kind, id, mapFile, boxFile, box, previous, job }) {
+  const sprite = what === 'sprite'
   const lines = [
     `You are writing ONE prompt for a pixel-art sprite generator (PixelLab). Read the image file` +
       `s below ONCE EACH with the Read tool, then answer in your next message. Do not read them ` +
@@ -1942,40 +2181,183 @@ async function planAsset({ ask, kind, id, mapFile, boxFile, box, previous, job }
       `direction, its value range, its outline treatment, its saturation, how chunky its pixels ` +
       `are. You can see the map, so use what is actually in it rather than generic pixel-art ` +
       `words. If the user asked for a mood the map does not have, follow the user.`,
-    ``,
-    `Choose the sprite's pixel size so it is in scale with things already there. Say what you ` +
-      `measured it against. Both sides must be between 32 and 128: that is the generator's own ` +
-      `ceiling, and a bigger number is not honoured, it is quietly cut down to 128. If the thing ` +
-      `wants to be taller than it is wide, spend the height and narrow the width.`,
   )
-  if (kind === 'animated')
+  if (sprite) lines.push(...spriteLines(kind))
+  else {
     lines.push(
       ``,
-      `This one animates, so also give the motion as movement words alone, no subject: the ` +
-        `animator is handed the finished sprite and those words.`,
+      `Choose the sprite's pixel size so it is in scale with things already there. Say what you ` +
+        `measured it against. Both sides must be between 32 and 128: that is the generator's own ` +
+        `ceiling, and a bigger number is not honoured, it is quietly cut down to 128. If the thing ` +
+        `wants to be taller than it is wide, spend the height and narrow the width.`,
     )
+    if (kind === 'animated')
+      lines.push(
+        ``,
+        `This one animates, so also give the motion as movement words alone, no subject: the ` +
+          `animator is handed the finished sprite and those words.`,
+      )
+  }
   if (previous)
     lines.push(
       ``,
       `The last attempt used this prompt and the user rejected it: "${String(previous).slice(0, ASK_MAX)}"`,
       `Work out what about it produced the wrong result and change that. Do not repeat it.`,
     )
+  /* The one opinion the router is allowed to have about which mode is open.
+   *
+   * It never switches, because a switch changes the price and the price is
+   * shown on a button the user is about to press. It says so in one line and
+   * the plan card prints it. */
   lines.push(
     ``,
+    sprite
+      ? `crossing: EMPTY unless this ask would clearly be better as a flat prop. A thing with no ` +
+        `body that never turns to face anything is a prop, and a prop is one generation instead ` +
+        `of nine. Say so in one short lower-case line and leave the rest of the answer as a sprite.`
+      : `crossing: EMPTY unless this ask would clearly be better as a sprite. A sprite is drawn on ` +
+        `a skeleton and comes back in eight rotations of the same body, which is what something ` +
+        `that walks around and faces where it is going needs. A prop gives you one flat png. Say ` +
+        `so in one short lower-case line and leave the rest of the answer as a prop.`,
+    ``,
     `Answer with ONLY this JSON, no prose:`,
-    `{"prompt":"the full generator prompt, 40 to 90 words","w":96,"h":128,"motion":"movement words only, or empty","note":"one short line, lower case, telling the user what you decided and what you sized it against"}`,
+    sprite ? SPRITE_ANSWER : OBJECT_ANSWER,
   )
   const raw = await runPlanner(lines.join('\n'), 240000, job)
   const o = planJSON(raw, 'prompt')
   if (!o || !o.prompt) throw new Error('the interpreter did not answer')
   const clean = (v, n) => String(v || '').replace(/\s+/g, ' ').trim().slice(0, n)
-  return {
+  const plan = {
+    kind: sprite ? 'sprite' : 'object',
     prompt: clean(o.prompt, PROMPT_MAX),
     motion: clean(o.motion, 160),
     note: clean(o.note, 240),
+    crossing: clean(o.crossing, 200),
     w: clampPx(o.w),
     h: clampPx(o.h),
   }
+  if (sprite) plan.sprite = spriteRoute(o.sprite, kind, plan.motion)
+  return plan
+}
+
+const OBJECT_ANSWER =
+  `{"kind":"object","prompt":"the full generator prompt, 40 to 90 words","w":96,"h":128,` +
+  `"motion":"movement words only, or empty","crossing":"",` +
+  `"note":"one short line, lower case, telling the user what you decided and what you sized it against"}`
+
+const SPRITE_ANSWER =
+  `{"kind":"sprite","prompt":"the full character description, 30 to 70 words","w":48,"h":48,` +
+  `"motion":"","note":"one short lower-case line on what you decided","crossing":"",` +
+  `"sprite":{"skeleton":"mannequin","view":"low top-down","size":48,` +
+  `"anim":{"how":"action","action":"...","frames":8},"why":"one short lower-case line"}}`
+
+/* THE SPRITE HALF OF THE PROMPT, which is where the narrowing used to live.
+ *
+ * It used to be four dropdowns: person or animal, which of five animals, walks
+ * or stands, and a view. Every one of them was a list of what can exist, and a
+ * list of what can exist is always shorter than what someone can imagine. A
+ * dragon is not on it. Nor is a robot, a ghoul or a hooded figure.
+ *
+ * So the dropdowns are gone and this text is what replaced them. The user types
+ * what they want and the model reads the map and works out the rig, the motion,
+ * the size and the angle. The only enumeration left is the six skeletons, which
+ * is not a taste, it is the complete set pixellab has. */
+function spriteLines(kind) {
+  return [
+    ``,
+    `This one is a SPRITE. Pixellab builds it as a character with a skeleton and eight rotations ` +
+      `of the same body, not as a flat prop.`,
+    ``,
+    `There are exactly six skeletons and no others: mannequin (upright, two arms, two legs) and ` +
+      `the four-legged bear, cat, dog, horse and lion. There is no dragon skeleton, no robot ` +
+      `skeleton, no bird and no serpent. Pick the NEAREST one by BODY PLAN, never by species. ` +
+      `Upright with arms is mannequin whether it is a person, a robot, a ghoul, a suit of armour ` +
+      `or a hooded figure. Four legs under a horizontal spine picks the quadruped whose build is ` +
+      `closest: a wolf is dog, a heavy-shouldered beast is bear, a big cat or a four-legged dragon ` +
+      `is lion, a long-legged one is horse. Something with no legs at all still has to name one, ` +
+      `so pick the closest posture and say which in why.`,
+    ``,
+    `The skeleton is only a rig. It does not decide what the thing looks like, the prompt does. If ` +
+      `the nearest rig is a person and the ask is a machine, write the prompt so the result reads ` +
+      `unmistakably as a machine: plated panels, exposed joints, a lens where a face would be. ` +
+      `Never let the rig leak into the words.`,
+    ``,
+    kind === 'animated'
+      ? `Motion. The user asked for it MOVING, so work out what moving MEANS for this thing.\n` +
+        `- Two legs, mannequin, ordinary walking, one foot in front of the other: use a named ` +
+        `template, {"how":"template","template":"walking-8-frames"}, and the template must be ` +
+        `exactly one of: ${WALK_TEMPLATES.join(', ')}.\n` +
+        `- ANYTHING ELSE uses a written action: ` +
+        `{"how":"action","action":"hovering in place, wings beating slowly","frames":8}. A dragon ` +
+        `does not walk, it hovers and beats its wings. A ghoul lurches. A robot that does not ` +
+        `stride has its servos idle and its head pan. A four-legged skeleton ALWAYS uses a ` +
+        `written action, because quadruped templates are named per body and cannot be known ` +
+        `before the body exists.\n` +
+        `- the action is movement words only, 4 to 14 words, no subject and no scenery, and it ` +
+        `has to LOOP: whatever it does, it comes back to where it started.\n` +
+        `- frames is 4 to 16 and even. 8 unless the movement needs more.`
+      : `Motion. The user asked for it STILL, so answer {"how":"none"}. It still comes back in ` +
+        `eight rotations and still faces where it is going; only its legs stay put.`,
+    ``,
+    `size is the character's own pixel height, ${SPRITE_MIN} to ${SPRITE_MAX}. Pixellab pads about ` +
+      `40% past it for animation headroom. 40 to 56 for a person standing on this map, more only ` +
+      `if the thing is genuinely bigger than a person there. w and h are the same number as size.`,
+    ``,
+    `view is one of ${CHAR_VIEWS.join(', ')}. Almost always low top-down, because that is the ` +
+      `angle this map is painted at. Answer anything else only if the ask cannot work at that ` +
+      `angle, and say why.`,
+  ]
+}
+
+/* The routing decision, held to what the endpoint will actually take.
+ *
+ * Every clamp here is a generation. A skeleton that does not exist, a template
+ * id that was invented, a quadruped handed a humanoid walk: each of those is a
+ * 422 that arrives AFTER the body has been drawn and paid for. So a wrong
+ * answer is corrected into the nearest honest one rather than sent. */
+function spriteRoute(raw, kind, motion) {
+  const s = raw && typeof raw === 'object' ? raw : {}
+  const skeleton = SKELETONS.includes(String(s.skeleton)) ? String(s.skeleton) : 'mannequin'
+  const view = CHAR_VIEWS.includes(String(s.view)) ? String(s.view) : OBJECT_VIEW
+  const n = Math.round(Number(s.size))
+  const size = isFinite(n) && n > 0 ? Math.max(SPRITE_MIN, Math.min(SPRITE_MAX, n)) : 48
+  return {
+    skeleton,
+    view,
+    size,
+    anim: spriteAnim(s.anim, kind, skeleton, motion),
+    why: String(s.why || '').replace(/\s+/g, ' ').trim().slice(0, 200),
+  }
+}
+
+/* how the thing moves, and the two demotions that save a paid body.
+ *
+ * A template id off the list is the cheap, proven path and is left alone. A
+ * name that is not on the list, or any template at all on a four-legged rig,
+ * becomes written motion instead: v3 takes any words at all, so it is the
+ * honest fallback rather than a refusal.
+ *
+ * A still ask that came back with motion anyway is left still, and a moving ask
+ * that came back with none is left at none. Both are the router's call and the
+ * price is recomputed from what it actually said, so the button never promises
+ * nine and buys one.
+ *
+ * The last-resort words are deliberately not "walking". Nothing here knows what
+ * the thing is, and a default that walks is the one assumption this whole path
+ * exists to get rid of: it would put a dragon on its feet. Neutral words let v3
+ * work it out from the body it was handed. */
+function spriteAnim(raw, kind, skeleton, motion) {
+  const a = raw && typeof raw === 'object' ? raw : {}
+  const how = String(a.how || '')
+  if (kind !== 'animated' || how === 'none') return { how: 'none' }
+  const tpl = String(a.template || '').toLowerCase().trim()
+  if (how === 'template' && skeleton === 'mannequin' && WALK_TEMPLATES.includes(tpl))
+    return { how: 'template', template: tpl }
+  const words =
+    String(a.action || '').replace(/\s+/g, ' ').trim() || motion || 'moving in place, ending where it began'
+  const f = Math.round(Number(a.frames))
+  const frames = isFinite(f) && f >= 4 ? Math.min(16, f % 2 ? f + 1 : f) : 8
+  return { how: 'action', action: words.slice(0, 300), frames }
 }
 
 /* Fill a boxed area: one look, a whole scene's worth of things planned at once.
@@ -2056,7 +2438,7 @@ async function planScene({ ask, id, mapFile, boxFile, box, count, kind, job }) {
   return { note: clean(o.note, 240), items: items.filter((i) => i.prompt) }
 }
 
-async function translateAsk(ask, kind, styleClause, id) {
+async function translateAsk(ask, kind, styleClause, id, job) {
   // the style card's one line, riding INSIDE the assembled prompt rather than
   // hanging off the end of it, so the refusal of ground stays last where the
   // proven prompts put it.
@@ -2120,6 +2502,7 @@ async function translateAsk(ask, kind, styleClause, id) {
         `Answer immediately with ONLY this JSON, no prose:\n` +
         `{"subject":"...","detail":"...","palette":"...","motion":"","w":96,"h":128,"belongs":1}`,
       60000,
+      job,
     )
     const o = planJSON(raw, 'subject')
     if (!o || !o.subject) return fallback
@@ -2148,7 +2531,7 @@ async function translateAsk(ask, kind, styleClause, id) {
 // the end of any sprite description. The planner is handed the file's absolute
 // path and asked to read it: no crop, no spot, no click, and no image ever
 // goes near the generator. Free, and cached, so a map is looked at once.
-async function readStyleCard(file) {
+async function readStyleCard(file, job) {
   try {
     const raw = await runPlanner(
       `Look at this painting and describe ITS OWN look, so a sprite drawn later can be made to ` +
@@ -2167,6 +2550,7 @@ async function readStyleCard(file) {
         `Answer immediately with ONLY this JSON, no prose:\n` +
         `{"palette":"...","light":"...","outline":"...","scale":"...","clause":"..."}`,
       180000,
+      job,
     )
     const o = planJSON(raw, 'clause')
     if (!o || !o.clause) return null
@@ -2398,7 +2782,7 @@ function cleanEffectParams(raw, start) {
   return out
 }
 
-async function effectPlan(ask, colors, id) {
+async function effectPlan(ask, colors, id, job) {
   const fb = fallbackEffectPlan(ask)
   try {
     const raw = await runPlanner(
@@ -2475,6 +2859,7 @@ async function effectPlan(ask, colors, id) {
         `"label":"wobble","min":0,"max":4,"step":0.1,"value":1}],"code":"for (let i = 0; i < 8; ` +
         `i++) { ... api.px(x, y, 1, 0.9) }"}`,
       60000,
+      job,
     )
     const o = planJSON(raw, 'type')
     if (!o) return fb
@@ -2572,7 +2957,7 @@ function verdictOf(o) {
  * because it is already right. The knobs are NOT up for revision: a person may
  * already have turned them, and a body that reads a knob that no longer exists
  * draws an empty frame. */
-async function reviewWritten(file, ask, frames, code, controls, params) {
+async function reviewWritten(file, ask, frames, code, controls, params, job) {
   const knobs = (controls || []).map((c) => `p.${c.key} (${c.label}, ${c.min}..${c.max})`).join(', ')
   try {
     const raw = await runPlanner(
@@ -2603,6 +2988,7 @@ async function reviewWritten(file, ask, frames, code, controls, params) {
         `{"verdict":"revise","why":"the threads were too sparse, made them denser","code":"<the whole new body>"}\n` +
         `or, when it is right:\n{"verdict":"good","why":"reads as what was asked for"}`,
       120000,
+      job,
     )
     const o = planJSON(raw)
     if (!o) return null
@@ -2616,7 +3002,7 @@ async function reviewWritten(file, ask, frames, code, controls, params) {
 /* One of the seven rules, looked at. There is no code to rewrite here, so the
  * answer is better numbers instead, which is the same free improvement without
  * writing a renderer. */
-async function reviewRule(file, ask, frames, type, params) {
+async function reviewRule(file, ask, frames, type, params, job) {
   const start = EFFECT_START[type] || EFFECT_START.rise
   const now = cleanEffectParams(params, start)
   try {
@@ -2646,6 +3032,7 @@ async function reviewRule(file, ask, frames, type, params) {
         `{"verdict":"revise","why":"too few puffs, and they died out too low","params":${JSON.stringify(now)}}\n` +
         `or, when it is right:\n{"verdict":"good","why":"reads as what was asked for"}`,
       120000,
+      job,
     )
     const o = planJSON(raw)
     if (!o) return null
@@ -2660,7 +3047,7 @@ async function reviewRule(file, ask, frames, type, params) {
  * one and says why, and the ui opens on that one with all of them still on
  * screen. fix is the escape hatch when none of them are usable: a corrected
  * prompt, which costs generations and so stays behind the armed confirm. */
-async function reviewObjects(file, ask, prompt, n) {
+async function reviewObjects(file, ask, prompt, n, job) {
   try {
     const raw = await runPlanner(
       `Look at these ${n} sprite${n === 1 ? '' : 's'} and say whether the ask was answered.\n\n` +
@@ -2684,6 +3071,7 @@ async function reviewObjects(file, ask, prompt, n) {
         `Answer immediately with ONLY this JSON, no prose:\n` +
         `{"best":1,"why":"the only one whose shape reads small","fix":""}`,
       120000,
+      job,
     )
     const o = planJSON(raw)
     if (!o) return null
@@ -2854,24 +3242,59 @@ function raceStop(gate, work) {
   ])
 }
 
+/* One gate, for every route that waits on pixellab.
+ *
+ * There is nothing to kill on this side: a generation already asked for is
+ * already paid for and finishes on their side whatever we do. What a stop buys
+ * is the generation NOT YET ASKED FOR. So halt() sits immediately before every
+ * spend and never after one, and whatever has already landed still gets
+ * written to disk. Stopping is not undoing.
+ *
+ * A job id that is reused across a run of variants is fine: the requests are
+ * sequential, so each one registers on the way in and clears on the way out. */
+function gateFor(job) {
+  const gate = job ? { off: false } : null
+  if (gate) WAITING.set(job, gate)
+  return {
+    gate,
+    halt: () => {
+      if (gate && gate.off) throw new Error('stopped')
+    },
+    // only ours: a stop may already have cleared it and the next variant may
+    // already have registered its own under the same id
+    done: () => {
+      if (gate && WAITING.get(job) === gate) WAITING.delete(job)
+    },
+  }
+}
+
+/* BOTH registries, not the first one that answers.
+ *
+ * One job id can hold a gate and a planner process at the same time: a spend
+ * route registers its gate on the way in and then runs the interpreter inside
+ * that same job when the client sent a bare ask. Ending only the gate left the
+ * planner thinking for its whole timeout with nobody waiting on it. */
 export function stopJob(job) {
+  let hit = false
   const gate = WAITING.get(job)
   if (gate) {
     gate.off = true
     if (gate.reject) gate.reject(new Error('stopped'))
     WAITING.delete(job)
-    return true
+    hit = true
   }
   const ps = LIVE.get(job)
-  if (!ps) return false
-  try {
-    if (process.platform === 'win32') spawn('taskkill', ['/pid', String(ps.pid), '/T', '/F'], { windowsHide: true })
-    else ps.kill()
-  } catch {
-    /* already gone, which is the outcome asked for anyway */
+  if (ps) {
+    try {
+      if (process.platform === 'win32') spawn('taskkill', ['/pid', String(ps.pid), '/T', '/F'], { windowsHide: true })
+      else ps.kill()
+    } catch {
+      /* already gone, which is the outcome asked for anyway */
+    }
+    LIVE.delete(job)
+    hit = true
   }
-  LIVE.delete(job)
-  return true
+  return hit
 }
 
 function runPlanner(prompt, timeoutMs, job) {

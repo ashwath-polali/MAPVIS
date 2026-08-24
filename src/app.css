@@ -49,6 +49,19 @@ button:disabled {
   opacity: 0.4;
   cursor: default;
 }
+/* Chromium gives every button 1px 6px of its own padding, and the small square
+   icon buttons never declare any, so a 20px box was really 6px of room holding
+   a 16px glyph. They centre it, so it looked deliberate while sitting over its
+   own border. Their size is the width and height, nothing else. */
+.tbtn,
+.lifedot,
+.grp-eye,
+.grp-clear,
+.arow-x,
+.lib-x,
+.lib-edit {
+  padding: 0;
+}
 :focus-visible {
   outline: 2px solid var(--acc);
   outline-offset: 1px;
@@ -66,6 +79,14 @@ input {
 input:focus {
   outline: none;
   border-color: var(--acc);
+}
+/* the accent border is enough for a mouse click, but a keyboard user gets no
+   border at all on a range or a checkbox, so the ring comes back for them.
+   input:focus above outranks the global :focus-visible, which is why this
+   needs its own rule rather than inheriting one. */
+input:focus-visible {
+  outline: 2px solid var(--acc);
+  outline-offset: 2px;
 }
 kbd {
   font: 10px/1 var(--font-mono);
@@ -284,6 +305,7 @@ main {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
   font-weight: 500;
 }
 .row-desc {
@@ -292,10 +314,95 @@ main {
   line-height: 1.4;
 }
 
+/* ---- the rail: one skin for every range in the tool ---------------------
+   The native control is a 33px grey capsule in chromium, because a range here
+   inherits the text input's border, padding and background. It reads as a form
+   field. Every slider in the tool is a knob you drag while watching the map, so
+   it gets drawn as a rail and a handle instead.
+
+   The filled part is the only piece a browser will not work out on its own.
+   Firefox hands it over through ::-moz-range-progress. Webkit has no such part
+   and never will, so the caller writes the position into --pct and the gradient
+   reads it. Without --pct the rail is simply unfilled, which is honest rather
+   than wrong. */
+input[type='range'] {
+  --rail: 4px;
+  --knob: 14px;
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  min-width: 0;
+  /* the box is the drag target, and 20px is a comfortable one. The rail is
+     drawn 4px tall inside it, so the extra height costs nothing visually. */
+  height: 20px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  cursor: pointer;
+  transition: none;
+}
+input[type='range']::-webkit-slider-runnable-track {
+  height: var(--rail);
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--acc) 0 var(--pct, 0%), var(--edge) var(--pct, 0%) 100%);
+}
+input[type='range']::-moz-range-track {
+  height: var(--rail);
+  border-radius: 999px;
+  background: var(--edge);
+}
+input[type='range']::-moz-range-progress {
+  height: var(--rail);
+  border-radius: 999px;
+  background: var(--acc);
+}
+/* webkit centres nothing for you once the thumb is unstyled: the negative
+   margin is what puts the handle on the rail instead of under it */
+input[type='range']::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: var(--knob);
+  height: var(--knob);
+  margin-top: calc((var(--rail) - var(--knob)) / 2);
+  border: 2px solid var(--panel);
+  border-radius: 50%;
+  background: var(--ink);
+  box-shadow: 0 1px 2px #00000088;
+  transition: box-shadow 140ms ease, background 140ms ease;
+}
+input[type='range']::-moz-range-thumb {
+  width: var(--knob);
+  height: var(--knob);
+  border: 2px solid var(--panel);
+  border-radius: 50%;
+  background: var(--ink);
+  box-shadow: 0 1px 2px #00000088;
+  transition: box-shadow 140ms ease, background 140ms ease;
+}
+input[type='range']:hover::-webkit-slider-thumb {
+  box-shadow: 0 1px 2px #00000088, 0 0 0 4px var(--acc-soft);
+}
+input[type='range']:hover::-moz-range-thumb {
+  box-shadow: 0 1px 2px #00000088, 0 0 0 4px var(--acc-soft);
+}
+input[type='range']:active::-webkit-slider-thumb {
+  background: var(--acc);
+  box-shadow: 0 1px 2px #00000088, 0 0 0 6px var(--acc-soft);
+}
+input[type='range']:active::-moz-range-thumb {
+  background: var(--acc);
+  box-shadow: 0 1px 2px #00000088, 0 0 0 6px var(--acc-soft);
+}
+input[type='range']:disabled {
+  cursor: default;
+  opacity: 0.45;
+}
+
 /* sliders, fields */
 .slider {
   display: grid;
-  gap: 4px;
+  gap: 3px;
   padding: 2px 12px 8px 46px;
   color: var(--dim);
   font-size: 11.5px;
@@ -304,13 +411,6 @@ main {
   font-style: normal;
   color: var(--ink);
   font-family: var(--font-mono);
-}
-.slider input {
-  width: 100%;
-  padding: 0;
-  accent-color: var(--acc);
-  border: none;
-  background: none;
 }
 .field {
   display: grid;
@@ -334,24 +434,30 @@ main {
   font-family: var(--font-mono);
 }
 
-/* the compact tool row in levels */
+/* the compact tool row in levels. Six fixed 36px buttons and five gaps came to
+   244px inside a column that is 239px once the panel scrolls, so the row ran
+   out the side. Equal share of whatever the column is, and the icons stay
+   centred at any width. */
 .toolrow {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 4px;
+  min-width: 0;
   padding: 2px 4px 6px;
 }
 .tbtn {
   position: relative;
   display: grid;
   place-items: center;
-  width: 36px;
+  width: 100%;
+  min-width: 0;
   height: 34px;
   border-radius: 8px;
   border: 1px solid transparent;
   color: var(--dim);
   transition: all 160ms ease;
 }
-.tbtn:hover {
+.tbtn:hover:not(:disabled) {
   background: var(--raised);
   color: var(--ink);
 }
@@ -377,10 +483,12 @@ main {
   pointer-events: none;
 }
 
-/* the level chips: large, named, keyed */
+/* the level chips: large, named, keyed. A 1fr track is min-content wide at
+   its floor, so a longer level name or a wider system font pushed the pair
+   past the panel instead of shortening the name. */
 .chips {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 4px;
   padding: 4px;
 }
@@ -388,6 +496,7 @@ main {
   display: flex;
   align-items: center;
   gap: 7px;
+  min-width: 0;
   padding: 8px 8px;
   border-radius: 8px;
   border: 1px solid transparent;
@@ -410,6 +519,9 @@ main {
 }
 .chip-name {
   flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   text-align: left;
   white-space: nowrap;
 }
@@ -776,21 +888,31 @@ main {
    column instead of a squeezed slice of it. */
 .make {
   display: grid;
+  /* a grid with no declared column gets one implicit track whose floor is
+     min-content, so the widest child decided how wide the strip was and the
+     panel grew a sideways scrollbar under it. The track is the fix, the same
+     one .fxpanel already carries. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 6px;
   min-width: 0;
   padding: 0 0 8px;
   border-bottom: 1px solid var(--edge);
 }
-.makewhat {
-  width: 100%;
+/* Four options on one line wanted 268px in a column that is 239px, and neither
+   share-out works: an equal quarter is 41px of text room against a 46px label,
+   and sizing each to its own words simply overflows. Two rows of two is the
+   only version where every label fits at its natural size with room to spare.
+   width:100% was 8px of the overflow by itself, because .seg keeps 4px of
+   margin on each side; stretching into the track is what it wanted. */
+/* .seg.makewhat, not .makewhat: .seg is declared further down this file with
+   display:flex at the same weight, so a single class here loses to it. */
+.seg.makewhat {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: auto;
 }
 .makewhat .seg-opt {
-  /* sized to their own words rather than an equal quarter each. At four options
-     an equal share leaves about 41px of text room and "a person" needs 46, so
-     the labels bled into their neighbours. */
-  flex: 1 1 auto;
   min-width: 0;
-  white-space: nowrap;
 }
 /* the sparkle and the box it opens. One round button on the selected thing,
    and everything else appears only after it is pressed. */
@@ -879,9 +1001,12 @@ main {
 }
 /* the two halves of the account: props and people. They are different things
    in pixellab and behave differently here, so the browser says which. */
-.acctabs {
-  width: 100%;
-  margin-bottom: 4px;
+/* same shape as the make strip's: width:100% plus .seg's own side margins put
+   this 8px past its column. Stretching into the track is what it wanted, and
+   the zeroed side margins line it up with the find box above it. */
+.seg.acctabs {
+  width: auto;
+  margin: 2px 0 4px;
 }
 .acctabs .seg-opt {
   flex: 1 1 0;
@@ -935,19 +1060,25 @@ main {
   min-width: 0;
   padding: 2px 0 4px;
 }
-/* the count for a fill: a label, a rail and the number, on its own line */
+/* a count on its own line: a label, a rail and the number. Used twice, by the
+   fill count and by the variant count, and they read the same on purpose.
+   The number track is minmax rather than a flat 2ch, so a two-digit count at a
+   wider system font takes the room it needs instead of clipping a digit. */
 .fillnum {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) 2ch;
+  grid-template-columns: auto minmax(0, 1fr) minmax(2ch, auto);
   align-items: center;
   gap: 8px;
   min-width: 0;
   margin: 0 4px;
-  padding: 6px 10px;
+  padding: 5px 10px;
   border: 1px solid var(--edge);
   border-radius: 8px;
 }
 .fillnum > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--dim);
   font-size: 10.5px;
 }
@@ -957,11 +1088,6 @@ main {
   font-weight: 500;
   font-variant-numeric: tabular-nums;
   text-align: right;
-}
-.fillnum input {
-  width: 100%;
-  min-width: 0;
-  accent-color: #8f93f5;
 }
 /* what a fill is about to draw, one row each, click to strike one out */
 .scenelist {
@@ -1077,7 +1203,7 @@ main {
   padding: 5px 8px;
   font-size: 10.5px;
 }
-.abtn.danger:hover {
+.abtn.danger:hover:not(:disabled) {
   border-color: #d0596b;
   color: #ff9aa8;
 }
@@ -1108,22 +1234,33 @@ main {
 
 /* box-the-area, and what the model wrote after looking. Both sit between the
    ask and the spend, so nothing here shouts: the reading is the quiet step. */
+/* 4px in on each side, like every segment and every count above it. It was
+   full bleed, so the box button was the one control in the strip whose edges
+   did not line up with the rest. */
 .areabtn {
-  width: 100%;
-  margin: 0 0 2px;
+  width: auto;
+  margin: 0 4px 2px;
   justify-content: center;
 }
 .areabtn.on {
   border-color: #8f93f5;
   color: #b9bcff;
 }
+/* flex, not a two-column grid: with no stop button the second track was still
+   there as an empty column plus its gap, so the generate button sat 14px short
+   of the panel and off the strip's right edge. A flex row simply has one child
+   when there is one child. */
 .genrow {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  gap: 6px;
+  display: flex;
   align-items: stretch;
+  gap: 6px;
+  min-width: 0;
+  margin: 0 4px;
 }
 .genrow .genbtn {
+  flex: 1 1 auto;
+  width: auto;
+  min-width: 0;
   margin: 0;
 }
 .stopbtn {
@@ -1175,6 +1312,35 @@ main {
   color: var(--dim);
   font-size: 10.5px;
   line-height: 1.5;
+}
+/* the gate between variant one and the rest. Same box as the plan card, in the
+   accent outline, because this one is a question with money behind it. What
+   landed sits above the two buttons and what the rest would cost sits under
+   them, so the answer is decided by looking rather than by remembering. */
+.gatebox {
+  border-color: var(--acc);
+  animation: panel-in 160ms ease;
+}
+.gateshot {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  height: 104px;
+  margin: 2px 0;
+  border-radius: 7px;
+  background: var(--stage);
+  overflow: hidden;
+}
+.gateshot img {
+  max-width: 100%;
+  max-height: 100px;
+  image-rendering: pixelated;
+}
+.gatebox .actrow {
+  padding: 4px 0 0;
+}
+.gatebox .fxfoot {
+  padding: 4px 0 0;
 }
 
 /* the record of what he typed, shut by default behind one small line. Open, it
@@ -1295,8 +1461,12 @@ main {
 .grp.open .grp-name {
   color: var(--acc);
 }
+/* the track again: an undeclared column is max-content wide, so one long asset
+   name took the whole list off the right edge with it. The name already knows
+   how to ellipsis, it was never given a width small enough to have to. */
 .arows {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 2px;
   padding: 2px 0 6px 14px;
   animation: panel-in 160ms ease;
@@ -1305,6 +1475,7 @@ main {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
   padding: 4px 6px;
   border-radius: 7px;
   border: 1px solid transparent;
@@ -1451,7 +1622,7 @@ main {
   font-size: 11px;
   transition: color 160ms ease, border-color 160ms ease, background 160ms ease;
 }
-.seclink:hover {
+.seclink:hover:not(:disabled) {
   color: var(--acc);
   border-color: var(--acc);
 }
@@ -1466,6 +1637,9 @@ main {
    step, so its foot says plainly that nothing in here spends. */
 .accpanel {
   display: grid;
+  /* min-width:0 caps the box, not the implicit track inside it, so a wide
+     child still grew the column. Same missing track as .make and .fxpanel. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 6px;
   min-width: 0;
   margin: 2px 4px 4px;
@@ -1619,9 +1793,10 @@ main {
 .segrow {
   display: flex;
   gap: 4px;
+  min-width: 0;
 }
 .segrow .seg {
-  flex: 1;
+  flex: 1 1 0;
   min-width: 0;
   margin: 2px 0 4px;
 }
@@ -1630,10 +1805,24 @@ main {
 }
 .segrow .seg:last-child {
   margin-right: 4px;
+}
+/* The narrow one is the SECOND segment, not the last one. When the row holds a
+   single segment that segment is also :last-child, so it took the 84px meant
+   for its neighbour and "moving" hung 14px outside its own border. Addressing
+   the neighbour directly means a lone segment always gets the whole row. */
+.segrow .seg + .seg {
   flex: 0 0 84px;
 }
 .seg-opt {
-  flex: 1;
+  flex: 1 1 0;
+  /* a flex item will not shrink under its own text unless it is told it may,
+     and a button that will not shrink draws its label straight out of the
+     segment. Shrink, then clip: a squeezed label is recoverable, an escaped
+     one is the bug he screenshotted. */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   padding: 5px 8px;
   border-radius: 7px;
   border: 1px solid transparent;
@@ -1641,7 +1830,7 @@ main {
   font-size: 12px;
   transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
 }
-.seg-opt:hover {
+.seg-opt:hover:not(:disabled) {
   color: var(--ink);
   background: var(--raised);
 }
@@ -1922,8 +2111,12 @@ main {
   display: flex;
   gap: 4px;
 }
+/* this one was live rather than latent: a door named "Panther's Maw →
+   panther-maw" pushed the whole list 26px past the panel and grew a sideways
+   scrollbar on the test step. */
 .evrows {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 2px;
   padding: 2px 0;
 }
@@ -1931,6 +2124,7 @@ main {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
   margin: 0 4px;
   padding: 5px 8px;
   border-radius: 7px;
@@ -2129,11 +2323,13 @@ footer .hint {
   overflow-wrap: anywhere;
   transition: all 160ms ease;
 }
-.abtn:hover {
+/* a disabled button lit up on hover exactly like a live one, which is the
+   worst thing a spend control can do: it says press me while refusing. */
+.abtn:hover:not(:disabled) {
   border-color: var(--acc);
   color: var(--acc);
 }
-.abtn.danger:hover {
+.abtn.danger:hover:not(:disabled) {
   border-color: #e84660;
   color: #ff8fa0;
 }
