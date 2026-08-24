@@ -4,7 +4,7 @@
  * Everything that happens per frame or per pixel happens here, outside React,
  * so a brush stroke never runs a render pass.
  */
-import { cleanLife, lifeAt, type Life } from './life'
+import { cleanLife, lifeAt, separate, type Life, type LifeAt } from './life'
 import { MaskDoc, PAL, colOf, nameOf, mkCanvas, bresenham, assetLabel, migrateEvent, type Pt, type PlacedAsset, type MapEvent } from './mask'
 import { Walker, canStand, checkReach, defaultCfg, type WalkCfg, type ReachResult } from './walk'
 import { savedScene, saveDoc, loadDoc, type LibItem } from '../api'
@@ -3166,11 +3166,37 @@ export class Editor {
   // cursor.
   private drawAssets(g: CanvasRenderingContext2D, z: number) {
     const now = performance.now() / 1000
+    /* Everyone resolved first, then pushed apart, then drawn.
+     *
+     * Two figures wandering one quay used to walk through each other. Avoidance
+     * needs to know where the others are, and it can: every position here is a
+     * pure function of the clock, so the whole set is knowable at once. Resolve,
+     * separate, draw. The game runs the identical three passes.
+     *
+     * Only things that MOVE take part. A crate does not step aside, and a figure
+     * standing at a stall was put there on purpose and should not drift off its
+     * spot because a walker brushed past. */
+    const t = now - this.lifeT0
+    const movers = this.doc.assets.filter((a) => this.lifePlay && a.life && !this.hiddenGroups.has(a.group))
+    const at = new Map<string, LifeAt>()
+    if (movers.length) {
+      const res = movers.map((a) => lifeAt(a.life as Life, t, { x: a.x, y: a.y }, this.standsAt))
+      const push = separate(
+        movers.map((a, i) => ({
+          x: a.x + res[i].dx,
+          y: a.y + res[i].dy,
+          // half the drawn width is the body, which is what should not overlap
+          r: Math.max(2, (this.drawnBox(a).w || 8) * 0.35),
+        })),
+        this.cfg.yScale,
+      )
+      movers.forEach((a, i) => at.set(a.id, { ...res[i], dx: res[i].dx + push[i].dx, dy: res[i].dy + push[i].dy }))
+    }
     for (const a of this.assetsSorted()) {
       // a placement that MOVES is drawn where its behaviour says it is right
       // now, off the same maths the game runs, so what is on screen here is
       // what will be on screen there
-      const L = this.lifePlay && a.life ? lifeAt(a.life, now - this.lifeT0, { x: a.x, y: a.y }, this.standsAt) : null
+      const L = at.get(a.id) || null
       /* A walk cycle is a GAIT. A wander is mostly pauses, and running the cycle
        * off the clock alone made a figure stood at the end of a leg march on the
        * spot. Frozen on its first frame while it waits, which is the standing
