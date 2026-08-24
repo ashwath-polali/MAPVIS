@@ -2446,7 +2446,7 @@ export default function App() {
     // again rather than spending on the wrong endpoint
     if (what === 'sprite' && !plan.sprite) {
       setGenPlan(null)
-      push('that read came back as a thing · press again to read it as a sprite')
+      push('that read came back as an asset · press again to read it as a sprite')
       return
     }
     setGenPlan(null)
@@ -3876,7 +3876,7 @@ export default function App() {
       <div className="seg makewhat" role="radiogroup" aria-label="what to make">
         {(
           [
-            ['object', 'a thing'],
+            ['object', 'an asset'],
             // not "a person". A person is one of the things this can be, and
             // naming the mode after it told everybody the rest were not allowed.
             ['sprite', 'a sprite'],
