@@ -1,0 +1,86 @@
+{
+  "dirs": {
+    "south-west": [
+      "/work/hub/library/dockworker-crate/south-west-0.png",
+      "/work/hub/library/dockworker-crate/south-west-1.png",
+      "/work/hub/library/dockworker-crate/south-west-2.png",
+      "/work/hub/library/dockworker-crate/south-west-3.png",
+      "/work/hub/library/dockworker-crate/south-west-4.png",
+      "/work/hub/library/dockworker-crate/south-west-5.png",
+      "/work/hub/library/dockworker-crate/south-west-6.png",
+      "/work/hub/library/dockworker-crate/south-west-7.png"
+    ],
+    "north-west": [
+      "/work/hub/library/dockworker-crate/north-west-0.png",
+      "/work/hub/library/dockworker-crate/north-west-1.png",
+      "/work/hub/library/dockworker-crate/north-west-2.png",
+      "/work/hub/library/dockworker-crate/north-west-3.png",
+      "/work/hub/library/dockworker-crate/north-west-4.png",
+      "/work/hub/library/dockworker-crate/north-west-5.png",
+      "/work/hub/library/dockworker-crate/north-west-6.png",
+      "/work/hub/library/dockworker-crate/north-west-7.png"
+    ],
+    "south-east": [
+      "/work/hub/library/dockworker-crate/south-east-0.png",
+      "/work/hub/library/dockworker-crate/south-east-1.png",
+      "/work/hub/library/dockworker-crate/south-east-2.png",
+      "/work/hub/library/dockworker-crate/south-east-3.png",
+      "/work/hub/library/dockworker-crate/south-east-4.png",
+      "/work/hub/library/dockworker-crate/south-east-5.png",
+      "/work/hub/library/dockworker-crate/south-east-6.png",
+      "/work/hub/library/dockworker-crate/south-east-7.png"
+    ],
+    "east": [
+      "/work/hub/library/dockworker-crate/east-0.png",
+      "/work/hub/library/dockworker-crate/east-1.png",
+      "/work/hub/library/dockworker-crate/east-2.png",
+      "/work/hub/library/dockworker-crate/east-3.png",
+      "/work/hub/library/dockworker-crate/east-4.png",
+      "/work/hub/library/dockworker-crate/east-5.png",
+      "/work/hub/library/dockworker-crate/east-6.png",
+      "/work/hub/library/dockworker-crate/east-7.png"
+    ],
+    "south": [
+      "/work/hub/library/dockworker-crate/south-0.png",
+      "/work/hub/library/dockworker-crate/south-1.png",
+      "/work/hub/library/dockworker-crate/south-2.png",
+      "/work/hub/library/dockworker-crate/south-3.png",
+      "/work/hub/library/dockworker-crate/south-4.png",
+      "/work/hub/library/dockworker-crate/south-5.png",
+      "/work/hub/library/dockworker-crate/south-6.png",
+      "/work/hub/library/dockworker-crate/south-7.png"
+    ],
+    "west": [
+      "/work/hub/library/dockworker-crate/west-0.png",
+      "/work/hub/library/dockworker-crate/west-1.png",
+      "/work/hub/library/dockworker-crate/west-2.png",
+      "/work/hub/library/dockworker-crate/west-3.png",
+      "/work/hub/library/dockworker-crate/west-4.png",
+      "/work/hub/library/dockworker-crate/west-5.png",
+      "/work/hub/library/dockworker-crate/west-6.png",
+      "/work/hub/library/dockworker-crate/west-7.png"
+    ],
+    "north": [
+      "/work/hub/library/dockworker-crate/north-0.png",
+      "/work/hub/library/dockworker-crate/north-1.png",
+      "/work/hub/library/dockworker-crate/north-2.png",
+      "/work/hub/library/dockworker-crate/north-3.png",
+      "/work/hub/library/dockworker-crate/north-4.png",
+      "/work/hub/library/dockworker-crate/north-5.png",
+      "/work/hub/library/dockworker-crate/north-6.png",
+      "/work/hub/library/dockworker-crate/north-7.png"
+    ],
+    "north-east": [
+      "/work/hub/library/dockworker-crate/north-east-0.png",
+      "/work/hub/library/dockworker-crate/north-east-1.png",
+      "/work/hub/library/dockworker-crate/north-east-2.png",
+      "/work/hub/library/dockworker-crate/north-east-3.png",
+      "/work/hub/library/dockworker-crate/north-east-4.png",
+      "/work/hub/library/dockworker-crate/north-east-5.png",
+      "/work/hub/library/dockworker-crate/north-east-6.png",
+      "/work/hub/library/dockworker-crate/north-east-7.png"
+    ]
+  },
+  "fps": 8,
+  "characterId": "01279264-4f77-4ce3-9e14-064c33e924a2"
+}

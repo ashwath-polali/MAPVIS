@@ -18,7 +18,8 @@
  *   POST /api/asset-gen        { id, prompt, w, h, name, seed } -> ONE object png into work/<id>/library
  *   POST /api/asset-gen-here   { id, prompt, thing, tw, th, cx, cy, crop } -> ONE map-object png, the crop as context
  *   POST /api/asset-anim       { id, prompt, name, seed } -> base sprite + animated frames into work/<id>/library/<name>/
- *   POST /api/effect-plan      { ask, colors } -> { plan } which rule, what numbers, whose colours, or a WRITTEN renderer. FREE
+ *   POST /api/asset-animate    { id, name, ask, confirm } -> makes an item that ALREADY EXISTS move, in place. Free without confirm
+ *   POST /api/effect-plan      { ask, colors, sprite } -> { plan } which rule, what numbers, whose colours, or a WRITTEN renderer. FREE
  *   POST /api/effect-save      { id, name, frames, meta, overwrite } -> the rendered frames + effect.json into the library
  *   POST /api/effect-read      { id, name } -> the saved rule, params, colours, fps and recipe, so an effect reopens
  *   POST /api/fx-review        { id, frames, ask, code|type } -> a contact sheet on disk, LOOKED AT, and a verdict. FREE
@@ -478,7 +479,7 @@ async function route(req, res, p, url) {
    * for someone wandering a harbour. */
   if (p === '/api/account-characters') {
     try {
-      const list = await pixellab.allCharacters()
+      const list = await accountCharacters(url.searchParams.get('refresh') === '1')
       const items = list
         .filter((c) => String(c.status || '').toLowerCase() !== 'failed')
         .map((c) => ({
@@ -513,7 +514,7 @@ async function route(req, res, p, url) {
     } catch (e) {
       return send(res, 502, { error: String(e.message || e).slice(0, 200) })
     }
-    const plan = saveFrames(id, characterDirs(d, b.animation), b.name || d.name || d.state_name || 'someone', 8)
+    const plan = saveFrames(id, characterDirs(d, b.animation), b.name || d.name || d.state_name || 'someone', 8, cid)
     if (!plan) return send(res, 404, { error: 'that one has fewer than four directions' })
     const item = await writeRotations(id, plan)
     if (!item) return send(res, 502, { error: 'the directions did not save' })
@@ -679,7 +680,7 @@ async function route(req, res, p, url) {
       // a template id or the word motion rather than anything with walk in it.
       // Unnamed, the library row is the first few words of the ask, the way a
       // generated object is named; a variant run passes its own name in.
-      const plan = saveFrames(id, characterDirs(d, '*'), b.name ? cleanName(b.name) : slugName(description), 8)
+      const plan = saveFrames(id, characterDirs(d, '*'), b.name ? cleanName(b.name) : slugName(description), 8, cid)
       if (!plan) throw new Error('it came back with fewer than four directions')
       folder = plan.dir
       const item = await writeRotations(id, plan)
@@ -924,20 +925,143 @@ async function route(req, res, p, url) {
     }
   }
 
+  /* MAKE A THING THAT ALREADY EXISTS MOVE, or replace the motion it has.
+   *
+   * The person types what they want and never picks a path. There are three,
+   * and the router chooses by reading the item off disk and asking what the
+   * words need. A list of animations to choose from is the one thing this must
+   * never grow into: whatever they can describe is what it has to try.
+   *
+   *   character  a person or animal with headings. Every heading goes in ONE
+   *              coordinated job through /v2/animate-character, priced per
+   *              direction. Eight separate calls to the single-image animator
+   *              would come back as eight loops with eight rhythms, so a figure
+   *              would breathe faster facing north than facing south. That is a
+   *              defect, not a saving, and this route refuses rather than ship
+   *              it: no character id, no animation.
+   *   sprite     one png, or a folder of frames. /v2/animate-with-text-v3
+   *              drives it off its own first frame.
+   *   written    the ask needs the thing to TRAVEL, or to trace a path, which
+   *              neither generator can do at all: both only ever redraw a
+   *              sprite where it stands. A written recipe stamps the item's own
+   *              sprite at a position it works out per frame, and costs
+   *              nothing. This route does not run that, it NAMES it, so the
+   *              client can offer the free path rather than quietly charge for
+   *              the wrong one.
+   *
+   * Two presses, like every other spend. Without confirm this is a free read
+   * that answers the plan and the true price. With confirm it runs the plan it
+   * was handed back, so the number on the button is the number that gets spent.
+   *
+   * Replacing is in place and safe. Every byte is fetched, trimmed and settled
+   * under work/<id>/.stage before the library folder is touched, and the old
+   * bytes go to work/<id>/.prev the way /api/asset-crop puts them there. One
+   * library row per thing, and a failure or a stop leaves the item as it was.
+   */
+  if (p === '/api/asset-animate' && req.method === 'POST') {
+    const b = await body(req)
+    const id = safeId(b.id)
+    const name = cleanName(b.name || '')
+    const ask = String(b.ask || '').replace(/\s+/g, ' ').trim().slice(0, PROMPT_MAX)
+    if (!b.name) return send(res, 400, { error: 'no item' })
+    if (!ask) return send(res, 400, { error: 'say what it should do' })
+    const it = readLibItem(id, name)
+    if (!it) return send(res, 404, { error: 'not in the library' })
+    const job = String(b.job || '').slice(0, 64)
+
+    /* The plan the client was shown wins over a fresh one. A router that
+     * changed its mind between the price and the press would make the price a
+     * lie, and the price is the whole of what the person is agreeing to. */
+    let plan
+    try {
+      plan = await animatePlan(it, ask, id, job, b)
+    } catch (e) {
+      const m = String((e && e.message) || e)
+      return send(res, m === 'stopped' ? 499 : 502, { error: m.slice(0, 300) })
+    }
+    // nothing below this line runs without the word: a stray post, a reload or
+    // a retry loop must not spend
+    if (b.confirm !== true) return send(res, 200, { plan })
+    // both of these spend nothing, and confirming them still spends nothing
+    if (plan.path === 'written') return send(res, 200, { plan, free: true, note: plan.note })
+    if (plan.path === 'blocked') return send(res, 409, { error: plan.why, plan })
+
+    const seed = seedOf(b)
+    const { gate, halt, done } = gateFor(job)
+    try {
+      if (plan.path === 'character') {
+        const byDir = await runCharacterMotion(plan, seed, gate, halt)
+        // past here every generation is bought and every frame is theirs, so
+        // the download runs to the end whatever a stop says. Stopping is not
+        // undoing.
+        const st = await stageViews(id, name, byDir, it.fps || 8)
+        if (!st) throw new Error('the headings did not save')
+        swapFolder(id, name, st.stage, { dirs: st.dirs, fps: st.fps, characterId: plan.characterId })
+        noteAsk(id, name, ask, plan.motion, 'motion')
+        return send(res, 200, {
+          item: {
+            name,
+            kind: 'static',
+            dirs: st.dirs,
+            fps: st.fps,
+            src: st.dirs.south ? st.dirs.south[0] : Object.values(st.dirs)[0][0],
+            w: st.w,
+            h: st.h,
+          },
+          note: plan.note,
+        })
+      }
+
+      const src = it.shape === 'still' ? it.file : path.join(it.folder, it.frames[0])
+      const first = fs.readFileSync(src)
+      halt()
+      const frames = await raceStop(
+        gate,
+        pixellab.animate({
+          base64: (plan.pad ? padPNG(first) : first).toString('base64'),
+          action: plan.motion,
+          frameCount: plan.frames,
+          seed,
+        }),
+      )
+      if (!frames || !frames.length) throw new Error('the animation came back with no frames')
+      const st = stageFrames(id, name, frames)
+      /* A still becomes a frame folder under the SAME name, so the library keeps
+       * one row rather than growing a second one beside it. The png is backed up
+       * like any other replaced bytes and only removed once the folder is whole:
+       * a crash in between leaves the original standing, which is the safe way
+       * round. */
+      if (it.shape === 'still') keepPrevFile(id, it.file, name + '.png')
+      swapFolder(id, name, st.stage, null)
+      if (it.shape === 'still') fs.rmSync(it.file, { force: true })
+      // an item that carried a written recipe does not carry it any more.
+      // Leaving effect.json beside pixellab's frames would reopen a recipe that
+      // did not draw them, and the library would keep calling it an effect.
+      else fs.rmSync(path.join(libDirOf(id), name, 'effect.json'), { force: true })
+      noteAsk(id, name, ask, plan.motion, 'motion')
+      // 6, because that is what libraryItems will say about this folder on the
+      // next read: a frame folder carries no rate of its own unless effect.json
+      // is beside it, and the one that was there did not draw these pixels
+      return send(res, 200, {
+        item: { name, kind: 'animated', frames: st.frames, fps: 6, w: st.w, h: st.h },
+        note: plan.note,
+      })
+    } catch (e) {
+      // the library was never touched: everything happens in .stage until there
+      // is nothing left that can fail
+      fs.rmSync(path.join(stageDirOf(id), name), { recursive: true, force: true })
+      const m = String((e && e.message) || e)
+      return send(res, m === 'stopped' ? 499 : 502, { error: m.slice(0, 300) })
+    } finally {
+      done()
+    }
+  }
+
   // What he typed, back to him. The library only ever kept a four-word slug of
   // the ask, so "what did I write to get that tree?" had no answer anywhere in
   // the app. Newest first.
   if (p.startsWith('/api/asks/')) {
-    const id = safeId(decodeURIComponent(p.slice('/api/asks/'.length)))
-    const f = path.join(WORK, id, 'asks.json')
-    let list = []
-    try {
-      const j = JSON.parse(fs.readFileSync(f, 'utf8'))
-      if (Array.isArray(j)) list = j
-    } catch {
-      list = []
-    }
-    return send(res, 200, { asks: list })
+    return send(res, 200, { asks: readAsks(decodeURIComponent(p.slice('/api/asks/'.length))) })
   }
 
   // Which motion rule fits the ask, and what numbers to start it at. When none
@@ -954,7 +1078,12 @@ async function route(req, res, p, url) {
       .map((c) => String(c).trim())
       .filter((c) => /^#[0-9a-f]{6}$/i.test(c))
       .slice(0, 12)
-    return send(res, 200, { plan: await effectPlan(ask, colors, b.id ? safeId(b.id) : '', String(b.job || '')) })
+    // sprite says an existing library sprite has been put in the recipe's
+    // hands, which changes what can be written: it can move the thing the
+    // person already owns rather than draw a new one out of pixels
+    return send(res, 200, {
+      plan: await effectPlan(ask, colors, b.id ? safeId(b.id) : '', String(b.job || ''), !!b.sprite),
+    })
   }
 
   // The rendered frames, written exactly like an animated library item:
@@ -975,11 +1104,15 @@ async function route(req, res, p, url) {
     fs.mkdirSync(dir, { recursive: true })
     const base = cleanName(b.name || 'effect')
     let name = base
+    // a still that is about to become a folder of frames, which is what happens
+    // when a recipe is written to MOVE a sprite that has never moved before
+    let wasStill = ''
     if (b.overwrite) {
       const target = path.resolve(dir, name)
       if (!target.startsWith(path.resolve(dir) + path.sep)) return send(res, 400, { error: 'bad name' })
-      if (!fs.existsSync(target) || !fs.statSync(target).isDirectory())
-        return send(res, 404, { error: 'not in the library' })
+      const asDir = fs.existsSync(target) && fs.statSync(target).isDirectory()
+      if (!asDir && fs.existsSync(target + '.png')) wasStill = target + '.png'
+      else if (!asDir) return send(res, 404, { error: 'not in the library' })
     } else {
       for (let i = 2; fs.existsSync(path.join(dir, name)) || fs.existsSync(path.join(dir, name + '.png')); i++)
         name = `${base}-${i}`
@@ -992,6 +1125,13 @@ async function route(req, res, p, url) {
       rel.push(`/work/${id}/library/${name}/${i}.png`)
     }
     for (let i = frames.length; fs.existsSync(path.join(fdir, i + '.png')); i++) fs.unlinkSync(path.join(fdir, i + '.png'))
+    /* The png goes only once the folder is whole, and its bytes go to .prev
+     * first. Both halves matter: the item keeps ONE library row, and a crash in
+     * between leaves the original standing rather than nothing at all. */
+    if (wasStill) {
+      keepPrevFile(id, wasStill, name + '.png')
+      fs.rmSync(wasStill, { force: true })
+    }
     const meta = b.meta && typeof b.meta === 'object' ? b.meta : {}
     const fps = Number(meta.fps) > 0 ? Math.round(Number(meta.fps)) : 6
     const rec = {
@@ -1074,7 +1214,7 @@ async function route(req, res, p, url) {
     const type = String(b.type || '')
     const job = String(b.job || '')
     const v = custom
-      ? await reviewWritten(file, ask, frames.length, cleanCode(b.code), cleanControls(b.controls), b.params, job)
+      ? await reviewWritten(file, ask, frames.length, cleanCode(b.code), cleanControls(b.controls), b.params, job, !!b.sprite)
       : await reviewRule(file, ask, frames.length, type, b.params, job)
     if (!v) return send(res, 502, { error: 'the planner did not answer', strip: file })
     return send(res, 200, { strip: file, ...v })
@@ -1593,6 +1733,24 @@ async function accountObjects(refresh) {
   return list
 }
 
+/* The character listing, held the same way and for the same reason: free but
+ * paged, and it only changes when something is generated.
+ *
+ * This one is kept RAW rather than mapped down, because two callers want
+ * different things off it. The picker wants a name and a thumbnail; the
+ * re-animate router wants the untouched name to match against asks.json, and
+ * the canvas size, because the animation is priced per direction by pixel
+ * budget and a 68px character at sixteen frames is not the same bill as a 48px
+ * one at eight. */
+let chars = { at: 0, list: [] }
+
+async function accountCharacters(refresh) {
+  if (!refresh && chars.list.length && Date.now() - chars.at < ACCT_TTL) return chars.list
+  const list = await pixellab.allCharacters()
+  chars = { at: Date.now(), list }
+  return list
+}
+
 // where a listed object's png actually lives. A 1-direction object has every
 // rotation url null and the file under storage_urls.unknown; a 4 or 8
 // direction one has south. Anything under storage_urls will do as a last try.
@@ -1660,7 +1818,7 @@ function saveRotations(id, detail, wantName) {
  * The folder is made here rather than in the writer, so the name is reserved the
  * moment it is picked: two of these running at once could otherwise both look,
  * both see nothing, and both choose it. */
-function saveFrames(id, byDir, wantName, fps) {
+function saveFrames(id, byDir, wantName, fps, characterId) {
   const keys = Object.keys(byDir || {}).filter((k) => k && Array.isArray(byDir[k]) && byDir[k].length)
   if (keys.length < 4) return null
   const dir = libDirOf(id)
@@ -1669,7 +1827,7 @@ function saveFrames(id, byDir, wantName, fps) {
   let name = base
   for (let i = 2; fs.existsSync(path.join(dir, name)) || fs.existsSync(path.join(dir, name + '.png')); i++)
     name = `${base}-${i}`
-  const plan = { name, dir: path.join(dir, name), urls: keys.map((k) => [k, byDir[k]]), frames: true, fps }
+  const plan = { name, dir: path.join(dir, name), urls: keys.map((k) => [k, byDir[k]]), frames: true, fps, characterId }
   fs.mkdirSync(plan.dir, { recursive: true })
   return plan
 }
@@ -1702,6 +1860,14 @@ async function writeRotations(id, plan) {
   if (Object.keys(dirs).length < 4) return null
   // a still object has no rate to keep, and writing one would say it plays
   const meta = plan.fps > 0 ? { dirs, fps: plan.fps } : { dirs }
+  /* WHICH CHARACTER ON THE ACCOUNT DREW THIS, written down beside the art.
+   *
+   * Without it the only way back to the rig is matching the four-word folder
+   * name against a description asks.json may already have forgotten, and only
+   * that rig can be given a motion that stays in register across every heading.
+   * dirs.json has always been read for dirs and fps and nothing else, so an
+   * extra key costs nothing anywhere. */
+  if (plan.characterId) meta.characterId = String(plan.characterId)
   fs.writeFileSync(path.join(plan.dir, 'dirs.json'), JSON.stringify(meta, null, 2))
   return {
     name: plan.name,
@@ -1711,6 +1877,516 @@ async function writeRotations(id, plan) {
     src: dirs.south ? dirs.south[0] : Object.values(dirs)[0][0],
     w: w0,
     h: h0,
+  }
+}
+
+/* ---- making something that already exists move --------------------------
+ *
+ * Everything below serves /api/asset-animate. It is written apart from the
+ * generate routes because it never makes a new library row: it replaces the
+ * pixels of one that is already there, and staying one row per thing is half
+ * the point.
+ */
+
+/* One library row, read off disk. libraryItems answers the same three shapes
+ * for the whole folder at once; this answers for one, and keeps the things only
+ * a re-animate cares about: where the files are, and what dirs.json says beyond
+ * dirs and fps. */
+function readLibItem(id, name) {
+  const dir = path.resolve(libDirOf(id))
+  const folder = path.resolve(dir, name)
+  if (!folder.startsWith(dir + path.sep)) return null
+  const png = folder + '.png'
+  if (fs.existsSync(folder) && fs.statSync(folder).isDirectory()) {
+    let meta = null
+    try {
+      meta = JSON.parse(fs.readFileSync(path.join(folder, 'dirs.json'), 'utf8'))
+    } catch {
+      /* no dirs.json, or an unreadable one: it is a folder of frames */
+    }
+    const dirs = meta && meta.dirs && typeof meta.dirs === 'object' ? meta.dirs : null
+    const heads = dirs ? Object.keys(dirs).filter((k) => Array.isArray(dirs[k]) && dirs[k].length) : []
+    if (heads.length) {
+      const fps = Number(meta.fps) > 0 ? Math.round(Number(meta.fps)) : 8
+      // a view set is kind static whether it moves or not, so the only test for
+      // "does this already play" is whether a heading holds more than one frame
+      return { id, name, shape: 'views', folder, dirs, heads, meta, fps, plays: dirs[heads[0]].length > 1 }
+    }
+    const frames = []
+    for (let i = 0; fs.existsSync(path.join(folder, i + '.png')); i++) frames.push(i + '.png')
+    if (!frames.length) return null
+    return { id, name, shape: 'frames', folder, frames, plays: frames.length > 1, effect: fs.existsSync(path.join(folder, 'effect.json')) }
+  }
+  if (fs.existsSync(png)) {
+    const { w, h } = pngSize(png)
+    return { id, name, shape: 'still', file: png, w, h, plays: false }
+  }
+  return null
+}
+
+// 4 to 16 and even, the bounds /v2/animate-character enforces. The single-image
+// animator is happy anywhere in that range too, so one clamp serves both.
+const evenFrames = (v) => {
+  const n = Math.max(4, Math.min(16, Math.round(Number(v) || 8)))
+  return n % 2 ? n + 1 : n
+}
+
+// what the two animators bill. /v2/animate-with-text-v3 gets 524288 pixels to a
+// generation across the whole take; /v2/animate-character gets 65536 per
+// direction, which is why one direction of a 48px character is one generation
+// and a 96px one at sixteen frames is three.
+const IMG_BUDGET = 524288
+const CHAR_BUDGET = 65536
+const priceOf = (w, h, frames, budget) => Math.max(1, Math.ceil((w * h * frames) / budget))
+
+/* Room for the motion to swing through.
+ *
+ * Everything in this library has been trimmed to its own pixels, by trimSet on
+ * the way in or by ctrl+T afterwards, so a sprite handed straight to the
+ * animator has no margin at all. A fisherman told to cast a rod has nowhere to
+ * put the rod and it comes back clipped at the edge of the frame. So the first
+ * frame goes into a bigger canvas before it is sent, and the whole loop is
+ * trimmed back to one shared box afterwards, which leaves the item exactly as
+ * tight as its own motion needs.
+ *
+ * 40 percent is pixellab's own headroom, the ratio their character pipeline
+ * pads by: a 48px character lands on a 68px canvas. It is reasoned from that
+ * number, not measured here. */
+const ANIM_PAD = 0.4
+
+// the size the animator is actually handed, and whether it is worth padding.
+// Padding that pushes the take into a second generation is not worth the
+// headroom, so the price the button showed stays the price.
+function padPlan(w, h, frames) {
+  const pw = w + Math.round(w * ANIM_PAD) * 2
+  const ph = h + Math.round(h * ANIM_PAD) * 2
+  if (!(w > 0) || !(h > 0)) return { w: w || 0, h: h || 0, pad: false }
+  if (priceOf(pw, ph, frames, IMG_BUDGET) > priceOf(w, h, frames, IMG_BUDGET)) return { w, h, pad: false }
+  return { w: pw, h: ph, pad: true }
+}
+
+function padPNG(buf) {
+  let im
+  try {
+    im = decodePNG(buf)
+  } catch {
+    return buf // unreadable here is still readable to them; send it as it is
+  }
+  const gx = Math.round(im.w * ANIM_PAD)
+  const gy = Math.round(im.h * ANIM_PAD)
+  const w = im.w + gx * 2
+  const h = im.h + gy * 2
+  const out = new Uint8ClampedArray(w * h * 4)
+  for (let y = 0; y < im.h; y++)
+    out.set(im.data.subarray(y * im.w * 4, (y + 1) * im.w * 4), ((y + gy) * w + gx) * 4)
+  return encodePNG(w, h, out)
+}
+
+/* The one question the router asks, and it is not "which animation".
+ *
+ * Both pixellab animators redraw a sprite where it stands. Neither can carry it
+ * anywhere: travel is life's job in the editor, or a written recipe that stamps
+ * the sprite at a position it computes. So the whole decision is whether these
+ * words need the DRAWING to change or the THING to move, and the same pass
+ * rewrites the ask into the motion words the animator is actually given, the
+ * way translateAsk rewrites an ask for the image generator.
+ *
+ * Nothing here is a list. The planner is told what the two mediums can do and
+ * answers in the person's own terms. On any failure the words go through
+ * unchanged as a redraw, so the box can never dead-end and the confirm press
+ * still shows the price before anything is spent. */
+async function animateAsk(it, ask, id, job) {
+  const shape =
+    it.shape === 'views'
+      ? `a figure drawn from ${it.heads.length} headings` + (it.plays ? ', which already has a motion on it' : '')
+      : it.plays
+        ? 'one sprite that already has frames'
+        : 'one still sprite'
+  const fb = { move: false, motion: ask.slice(0, 300), frames: 8, note: '' }
+  try {
+    const raw = await runPlanner(
+      `Decide how a pixel-art sprite that ALREADY EXISTS should be made to move, and write the ` +
+        `motion words for it. Nothing is drawn from scratch: the sprite is there and this is only ` +
+        `about what it does.\n\n` +
+        `The sprite: ${shape}, called "${it.name}".\n` +
+        `What was asked for, in the person's own words: "${ask}"\n\n` +
+        `TWO MEDIUMS, and the only question is which one these words need.\n` +
+        `redraw: the drawing itself changes where it stands. Breathing, a head turning, a rod ` +
+        `casting and reeling in, cloth lifting, a wheel turning on the spot, weight shifting from ` +
+        `foot to foot. The sprite is redrawn frame by frame and never leaves its own footprint.\n` +
+        `move: the sprite has to TRAVEL, or trace a path over the ground, or scatter, circle, dart ` +
+        `off and come back. Redrawing cannot do this at all. Asked to walk somewhere it gives a ` +
+        `figure marching on the spot, which is the wrong picture and it costs money.\n\n` +
+        `When the words are about the BODY, answer move false. When they are about where the thing ` +
+        `GOES, answer move true. If both are asked for at once the body wins: the going is added ` +
+        `separately, in the editor, and it is free.\n\n` +
+        `motion: the ask rewritten as one plain present-tense line of what the body does. Under ` +
+        `200 characters, no scenery, no place names, no other creatures. The animator draws every ` +
+        `noun it hears, so name only this thing and what it does with itself.\n` +
+        `frames: 4, 6, 8, 12 or 16. A small slow idle takes fewer, a whole gesture takes more.\n` +
+        `note: one short lowercase line saying what it will look like.\n\n` +
+        `Answer with ONLY this JSON, no prose.\n` +
+        `{"move":false,"motion":"breathes slowly, shoulders rising and settling, head drifting",` +
+        `"frames":8,"note":"a standing idle"}`,
+      60000,
+      job,
+    )
+    const o = planJSON(raw, 'motion')
+    if (!o) return fb
+    const motion = String(o.motion || '').replace(/\s+/g, ' ').trim().slice(0, 300)
+    return {
+      move: o.move === true,
+      motion: motion || fb.motion,
+      frames: evenFrames(o.frames),
+      note: String(o.note || '').replace(/\s+/g, ' ').trim().slice(0, 240),
+    }
+  } catch (e) {
+    // a stop is the person changing their mind and travels up; anything else is
+    // the planner, and the raw words are a good enough answer to route on
+    if (String((e && e.message) || e) === 'stopped') throw e
+    return fb
+  }
+}
+
+/* Which path, and what it costs, worked out before anything is spent.
+ *
+ * The motion words are asked for once. On the confirm press the client hands
+ * back the plan it was shown and only the price is re-derived, from the item on
+ * disk and the account, so a client cannot talk the price down and the router
+ * cannot talk it up. */
+async function animatePlan(it, ask, id, job, b) {
+  const had = b.plan && typeof b.plan === 'object' ? b.plan : null
+  const said = had
+    ? {
+        move: had.move === true,
+        motion: String(had.motion || ask).replace(/\s+/g, ' ').trim().slice(0, 300) || ask.slice(0, 300),
+        frames: evenFrames(had.frames),
+        note: String(had.note || '').replace(/\s+/g, ' ').trim().slice(0, 240),
+      }
+    : await animateAsk(it, ask, id, job)
+  const base = { ...said, name: it.name, shape: it.shape }
+
+  // travel is free and neither generator can do it, so it is named and handed
+  // back rather than charged for. The client opens the effect box on this item
+  // instead, with its own sprite in the recipe's hands.
+  if (said.move)
+    return {
+      ...base,
+      path: 'written',
+      price: 0,
+      sprite: true,
+      note: said.note || 'this one has to travel, so it is a written recipe and costs nothing',
+    }
+
+  if (it.shape !== 'views') {
+    const src = it.shape === 'still' ? it : pngSize(path.join(it.folder, it.frames[0]))
+    const fit = padPlan(src.w || 0, src.h || 0, said.frames)
+    return { ...base, path: 'sprite', price: priceOf(fit.w, fit.h, said.frames, IMG_BUDGET), pad: fit.pad }
+  }
+
+  /* REGISTRATION IS NOT NEGOTIABLE.
+   *
+   * The single-image animator would happily take each heading in turn, and the
+   * eight loops that came back would drift against each other: the figure would
+   * breathe on a different rhythm facing north than facing south. So a figure
+   * with headings goes through the coordinated endpoint or it does not go, and
+   * that endpoint needs the character id. */
+  const who = await characterFor(it, b.characterId)
+  if (!who.id) return { ...base, path: 'blocked', price: 0, why: who.why }
+  noteCharacterId(it, who.id)
+  const per = priceOf(who.w, who.h, said.frames, CHAR_BUDGET)
+  return {
+    ...base,
+    path: 'character',
+    headings: it.heads,
+    characterId: who.id,
+    found: who.from,
+    price: per * it.heads.length,
+  }
+}
+
+/* WHICH CHARACTER ON THE ACCOUNT THIS FOLDER WAS DRAWN FROM.
+ *
+ * MAPVIS never wrote it down. dirs.json held dirs and fps and nothing else, so
+ * every person in the hub library is art with no way back to the rig that drew
+ * it, and the one endpoint that keeps eight headings in register takes an id.
+ *
+ * The account listing is free, so the id is recovered rather than regenerated.
+ * What it CANNOT be recovered by is the folder name: the folder is a four-word
+ * slug of the ask and the account row is named with the whole description,
+ * because createCharacter sends no name at all. Measured 2026-08-23 against all
+ * nine people in the hub library: not one folder name is a substring of any
+ * account name, so name-to-name matching returns nothing every single time.
+ *
+ * The bridge is asks.json, which noteAsk writes at generation time and which
+ * holds the folder name beside the exact description that was sent. That string
+ * is byte-identical to the account row's name. Verified against all nine.
+ *
+ * It is a RESCUE, not a mechanism. asks.json keeps forty entries, so an old
+ * item falls off the record and can never be matched again, and an imported
+ * character was never in it. The id is written into dirs.json the moment it is
+ * found, and every route that makes or imports a character writes it there now,
+ * so this runs once per item and then never. */
+async function characterFor(it, given) {
+  const looksId = (s) => /^[a-f0-9-]{16,64}$/i.test(String(s || ''))
+  let list
+  try {
+    list = await accountCharacters()
+  } catch (e) {
+    return { why: 'the account listing did not answer, so the character behind this one cannot be found · ' + String((e && e.message) || e).slice(0, 120) }
+  }
+  const sized = (row) => ({
+    id: String(row.id),
+    w: (row.size && Number(row.size.width)) || 48,
+    h: (row.size && Number(row.size.height)) || 48,
+  })
+  // an id the client pinned, or one already written down beside the art
+  const pinned = looksId(given) ? String(given) : it.meta && looksId(it.meta.characterId) ? String(it.meta.characterId) : ''
+  if (pinned) {
+    const row = list.find((c) => String(c.id) === pinned)
+    // a character deleted on their side would 422 after the price had been
+    // shown, and finding that out here costs nothing
+    if (row) return { ...sized(row), from: looksId(given) ? 'asked' : 'dirs' }
+    return { why: 'the character this was drawn from is no longer on the account' }
+  }
+  const asks = readAsks(it.id).filter((a) => a && a.kind === 'character' && a.prompt)
+  const mine = asks.filter((a) => cleanName(a.name || '') === it.name)
+  if (!mine.length)
+    return { why: 'nothing on record says which character on the account drew this, so its headings cannot be animated together' }
+  const want = String(mine[0].prompt)
+  let hits = list.filter((c) => String(c.name || '') === want)
+  // asks.json slices the description at 1200 characters and their side keeps it
+  // whole, so a long one only ever agrees at its start
+  if (!hits.length) hits = list.filter((c) => String(c.name || '').startsWith(want) || want.startsWith(String(c.name || '')))
+  if (!hits.length) return { why: 'no character on the account matches what this one was asked for' }
+  if (hits.length === 1) return { ...sized(hits[0]), from: 'asks' }
+  /* Two takes of one description are two account rows with the same name, and
+   * the name alone cannot tell them apart. Both lists run newest first, so the
+   * nth folder made from these words is the nth row by age. */
+  const same = asks.filter((a) => String(a.prompt) === want)
+  const rank = same.findIndex((a) => cleanName(a.name || '') === it.name)
+  const byAge = [...hits].sort((a, c) => String(c.created_at || '').localeCompare(String(a.created_at || '')))
+  return { ...sized(byAge[rank > 0 ? Math.min(rank, byAge.length - 1) : 0]), from: 'asks' }
+}
+
+// the id, written down where the art lives, so the match above runs once. Free
+// and idempotent, and it happens on the price read, before anything is spent.
+function noteCharacterId(it, cid) {
+  if (!it || it.shape !== 'views' || !cid || (it.meta && it.meta.characterId === cid)) return
+  try {
+    const meta = { ...(it.meta || {}), characterId: cid }
+    fs.writeFileSync(path.join(it.folder, 'dirs.json'), JSON.stringify(meta, null, 2))
+    it.meta = meta
+  } catch {
+    /* it is recoverable again next time; not worth failing a free read over */
+  }
+}
+
+/* EVERY FRAME URL THE CHARACTER ALREADY CARRIES.
+ *
+ * This is how the motion just paid for is told from the one that was already
+ * there, and it is urls rather than group names or ids because of what a live
+ * read actually answers: measured 2026-08-23, an animation group comes back
+ * with g.id undefined, display_name null and only animation_type carrying the
+ * template's name. There is no id to compare and the position in the list moves
+ * when a group is added. The frame urls are path-based, unsigned and identical
+ * across two reads, so they are the one thing that means the same both times. */
+const frameSet = (d) => {
+  const out = new Set()
+  for (const g of Array.isArray(d && d.animations) ? d.animations : [])
+    for (const dd of Array.isArray(g.directions) ? g.directions : [])
+      for (const u of Array.isArray(dd.frames) ? dd.frames : []) if (u) out.add(u)
+  return out
+}
+
+/* EVERY HEADING IN ONE JOB.
+ *
+ * The two free reads around the spend are what make replacing an existing
+ * motion safe. Before: every frame the character already carries. After: the
+ * frames that were not there. Without the first read a walker re-animated a
+ * second time reads back whichever group the api lists first, which is the old
+ * walk, and the item gets overwritten with the motion it already had. */
+async function runCharacterMotion(plan, seed, gate, halt) {
+  halt()
+  let d = await raceStop(gate, pixellab.characterDetail(plan.characterId))
+  const before = frameSet(d)
+  const rot = d.rotation_urls && typeof d.rotation_urls === 'object' ? d.rotation_urls : {}
+  // only headings the character actually has: naming one it does not is a
+  // generation asked for and thrown away
+  const heads = plan.headings.filter((k) => typeof rot[k] === 'string' && rot[k])
+  if (heads.length < 4) throw new Error('the character on the account has fewer than four headings, so nothing was asked for')
+  /* A name nothing else on it carries, so the frames that come back are
+   * unmistakably the ones just paid for. Reusing a name leaves two groups
+   * called the same thing and the reader takes whichever it meets first. */
+  const group = 'motion-' + Date.now().toString(36)
+  halt()
+  const h = await pixellab.animateCharacterAction({
+    characterId: plan.characterId,
+    action: plan.motion,
+    frameCount: plan.frames,
+    directions: heads,
+    name: group,
+    seed,
+  })
+  // the wait is told what was already there for the same reason: without it, a
+  // character that already moves reports finished on the first tick
+  d = await raceStop(gate, pixellab.awaitAnimation(plan.characterId, h, { timeoutMs: WALK_WAIT, known: before }))
+  const byDir = newGroupDirs(d, group, before, heads, rot)
+  // refusing here costs the generations and keeps the item. Guessing would
+  // write the OLD motion over it and call the result the new one.
+  if (!byDir) throw new Error('the frames that came back could not be told from the motion it already had, so nothing was replaced')
+  return byDir
+}
+
+/* The frames of the group just paid for, by heading.
+ *
+ * Two readings and both have to agree that the frames are new. The name is the
+ * first try, for when the api echoes it back. Frames that were not on the
+ * character before is the second, and it is the one that always works. A
+ * heading whose every frame was already there is dropped whichever way it was
+ * found, so an old motion can never be written back over a new one. */
+function newGroupDirs(detail, group, before, heads, rot) {
+  const groups = Array.isArray(detail && detail.animations) ? detail.animations : []
+  const named = (s) => String(s || '').toLowerCase() === group.toLowerCase()
+  const fresh = (dd) => (Array.isArray(dd.frames) ? dd.frames.filter(Boolean) : []).some((u) => !before.has(u))
+  let pick = groups.filter((g) => named(g.animation_type) || named(g.display_name) || named(g.animation_name))
+  if (!pick.some((g) => (g.directions || []).some(fresh))) pick = groups
+  const byDir = {}
+  for (const g of pick)
+    for (const dd of Array.isArray(g.directions) ? g.directions : []) {
+      const k = String(dd.direction || '').toLowerCase()
+      const frames = Array.isArray(dd.frames) ? dd.frames.filter(Boolean) : []
+      if (k && frames.length && fresh(dd) && !byDir[k]) byDir[k] = frames
+    }
+  /* Nothing new anywhere means the motion never landed, and this is the one
+   * place that must not be forgiving. Falling through to the rotations below
+   * would fill all eight headings with stills and write statues over a walk
+   * cycle, and the reply would call it a success. */
+  if (!Object.keys(byDir).length) return null
+  // a heading the motion missed keeps its still rotation rather than vanishing.
+  // It stands there facing the right way while the others move, which is what
+  // the whole library looked like an hour ago.
+  for (const k of heads) if (!byDir[k] && rot[k]) byDir[k] = [rot[k]]
+  return Object.keys(byDir).length >= 4 ? byDir : null
+}
+
+/* THE NEW BYTES LAND SOMEWHERE ELSE FIRST.
+ *
+ * Eight headings of eight frames is sixty-four downloads and any one of them
+ * can fail. Writing them straight into the library would leave a figure that is
+ * half its old motion and half its new one, which is worse than either. So
+ * everything is fetched, written and trimmed under work/<id>/.stage, and the
+ * library folder is only touched once there is nothing left that can fail.
+ *
+ * .stage sits beside .prev, outside the library, so neither is ever listed as
+ * an item. */
+const stageDirOf = (id) => path.join(WORK, safeId(id), '.stage')
+
+async function stageViews(id, name, byDir, fps) {
+  const stage = path.join(stageDirOf(id), name)
+  fs.rmSync(stage, { recursive: true, force: true })
+  fs.mkdirSync(stage, { recursive: true })
+  const dirs = {}
+  let w0 = 0
+  let h0 = 0
+  for (const [k, urls] of Object.entries(byDir)) {
+    const rel = []
+    for (let i = 0; i < urls.length; i++) {
+      const buf = await pixellab.fetchPNG(urls[i])
+      const sz = pngSizeBuf(buf)
+      if (!(sz.w > 0)) continue
+      // the same names writeRotations writes, so an item that gains frames per
+      // heading renames none of the files it already had
+      const f = `${k}-${i}.png`
+      fs.writeFileSync(path.join(stage, f), buf)
+      rel.push(`/work/${id}/library/${name}/${f}`)
+      if (!w0) {
+        w0 = sz.w
+        h0 = sz.h
+      }
+    }
+    if (rel.length) dirs[k] = rel
+  }
+  if (Object.keys(dirs).length < 4) {
+    fs.rmSync(stage, { recursive: true, force: true })
+    return null
+  }
+  // the same one-box trim a generation gets. pixellab pads the canvas about 40%
+  // for the motion to swing through and that margin is what makes a figure
+  // float above the ground.
+  const box = trimSet(stage, dirs)
+  return { stage, dirs, fps, w: box ? box.w : w0, h: box ? box.h : h0 }
+}
+
+function stageFrames(id, name, frames) {
+  const stage = path.join(stageDirOf(id), name)
+  fs.rmSync(stage, { recursive: true, force: true })
+  fs.mkdirSync(stage, { recursive: true })
+  const rel = []
+  for (let i = 0; i < frames.length; i++) {
+    fs.writeFileSync(path.join(stage, i + '.png'), Buffer.from(frames[i], 'base64'))
+    rel.push(`/work/${id}/library/${name}/${i}.png`)
+  }
+  // the padding put on for the swing comes back off, against ONE box for the
+  // whole loop. A box per frame would move the sprite a pixel each frame and
+  // the thing would jitter where it stands.
+  const box = trimSet(stage, { all: rel })
+  const sz = box || pngSize(path.join(stage, '0.png'))
+  return { stage, frames: rel, w: sz.w, h: sz.h }
+}
+
+// one file copied to work/<id>/.prev, which is not the library and is never
+// listed. The same contract /api/asset-crop keeps: these bytes cost generations
+// and an edit is not worth losing them over.
+function keepPrevFile(id, from, as) {
+  try {
+    const prev = path.join(WORK, safeId(id), '.prev')
+    fs.mkdirSync(prev, { recursive: true })
+    fs.copyFileSync(from, path.join(prev, as))
+  } catch {
+    /* a backup that cannot be written is not a reason to block the edit */
+  }
+}
+
+/* The old bytes out, the new bytes in, ONE library row either way.
+ *
+ * The item keeps its own name, so every placement of it picks the new pixels up
+ * instead of pointing at art nothing links to any more. Files the new take does
+ * not use are deleted: a shorter motion would otherwise leave the tail of a
+ * longer one behind, and a set trimmed through asset-crop's heading branch
+ * would leave flat <heading>.png files beside the indexed ones. */
+function swapFolder(id, name, stage, meta) {
+  const folder = path.join(libDirOf(id), name)
+  const prev = path.join(WORK, safeId(id), '.prev', name)
+  try {
+    fs.rmSync(prev, { recursive: true, force: true })
+    fs.mkdirSync(prev, { recursive: true })
+    if (fs.existsSync(folder))
+      for (const f of fs.readdirSync(folder)) fs.copyFileSync(path.join(folder, f), path.join(prev, f))
+  } catch {
+    /* a backup that cannot be written is not a reason to block the edit */
+  }
+  fs.mkdirSync(folder, { recursive: true })
+  const keep = new Set()
+  for (const f of fs.readdirSync(stage)) {
+    fs.copyFileSync(path.join(stage, f), path.join(folder, f))
+    keep.add(f)
+  }
+  if (meta) {
+    fs.writeFileSync(path.join(folder, 'dirs.json'), JSON.stringify(meta, null, 2))
+    keep.add('dirs.json')
+  }
+  for (const f of fs.readdirSync(folder)) if (!keep.has(f) && /\.png$/i.test(f)) fs.unlinkSync(path.join(folder, f))
+  fs.rmSync(stage, { recursive: true, force: true })
+}
+
+// what he typed, on this map, newest first
+function readAsks(id) {
+  try {
+    const j = JSON.parse(fs.readFileSync(path.join(WORK, safeId(id), 'asks.json'), 'utf8'))
+    return Array.isArray(j) ? j : []
+  } catch {
+    return []
   }
 }
 
@@ -2810,7 +3486,7 @@ function cleanHexes(v) {
  * that writes a renderer, and the review that rewrites one. They have to agree
  * to the letter, because a revision is dropped into the same sandbox the first
  * draft ran in. */
-const CUSTOM_API_DOC =
+const CUSTOM_BASE_DOC =
   `code is the BODY of a function with this exact signature, called once per frame:\n` +
   `  (p, colors, api) => void\n` +
   `p holds every number: p.width, p.height, p.frames, p.speed, p.intensity, p.seed, and ` +
@@ -2837,6 +3513,36 @@ const CUSTOM_API_DOC =
   `you draw at t = 0, so the last frame wraps onto the first with nothing popping. Wrap ` +
   `every position with % 1, or use Math.sin(2 * Math.PI * api.t). Do not place anything from ` +
   `api.frame or api.frames, and keep no state between frames.`
+
+/* THE SPRITE HALF, handed over only when there is actually a sprite.
+ *
+ * Both pixellab animators redraw a sprite where it stands and neither can carry
+ * it anywhere, so travel is not something that can be bought. A recipe that
+ * stamps an existing sprite at a position it works out per frame does scatter,
+ * circling and darting in one pass and costs nothing. That is the whole free
+ * path, and this is the only place the planner is told it exists.
+ *
+ * It is conditional because a recipe that stamps a sprite that was never passed
+ * in draws an empty frame, and most effects are not about a sprite at all. */
+const CUSTOM_SPRITE_DOC =
+  `\n\nAN EXISTING SPRITE HAS BEEN HANDED TO THE RECIPE, and for this request it is the point. ` +
+  `Three more things on api:\n` +
+  `  api.hasSprite                   true here, so the calls below draw something\n` +
+  `  api.spriteW, api.spriteH        its size in pixels\n` +
+  `  api.sprite(x, y, opts)          stamp it with its FEET at x, y. opts is optional: ` +
+  `{frame: which of its own frames, defaults to this one, flip: true mirrors it, which is how a ` +
+  `walker turns round, alpha: 0 to 1}\n` +
+  `Draw the sprite. Do not invent one out of pixels: it is the thing the person already has and ` +
+  `it is what they asked to see move. The canvas is the ground it travels over, so make it big ` +
+  `enough for the whole path and put the sprite somewhere different on every frame. Everything ` +
+  `else you draw is scenery around it, and usually there should be none.\n` +
+  `The loop rule still holds and it binds the path: wherever the sprite is at t = 1 it must be ` +
+  `exactly where it was at t = 0. A circuit, a there-and-back, or a wrap off one edge and on at ` +
+  `the other all close; a one-way walk does not.`
+
+// the two callers hand out the same contract, plus the sprite half when one was
+// given. A revision has to read the same document the first draft did.
+const customApiDoc = (withSprite) => CUSTOM_BASE_DOC + (withSprite ? CUSTOM_SPRITE_DOC : '')
 
 function fallbackEffectPlan(ask) {
   const type = guessEffectType(ask)
@@ -2876,7 +3582,7 @@ function cleanEffectParams(raw, start) {
   return out
 }
 
-async function effectPlan(ask, colors, id, job) {
+async function effectPlan(ask, colors, id, job, sprite) {
   const fb = fallbackEffectPlan(ask)
   try {
     const raw = await runPlanner(
@@ -2930,13 +3636,17 @@ async function effectPlan(ask, colors, id, job) {
         `("three clouds stacked", "a rectangular churning gateway", "fish darting together"), ` +
         `then no rule can be it, because a rule is one fixed idea with knobs. Write the thing ` +
         `they asked for.\n` +
+        (sprite
+          ? `- This request is about a sprite that ALREADY EXISTS and has been handed to you (see ` +
+            `below). None of the seven can draw it, so the answer here is always "custom".\n`
+          : ``) +
         `When in doubt, WRITE IT. A written renderer that misses can be discarded for free; a ` +
         `rule that quietly substitutes its own idea wastes the person's time and looks like the ` +
         `tool ignored them. A measured example: "swirling purple portal like a minecraft nether ` +
         `portal" was answered with the swirl rule and came back as concentric rings, a galaxy, ` +
         `nothing like a nether portal, which is a tall rectangular frame of churning violet with ` +
         `a dark core and brighter threads rising through it. That ask should have been custom.\n\n` +
-        CUSTOM_API_DOC +
+        customApiDoc(sprite) +
         `\n\n` +
         `controls: 2 to 5 knobs a person can tune, each ` +
         `{"key":"...","label":"...","min":0,"max":10,"step":0.1,"value":3}. key is one short ` +
@@ -3051,7 +3761,7 @@ function verdictOf(o) {
  * because it is already right. The knobs are NOT up for revision: a person may
  * already have turned them, and a body that reads a knob that no longer exists
  * draws an empty frame. */
-async function reviewWritten(file, ask, frames, code, controls, params, job) {
+async function reviewWritten(file, ask, frames, code, controls, params, job, sprite) {
   const knobs = (controls || []).map((c) => `p.${c.key} (${c.label}, ${c.min}..${c.max})`).join(', ')
   try {
     const raw = await runPlanner(
@@ -3066,7 +3776,7 @@ async function reviewWritten(file, ask, frames, code, controls, params, job) {
         `What was asked for, in the person's own words: "${ask}"\n\n` +
         `The code that drew it, the body of (p, colors, api) => void:\n${code}\n\n` +
         `The knobs it has, which are FIXED and must keep working: ${knobs || '(none)'}\n\n` +
-        CUSTOM_API_DOC +
+        customApiDoc(sprite) +
         `\n\n` +
         `Judge only what you can see. Does the strip read as the thing that was asked for, at a ` +
         `glance, small? Is anything obviously wrong: nothing drawn, one blob with no structure, ` +

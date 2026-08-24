@@ -1023,6 +1023,45 @@ input[type='range']:disabled {
 .lifeline .abtn {
   flex: 0 0 auto;
 }
+/* Saying what a library item should DO. Same box as the life one, and it
+   borrows the make strip's field and primary button outright, because it asks
+   the same question and spends the same money: one line of free text, the price
+   under it, one armed press.
+
+   Those two carry the panel's own --pan-in inset themselves, since out there
+   they sit directly on the column. In here they are inside the inspector card,
+   which has already stepped in once and added its 8px of padding, so left
+   unzeroed they step in twice and the button runs past the card's right edge.
+   Zero the side insets and let both fill the card's track. */
+.animbox {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  margin: 2px 0 0;
+  padding: 8px;
+  border: 1px solid var(--acc);
+  border-radius: 8px;
+  background: var(--raised);
+  animation: panel-in 140ms ease;
+}
+.animbox .field {
+  padding: 0;
+}
+.animbox .field input {
+  width: 100%;
+  min-width: 0;
+  padding: 6px 8px;
+  font-size: 11.5px;
+}
+.animbox .field-desc {
+  font-size: 10px;
+  line-height: 1.45;
+}
+/* the button keeps the one height it has everywhere else, so a price, a clock
+   and a two-line label all measure the same and the card never jumps */
+.animbox .genrow {
+  margin: 0;
+}
 /* the two halves of the account: props and people. They are different things
    in pixellab and behave differently here, so the browser says which. */
 /* same shape as the make strip's: width:100% plus .seg's own side margins put

@@ -1,5 +1,68 @@
 [
   {
+    "name": "child-barefoot",
+    "kind": "character",
+    "ask": "a barefoot child in a short tan tunic, tousled dark hair, arms swinging, warm golden-hour light from the left, terracotta and sand palette, clean pixel art, limited palette",
+    "prompt": "a barefoot child in a short tan tunic, tousled dark hair, arms swinging, warm golden-hour light from the left, terracotta and sand palette, clean pixel art, limited palette",
+    "at": "2026-08-24T03:32:44.002Z"
+  },
+  {
+    "name": "townswoman-basket",
+    "kind": "character",
+    "ask": "a townswoman in a warm ochre skirt and cream blouse carrying a woven basket, hair in a headscarf, warm golden-hour light from the left, terracotta and sand palette, clean pixel art, limited palette",
+    "prompt": "a townswoman in a warm ochre skirt and cream blouse carrying a woven basket, hair in a headscarf, warm golden-hour light from the left, terracotta and sand palette, clean pixel art, limited palette",
+    "at": "2026-08-24T03:29:29.456Z"
+  },
+  {
+    "name": "dockworker-crate",
+    "kind": "character",
+    "ask": "a dockworker carrying a wooden crate on one shoulder, sleeveless tunic, canvas trousers, sun-browned skin, warm golden-hour light from the left, terracotta and sand palette, clean pixel art, limited palette",
+    "prompt": "a dockworker carrying a wooden crate on one shoulder, sleeveless tunic, canvas trousers, sun-browned skin, warm golden-hour light from the left, terracotta and sand palette, clean pixel art, limited palette",
+    "at": "2026-08-24T03:25:57.335Z"
+  },
+  {
+    "name": "gate-guard",
+    "kind": "character",
+    "ask": "a guard in light leather armour over a rust red tunic, a short spear held upright at his side, simple helm, warm golden-hour light from the left, terracotta and sand palette, clean pixel art, limited palette",
+    "prompt": "a guard in light leather armour over a rust red tunic, a short spear held upright at his side, simple helm, warm golden-hour light from the left, terracotta and sand palette, clean pixel art, limited palette",
+    "at": "2026-08-24T03:22:46.234Z"
+  },
+  {
+    "name": "woman-blue-wrap",
+    "kind": "character",
+    "ask": "a woman in a deep blue wrap dress with a woven shawl, dark hair tied back, standing with arms folded, warm golden-hour light from the left, terracotta and sand palette, clean pixel art, limited palette",
+    "prompt": "a woman in a deep blue wrap dress with a woven shawl, dark hair tied back, standing with arms folded, warm golden-hour light from the left, terracotta and sand palette, clean pixel art, limited palette",
+    "at": "2026-08-24T03:22:00.902Z"
+  },
+  {
+    "name": "fisherman-rod",
+    "kind": "character",
+    "ask": "an old fisherman in a faded blue tunic and wide brimmed hat, grey beard, holding a long fishing rod, bare feet, warm golden-hour light from the left, terracotta and sand palette, clean pixel art, limited palette",
+    "prompt": "an old fisherman in a faded blue tunic and wide brimmed hat, grey beard, holding a long fishing rod, bare feet, warm golden-hour light from the left, terracotta and sand palette, clean pixel art, limited palette",
+    "at": "2026-08-24T03:21:07.900Z"
+  },
+  {
+    "name": "dockhand-barrels",
+    "kind": "character",
+    "ask": "a dockhand in a sleeveless linen shirt and rolled canvas trousers, arms crossed, sunburnt forearms, weathered leather belt, warm golden-hour light from the left, terracotta and sand palette, clean pixel art, limited palette",
+    "prompt": "a dockhand in a sleeveless linen shirt and rolled canvas trousers, arms crossed, sunburnt forearms, weathered leather belt, warm golden-hour light from the left, terracotta and sand palette, clean pixel art, limited palette",
+    "at": "2026-08-24T03:19:46.205Z"
+  },
+  {
+    "name": "vendor-straw-hat-20",
+    "kind": "character",
+    "ask": "a fruit vendor in a wide straw hat and a faded teal apron over a cream shirt, sleeves rolled, sun-browned skin, standing calmly with hands resting in front, warm golden-hour light from the left, terracotta and sand palette",
+    "prompt": "a fruit vendor in a wide straw hat and a faded teal apron over a cream shirt, sleeves rolled, sun-browned skin, standing calmly with hands resting in front, warm golden-hour light from the left, terracotta and sand palette",
+    "at": "2026-08-24T03:17:45.193Z"
+  },
+  {
+    "name": "vendor-straw-hat",
+    "kind": "character",
+    "ask": "a fruit vendor in a wide straw hat and a faded teal apron over a cream shirt, sleeves rolled, sun-browned skin, standing calmly with hands resting in front, warm golden-hour light from the left, terracotta and sand palette",
+    "prompt": "a fruit vendor in a wide straw hat and a faded teal apron over a cream shirt, sleeves rolled, sun-browned skin, standing calmly with hands resting in front, warm golden-hour light from the left, terracotta and sand palette",
+    "at": "2026-08-24T03:14:37.504Z"
+  },
+  {
     "name": "crab-beach-wander",
     "kind": "effect",
     "ask": "wandering around the map / beach",

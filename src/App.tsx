@@ -153,10 +153,16 @@ const slug = (s: string) =>
     .slice(0, 4)
     .join('-') || 'scene'
 
-// the folder an animated item's frames live in: the prefix every one of its
-// placements carries, and the key for dropping their cached pixels
+/* the folder an item's pixels live in: the prefix every one of its placements
+ * carries, and the key for dropping their cached bytes.
+ *
+ * A set of headings lives in a folder too. Reading only frames[0] answered ''
+ * for those, and bustAssets('') returns without doing anything, so a person
+ * whose frames were rewritten under the same names went on being drawn out of
+ * the cache from the old pixels. It only started to matter when an item could
+ * gain frames in place. */
 const folderOf = (it: api.LibItem): string => {
-  const f = it.frames && it.frames[0]
+  const f = (it.frames && it.frames[0]) || (it.dirs && Object.values(it.dirs)[0]?.[0]) || ''
   return f ? f.slice(0, f.lastIndexOf('/') + 1) : ''
 }
 
@@ -513,6 +519,27 @@ export default function App() {
   const [lifeAsk, setLifeAsk] = useState('')
   const [lifeBusy, setLifeBusy] = useState(false)
   const [lifeNote, setLifeNote] = useState('')
+  /* Animating a thing that is already in the library.
+   *
+   * Life moves a placement around the map. This is the other half: what the
+   * pixels themselves do while they stand there. Five people on the hub were
+   * dead still, and dead still is what makes a map read as a diorama.
+   *
+   * One free-text box, the same two presses as every other spend, and no list
+   * of animations anywhere: the words go to the server and it answers whether
+   * that is a written recipe (free), one picture animated (one), or every
+   * heading in one coordinated job (one each). */
+  const [animOpen, setAnimOpen] = useState(false)
+  const [animAsk, setAnimAsk] = useState('')
+  const [animBusy, setAnimBusy] = useState(false)
+  const [animPlan, setAnimPlan] = useState<api.AnimPlan | null>(null)
+  /* The run carries the plan it is running as well as its start time. The plan
+   * is cleared the instant the confirmed press lands, so without this the
+   * button would have nothing left to say what it is doing for the several
+   * minutes it takes. */
+  const [animRun, setAnimRun] = useState<{ at: number; plan: api.AnimPlan } | null>(null)
+  const [animSecs, setAnimSecs] = useState(0)
+  const [animNote, setAnimNote] = useState('')
   // stop: the server-side job to kill, and a flag the loops check between
   // steps so a batch ends after the generation already in flight
   const jobRef = useRef('')
@@ -912,6 +939,28 @@ export default function App() {
     const t = window.setInterval(() => setCharSecs(Math.round((Date.now() - charRun.at) / 1000)), 1000)
     return () => window.clearInterval(t)
   }, [charRun])
+
+  // the same clock under the animate button, for the same reason: eight
+  // headings is minutes and a label that never moves reads as a hang
+  useEffect(() => {
+    if (!animRun) {
+      setAnimSecs(0)
+      return
+    }
+    setAnimSecs(0)
+    const t = window.setInterval(() => setAnimSecs(Math.round((Date.now() - animRun.at) / 1000)), 1000)
+    return () => window.clearInterval(t)
+  }, [animRun])
+
+  /* A plan is a price for ONE item. Picking a different thing drops it, or the
+   * armed button would still be lit and the next press would buy the last
+   * item's plan against this one's name. */
+  const animSel = st?.assetSel ?? ''
+  useEffect(() => {
+    setAnimOpen(false)
+    setAnimPlan(null)
+    setAnimNote('')
+  }, [animSel])
 
   /* Hold a multi-take run after the first one and put the actual picture on the
    * panel. Answers whether to carry on.
@@ -1383,6 +1432,122 @@ export default function App() {
       push('draw where it may roam · esc to leave it unfenced')
     },
     [lifeAsk, lifeBusy, lib, push],
+  )
+
+  /* Two presses, on a thing that is already in the library.
+   *
+   * FIRST press is free and buys nothing. The server looks at what the item IS
+   * on disk, which is one png or a folder of frames or eight headings, and at
+   * the words, and answers how it would do it and exactly what that costs.
+   * There are four answers at 0, 1, one-per-heading and no, so the price cannot
+   * be worked out on this side and the button refuses to arm over a guess.
+   *
+   * SECOND press spends precisely the number the button was showing. The frames
+   * land back under the same name, so every placement of that thing starts
+   * moving without being touched and the library keeps one row.
+   *
+   * A stop is worth pressing even after the first heading is paid for, because
+   * seven more are queued behind it. Whatever landed stays; stopping never
+   * undoes. */
+  const doAnim = useCallback(
+    async (item: api.LibItem) => {
+      const e = edRef.current
+      const ask = animAsk.trim()
+      if (!e || !ask || animBusy || animRun) return
+      const sid = e.sceneId
+
+      if (!animPlan) {
+        const job = newJob('anim')
+        jobRef.current = job
+        stopRef.current = false
+        setAnimBusy(true)
+        e.setBusy('reading what it should do')
+        try {
+          const r = await api.assetAnimate(sid, { name: item.name, ask, job })
+          if (stopRef.current || !r.plan) return
+          setAnimPlan(r.plan)
+          push(
+            r.plan.path === 'blocked'
+              ? r.plan.why || 'that cannot be done to this one'
+              : (r.plan.note || r.plan.motion) + ' · press again',
+          )
+        } catch (err) {
+          const m = String(err instanceof Error ? err.message : err)
+          push(m.includes('stopped') ? 'stopped' : 'could not read that · ' + m.slice(0, 90))
+        } finally {
+          setAnimBusy(false)
+          e.setBusy('')
+        }
+        return
+      }
+
+      const plan = animPlan
+      // nothing to buy and nothing to draw here. Saying no is the answer, and
+      // the button never arms over it.
+      if (plan.path === 'blocked') return
+      /* The free path never posts.
+       *
+       * Travelling is the one thing neither animator can do: both redraw a
+       * sprite where it stands, so a crab asked to scatter comes back scuttling
+       * on the spot for real money. The recipe engine already does travel for
+       * nothing, so the words are carried across to it rather than spent here. */
+      if (plan.path === 'written') {
+        setAnimPlan(null)
+        setAnimOpen(false)
+        setFxAsk(plan.motion || ask)
+        setMakeWhat('effect')
+        stopPick()
+        push(
+          (plan.note || 'this one has to travel, so it is written rather than drawn') +
+            ' · free · the words are in the motion box',
+        )
+        return
+      }
+
+      setAnimPlan(null)
+      const job = newJob('anim')
+      jobRef.current = job
+      stopRef.current = false
+      setAnimRun({ at: Date.now(), plan })
+      e.setBusy(`animating ${item.name}`)
+      try {
+        const r = await api.assetAnimate(sid, { name: item.name, ask, plan, confirm: true, job })
+        // a scene swap mid-run would file the result under the wrong map
+        if (e.sceneId !== sid || !r.item) return
+        const next = r.item
+        setLib((prev) => [...(prev || []).filter((x) => x.name !== next.name), next])
+        // same names, new bytes: without this the editor answers every draw out
+        // of the frames it already cached
+        e.bustAssets(folderOf(next))
+        setBust((q) => ({ ...q, [next.name]: Date.now() }))
+        /* pixellab pads a canvas to leave the motion somewhere to go, so what
+         * comes back is rarely the size that went in. Every placement is scaled
+         * by the difference BEFORE it is refreshed, or the figures change size
+         * on the map. Same order doBitify uses. */
+        if (next.w !== item.w || next.h !== item.h)
+          e.rescalePlacementsOf(next, item.w / next.w, item.h / next.h)
+        e.refreshPlacementsOf(next)
+        setAnimNote(r.note || '')
+        setAnimAsk('')
+        setAnimOpen(false)
+        push(
+          `${next.name} is moving · ${plan.motion}` +
+            (r.note ? ' · ' + r.note : '') +
+            ' · the old pixels are in .prev',
+        )
+      } catch (err) {
+        const m = String(err instanceof Error ? err.message : err)
+        push(
+          m.includes('stopped')
+            ? 'stopped · the item is as it was, nothing half-written'
+            : 'that did not come back · ' + m.slice(0, 110),
+        )
+      } finally {
+        setAnimRun(null)
+        edRef.current?.setBusy('')
+      }
+    },
+    [animAsk, animBusy, animRun, animPlan, push, stopPick],
   )
 
   const openMatch = useCallback(
@@ -3158,6 +3323,58 @@ export default function App() {
   // the library calls a static png (basename) and an animated folder alike
   const selItem = selA ? (lib || []).find((it) => it.name === assetLabel(selA)) : undefined
   const selIsFx = !!(selItem && selItem.kind === 'animated' && selItem.effect)
+  /* Does the selected thing MOVE today.
+   *
+   * kind cannot answer it. A set of headings is kind 'static' whether each
+   * heading holds one frame or a whole walk cycle, so the only honest test is
+   * how many frames a heading has. Getting this wrong would put "replaces what
+   * it does now" on a still and hide it from a walker. */
+  const selWays = selItem?.dirs ? Object.keys(selItem.dirs).length : 0
+  const selMoves = !!(
+    selItem &&
+    (selItem.kind === 'animated'
+      ? (selItem.frames?.length ?? 0) > 1
+      : (Object.values(selItem.dirs ?? {})[0]?.length ?? 0) > 1)
+  )
+  /* The price, before the read as well as on the button after it.
+   *
+   * The read is free and it can come back free, so the line before it is a
+   * CEILING, not a promise: eight headings is at most eight and a written
+   * recipe is none. Said up front because by the time the plan is on screen he
+   * has already decided whether this was worth asking for. */
+  const animMost = selWays || 1
+  // said the same way everywhere: an eight-heading job is minutes, and a label
+  // that never changes for five of them is indistinguishable from a hang
+  const animWait = animPlan
+    ? animPlan.path === 'character'
+      ? `${(animPlan.headings || []).length || selWays} headings in one job · five to fifteen minutes`
+      : animPlan.path === 'sprite'
+        ? 'one picture · a minute or two'
+        : 'nothing is spent'
+    : ''
+  const animBlocked = animPlan?.path === 'blocked'
+  const animLabel = animRun
+    ? `${animRun.plan.path === 'character' ? 'every heading together' : 'animating it'} · ${mmss(animSecs)}`
+    : animBusy
+      ? 'reading it…'
+      : animBlocked
+        ? 'it cannot be done this way'
+        : animPlan
+          ? animPlan.price === 0
+            ? // zero, and it means zero: the written path never touches pixellab
+              'free · write it instead'
+            : `${animPlan.price} generation${animPlan.price === 1 ? '' : 's'} · ${selMoves ? 'replace what it does' : 'animate it'}`
+          : 'read the ask · free'
+  const animDesc = animRun
+    ? animRun.plan.path === 'character'
+      ? // what a stop is still worth once this is running
+        'pixellab is drawing every heading in one job · stopping saves the ones not asked for yet'
+      : 'pixellab is drawing · already paid for'
+    : animBlocked
+      ? animPlan?.why || 'that cannot be done to this one'
+      : animPlan
+        ? `${animPlan.note || animPlan.motion} · ${animPlan.frames} frames · ${animWait}`
+        : `${selWays ? `${selWays} headings` : 'one picture'} · at most ${animMost} generation${animMost === 1 ? '' : 's'}, none if the words need it to travel${selMoves ? ' · replaces what it does now' : ''}${usd ? ` · ${usd} left` : ''}`
   // how far this one placement is above the map's pixel size; 1 means it is
   // already there and the button has no work to offer
   const selBit =
@@ -3343,6 +3560,22 @@ export default function App() {
         </button>
       </div>
       <div className="actrow">
+        {/* it sits with the other edits to the ART, because that is what it is:
+            the pixels get rewritten in place under the same name, the way
+            trim and pixelate rewrite them. It offers no list of animations. */}
+        {selItem && (
+          <button
+            className={'abtn' + (animOpen ? ' on' : '')}
+            data-tip={selMoves ? 'say what it should do instead' : 'say what it should do'}
+            onClick={() => {
+              setAnimOpen((v) => !v)
+              setAnimPlan(null)
+            }}
+            disabled={plBusy || !!animRun}
+          >
+            animate
+          </button>
+        )}
         {selIsFx && selItem && (
           <button className="abtn" data-tip="reopen its knobs" onClick={() => openFx(selItem, [selA.x, selA.y])}>
             edit effect
@@ -3383,6 +3616,53 @@ export default function App() {
         </button>
       </div>
       {selItem && selA && selBit >= 1.25 && grainRow}
+      {/* The ask, in the make strip's own language: one free-text line, the
+          honest cost under it, and one armed button. Nothing here enumerates
+          what an animation can be. Whatever is typed is what the router has to
+          find a way to draw, the same way the sprite box works. */}
+      {animOpen && selItem && (
+        <div className="animbox">
+          <label className="field">
+            <input
+              autoFocus
+              value={animAsk}
+              placeholder={selMoves ? 'e.g. breathes while it stands' : 'e.g. casts the rod out over the water'}
+              onChange={(ev) => {
+                setAnimAsk(ev.target.value)
+                // the plan was priced against the words that were there
+                setAnimPlan(null)
+              }}
+              onKeyDown={(ev) => {
+                if (ev.key === 'Enter') void doAnim(selItem)
+                if (ev.key === 'Escape') {
+                  setAnimOpen(false)
+                  ev.currentTarget.blur()
+                }
+              }}
+              spellCheck={false}
+            />
+            <span className="field-desc">{animDesc}</span>
+          </label>
+          <div className="genrow">
+            {/* the yellow arm is the money colour and it stays that way: a
+                free answer is a second press too, but it is not a spend and
+                must not shout like one */}
+            <button
+              className={'primary genbtn' + (animPlan && animPlan.price > 0 ? ' armed' : '')}
+              onClick={() => void doAnim(selItem)}
+              disabled={!animAsk.trim() || animBusy || !!animRun || animBlocked}
+            >
+              {animLabel}
+            </button>
+            {(animBusy || !!animRun) && (
+              <button className="abtn stopbtn" onClick={doStop}>
+                stop
+              </button>
+            )}
+          </div>
+          {animNote && <div className="lifehint">{animNote}</div>}
+        </div>
+      )}
     </div>
   )
 
@@ -4034,7 +4314,16 @@ export default function App() {
         {/* everything that can be running is listed here on purpose. A wait
             with nothing to press is the failure this button exists for, so a
             new one must be added to this line the day it is written. */}
-        {(genBusy || !!genRun || !!fillRun || fxBusy || !!charRun || lifeBusy || !!pl?.looking || !!fxRev?.running) && (
+        {(genBusy ||
+          !!genRun ||
+          !!fillRun ||
+          fxBusy ||
+          !!charRun ||
+          lifeBusy ||
+          animBusy ||
+          !!animRun ||
+          !!pl?.looking ||
+          !!fxRev?.running) && (
           <button className="abtn stopbtn" onClick={doStop}>
             stop
           </button>

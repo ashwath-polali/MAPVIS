@@ -1,0 +1,30 @@
+{
+  "dirs": {
+    "south": [
+      "/work/hub/library/gate-guard/south-0.png"
+    ],
+    "west": [
+      "/work/hub/library/gate-guard/west-0.png"
+    ],
+    "east": [
+      "/work/hub/library/gate-guard/east-0.png"
+    ],
+    "north": [
+      "/work/hub/library/gate-guard/north-0.png"
+    ],
+    "south-east": [
+      "/work/hub/library/gate-guard/south-east-0.png"
+    ],
+    "north-east": [
+      "/work/hub/library/gate-guard/north-east-0.png"
+    ],
+    "north-west": [
+      "/work/hub/library/gate-guard/north-west-0.png"
+    ],
+    "south-west": [
+      "/work/hub/library/gate-guard/south-west-0.png"
+    ]
+  },
+  "fps": 8,
+  "characterId": "bded7732-5089-47f8-9d05-8a184139c9c1"
+}

@@ -419,10 +419,16 @@ async function startAnimation(req, want, group) {
   return { ...out, jobIds, directions: going, templateAnimationId: group }
 }
 
-// heading to frame urls, in order, for the group named after the template.
-// Nothing carrying that name means every group is read, which is right for a
-// character just generated because the walk is the only thing on it.
-function framesByDir(detail, tpl) {
+/* heading to frame urls, in order, for the group named after the template.
+ * Nothing carrying that name means every group is read, which is right for a
+ * character just generated because the walk is the only thing on it.
+ *
+ * known, when given, is every frame the character carried BEFORE this job, and
+ * a heading made only of those has not landed. The skip belongs here rather
+ * than in the caller: the first group holding a heading wins, so on a character
+ * that already moves an old walk listed first would mask the new frames and
+ * they would never be looked at again. */
+function framesByDir(detail, tpl, known) {
   const groups = Array.isArray(detail && detail.animations) ? detail.animations : []
   const named = tpl
     ? groups.filter((g) => [g.animation_type, g.display_name].some((s) => String(s || '').toLowerCase() === tpl.toLowerCase()))
@@ -432,6 +438,7 @@ function framesByDir(detail, tpl) {
     for (const dd of Array.isArray(g.directions) ? g.directions : []) {
       const k = String(dd.direction || '').toLowerCase()
       const frames = Array.isArray(dd.frames) ? dd.frames.filter(Boolean) : []
+      if (known && !frames.some((u) => !known.has(u))) continue
       if (k && frames.length && !out[k]) out[k] = frames
     }
   }
@@ -445,8 +452,18 @@ function framesByDir(detail, tpl) {
  * thing being waited for and it is one read a tick instead of one per job. The
  * jobs are swept every sixth tick, thirty seconds, only so a failed direction
  * surfaces as an error rather than sitting until the ceiling.
+ *
+ * known is every frame url the character ALREADY carried, and it exists because
+ * of what a live read says: an animation group comes back with no id at all,
+ * animation_type carrying the template's name and display_name null. So when
+ * the api does not echo a written animation's name, framesByDir falls back to
+ * reading every group, and on a character that already moves that is the OLD
+ * motion, sitting there complete, and the wait ends the instant it starts.
+ * Frame urls are path-based, unsigned and identical across reads (measured
+ * 2026-08-23), so they are the one honest test of what is new. Nothing that
+ * animates a fresh character passes this, and nothing changes for them.
  */
-export async function awaitAnimation(characterId, handle, { timeoutMs = 600000 } = {}) {
+export async function awaitAnimation(characterId, handle, { timeoutMs = 600000, known } = {}) {
   if (!characterId) throw new Error('no character to wait on')
   const h = handle || {}
   const tpl = String(h.templateAnimationId || '')
@@ -464,7 +481,7 @@ export async function awaitAnimation(characterId, handle, { timeoutMs = 600000 }
       if (++misses >= 3) throw e
       continue
     }
-    const got = framesByDir(d, tpl)
+    const got = framesByDir(d, tpl, known)
     // with no list to check against, four headings is the same floor the
     // library import holds a view set to
     const ready = want.length ? want.every((k) => got[k]) : Object.keys(got).length >= 4

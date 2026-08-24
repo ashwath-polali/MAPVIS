@@ -1,0 +1,30 @@
+{
+  "dirs": {
+    "south": [
+      "/work/hub/library/dockhand-barrels/south-0.png"
+    ],
+    "west": [
+      "/work/hub/library/dockhand-barrels/west-0.png"
+    ],
+    "east": [
+      "/work/hub/library/dockhand-barrels/east-0.png"
+    ],
+    "north": [
+      "/work/hub/library/dockhand-barrels/north-0.png"
+    ],
+    "south-east": [
+      "/work/hub/library/dockhand-barrels/south-east-0.png"
+    ],
+    "north-east": [
+      "/work/hub/library/dockhand-barrels/north-east-0.png"
+    ],
+    "north-west": [
+      "/work/hub/library/dockhand-barrels/north-west-0.png"
+    ],
+    "south-west": [
+      "/work/hub/library/dockhand-barrels/south-west-0.png"
+    ]
+  },
+  "fps": 8,
+  "characterId": "19d37e50-dcc7-43a0-97af-5ee2b255f930"
+}

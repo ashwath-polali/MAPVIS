@@ -1,0 +1,30 @@
+{
+  "dirs": {
+    "south": [
+      "/work/hub/library/vendor-straw-hat-20/south-0.png"
+    ],
+    "west": [
+      "/work/hub/library/vendor-straw-hat-20/west-0.png"
+    ],
+    "east": [
+      "/work/hub/library/vendor-straw-hat-20/east-0.png"
+    ],
+    "north": [
+      "/work/hub/library/vendor-straw-hat-20/north-0.png"
+    ],
+    "south-east": [
+      "/work/hub/library/vendor-straw-hat-20/south-east-0.png"
+    ],
+    "north-east": [
+      "/work/hub/library/vendor-straw-hat-20/north-east-0.png"
+    ],
+    "north-west": [
+      "/work/hub/library/vendor-straw-hat-20/north-west-0.png"
+    ],
+    "south-west": [
+      "/work/hub/library/vendor-straw-hat-20/south-west-0.png"
+    ]
+  },
+  "fps": 8,
+  "characterId": "d04e17c5-b7de-4cdb-bde9-5dfb6c2579d9"
+}

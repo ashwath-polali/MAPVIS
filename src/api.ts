@@ -463,6 +463,92 @@ export const assetAnim = (
   },
 ) => jpost<{ item: LibItem; note?: string }>('/api/asset-anim', { id, prompt, motion, ...o })
 
+/* ---- making a thing that is already in the library MOVE -------------------
+ *
+ * Everything above makes something new. This points at a thing that exists and
+ * says what it should DO: breathing while it stands, a rod cast, wings, a hop, a
+ * crab scattering. Five people were standing dead still on the hub and there was
+ * no way to ask for that without generating them again.
+ *
+ * Nothing on this path shows a list of animations. The user types it and the
+ * server routes it, because a list of animations is always shorter than what
+ * somebody wants. There are three ways to get there and they do not cost the
+ * same, which is exactly why the price cannot be worked out on this side:
+ *
+ *   character  something drawn from headings. Every heading goes through ONE
+ *              coordinated job, priced per heading. Eight separate single-image
+ *              calls would come back as eight loops with eight rhythms, so a
+ *              figure would breathe faster facing north than facing south.
+ *   sprite     one png, or a folder of frames, animated off its own first
+ *              frame. One generation.
+ *   written    the ask needs the thing to TRAVEL, and neither generator can
+ *              carry a sprite anywhere: both only redraw it where it stands. A
+ *              written recipe stamps the item's own sprite at a position it
+ *              works out per frame, and costs NOTHING. The route names this
+ *              path rather than running it, so the free answer is offered
+ *              instead of the wrong one being quietly charged for.
+ *   blocked    it cannot be done honestly, and why. A figure whose character on
+ *              the account cannot be found is the case that exists: animating
+ *              its headings one at a time would come back out of register, so
+ *              the route refuses instead of selling a defect.
+ *
+ * Everything except written rewrites the item IN PLACE, the way crop and
+ * pixelate do, so an item that already moves has its frames REPLACED and the
+ * library keeps one row per thing. Nothing touches the library folder until
+ * every byte has landed under .stage, and the bytes that were there go to
+ * work/<id>/.prev.
+ *
+ * ONE route, two presses. Without confirm it is a free read that answers the
+ * plan and the true price. With confirm it runs the plan it was handed back, so
+ * the number the button showed is the number that gets spent; the price itself
+ * is re-derived server-side from the item and the account, so a client cannot
+ * talk it down and the router cannot talk it up. */
+export interface AnimPlan {
+  path: 'character' | 'sprite' | 'written' | 'blocked'
+  // exact, and the number the armed button shows. 0 on written and on blocked,
+  // and on written it is a real zero: nothing there touches pixellab at all.
+  price: number
+  // the ask rewritten as one plain line of what the body does, which is what
+  // the animator is actually given. The panel shows this, not the raw ask.
+  motion: string
+  // how many frames the loop is. 4 to 16, even.
+  frames: number
+  // one short line saying what it will look like
+  note: string
+  // true when the words were about where the thing GOES rather than what its
+  // body does, which is what sends it down the free path
+  move: boolean
+  name: string
+  shape: 'still' | 'frames' | 'views'
+  // the headings a character job covers. Its length times the per-heading price
+  // IS the price.
+  headings?: string[]
+  characterId?: string
+  // how the character behind a folder was found: pinned, off dirs.json, or
+  // rescued through asks.json
+  found?: string
+  pad?: boolean
+  sprite?: boolean
+  // set only on blocked: the reason, in words, and it is the whole answer
+  why?: string
+}
+/* The read has no confirm and buys nothing. The confirmed press hands the plan
+ * straight back so what was priced is what runs; job makes the wait stoppable,
+ * which on the character path is worth up to seven of the eight.
+ *
+ * What comes back: { plan } from a read, { item, note } from a run that drew
+ * something, { plan, free: true } from a confirmed written path, which spends
+ * nothing and leaves the item alone. note carries a half that did not happen,
+ * the way characterGen's does. */
+export const assetAnimate = (
+  id: string,
+  o: { name: string; ask: string; plan?: AnimPlan; confirm?: true; job?: string },
+) =>
+  jpost<{ plan?: AnimPlan; item?: LibItem; note?: string; free?: boolean }>('/api/asset-animate', {
+    id,
+    ...o,
+  })
+
 // ---- the effect engine --------------------------------------------------
 
 // Which motion rule fits the ask, what numbers to start it at, and WHOSE
