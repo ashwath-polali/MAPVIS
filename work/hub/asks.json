@@ -1,5 +1,33 @@
 [
   {
+    "name": "net-mender",
+    "kind": "motion",
+    "ask": "works the net through her hands, shoulders shifting",
+    "prompt": "works a net through her hands, fingers picking at it, shoulders shifting as she pulls it along",
+    "at": "2026-08-24T19:41:51.685Z"
+  },
+  {
+    "name": "old-fisherman",
+    "kind": "motion",
+    "ask": "casts the rod out over the water and slowly draws it back",
+    "prompt": "swings the rod forward casting the line out, then slowly winds it back in, arms drawing toward the body",
+    "at": "2026-08-24T19:38:21.748Z"
+  },
+  {
+    "name": "fruit-seller",
+    "kind": "motion",
+    "ask": "breathes slowly while standing, the basket shifting a little",
+    "prompt": "breathes slowly, chest and shoulders rising and settling, the basket shifting a little with each breath",
+    "at": "2026-08-24T19:34:04.022Z"
+  },
+  {
+    "name": "fishmonger",
+    "kind": "motion",
+    "ask": "breathes slowly and shifts the fish from hand to hand",
+    "prompt": "breathes slowly, shoulders rising and settling, and passes a fish from one hand to the other",
+    "at": "2026-08-24T19:30:30.361Z"
+  },
+  {
     "name": "knight-watch",
     "kind": "motion",
     "ask": "breathes slowly at attention, chest rising and falling",
@@ -250,12 +278,5 @@
     "ask": "island palm trees. dark green leaves, maybe with a little different color tinge, beautiful trees, swaying animation slowly. slightly golden hour atmosphere but not too much, also a bit damper",
     "prompt": "a cluster of tall island palm trees in strict 2:1 isometric pixel art, slender curved trunks in warm tan and grey-brown with stacked ring segments, wide arching fronds in deep forest green shading to teal and olive at the tips, a few yellowed lower fronds, small clusters of green-brown coconuts at the crown, damp glossy highlights along the leaf spines, warm golden-hour sunlight from the upper left, blue-tinted shadow on the right side, painterly 6-8 value shading, muted palette of deep green, teal, tan and soft gold, one unified structure, warm sandy-tan and earthy-brown palette, cool grey stone, desaturated muted tones, dark 1px outlines, chunky isometric pixel forms, upper-left daylight, the object alone as a cut-out sprite on a fully transparent background, the base of the object is where its own material ends",
     "at": "2026-08-20T02:21:06.994Z"
-  },
-  {
-    "name": "island-palm-trees-dark-1",
-    "kind": "asset",
-    "ask": "island palm trees. dark green leaves, maybe with a little different color tinge, beautiful trees, swaying animation slowly. slightly golden hour atmosphere but not too much, also a bit damper",
-    "prompt": "a cluster of tall island palm trees in strict 2:1 isometric pixel art, slender curved trunks in warm tan and grey-brown with stacked ring segments, wide arching fronds in deep forest green shading to teal and olive at the tips, a few yellowed lower fronds, small clusters of green-brown coconuts at the crown, damp glossy highlights along the leaf spines, warm golden-hour sunlight from the upper left, blue-tinted shadow on the right side, painterly 6-8 value shading, muted palette of deep green, teal, tan and soft gold, one unified structure, warm sandy-tan and earthy-brown palette, cool grey stone, desaturated muted tones, dark 1px outlines, chunky isometric pixel forms, upper-left daylight, the object alone as a cut-out sprite on a fully transparent background, the base of the object is where its own material ends",
-    "at": "2026-08-20T02:19:26.810Z"
   }
 ]
