@@ -31,6 +31,10 @@ public/work/
 # mask, which is the whole point of committing.
 !work/*/map.json
 !work/*/assets.json
+# the map itself as the editor holds it: the cut, the levels, the occluders and
+# every placement. This is the hand-drawn work, and leaving it out was leaving
+# the one file that cannot be regenerated out of the history.
+!work/*/doc.json
 !work/*/scene.png
 !work/*/scene-cut.png
 !work/*/levels.png
