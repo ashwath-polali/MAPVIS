@@ -7,7 +7,7 @@
 import { cleanLife, lifeAt, type Life } from './life'
 import { MaskDoc, PAL, colOf, nameOf, mkCanvas, bresenham, assetLabel, migrateEvent, type Pt, type PlacedAsset, type MapEvent } from './mask'
 import { Walker, canStand, checkReach, defaultCfg, type WalkCfg, type ReachResult } from './walk'
-import { savedScene, type LibItem } from '../api'
+import { savedScene, saveDoc, loadDoc, type LibItem } from '../api'
 
 export type Tool =
   | 'region'
@@ -267,6 +267,13 @@ export class Editor {
   private last = 0
   private saveT = 0
   private changed = false
+  // loadPainting replaces this.doc and then awaits a restore. Without this the
+  // autosave beat can fire inside that gap and write the empty replacement over
+  // a good save, which is a way to lose a map by opening another one.
+  private loading = false
+  // set once a disk save has failed, so the failure is said once and not every
+  // four seconds forever
+  private diskWarned = false
   private listener: ((s: EditorStatus) => void) | null = null
   private detachers: (() => void)[] = []
 
@@ -406,6 +413,11 @@ export class Editor {
     this.basePainting = img
     this.sceneId = id
     this.doc = new MaskDoc(img.naturalWidth, img.naturalHeight)
+    // the replacement is empty and the restore below is async, so the autosave
+    // beat has to be held off until this doc is the real one
+    this.loading = true
+    this.changed = false
+    this.diskWarned = false
     this.walker = new Walker(this.doc.spawn)
     this.natMask = mkCanvas(this.doc.W, this.doc.H)
     this.natOcc = mkCanvas(this.doc.W, this.doc.H)
@@ -432,7 +444,13 @@ export class Editor {
       g.drawImage(img, 0, 0)
       this.pix = g.getImageData(0, 0, this.doc.W, this.doc.H).data
     }
-    if (!this.restoreLocal()) await this.restoreFromDisk()
+    // this browser first, then the doc mirrored to disk, then a bundle if one
+    // was exported under this id. Newest and most complete first.
+    try {
+      if (!this.restoreLocal() && !(await this.restoreDoc())) await this.restoreFromDisk()
+    } finally {
+      this.loading = false
+    }
     this.fit()
     this.dirtyMask = true
     this.dirty = true
@@ -2608,11 +2626,21 @@ export class Editor {
     return `mapvis:${this.sceneId}`
   }
   private saveLocal() {
+    const s = this.doc.serialize()
     try {
-      localStorage.setItem(this.key(), this.doc.serialize())
+      localStorage.setItem(this.key(), s)
     } catch {
-      /* a full quota is not worth an error in the face */
+      // a full quota used to be swallowed here. One map is about two megabytes
+      // of utf-16 at 688x384 and a browser gives roughly five, so the third map
+      // in one browser stops saving. Silently, which is the part that cost work.
+      this.say('this browser is full · saving to disk only')
     }
+    // the copy that survives a cleared browser or a different machine
+    void saveDoc(this.sceneId, s).catch(() => {
+      if (this.diskWarned) return
+      this.diskWarned = true
+      this.say('could not save to disk · this browser is the only copy')
+    })
   }
   private restoreLocal() {
     const legacyKey = `mapvis:${this.sceneId}:${this.doc.W}x${this.doc.H}`
@@ -2648,6 +2676,36 @@ export class Editor {
       }
     } catch {
       /* nothing saved, or nothing readable */
+    }
+    return false
+  }
+
+  /* The disk mirror, read when this browser has nothing. That is a new machine,
+   * a cleared browser, or the quota having eaten the local copy. Same string
+   * and the same grow-then-unpack order restoreLocal uses, because deserialize
+   * ignores the envelope's w/h and unpack refuses a length mismatch. */
+  private async restoreDoc() {
+    try {
+      const { doc: raw } = await loadDoc(this.sceneId)
+      if (!raw) return false
+      if (raw.startsWith('{')) {
+        const d = JSON.parse(raw) as {
+          w?: number
+          h?: number
+          base?: { w: number; h: number; ox: number; oy: number }
+        }
+        if (typeof d.w === 'number' && typeof d.h === 'number' && (d.w !== this.doc.W || d.h !== this.doc.H)) {
+          const b = d.base
+          if (!b || b.w !== this.doc.W || b.h !== this.doc.H) return false // saved against another painting
+          this.relayCanvas(b.ox, b.oy, d.w, d.h)
+        }
+      }
+      if (this.doc.deserialize(raw)) {
+        this.say('restored from disk')
+        return true
+      }
+    } catch {
+      /* no mirror yet, or the server is not up */
     }
     return false
   }
@@ -2853,7 +2911,7 @@ export class Editor {
       if (wasBlocked && this.showHits) this.dirtyMask = true
       this.dirty = true
     }
-    if (this.changed && now - this.saveT > 4000) {
+    if (this.changed && !this.loading && now - this.saveT > 4000) {
       this.saveLocal()
       this.changed = false
       this.saveT = now
