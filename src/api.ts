@@ -205,6 +205,54 @@ export const accountCharacters = () =>
 export const characterImport = (id: string, sceneId: string, o?: { name?: string; animation?: string }) =>
   jpost<{ item: LibItem }>('/api/character-import', { id, sceneId, ...o })
 
+/* A NEW character, made rather than picked. The only paid call on this half.
+ *
+ * Not an object with more sides. An object endpoint given a person answers with
+ * a generic character instead of the one that was asked for, which is pixellab's
+ * own warning and not a guess; a character is generated off a skeleton, which is
+ * what makes eight views of the SAME body possible and what a walk template
+ * hangs on. So the two live on different endpoints and this one is theirs.
+ *
+ * The price is the thing to say out loud. One generation for the character in
+ * standard mode, then ONE PER DIRECTION for a walk cycle, so the eight-way
+ * default with a walk is nine. It is also slow: two to five minutes for the
+ * character and longer again for the walk, all inside this one request.
+ *
+ * confirm true is the server's own gate and only the confirmed press sends it,
+ * so a reload or a retry cannot spend. job makes the wait stoppable, and a stop
+ * that lands between the character and its walk is worth eight generations.
+ *
+ * walk is a template animation id, or '' for a character that only stands.
+ * What lands is the same on-disk shape the account import writes, so placement,
+ * facing, life and the export never learn that it was generated.
+ *
+ * note carries a walk that did not happen. The body is bought the moment it is
+ * asked for, so a walk that fails or is stopped leaves the character standing
+ * rather than losing it, and this is where the reason comes back. */
+export const characterGen = (
+  id: string,
+  o: {
+    description: string
+    confirm: true
+    job?: string
+    name?: string
+    // pixellab pads the canvas about 40% past this to leave room for the
+    // animation, so 48 comes back near 68 and arrives needing its base trimmed
+    size?: number
+    view?: string
+    // quadruped REQUIRES a template, one of bear, cat, dog, horse, lion
+    bodyType?: 'humanoid' | 'quadruped'
+    template?: string
+    // eight, because life.ts works out an eight-way facing and four makes the
+    // diagonals snap to the wrong view
+    nDirections?: 4 | 8
+    walk?: string
+    // standard is one generation. pro is twenty to forty and can never be a
+    // default here.
+    mode?: 'standard' | 'pro' | 'v3'
+  },
+) => jpost<{ item: LibItem; note?: string }>('/api/character-gen', { id, ...o })
+
 /* ---- the ask, read with the map open ------------------------------------
  *
  * One call, and the only one before a generation. It is handed the painting
@@ -427,7 +475,9 @@ export const effectSave = (
 // answer to "what did I type to get that". A record, not a feature to feed.
 export interface Ask {
   name: string
-  kind?: 'asset' | 'effect'
+  // character is here so a past ask reopens in the mode that made it. Without
+  // it a person came back in the object box, which draws a prop of a person.
+  kind?: 'asset' | 'effect' | 'character'
   ask: string
   prompt: string
   at: string

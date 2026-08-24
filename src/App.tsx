@@ -111,6 +111,33 @@ interface FxState {
 // it. Every pass is free: the render is local and the look generates nothing.
 const FX_PASSES = 3
 
+/* What a made character is, before anyone touches a control.
+ *
+ * Eight views because life.ts works out an eight-way facing and four makes the
+ * diagonals snap to the wrong one. Low top-down because that is the angle the
+ * island paintings are at. Standard mode because pro is twenty to forty
+ * generations and can never be what a first press buys. The size is pixellab's
+ * own default and it comes back on a canvas about 40% larger, which is the
+ * padding a base trim takes off.
+ *
+ * The walk template is eight frames, one generation per direction, so the
+ * default spend here is one plus eight.
+ *
+ * walking-8-frames is a HUMANOID template name. Pixellab's own note is that
+ * quadruped animations vary by body template and are only listed per character,
+ * so an animal may come back refusing it. Unverified, and it is not worth a
+ * generation to find out: the server keeps a character whose walk failed, so
+ * the worst an animal costs is the one the body cost, and the reason is said in
+ * the line under the button. */
+const CHAR_DIRS = 8
+const CHAR_SIZE = 48
+const CHAR_VIEW = 'low top-down'
+const CHAR_WALK = 'walking-8-frames'
+const CHAR_ANIMALS = ['bear', 'cat', 'dog', 'horse', 'lion'] as const
+
+// a running wait, said the way a clock says it
+const mmss = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
+
 const slug = (s: string) =>
   s
     .toLowerCase()
@@ -438,7 +465,24 @@ export default function App() {
    * column, an object one and an effect one, running the same gesture twice:
    * type, point at the map, get a thing. One box and a three-way says the same
    * with half the controls. */
-  const [makeWhat, setMakeWhat] = useState<'object' | 'effect' | 'fill'>('object')
+  const [makeWhat, setMakeWhat] = useState<'object' | 'effect' | 'fill' | 'character'>('object')
+  /* The whole settings panel a character needs, which is three answers.
+   *
+   * Person or animal, because pixellab builds the two on different skeletons and
+   * an animal has to name which one. Walk or stand, because the walk is what
+   * costs eight of the nine generations. Everything else is decided in the
+   * constants above and is not worth a control.
+   */
+  const [charBody, setCharBody] = useState<'humanoid' | 'quadruped'>('humanoid')
+  const [charAnimal, setCharAnimal] = useState<(typeof CHAR_ANIMALS)[number]>('dog')
+  const [charWalk, setCharWalk] = useState(true)
+  /* A character is the longest wait in the tool by a wide margin: minutes for
+   * the body, minutes again for eight walking directions, all inside one
+   * request. So the button counts out loud, because a still label for six
+   * minutes is indistinguishable from a hang.
+   */
+  const [charRun, setCharRun] = useState<{ at: number } | null>(null)
+  const [charSecs, setCharSecs] = useState(0)
   // how many things a fill plans. A range, because "populate this" means
   // something different for a courtyard than for a whole beach.
   const [fillCount, setFillCount] = useState(6)
@@ -822,6 +866,80 @@ export default function App() {
     },
     [acc.taking, push],
   )
+
+  // the clock under the character button. One second is enough resolution for
+  // a wait measured in minutes.
+  useEffect(() => {
+    if (!charRun) {
+      setCharSecs(0)
+      return
+    }
+    setCharSecs(0)
+    const t = window.setInterval(() => setCharSecs(Math.round((Date.now() - charRun.at) / 1000)), 1000)
+    return () => window.clearInterval(t)
+  }, [charRun])
+
+  /* A character made to order, after the price has been confirmed.
+   *
+   * One request holds the whole job: the body, then a walk template run once
+   * per direction. Stopping is still worth having even though the body is paid
+   * for the moment it is asked for, because a stop that lands in the minutes
+   * before the walk keeps eight generations from ever being asked for. So it
+   * carries a job id like the planners do.
+   *
+   * A scene swap mid-run drops the result rather than filing it under the wrong
+   * map, the same as every other spend here.
+   */
+  const runCharGen = useCallback(async () => {
+    const e = edRef.current
+    const p = genPrompt.trim()
+    if (!e || !p || charRun) return
+    const sid = e.sceneId
+    const job = 'char-' + Date.now() + '-' + Math.floor(Math.random() * 1e6)
+    jobRef.current = job
+    stopRef.current = false
+    setCharRun({ at: Date.now() })
+    e.setBusy(charWalk ? 'drawing them, then the walk' : 'drawing them')
+    try {
+      const r = await api.characterGen(sid, {
+        description: p,
+        // the server will not spend without this, and only this press sends it
+        confirm: true,
+        job,
+        size: CHAR_SIZE,
+        view: CHAR_VIEW,
+        bodyType: charBody,
+        template: charBody === 'quadruped' ? charAnimal : undefined,
+        nDirections: CHAR_DIRS,
+        walk: charWalk ? CHAR_WALK : '',
+        mode: 'standard',
+      })
+      if (e.sceneId !== sid) return
+      setLib((prev) => [...(prev || []).filter((x) => x.name !== r.item.name), r.item])
+      setGenPrompt('')
+      api
+        .asks(sid)
+        .then((q) => setAsks(q.asks))
+        .catch(() => {})
+      // a walk that did not happen is said out loud. It still lands, standing,
+      // because the body was bought before the walk was ever asked for.
+      push(
+        `${r.item.name} added · ${Object.keys(r.item.dirs || {}).length} ways` +
+          `${(r.item.dirs?.south?.length || 1) > 1 ? ', walking' : ''}` +
+          `${r.note ? ' · ' + r.note : ' · click it, then the map'}`,
+      )
+    } catch (err) {
+      const m = String(err instanceof Error ? err.message : err)
+      push(
+        m.includes('stopped')
+          ? 'stopped · the character was already paid for, the walk was not asked for'
+          : 'that one did not come back · ' + m.slice(0, 120),
+      )
+    } finally {
+      setCharRun(null)
+      edRef.current?.setBusy('')
+    }
+  }, [genPrompt, charRun, charBody, charAnimal, charWalk, push])
 
   // the search box, one call behind the typing so a full listing is not walked
   // per keystroke
@@ -2792,9 +2910,15 @@ export default function App() {
   const groupNames = [...SUGGESTED_GROUPS]
   for (const a of assets) if (!groupNames.includes(a.group)) groupNames.push(a.group)
   const thumbOf = (a: { src?: string; frames?: string[] }) => a.src || (a.frames && a.frames[0]) || ''
-  // the real price of the armed click: an animated item is two generations
-  // (base sprite + animation), a batch is three items
-  const genCost = (genType === 'animated' ? 2 : 1) * (genMode === 'batch' ? 3 : 1)
+  /* the real price of the armed click: an animated item is two generations
+   * (base sprite + animation), a batch is three items, and a character is one
+   * for the body plus ONE PER DIRECTION for its walk, so eight ways walking is
+   * nine. The walk is eight of the nine, which is why turning it off is a
+   * control and the direction count is not. */
+  const genCost =
+    makeWhat === 'character'
+      ? 1 + (charWalk ? CHAR_DIRS : 0)
+      : (genType === 'animated' ? 2 : 1) * (genMode === 'batch' ? 3 : 1)
   // the big preview's zoom: the largest whole multiple that still fits the
   // panel, so a tall plume and a wide splash both land inside the column
   const fxBig = fxP ? ([4, 3, 2, 1].find((z) => Math.max(fxP.width, fxP.height) * z <= 208) ?? 1) : 4
@@ -3417,51 +3541,84 @@ export default function App() {
   const doMake = useCallback(() => {
     if (makeWhat === 'effect') return void armFx()
     if (makeWhat === 'fill') return scene ? void doFill() : void doScenePlan()
+    // a character has nothing free to read first, so the price stands on the
+    // button and the second press is what buys it
+    if (makeWhat === 'character') {
+      if (arm('char-gen', 20000)) void runCharGen()
+      return
+    }
     return void doGen()
-  }, [makeWhat, scene, armFx, doFill, doScenePlan, doGen])
+  }, [makeWhat, scene, armFx, doFill, doScenePlan, doGen, arm, runCharGen])
 
   const wantedInScene = scene ? scene.items.length - sceneOff.size : 0
-  const makeArmed = makeWhat === 'fill' ? !!scene : makeWhat === 'object' ? !!genPlan : fxPick
+  const makeArmed =
+    makeWhat === 'fill'
+      ? !!scene
+      : makeWhat === 'object'
+        ? !!genPlan
+        : makeWhat === 'character'
+          ? armed === 'char-gen'
+          : fxPick
   const makeOff =
     genBusy ||
     !!genRun ||
     !!fillRun ||
+    !!charRun ||
     (makeWhat === 'effect'
       ? !fxAsk.trim() || fxBusy || !!fx
       : makeWhat === 'object'
         ? !genPrompt.trim() || genPick
-        : false)
-  const makeLabel = fillRun
-    ? `${fillRun.done + 1}/${fillRun.total} · ${fillRun.what}…`
-    : genRun
-      ? genRun.total > 1
-        ? `generating ${Math.min(genRun.done + 1, genRun.total)}/${genRun.total}…`
-        : 'generating…'
-      : genBusy
-        ? makeWhat === 'fill'
-          ? 'reading the area…'
-          : 'reading the map…'
-        : fxBusy
-          ? 'reading the ask…'
-          : genPick || fxPick
-            ? 'click where it goes'
-            : makeWhat === 'effect'
-              ? 'make it move'
-              : makeWhat === 'fill'
-                ? scene
-                  ? `${wantedInScene} generation${wantedInScene === 1 ? '' : 's'} · draw them`
-                  : genBox
-                    ? 'read the area · free'
-                    : 'box the area first'
-                : genPlan
-                  ? `${genCost} generation${genCost === 1 ? '' : 's'} · draw it`
-                  : 'read the map · free'
+        : makeWhat === 'character'
+          ? !genPrompt.trim()
+          : false)
+  const makeLabel = charRun
+    ? // the one wait long enough to look broken, so it counts
+      `${charWalk ? 'drawing them, then the walk' : 'drawing them'} · ${mmss(charSecs)}`
+    : fillRun
+      ? `${fillRun.done + 1}/${fillRun.total} · ${fillRun.what}…`
+      : genRun
+        ? genRun.total > 1
+          ? `generating ${Math.min(genRun.done + 1, genRun.total)}/${genRun.total}…`
+          : 'generating…'
+        : genBusy
+          ? makeWhat === 'fill'
+            ? 'reading the area…'
+            : 'reading the map…'
+          : fxBusy
+            ? 'reading the ask…'
+            : genPick || fxPick
+              ? 'click where it goes'
+              : makeWhat === 'effect'
+                ? 'make it move'
+                : makeWhat === 'character'
+                  ? // the price is on the button before the first press, not
+                    // revealed by it
+                    `${genCost} generation${genCost === 1 ? '' : 's'} · ${armed === 'char-gen' ? 'sure?' : 'make them'}`
+                  : makeWhat === 'fill'
+                    ? scene
+                      ? `${wantedInScene} generation${wantedInScene === 1 ? '' : 's'} · draw them`
+                      : genBox
+                        ? 'read the area · free'
+                        : 'box the area first'
+                    : genPlan
+                      ? `${genCost} generation${genCost === 1 ? '' : 's'} · draw it`
+                      : 'read the map · free'
   const makeDesc =
     makeWhat === 'effect'
       ? 'free · built from this map’s colours'
-      : makeWhat === 'fill'
-        ? `${genBox ? `the boxed ${genBox.w}×${genBox.h}` : 'box an area'} · ${fillCount} thing${fillCount === 1 ? '' : 's'}${usd ? ` · ${usd} left` : ''}`
-        : `${genBox ? `reads the boxed ${genBox.w}×${genBox.h}` : 'reads the whole map'} · ${genType === 'animated' ? 'sprite + 8 frames' : 'one png'}${genMode === 'batch' ? ', ×3' : ''}${usd ? ` · ${usd} left` : ''}`
+      : makeWhat === 'character'
+        ? charRun
+          ? /* what a stop is still worth: the body is paid for the moment it is
+             * asked for, the eight walking directions are not */
+            charWalk
+            ? 'pixellab is drawing · stopping before the walk saves eight'
+            : 'pixellab is drawing · already paid for'
+          : /* said honestly: this is minutes, not the seconds an object takes,
+             * and the walk is what most of them go on */
+            `${CHAR_DIRS} ways${charWalk ? ' + a walk' : ''} · ${charWalk ? 'five to fifteen minutes' : 'two to five minutes'}${usd ? ` · ${usd} left` : ''}`
+        : makeWhat === 'fill'
+          ? `${genBox ? `the boxed ${genBox.w}×${genBox.h}` : 'box an area'} · ${fillCount} thing${fillCount === 1 ? '' : 's'}${usd ? ` · ${usd} left` : ''}`
+          : `${genBox ? `reads the boxed ${genBox.w}×${genBox.h}` : 'reads the whole map'} · ${genType === 'animated' ? 'sprite + 8 frames' : 'one png'}${genMode === 'batch' ? ', ×3' : ''}${usd ? ` · ${usd} left` : ''}`
 
   /* ---- the make strip -------------------------------------------------
    *
@@ -3480,6 +3637,7 @@ export default function App() {
         {(
           [
             ['object', 'a thing'],
+            ['character', 'a person'],
             ['effect', 'motion'],
             ['fill', 'fill an area'],
           ] as const
@@ -3493,6 +3651,9 @@ export default function App() {
               setMakeWhat(m)
               setGenPlan(null)
               setScene(null)
+              // an arm does not survive a change of mind about what is being
+              // made, or the next press spends on the new thing
+              disarm()
               stopPick()
             }}
           >
@@ -3508,9 +3669,15 @@ export default function App() {
               ? 'e.g. water splashing where the fall lands'
               : makeWhat === 'fill'
                 ? 'anything to steer it, or leave empty'
-                : genType === 'animated'
-                  ? 'e.g. a campfire'
-                  : 'e.g. a stone well'
+                : makeWhat === 'character'
+                  ? // one box for both, because a person is described the same
+                    // way a thing is
+                    charBody === 'quadruped'
+                    ? 'e.g. a scruffy harbour dog'
+                    : 'e.g. a fisherman in a yellow coat'
+                  : genType === 'animated'
+                    ? 'e.g. a campfire'
+                    : 'e.g. a stone well'
           }
           onChange={(ev) => {
             if (makeWhat === 'effect') {
@@ -3534,7 +3701,10 @@ export default function App() {
         />
         <span className="field-desc">{makeDesc}</span>
       </label>
-      {makeWhat !== 'effect' && (
+      {/* still or moving says nothing about a character: it is always a set of
+          views, and its motion is a walk cycle rather than frames of a still.
+          So this row belongs to the two modes it means something to. */}
+      {(makeWhat === 'object' || makeWhat === 'fill') && (
         <div className="segrow">
           <div className="seg" role="radiogroup" aria-label="still or moving">
             {(['static', 'animated'] as const).map((t) => (
@@ -3572,6 +3742,79 @@ export default function App() {
           )}
         </div>
       )}
+      {/* Everything a character needs answered, and nothing more. There is no
+          settings panel here on purpose: the view, the size and the eight
+          directions are decided once in the constants, and the two things that
+          are genuinely a choice are what kind of body it is and whether it
+          walks. */}
+      {makeWhat === 'character' && (
+        <>
+          <div className="seg" role="radiogroup" aria-label="person or animal">
+            {(
+              [
+                ['humanoid', 'a person'],
+                ['quadruped', 'an animal'],
+              ] as const
+            ).map(([b, label]) => (
+              <button
+                key={b}
+                className={'seg-opt' + (charBody === b ? ' on' : '')}
+                role="radio"
+                aria-checked={charBody === b}
+                onClick={() => {
+                  setCharBody(b)
+                  disarm()
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {/* pixellab will not build an animal without one of its five body
+              templates, so this list is a requirement rather than a nicety */}
+          {charBody === 'quadruped' && (
+            <div className="seg" role="radiogroup" aria-label="which body">
+              {CHAR_ANIMALS.map((a) => (
+                <button
+                  key={a}
+                  className={'seg-opt' + (charAnimal === a ? ' on' : '')}
+                  role="radio"
+                  aria-checked={charAnimal === a}
+                  onClick={() => {
+                    setCharAnimal(a)
+                    disarm()
+                  }}
+                >
+                  {a}
+                </button>
+              ))}
+            </div>
+          )}
+          {/* the walk is eight of the nine, so this is the control that moves
+              the price and the button has to be re-armed after it */}
+          <div className="seg" role="radiogroup" aria-label="walks or stands">
+            {(
+              [
+                [true, 'walks'],
+                [false, 'stands still'],
+              ] as const
+            ).map(([w, label]) => (
+              <button
+                key={label}
+                className={'seg-opt' + (charWalk === w ? ' on' : '')}
+                role="radio"
+                aria-checked={charWalk === w}
+                onClick={() => {
+                  setCharWalk(w)
+                  disarm()
+                }}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
       {/* the count gets its own line. Sharing one with still/moving put a range
           input beside a segment that would not give up any width, and the two
           ended up drawn on top of each other. */}
@@ -3591,7 +3834,9 @@ export default function App() {
           <b>{fillCount}</b>
         </label>
       )}
-      {makeWhat !== 'effect' && (
+      {/* a box is context for a drawing on the map, and the character endpoint
+          has nowhere to put one */}
+      {(makeWhat === 'object' || makeWhat === 'fill') && (
         <button
           className={'abtn areabtn' + (genBox ? ' on' : '')}
           onClick={doBox}
@@ -3604,7 +3849,7 @@ export default function App() {
         <button className={'primary genbtn' + (makeArmed ? ' armed' : '')} onClick={doMake} disabled={makeOff}>
           {makeLabel}
         </button>
-        {(genBusy || !!genRun || !!fillRun || fxBusy) && (
+        {(genBusy || !!genRun || !!fillRun || fxBusy || !!charRun) && (
           <button className="abtn stopbtn" onClick={doStop}>
             stop
           </button>
@@ -3848,9 +4093,12 @@ export default function App() {
                   setMakeWhat('effect')
                   setFxAsk(a.ask)
                 } else {
-                  setMakeWhat('object')
+                  // a person put back in the object box comes out a prop of a
+                  // person, so the mode has to come back with the words
+                  setMakeWhat(a.kind === 'character' ? 'character' : 'object')
                   setGenPrompt(a.ask)
                 }
+                disarm()
                 setAsksOpen(false)
                 push('back in the box · edit it and go again')
               }}

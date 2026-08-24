@@ -10,6 +10,9 @@
  *   POST /api/library-remove   { id, name } -> deletes work/<id>/library/<name>(.png | /)
  *   GET  /api/account-objects  ?page=&q= everything the pixellab account already owns. FREE
  *   POST /api/account-import   { id, sceneId } -> copies one of them into this map's library. FREE
+ *   GET  /api/account-characters  every person and animal on the account. FREE
+ *   POST /api/character-import { id, sceneId, name, animation } -> one of them, walk and all. FREE
+ *   POST /api/character-gen    { id, description, confirm, walk, ... } -> a NEW one. SPENDS 1 + one per direction
  *   POST /api/style-card       { id, image, refresh } -> { card } this map's own look, read ONCE and cached. FREE
  *   POST /api/asset-gen        { id, prompt, w, h, name, seed } -> ONE object png into work/<id>/library
  *   POST /api/asset-gen-here   { id, prompt, thing, tw, th, cx, cy, crop } -> ONE map-object png, the crop as context
@@ -30,7 +33,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawn } from 'node:child_process'
 import * as pixellab from './pixellab.mjs'
-import { sheetPNG } from './sheet.mjs'
+import { decodePNG, encodePNG, sheetPNG } from './sheet.mjs'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(HERE, '..')
@@ -493,73 +496,151 @@ async function route(req, res, p, url) {
     } catch (e) {
       return send(res, 502, { error: String(e.message || e).slice(0, 200) })
     }
-    // the walk, gathered across however many groups it is split over: a
-    // character animated in two passes has its eight headings in two entries
-    const want = String(b.animation || '').toLowerCase()
-    const byDir = {}
-    for (const an of Array.isArray(d.animations) ? d.animations : []) {
-      const kind = String(an.animation_type || an.display_name || '').toLowerCase()
-      if (want && kind !== want) continue
-      if (!want && !/walk/.test(kind)) continue
-      for (const dd of Array.isArray(an.directions) ? an.directions : []) {
-        const k = String(dd.direction || '')
-        const frames = Array.isArray(dd.frames) ? dd.frames.filter(Boolean) : []
-        if (k && frames.length && !byDir[k]) byDir[k] = frames
-      }
+    const plan = saveFrames(id, characterDirs(d, b.animation), b.name || d.name || d.state_name || 'someone', 8)
+    if (!plan) return send(res, 404, { error: 'that one has fewer than four directions' })
+    const item = await writeRotations(id, plan)
+    if (!item) return send(res, 502, { error: 'the directions did not save' })
+    // the same trim the generate route does. An account character carries the
+    // same ~40% animation headroom as a fresh one, and a figure imported before
+    // this landed measured 11 to 12 painting pixels of float in the game.
+    const box = trimSet(plan.dir, item.dirs)
+    if (box) {
+      item.w = box.w
+      item.h = box.h
     }
-    // no walk: the still rotations, one frame per heading
-    const rot = d.rotation_urls && typeof d.rotation_urls === 'object' ? d.rotation_urls : {}
-    for (const [k, u] of Object.entries(rot)) if (u && !byDir[k]) byDir[k] = [u]
-    const keys = Object.keys(byDir)
-    if (keys.length < 4) return send(res, 404, { error: 'that one has fewer than four directions' })
-
-    const dir = libDirOf(id)
-    fs.mkdirSync(dir, { recursive: true })
-    const base = cleanName(b.name || d.name || d.state_name || 'someone')
-    let name = base
-    for (let i2 = 2; fs.existsSync(path.join(dir, name)) || fs.existsSync(path.join(dir, name + '.png')); i2++)
-      name = `${base}-${i2}`
-    const fdir = path.join(dir, name)
-    fs.mkdirSync(fdir, { recursive: true })
-
-    const dirs = {}
-    let w0 = 0
-    let h0 = 0
-    for (const k of keys) {
-      const urls = byDir[k]
-      const rel = []
-      for (let i2 = 0; i2 < urls.length; i2++) {
-        const buf = await pixellab.fetchPNG(urls[i2])
-        const sk = pngSizeBuf(buf)
-        if (!(sk.w > 0)) continue
-        // flat names so the export's folder handling needs no change
-        const fname = `${k}-${i2}.png`
-        fs.writeFileSync(path.join(fdir, fname), buf)
-        rel.push(`/work/${id}/library/${name}/${fname}`)
-        if (!w0) {
-          w0 = sk.w
-          h0 = sk.h
-        }
-      }
-      if (rel.length) dirs[k] = rel
-    }
-    if (Object.keys(dirs).length < 4) return send(res, 502, { error: 'the directions did not save' })
-    fs.writeFileSync(path.join(fdir, 'dirs.json'), JSON.stringify({ dirs, fps: 8 }, null, 2))
-    return send(res, 200, {
-      item: {
-        name,
-        kind: 'static',
-        dirs,
-        fps: 8,
-        src: dirs.south ? dirs.south[0] : Object.values(dirs)[0][0],
-        w: w0,
-        h: h0,
-      },
-    })
+    return send(res, 200, { item })
   }
 
-  // End a planner that is still thinking, by the job id the client sent with
-  // it. Free, and idempotent: stopping something already finished is fine.
+  /* ONE CHARACTER, DRAWN TO ORDER. The only route in this file that spends with
+   * no free read in front of it, so the ui's armed press is the gate and the
+   * confirm field below is the fence behind it.
+   *
+   * The price is one generation for the character in standard mode plus one per
+   * direction for the walk cycle, so the default ask, eight directions with a
+   * walk, is nine. Pro is 20-40 on its own and is never the default.
+   *
+   * What lands is what /api/character-import lands, through the same writer:
+   * work/<id>/library/<name>/<heading>-<frame>.png beside a dirs.json carrying
+   * dirs and fps. Nothing downstream has to know which route made it.
+   *
+   * The whole set is trimmed to one shared box on the way in, because pixellab
+   * draws into a canvas about 40% bigger than the character to leave animation
+   * headroom, and that empty margin is why an imported figure stands in the air.
+   */
+  if (p === '/api/character-gen' && req.method === 'POST') {
+    const b = await body(req)
+    const id = safeId(b.id)
+    const description = String(b.description || '').replace(/\s+/g, ' ').trim().slice(0, PROMPT_MAX)
+    if (!description) return send(res, 400, { error: 'no description' })
+    // nothing above this line costs anything, and nothing below it runs without
+    // the word: a stray post, a reload, a retry loop must not spend
+    if (b.confirm !== true) return send(res, 400, { error: 'this spends generations: send confirm true' })
+
+    const mode = CHAR_MODES.includes(String(b.mode)) ? String(b.mode) : 'standard'
+    // pro and v3 come back eight ways whatever is asked for, and the walk is
+    // priced per direction, so the count has to be the real one
+    const nDirections = mode === 'standard' && Number(b.nDirections) === 4 ? 4 : 8
+    const view = CHAR_VIEWS.includes(String(b.view)) ? String(b.view) : OBJECT_VIEW
+    const bodyType = String(b.bodyType) === 'quadruped' ? 'quadruped' : 'humanoid'
+    // an animal has no skeleton of its own on this endpoint: pixellab wants one
+    // of its five body templates to hang the walk on, and refuses without it
+    const template = QUADRUPEDS.includes(String(b.template)) ? String(b.template) : ''
+    if (bodyType === 'quadruped' && !template)
+      return send(res, 400, { error: 'an animal needs a body: ' + QUADRUPEDS.join(', ') })
+    // v3 draws up to 256, standard and pro stop at 128
+    const size = Math.max(16, Math.min(mode === 'v3' ? 256 : 128, Math.round(Number(b.size) || 48)))
+    const walk = String(b.walk || '')
+      .toLowerCase()
+      .replace(/[^a-z0-9-]/g, '')
+      .slice(0, 40)
+    // pixellab's own look controls, passed through only when the ui sent one
+    const look = {}
+    for (const k of ['outline', 'detail', 'proportions']) if (b[k]) look[k] = String(b[k]).slice(0, 40)
+    if (mode === 'pro' && b.styleCharacterId) look.styleCharacterId = String(b.styleCharacterId).slice(0, 64)
+
+    const job = String(b.job || '').slice(0, 64)
+    const gate = job ? { off: false } : null
+    if (gate) WAITING.set(job, gate)
+    // a stop lands between two awaits as often as during one, so it is read at
+    // every point where the next step would cost money
+    const halt = () => {
+      if (gate && gate.off) throw new Error('stopped')
+    }
+    let folder = ''
+    try {
+      const cid = await pixellab.createCharacter({
+        description,
+        size,
+        view,
+        nDirections,
+        bodyType,
+        template: bodyType === 'quadruped' ? template : '',
+        mode,
+        ...look,
+      })
+      if (!cid) throw new Error('no character came back')
+      let d = await raceStop(gate, pixellab.awaitCharacter(cid, { timeoutMs: CHAR_WAIT }))
+      // the walk is eight more generations. The minutes the character took are
+      // the one window in which they can still be saved, so this is where a
+      // change of mind is worth the most.
+      halt()
+      let note = ''
+      if (walk) {
+        /* The body is paid for by the time the walk is asked for, so nothing
+         * about the walk is allowed to take it down with it. The case that
+         * bites is an animal: quadruped templates are named per body, so a
+         * humanoid template id can come straight back 422 and a run that let
+         * that through would bin a character that was already bought. It lands
+         * standing instead and the reason travels with it.
+         *
+         * The still rotations are kept rather than whatever the walk half
+         * landed, so every heading has the same number of frames. */
+        try {
+          // no directions asked for: the endpoint's default is every direction
+          // the character has, which is exactly what the button priced
+          const h = await pixellab.animateCharacter({ characterId: cid, templateAnimationId: walk })
+          d = await raceStop(gate, pixellab.awaitAnimation(cid, h, { timeoutMs: WALK_WAIT }))
+        } catch (e) {
+          const m = String((e && e.message) || e)
+          note = m === 'stopped' ? 'stopped mid walk, so it stands still' : 'no walk cycle · ' + m.slice(0, 140)
+        }
+      }
+      // Two readings, both deliberate. Every animation on it is the walk, because
+      // this route just paid for the only one it has and the template's name is
+      // not always a word with walk in it. Unnamed, the library row is the first
+      // few words of the ask, the way a generated object is named.
+      const plan = saveFrames(id, characterDirs(d, '*'), b.name ? cleanName(b.name) : slugName(description), 8)
+      if (!plan) throw new Error('it came back with fewer than four directions')
+      folder = plan.dir
+      const item = await writeRotations(id, plan)
+      if (!item) throw new Error('the directions did not save')
+      const box = trimSet(plan.dir, item.dirs)
+      if (box) {
+        item.w = box.w
+        item.h = box.h
+      }
+      noteAsk(id, item.name, description, description, 'character')
+      return send(res, 200, { item, note })
+    } catch (e) {
+      // a folder with three headings in it lists in the library looking like a
+      // character and is not one, so a run that died halfway leaves nothing
+      if (folder) {
+        try {
+          fs.rmSync(folder, { recursive: true, force: true })
+        } catch {
+          /* it was never written, or something else holds it; either way the error below is the news */
+        }
+      }
+      const m = String((e && e.message) || e)
+      return send(res, m === 'stopped' ? 499 : 502, { error: m.slice(0, 300) })
+    } finally {
+      if (gate) WAITING.delete(job)
+    }
+  }
+
+  // End a planner that is still thinking, or a wait on pixellab, by the job id
+  // the client sent with it. Free, and idempotent: stopping something already
+  // finished is fine.
   if (p === '/api/stop' && req.method === 'POST') {
     const b = await body(req)
     return send(res, 200, { stopped: stopJob(String(b.job || '')) })
@@ -1469,32 +1550,157 @@ function saveRotations(id, detail, wantName) {
   return { name, dir: path.join(dir, name), urls: got.map((k) => [k, rot[k]]) }
 }
 
+/* The same plan for a set that has FRAMES INSIDE each heading, which is what a
+ * walk cycle is. byDir is heading -> urls in play order.
+ *
+ * The folder is made here rather than in the writer, so the name is reserved the
+ * moment it is picked: two of these running at once could otherwise both look,
+ * both see nothing, and both choose it. */
+function saveFrames(id, byDir, wantName, fps) {
+  const keys = Object.keys(byDir || {}).filter((k) => k && Array.isArray(byDir[k]) && byDir[k].length)
+  if (keys.length < 4) return null
+  const dir = libDirOf(id)
+  fs.mkdirSync(dir, { recursive: true })
+  const base = cleanName(wantName || 'someone')
+  let name = base
+  for (let i = 2; fs.existsSync(path.join(dir, name)) || fs.existsSync(path.join(dir, name + '.png')); i++)
+    name = `${base}-${i}`
+  const plan = { name, dir: path.join(dir, name), urls: keys.map((k) => [k, byDir[k]]), frames: true, fps }
+  fs.mkdirSync(plan.dir, { recursive: true })
+  return plan
+}
+
 async function writeRotations(id, plan) {
   fs.mkdirSync(plan.dir, { recursive: true })
   const dirs = {}
   let w0 = 0
   let h0 = 0
-  for (const [k, url] of plan.urls) {
-    const buf = await pixellab.fetchPNG(url)
-    const sk = pngSizeBuf(buf)
-    if (!(sk.w > 0)) continue
-    fs.writeFileSync(path.join(plan.dir, k + '.png'), buf)
-    dirs[k] = [`/work/${id}/library/${plan.name}/${k}.png`]
-    if (!w0) {
-      w0 = sk.w
-      h0 = sk.h
+  for (const [k, u] of plan.urls) {
+    const urls = Array.isArray(u) ? u : [u]
+    const rel = []
+    for (let i = 0; i < urls.length; i++) {
+      const buf = await pixellab.fetchPNG(urls[i])
+      const sk = pngSizeBuf(buf)
+      if (!(sk.w > 0)) continue
+      // a still set keeps <heading>.png, the name the object import has always
+      // written. A walking one carries the frame index, which is the flat name
+      // the export's folder handling and the game already read.
+      const fname = plan.frames ? `${k}-${i}.png` : `${k}.png`
+      fs.writeFileSync(path.join(plan.dir, fname), buf)
+      rel.push(`/work/${id}/library/${plan.name}/${fname}`)
+      if (!w0) {
+        w0 = sk.w
+        h0 = sk.h
+      }
     }
+    if (rel.length) dirs[k] = rel
   }
   if (Object.keys(dirs).length < 4) return null
-  fs.writeFileSync(path.join(plan.dir, 'dirs.json'), JSON.stringify({ dirs }, null, 2))
+  // a still object has no rate to keep, and writing one would say it plays
+  const meta = plan.fps > 0 ? { dirs, fps: plan.fps } : { dirs }
+  fs.writeFileSync(path.join(plan.dir, 'dirs.json'), JSON.stringify(meta, null, 2))
   return {
     name: plan.name,
     kind: 'static',
     dirs,
+    ...(plan.fps > 0 ? { fps: plan.fps } : {}),
     src: dirs.south ? dirs.south[0] : Object.values(dirs)[0][0],
     w: w0,
     h: h0,
   }
+}
+
+/* Every heading a character can face, walking if it can walk.
+ *
+ * The walk is gathered across however many animation groups it is split over: a
+ * character animated in two passes has its eight headings in two entries. want
+ * is an animation_type to insist on, '' for any group with walk in its name, or
+ * '*' for whatever it has, which is the right reading straight after a
+ * generation, where the only animation on it is the one just paid for and its
+ * name is the template's.
+ *
+ * Any heading the walk does not cover falls back to the still rotation, so a
+ * character with no animation still faces where it is going without its legs
+ * moving. */
+function characterDirs(detail, want) {
+  const d = detail && typeof detail === 'object' ? detail : {}
+  const w = String(want || '').toLowerCase()
+  const byDir = {}
+  for (const an of Array.isArray(d.animations) ? d.animations : []) {
+    const kind = String(an.animation_type || an.display_name || '').toLowerCase()
+    if (w !== '*' && (w ? kind !== w : !/walk/.test(kind))) continue
+    for (const dd of Array.isArray(an.directions) ? an.directions : []) {
+      const k = String(dd.direction || '')
+      const frames = Array.isArray(dd.frames) ? dd.frames.filter(Boolean) : []
+      if (k && frames.length && !byDir[k]) byDir[k] = frames
+    }
+  }
+  const rot = d.rotation_urls && typeof d.rotation_urls === 'object' ? d.rotation_urls : {}
+  for (const [k, u] of Object.entries(rot)) if (u && !byDir[k]) byDir[k] = [u]
+  return byDir
+}
+
+// the alpha a pixel needs to count as drawn. The same floor the client's own
+// trim uses, src/core/debase.ts:29, so the two agree about where a sprite ends
+const ALPHA_MIN = 20
+
+/* THE PADDING COMES OFF, once, against ONE box.
+ *
+ * pixellab draws a character into a canvas about 40% bigger than the character
+ * to leave animation headroom (a 48px character lands on a ~68px canvas), and
+ * that empty margin is why an imported figure floats above the ground in the
+ * game. So the set is cropped to the tightest box that holds every frame of
+ * every heading. ONE box for all of them: a box per frame would move the feet a
+ * pixel or two each frame and the walk would bob.
+ *
+ * The client's trim cannot be reached from here. It runs on a canvas and
+ * /api/asset-crop only writes back the pixels it is handed. The png pair in
+ * sheet.mjs is this project's decoder and encoder and this is what it is for.
+ *
+ * Answers the new size, or null when there was nothing to take off, in which
+ * case the files on disk are exactly as they arrived. */
+function trimSet(dir, dirs) {
+  const files = []
+  for (const list of Object.values(dirs || {}))
+    for (const u of list) files.push(path.join(dir, String(u).split('/').pop()))
+  if (!files.length) return null
+  const imgs = []
+  let x0 = Infinity
+  let y0 = Infinity
+  let x1 = -1
+  let y1 = -1
+  for (const f of files) {
+    let im
+    try {
+      im = decodePNG(fs.readFileSync(f))
+    } catch {
+      return null // an unreadable frame means no shared box, so leave the set alone
+    }
+    imgs.push([f, im])
+    for (let y = 0; y < im.h; y++)
+      for (let x = 0; x < im.w; x++)
+        if (im.data[(y * im.w + x) * 4 + 3] > ALPHA_MIN) {
+          if (x < x0) x0 = x
+          if (x > x1) x1 = x
+          if (y < y0) y0 = y
+          if (y > y1) y1 = y
+        }
+  }
+  if (x1 < x0 || y1 < y0) return null
+  const first = imgs[0][1]
+  // frames of different sizes share no box, and a set already tight has nothing
+  // to take; either way it is left as it is
+  if (imgs.some(([, im]) => im.w !== first.w || im.h !== first.h)) return null
+  const w = x1 - x0 + 1
+  const h = y1 - y0 + 1
+  if (w >= first.w && h >= first.h) return null
+  for (const [f, im] of imgs) {
+    const out = new Uint8ClampedArray(w * h * 4)
+    for (let y = 0; y < h; y++)
+      out.set(im.data.subarray(((y + y0) * im.w + x0) * 4, ((y + y0) * im.w + x0 + w) * 4), y * w * 4)
+    fs.writeFileSync(f, encodePNG(w, h, out))
+  }
+  return { w, h }
 }
 
 function noteAsk(id, name, ask, prompt, kind = 'asset') {
@@ -1587,6 +1793,20 @@ const ASK_MAX = 1200
 // top-down" looks down on a lid. One constant, so the projection can never
 // disagree with the words in the prompt.
 const OBJECT_VIEW = 'low top-down'
+
+/* What /v2/characters will actually take, read off its own schema.
+ *
+ * standard is one generation and the only mode that honours a direction count.
+ * pro is 20 to 40 for the character alone, so it is offered and never assumed.
+ * v3 is 2 to 9 and the only one that takes a reference image. A quadruped has no
+ * skeleton of its own here and must name one of five bodies. */
+const CHAR_MODES = ['standard', 'pro', 'v3']
+const CHAR_VIEWS = ['low top-down', 'high top-down', 'side', 'oblique']
+const QUADRUPEDS = ['bear', 'cat', 'dog', 'horse', 'lion']
+// standard draws in two to five minutes and a walk is eight directions behind
+// it, so these are long on purpose. The stop button is the way out, not a clock.
+const CHAR_WAIT = 600000
+const WALK_WAIT = 900000
 
 /* THE HOUSE PROMPT.
  *
@@ -2608,7 +2828,40 @@ const PLANNER_MODEL = 'opus' // resolves to claude-opus-5, checked 2026-08-19
  * no longer want. Killed jobs reject like a timeout does. */
 const LIVE = new Map()
 
+/* Jobs that are WAITING ON PIXELLAB rather than on a planner, by the same job
+ * id. There is no process to kill here: a generation already asked for is
+ * already paid for and finishes on their side whatever we do. What a stop does
+ * is end our wait, and, when it lands between the character and its walk, keep
+ * the eight animation generations from ever being asked for. That is the whole
+ * reason this route carries a job id. */
+const WAITING = new Map()
+
+// a wait a stop can end. The second promise never resolves on its own, so the
+// only way out other than the work finishing is stopJob rejecting it.
+function raceStop(gate, work) {
+  if (!gate) return work
+  // stopped while the call that started this was still in flight: nobody is
+  // waiting on it any more, so swallow whatever it comes back with
+  if (gate.off) {
+    work.catch(() => {})
+    return Promise.reject(new Error('stopped'))
+  }
+  return Promise.race([
+    work,
+    new Promise((_, rej) => {
+      gate.reject = rej
+    }),
+  ])
+}
+
 export function stopJob(job) {
+  const gate = WAITING.get(job)
+  if (gate) {
+    gate.off = true
+    if (gate.reject) gate.reject(new Error('stopped'))
+    WAITING.delete(job)
+    return true
+  }
   const ps = LIVE.get(job)
   if (!ps) return false
   try {

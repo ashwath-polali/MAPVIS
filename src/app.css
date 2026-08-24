@@ -785,7 +785,10 @@ main {
   width: 100%;
 }
 .makewhat .seg-opt {
-  flex: 1 1 0;
+  /* sized to their own words rather than an equal quarter each. At four options
+     an equal share leaves about 41px of text room and "a person" needs 46, so
+     the labels bled into their neighbours. */
+  flex: 1 1 auto;
   min-width: 0;
   white-space: nowrap;
 }
