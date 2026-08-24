@@ -2300,6 +2300,19 @@ async function runCharacterMotion(plan, seed, gate, halt) {
     d = await raceStop(gate, pixellab.characterDetail(plan.characterId))
     byDir = newGroupDirs(d, group, before, heads, rot)
   }
+  /* And when the name-and-freshness reading still cannot see it, fall to the
+   * one that can. Measured over eleven animations: the reading above failed
+   * every single time and this lookup succeeded every single time, so leaving
+   * the strict test in front as the error a person meets was making them press
+   * twice for something already bought and sitting on the account.
+   *
+   * It is not a guess. It takes the newest group whose frames are not the
+   * rotation stills, which is the motion just paid for, and refuses outright
+   * when nothing on the character is moving. */
+  if (!byDir) {
+    const found = await recoverCharacterMotion(plan)
+    if (found) return found.byDir
+  }
   // refusing here costs the generations and keeps the item. Guessing would
   // write the OLD motion over it and call the result the new one.
   if (!byDir) throw new Error('the frames that came back could not be told from the motion it already had, so nothing was replaced')

@@ -12,5 +12,68 @@
     "name": "crab-beach-wander",
     "kind": "effect",
     "when": "2026-08-24"
+  },
+  {
+    "ask": "lighthouse glowing / main light effect",
+    "prompt": "a written renderer",
+    "name": "lighthouse-lamp-sweep",
+    "kind": "effect",
+    "when": "2026-08-24"
+  },
+  {
+    "ask": "lighthouse glowing / main light effect",
+    "prompt": "a written renderer",
+    "name": "lighthouse-lamp-sweep-2",
+    "kind": "effect",
+    "when": "2026-08-24"
+  },
+  {
+    "ask": "lighthouse glowing / main light effect",
+    "prompt": "a written renderer",
+    "name": "lighthouse-lamp-sweep-3",
+    "kind": "effect",
+    "when": "2026-08-24"
+  },
+  {
+    "ask": "wave coming and splashing on to the groud, then retracting and repeating",
+    "prompt": "a written renderer",
+    "name": "wave-wash-back",
+    "kind": "effect",
+    "when": "2026-08-24"
+  },
+  {
+    "ask": "slow splashing wave effect",
+    "prompt": "a written renderer",
+    "name": "slow-wash-splash",
+    "kind": "effect",
+    "when": "2026-08-24"
+  },
+  {
+    "ask": "chimney smoke, evaporation at the top",
+    "prompt": "a written renderer",
+    "name": "chimney-smoke-thin",
+    "kind": "effect",
+    "when": "2026-08-24"
+  },
+  {
+    "ask": "chimney smoke, evaporation at the top",
+    "prompt": "a written renderer",
+    "name": "chimney-smoke-thin-2",
+    "kind": "effect",
+    "when": "2026-08-24"
+  },
+  {
+    "ask": "chimney smoke, evaporation at the top",
+    "prompt": "a written renderer",
+    "name": "chimney-smoke-thin-3",
+    "kind": "effect",
+    "when": "2026-08-24"
+  },
+  {
+    "ask": "chimney smoke, evaporation at the top",
+    "prompt": "a written renderer",
+    "name": "chimney-smoke-thin-4",
+    "kind": "effect",
+    "when": "2026-08-24"
   }
 ]

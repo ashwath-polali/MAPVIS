@@ -1,0 +1,30 @@
+{
+  "dirs": {
+    "south": [
+      "/work/hub/library/gull/south-0.png"
+    ],
+    "west": [
+      "/work/hub/library/gull/west-0.png"
+    ],
+    "east": [
+      "/work/hub/library/gull/east-0.png"
+    ],
+    "north": [
+      "/work/hub/library/gull/north-0.png"
+    ],
+    "south-east": [
+      "/work/hub/library/gull/south-east-0.png"
+    ],
+    "north-east": [
+      "/work/hub/library/gull/north-east-0.png"
+    ],
+    "north-west": [
+      "/work/hub/library/gull/north-west-0.png"
+    ],
+    "south-west": [
+      "/work/hub/library/gull/south-west-0.png"
+    ]
+  },
+  "fps": 8,
+  "characterId": "1afe1144-4e63-4d62-a1ff-de4a5b0228f5"
+}

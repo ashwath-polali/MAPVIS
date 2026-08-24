@@ -1,5 +1,159 @@
 [
   {
+    "name": "boat-rowing-ctx",
+    "kind": "asset",
+    "ask": "a small open wooden rowboat with a curved hull, pale worn planks, two oars shipped inside, a coil of rope at the bow, floating empty",
+    "prompt": "a small open wooden rowboat with a curved hull, pale worn planks, two oars shipped inside, a coil of rope at the bow, floating empty",
+    "at": "2026-08-24T22:48:35.824Z"
+  },
+  {
+    "name": "gull",
+    "kind": "character",
+    "ask": "a white seagull with pale grey wings and a yellow beak, wings spread in level flight, seen from above and slightly behind, clean pixel art, low top-down three quarter view, strong dark outline, few colours, saturated palette, golden-hour light from the left, one piece on a transparent background, no water and no ground beneath it",
+    "prompt": "a white seagull with pale grey wings and a yellow beak, wings spread in level flight, seen from above and slightly behind, clean pixel art, low top-down three quarter view, strong dark outline, few colours, saturated palette, golden-hour light from the left, one piece on a transparent background, no water and no ground beneath it",
+    "at": "2026-08-24T22:46:39.180Z"
+  },
+  {
+    "name": "boat-outrigger",
+    "kind": "motion",
+    "ask": "rocks gently on the water where it is moored",
+    "prompt": "rocks gently side to side, tipping slowly one way then the other and settling",
+    "at": "2026-08-24T22:43:04.271Z"
+  },
+  {
+    "name": "boat-outrigger",
+    "kind": "asset",
+    "ask": "a slim island outrigger canoe, dark hull with pale lashings, a single carved paddle across it, clean pixel art, low top-down three quarter view, strong dark outline, few colours, saturated palette, golden-hour light from the left, one piece on a transparent background, no water and no ground beneath it",
+    "prompt": "a slim island outrigger canoe, dark hull with pale lashings, a single carved paddle across it, clean pixel art, low top-down three quarter view, strong dark outline, few colours, saturated palette, golden-hour light from the left, one piece on a transparent background, no water and no ground beneath it",
+    "at": "2026-08-24T22:41:29.201Z"
+  },
+  {
+    "name": "boat-cargo",
+    "kind": "motion",
+    "ask": "rocks gently on the water where it is moored",
+    "prompt": "rocks gently, tilting side to side and settling, hull bobbing slightly",
+    "at": "2026-08-24T22:40:59.292Z"
+  },
+  {
+    "name": "boat-cargo",
+    "kind": "asset",
+    "ask": "a flat wooden cargo launch low in the water, three stacked crates and a barrel lashed under a canvas, clean pixel art, low top-down three quarter view, strong dark outline, few colours, saturated palette, golden-hour light from the left, one piece on a transparent background, no water and no ground beneath it",
+    "prompt": "a flat wooden cargo launch low in the water, three stacked crates and a barrel lashed under a canvas, clean pixel art, low top-down three quarter view, strong dark outline, few colours, saturated palette, golden-hour light from the left, one piece on a transparent background, no water and no ground beneath it",
+    "at": "2026-08-24T22:39:18.320Z"
+  },
+  {
+    "name": "boat-fishing",
+    "kind": "motion",
+    "ask": "rocks gently on the water where it is moored",
+    "prompt": "rocks gently, tipping side to side and settling, hull bobbing slowly",
+    "at": "2026-08-24T22:38:54.184Z"
+  },
+  {
+    "name": "boat-fishing",
+    "kind": "asset",
+    "ask": "a little fishing skiff with a short mast and a furled ochre sail, nets heaped in the stern, floats along the gunwale, clean pixel art, low top-down three quarter view, strong dark outline, few colours, saturated palette, golden-hour light from the left, one piece on a transparent background, no water and no ground beneath it",
+    "prompt": "a little fishing skiff with a short mast and a furled ochre sail, nets heaped in the stern, floats along the gunwale, clean pixel art, low top-down three quarter view, strong dark outline, few colours, saturated palette, golden-hour light from the left, one piece on a transparent background, no water and no ground beneath it",
+    "at": "2026-08-24T22:37:21.530Z"
+  },
+  {
+    "name": "boat-rowing",
+    "kind": "motion",
+    "ask": "rocks gently on the water where it is moored",
+    "prompt": "rocks gently side to side, tilting and settling back level, hull dipping slightly",
+    "at": "2026-08-24T22:36:51.934Z"
+  },
+  {
+    "name": "chimney-smoke-thin-4",
+    "kind": "effect",
+    "ask": "chimney smoke, evaporation at the top",
+    "prompt": "written",
+    "at": "2026-08-24T22:35:18.852Z"
+  },
+  {
+    "name": "boat-rowing",
+    "kind": "asset",
+    "ask": "a small open wooden rowboat, pale worn planks, two oars shipped inside, a coil of rope at the bow, empty, clean pixel art, low top-down three quarter view, strong dark outline, few colours, saturated palette, golden-hour light from the left, one piece on a transparent background, no water and no ground beneath it",
+    "prompt": "a small open wooden rowboat, pale worn planks, two oars shipped inside, a coil of rope at the bow, empty, clean pixel art, low top-down three quarter view, strong dark outline, few colours, saturated palette, golden-hour light from the left, one piece on a transparent background, no water and no ground beneath it",
+    "at": "2026-08-24T22:34:52.265Z"
+  },
+  {
+    "name": "ship-paw-2",
+    "kind": "motion",
+    "ask": "rocks slowly at its mooring, the sail breathing and the mast swaying a little in the wind",
+    "prompt": "rocks slowly in place, sail swelling and easing, mast tilting gently side to side",
+    "at": "2026-08-24T22:34:28.252Z"
+  },
+  {
+    "name": "chimney-smoke-thin-3",
+    "kind": "effect",
+    "ask": "chimney smoke, evaporation at the top",
+    "prompt": "written",
+    "at": "2026-08-24T22:34:07.176Z"
+  },
+  {
+    "name": "chimney-smoke-thin-2",
+    "kind": "effect",
+    "ask": "chimney smoke, evaporation at the top",
+    "prompt": "written",
+    "at": "2026-08-24T22:33:45.933Z"
+  },
+  {
+    "name": "chimney-smoke-thin",
+    "kind": "effect",
+    "ask": "chimney smoke, evaporation at the top",
+    "prompt": "written",
+    "at": "2026-08-24T22:33:28.370Z"
+  },
+  {
+    "name": "ship-paw-2",
+    "kind": "asset",
+    "ask": "a proud single-masted sailing ship with a deep curved wooden hull, dark timber planking and a pale strake along the top, a tall upright mast at the centre, one BROAD SQUARE SAIL spread full and catching the light, the sail is cream and carries ONE LARGE DARK PANTHER PAW PRINT centred on it as its emblem, rope rigging fore and aft, a small raised stern deck, empty of crew, clean pixel art, low top-down three quarter view, strong dark outline, few colours, saturated palette, golden-hour light from",
+    "prompt": "a proud single-masted sailing ship with a deep curved wooden hull, dark timber planking and a pale strake along the top, a tall upright mast at the centre, one BROAD SQUARE SAIL spread full and catching the light, the sail is cream and carries ONE LARGE DARK PANTHER PAW PRINT centred on it as its emblem, rope rigging fore and aft, a small raised stern deck, empty of crew, clean pixel art, low top-down three quarter view, strong dark outline, few colours, saturated palette, golden-hour light from the left, one piece on a transparent background, no water and no ground beneath it",
+    "at": "2026-08-24T22:31:46.012Z"
+  },
+  {
+    "name": "ship-paw",
+    "kind": "asset",
+    "ask": "a large wooden sailing ship moored side-on, dark timber hull with a pale strake along the gunwale, tall central mast, cream sail furled to the yard, rope rigging, and a deep teal banner at the masthead bearing a pale panther paw print, empty deck, clean pixel art, low top-down three quarter view, strong dark outline, few colours, saturated warm palette, golden-hour light from the left, one piece on transparent background, no ground beneath it",
+    "prompt": "a large wooden sailing ship moored side-on, dark timber hull with a pale strake along the gunwale, tall central mast, cream sail furled to the yard, rope rigging, and a deep teal banner at the masthead bearing a pale panther paw print, empty deck, clean pixel art, low top-down three quarter view, strong dark outline, few colours, saturated warm palette, golden-hour light from the left, one piece on transparent background, no ground beneath it",
+    "at": "2026-08-24T22:29:57.599Z"
+  },
+  {
+    "name": "slow-wash-splash",
+    "kind": "effect",
+    "ask": "slow splashing wave effect",
+    "prompt": "written",
+    "at": "2026-08-24T22:29:52.855Z"
+  },
+  {
+    "name": "wave-wash-back",
+    "kind": "effect",
+    "ask": "wave coming and splashing on to the groud, then retracting and repeating",
+    "prompt": "written",
+    "at": "2026-08-24T22:27:29.034Z"
+  },
+  {
+    "name": "lighthouse-lamp-sweep-3",
+    "kind": "effect",
+    "ask": "lighthouse glowing / main light effect",
+    "prompt": "written",
+    "at": "2026-08-24T22:24:28.494Z"
+  },
+  {
+    "name": "lighthouse-lamp-sweep-2",
+    "kind": "effect",
+    "ask": "lighthouse glowing / main light effect",
+    "prompt": "written",
+    "at": "2026-08-24T22:23:45.473Z"
+  },
+  {
+    "name": "lighthouse-lamp-sweep",
+    "kind": "effect",
+    "ask": "lighthouse glowing / main light effect",
+    "prompt": "written",
+    "at": "2026-08-24T22:23:28.032Z"
+  },
+  {
     "name": "fishmonger",
     "kind": "motion",
     "ask": "breathes slowly and shifts the fish from hand to hand",
@@ -124,159 +278,5 @@
     "ask": "a woman kneeling forward mending a fishing net, a bright scarlet headscarf, ochre tunic, weathered hands working the mesh, olive skin, chunky readable pixel art, few colours, strong dark outline, saturated warm palette, golden-hour light from the left",
     "prompt": "a woman kneeling forward mending a fishing net, a bright scarlet headscarf, ochre tunic, weathered hands working the mesh, olive skin, chunky readable pixel art, few colours, strong dark outline, saturated warm palette, golden-hour light from the left",
     "at": "2026-08-24T18:58:53.469Z"
-  },
-  {
-    "name": "old-fisherman",
-    "kind": "character",
-    "ask": "a lean old fisherman in a faded sea blue tunic and rolled trousers, wide straw hat, grey beard, a long bamboo rod held out over the water, bare feet, chunky readable pixel art, few colours, strong dark outline, saturated warm palette, golden-hour light from the left",
-    "prompt": "a lean old fisherman in a faded sea blue tunic and rolled trousers, wide straw hat, grey beard, a long bamboo rod held out over the water, bare feet, chunky readable pixel art, few colours, strong dark outline, saturated warm palette, golden-hour light from the left",
-    "at": "2026-08-24T18:57:52.447Z"
-  },
-  {
-    "name": "fruit-seller",
-    "kind": "character",
-    "ask": "a young fruit seller in a vivid marigold blouse and deep indigo skirt, a woven basket of red and green fruit on one hip, headscarf, deep brown skin, chunky readable pixel art, few colours, strong dark outline, saturated warm palette, golden-hour light from the left",
-    "prompt": "a young fruit seller in a vivid marigold blouse and deep indigo skirt, a woven basket of red and green fruit on one hip, headscarf, deep brown skin, chunky readable pixel art, few colours, strong dark outline, saturated warm palette, golden-hour light from the left",
-    "at": "2026-08-24T18:56:22.076Z"
-  },
-  {
-    "name": "fishmonger",
-    "kind": "character",
-    "ask": "a broad fishmonger in a bright coral apron over a cream shirt, sleeves shoved up, a silver fish held in one hand, dark curly hair, warm brown skin, chunky readable pixel art, few colours, strong dark outline, saturated warm palette, golden-hour light from the left",
-    "prompt": "a broad fishmonger in a bright coral apron over a cream shirt, sleeves shoved up, a silver fish held in one hand, dark curly hair, warm brown skin, chunky readable pixel art, few colours, strong dark outline, saturated warm palette, golden-hour light from the left",
-    "at": "2026-08-24T18:54:35.755Z"
-  },
-  {
-    "name": "knight-watch",
-    "kind": "character",
-    "ask": "a knight in full plate armour, blackened steel with warm rim light, a crimson tabard bearing a pale panther crest, one gauntlet on the hilt of a longsword sheathed at the hip, visor raised, weathered face, chunky readable pixel art, few colours, strong dark outline, saturated warm palette, golden-hour light from the left",
-    "prompt": "a knight in full plate armour, blackened steel with warm rim light, a crimson tabard bearing a pale panther crest, one gauntlet on the hilt of a longsword sheathed at the hip, visor raised, weathered face, chunky readable pixel art, few colours, strong dark outline, saturated warm palette, golden-hour light from the left",
-    "at": "2026-08-24T18:53:41.837Z"
-  },
-  {
-    "name": "knight-gate",
-    "kind": "character",
-    "ask": "a knight in full plate armour, polished steel with warm highlights, a deep teal tabard bearing a pale panther crest, both gauntlets resting on the pommel of a longsword planted point-down in front of him, visor raised showing a weathered face, chunky readable pixel art, few colours, strong dark outline, saturated warm palette, golden-hour light from the left",
-    "prompt": "a knight in full plate armour, polished steel with warm highlights, a deep teal tabard bearing a pale panther crest, both gauntlets resting on the pommel of a longsword planted point-down in front of him, visor raised showing a weathered face, chunky readable pixel art, few colours, strong dark outline, saturated warm palette, golden-hour light from the left",
-    "at": "2026-08-24T18:51:06.385Z"
-  },
-  {
-    "name": "child-barefoot",
-    "kind": "character",
-    "ask": "a barefoot child in a short tan tunic, tousled dark hair, arms swinging, warm golden-hour light from the left, terracotta and sand palette, clean pixel art, limited palette",
-    "prompt": "a barefoot child in a short tan tunic, tousled dark hair, arms swinging, warm golden-hour light from the left, terracotta and sand palette, clean pixel art, limited palette",
-    "at": "2026-08-24T03:32:44.002Z"
-  },
-  {
-    "name": "townswoman-basket",
-    "kind": "character",
-    "ask": "a townswoman in a warm ochre skirt and cream blouse carrying a woven basket, hair in a headscarf, warm golden-hour light from the left, terracotta and sand palette, clean pixel art, limited palette",
-    "prompt": "a townswoman in a warm ochre skirt and cream blouse carrying a woven basket, hair in a headscarf, warm golden-hour light from the left, terracotta and sand palette, clean pixel art, limited palette",
-    "at": "2026-08-24T03:29:29.456Z"
-  },
-  {
-    "name": "dockworker-crate",
-    "kind": "character",
-    "ask": "a dockworker carrying a wooden crate on one shoulder, sleeveless tunic, canvas trousers, sun-browned skin, warm golden-hour light from the left, terracotta and sand palette, clean pixel art, limited palette",
-    "prompt": "a dockworker carrying a wooden crate on one shoulder, sleeveless tunic, canvas trousers, sun-browned skin, warm golden-hour light from the left, terracotta and sand palette, clean pixel art, limited palette",
-    "at": "2026-08-24T03:25:57.335Z"
-  },
-  {
-    "name": "gate-guard",
-    "kind": "character",
-    "ask": "a guard in light leather armour over a rust red tunic, a short spear held upright at his side, simple helm, warm golden-hour light from the left, terracotta and sand palette, clean pixel art, limited palette",
-    "prompt": "a guard in light leather armour over a rust red tunic, a short spear held upright at his side, simple helm, warm golden-hour light from the left, terracotta and sand palette, clean pixel art, limited palette",
-    "at": "2026-08-24T03:22:46.234Z"
-  },
-  {
-    "name": "woman-blue-wrap",
-    "kind": "character",
-    "ask": "a woman in a deep blue wrap dress with a woven shawl, dark hair tied back, standing with arms folded, warm golden-hour light from the left, terracotta and sand palette, clean pixel art, limited palette",
-    "prompt": "a woman in a deep blue wrap dress with a woven shawl, dark hair tied back, standing with arms folded, warm golden-hour light from the left, terracotta and sand palette, clean pixel art, limited palette",
-    "at": "2026-08-24T03:22:00.902Z"
-  },
-  {
-    "name": "fisherman-rod",
-    "kind": "character",
-    "ask": "an old fisherman in a faded blue tunic and wide brimmed hat, grey beard, holding a long fishing rod, bare feet, warm golden-hour light from the left, terracotta and sand palette, clean pixel art, limited palette",
-    "prompt": "an old fisherman in a faded blue tunic and wide brimmed hat, grey beard, holding a long fishing rod, bare feet, warm golden-hour light from the left, terracotta and sand palette, clean pixel art, limited palette",
-    "at": "2026-08-24T03:21:07.900Z"
-  },
-  {
-    "name": "dockhand-barrels",
-    "kind": "character",
-    "ask": "a dockhand in a sleeveless linen shirt and rolled canvas trousers, arms crossed, sunburnt forearms, weathered leather belt, warm golden-hour light from the left, terracotta and sand palette, clean pixel art, limited palette",
-    "prompt": "a dockhand in a sleeveless linen shirt and rolled canvas trousers, arms crossed, sunburnt forearms, weathered leather belt, warm golden-hour light from the left, terracotta and sand palette, clean pixel art, limited palette",
-    "at": "2026-08-24T03:19:46.205Z"
-  },
-  {
-    "name": "vendor-straw-hat-20",
-    "kind": "character",
-    "ask": "a fruit vendor in a wide straw hat and a faded teal apron over a cream shirt, sleeves rolled, sun-browned skin, standing calmly with hands resting in front, warm golden-hour light from the left, terracotta and sand palette",
-    "prompt": "a fruit vendor in a wide straw hat and a faded teal apron over a cream shirt, sleeves rolled, sun-browned skin, standing calmly with hands resting in front, warm golden-hour light from the left, terracotta and sand palette",
-    "at": "2026-08-24T03:17:45.193Z"
-  },
-  {
-    "name": "vendor-straw-hat",
-    "kind": "character",
-    "ask": "a fruit vendor in a wide straw hat and a faded teal apron over a cream shirt, sleeves rolled, sun-browned skin, standing calmly with hands resting in front, warm golden-hour light from the left, terracotta and sand palette",
-    "prompt": "a fruit vendor in a wide straw hat and a faded teal apron over a cream shirt, sleeves rolled, sun-browned skin, standing calmly with hands resting in front, warm golden-hour light from the left, terracotta and sand palette",
-    "at": "2026-08-24T03:14:37.504Z"
-  },
-  {
-    "name": "crab-beach-wander",
-    "kind": "effect",
-    "ask": "wandering around the map / beach",
-    "prompt": "written",
-    "at": "2026-08-23T02:38:36.928Z"
-  },
-  {
-    "name": "gen-walking-crab",
-    "kind": "asset",
-    "ask": "walking crab",
-    "prompt": "A hermit crab in three-quarter isometric view, warm brick-orange chitin shell with darker rust banding, chunky low-resolution pixels, hard black outline on every edge, flat cel shading in three tones, lit from the upper left so the left claw and upper carapace catch a pale cream highlight while the right side falls to deep umber shadow, muted earthy saturation, two thick raised pincers, four jointed walking legs, small black bead eyes on short stalks",
-    "at": "2026-08-22T22:30:48.650Z"
-  },
-  {
-    "name": "gen-bleached-driftwood-log",
-    "kind": "asset",
-    "ask": "bleached driftwood log",
-    "prompt": "A long bleached driftwood log lying flat, split hollow trunk of pale grey and warm tan wood, knotted stubs of snapped branches along its length, one end frayed into pale fibres. Isometric pixel art, chunky pixels, limited warm palette, dark warm-brown outline, sunlight from the upper left, shaded underside, dithered grain, muted saturation.",
-    "at": "2026-08-22T22:27:06.710Z"
-  },
-  {
-    "name": "gen-wrecked-wooden-rowboat",
-    "kind": "asset",
-    "ask": "wrecked wooden rowboat",
-    "prompt": "A small wooden rowboat listing on its side, hull of overlapping planks in faded red-brown and bleached tan with peeling paint, one cracked oar laid across the gunwale, coil of frayed rope at the bow, a plank missing amidships. Isometric pixel art, chunky pixels, limited warm palette, dark brown outline, lit from the upper left, shaded right, muted saturation.",
-    "at": "2026-08-22T22:26:48.646Z"
-  },
-  {
-    "name": "gen-tipped-over-barrel",
-    "kind": "asset",
-    "ask": "tipped-over barrel",
-    "prompt": "A single old barrel tipped onto its side, oak staves split and bleached pale grey-brown, three rusted iron hoops, the lid boards loose and half sprung. Isometric pixel art, chunky pixels, limited warm palette of tan and burnt orange, dark warm-brown outline, sunlight from the upper left, shaded lower-right side, dithered wood grain, muted saturation.",
-    "at": "2026-08-22T22:26:24.651Z"
-  },
-  {
-    "name": "gen-old-hand-cart",
-    "kind": "asset",
-    "ask": "old hand-cart",
-    "prompt": "An old wooden hand-cart, two plank sides, a single iron-rimmed spoked wheel, long worn handles tipped down, planks in warm brown with pale bleached highlights and dark rusted iron bands, one burlap sack slumped inside. Isometric pixel art, chunky pixels, limited warm palette, dark brown outline, lit from the upper left, shaded on the right, muted saturation.",
-    "at": "2026-08-22T22:26:00.626Z"
-  },
-  {
-    "name": "gen-weathered-boulder-cluster",
-    "kind": "asset",
-    "ask": "weathered boulder cluster",
-    "prompt": "A low cluster of three weathered sandstone boulders, cracked flat tops and banded strata of rusty orange and pale tan, one small broken chip leaning against the largest, a dry brown tuft wedged between them. Isometric pixel art, chunky blocky pixels, limited warm palette, dark warm-brown outline, sunlight from the upper left, shaded right faces, dithered midtones, muted saturation.",
-    "at": "2026-08-22T22:25:36.410Z"
-  },
-  {
-    "name": "gen-windswept-dead-tree",
-    "kind": "asset",
-    "ask": "windswept dead tree",
-    "prompt": "A small windswept dead tree, bare crooked trunk of grey-brown weathered wood leaning to the left, a few thin forked branches, one sparse tuft of dry olive leaves clinging near the top. Isometric pixel art, chunky pixels, limited warm palette of ochre and burnt umber, dark brown outline, lit from the upper left, shaded on its lower right, muted saturation.",
-    "at": "2026-08-22T22:25:12.143Z"
   }
 ]
