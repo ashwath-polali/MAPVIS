@@ -410,6 +410,10 @@ export const scenePlan = (
 // the crop as the background of pixellab's map-object endpoint, so the asset
 // comes back drawn in that spot's palette and light, transparent, and lands
 // in this map's library like any other static item. The client places it.
+//
+// note is the same disclosure characterGen carries: asked for moving, a stop
+// between the base and its frames files the base as a still object, and this is
+// where the reason travels so the ui does not have to guess why it stands.
 export const assetGenHere = (
   id: string,
   prompt: string,
@@ -427,7 +431,7 @@ export const assetGenHere = (
     // a stop landing between the base and its animation saves the second half
     job?: string
   },
-) => jpost<{ item: LibItem }>('/api/asset-gen-here', { id, prompt, ...o })
+) => jpost<{ item: LibItem; note?: string }>('/api/asset-gen-here', { id, prompt, ...o })
 
 // TWO pixellab generations behind the same confirm: a transparent base
 // sprite, then its 8-frame animation. The ui passes motion as '' and the
@@ -437,6 +441,12 @@ export const assetGenHere = (
 // frames land in work/<id>/library/<name>/0..n.png, the folder shape the
 // library lists as one animated item. thing/tmotion/tw/th carry the confirmed
 // translation through verbatim.
+//
+// note carries a motion that did not happen, the way characterGen's does. The
+// base is bought the moment it is asked for, so a stop landing between the two
+// halves files it as a still object rather than losing it; without the note
+// travelling with it the user gets a still where they asked for a moving one
+// and nothing on screen says why.
 export const assetAnim = (
   id: string,
   prompt: string,
@@ -451,7 +461,7 @@ export const assetAnim = (
     // two spends behind one request, so a stop between them is worth one
     job?: string
   },
-) => jpost<{ item: LibItem }>('/api/asset-anim', { id, prompt, motion, ...o })
+) => jpost<{ item: LibItem; note?: string }>('/api/asset-anim', { id, prompt, motion, ...o })
 
 // ---- the effect engine --------------------------------------------------
 

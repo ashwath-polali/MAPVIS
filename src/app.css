@@ -20,6 +20,20 @@
   --stage: #0a0b0d;
   --font-ui: 'Inter', 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
   --font-mono: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+
+  /* One left line for the whole side panel, declared here and read by every
+     rule that touches it. The panel keeps its own gutter and every block
+     inside steps in by the same amount, so the line lands at --pan-gut plus
+     --pan-in, 16px from the panel edge. There are only two ways to sit on it:
+     bare text starts its glyphs there, and a thing with a resting frame puts
+     its border there. Text used to arrive at 12, 16, 20 and 22 down one 272px
+     column and nothing read straight, so change these two, not a rule. */
+  --pan-gut: 12px;
+  --pan-in: 4px;
+  /* a fold at the foot of a panel is bare text until the pointer arrives. Its
+     words sit on the line and its hover shape is grown outward by this, rather
+     than the words being shoved in by padding you cannot see at rest. */
+  --pan-pill: 8px;
 }
 
 * {
@@ -207,10 +221,12 @@ main {
   min-height: 0;
 }
 
+/* the gutter half of the left line. The other half is --pan-in, carried by
+   every block in here. Both are at the top of this file. */
 .panel {
   width: 272px;
   flex: 0 0 272px;
-  padding: 14px 12px 18px;
+  padding: 14px var(--pan-gut) 18px;
   background: var(--panel);
   border-right: 1px solid var(--edge);
   display: flex;
@@ -242,12 +258,12 @@ main {
 }
 
 .panel-cap {
-  padding: 0 4px 8px;
+  padding: 0 var(--pan-in) 8px;
   color: var(--dim);
   font-size: 12px;
 }
 .panel-foot {
-  padding: 8px 4px 0;
+  padding: 8px var(--pan-in) 0;
   color: var(--dim);
   font: 11px/1.4 var(--font-mono);
 }
@@ -262,12 +278,16 @@ main {
   margin: 0;
 }
 
-/* a row: one action or one tool, a big target with a plain sentence under */
+/* a row: one action or one tool, a big target with a plain sentence under.
+   It carries a background when hovered or on, so it is a framed thing and its
+   edge belongs on the line with every card. It was full bleed at 12, four
+   pixels left of the segments and counts it stacks with. */
 .row {
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  width: 100%;
+  width: calc(100% - var(--pan-in) * 2);
+  margin: 0 var(--pan-in);
   padding: 10px 10px;
   border-radius: 9px;
   text-align: left;
@@ -400,10 +420,12 @@ input[type='range']:disabled {
 }
 
 /* sliders, fields */
+/* the left indent lands the slider under the words of the row above it, past
+   that row's own inset and its icon, so it reads as belonging to that row */
 .slider {
   display: grid;
   gap: 3px;
-  padding: 2px 12px 8px 46px;
+  padding: 2px 12px 8px calc(var(--pan-in) + 46px);
   color: var(--dim);
   font-size: 11.5px;
 }
@@ -415,7 +437,7 @@ input[type='range']:disabled {
 .field {
   display: grid;
   gap: 6px;
-  padding: 2px 4px;
+  padding: 2px var(--pan-in);
 }
 .field > span:first-child {
   font-weight: 500;
@@ -427,7 +449,7 @@ input[type='range']:disabled {
 .field.inline {
   grid-template-columns: 1fr 78px;
   align-items: center;
-  padding: 6px 10px;
+  padding: 6px var(--pan-in);
 }
 .field.inline input {
   padding: 5px 8px;
@@ -443,7 +465,7 @@ input[type='range']:disabled {
   grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 4px;
   min-width: 0;
-  padding: 2px 4px 6px;
+  padding: 2px var(--pan-in) 6px;
 }
 .tbtn {
   position: relative;
@@ -490,7 +512,7 @@ input[type='range']:disabled {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 4px;
-  padding: 4px;
+  padding: var(--pan-in);
 }
 .chip {
   display: flex;
@@ -526,7 +548,7 @@ input[type='range']:disabled {
   white-space: nowrap;
 }
 .lawhint {
-  margin: 4px 4px 0;
+  margin: 4px var(--pan-in) 0;
   padding: 8px 10px;
   border-left: 2px solid var(--acc);
   border-radius: 0 8px 8px 0;
@@ -538,7 +560,7 @@ input[type='range']:disabled {
   display: flex;
   align-items: baseline;
   gap: 8px;
-  padding: 12px 8px 4px;
+  padding: 12px var(--pan-in) 4px;
 }
 .walkpct {
   font: 600 24px/1 var(--font-mono);
@@ -559,7 +581,8 @@ input[type='range']:disabled {
   display: flex;
   align-items: center;
   gap: 7px;
-  padding: 7px 10px;
+  margin: 0 calc(var(--pan-in) - var(--pan-pill));
+  padding: 7px var(--pan-pill);
   border-radius: 8px;
   color: var(--dim);
   font-size: 12px;
@@ -598,8 +621,8 @@ input[type='range']:disabled {
   transform: translateY(1px);
 }
 .primary.big {
-  width: calc(100% - 8px);
-  margin: 10px 4px 2px;
+  width: calc(100% - var(--pan-in) * 2);
+  margin: 10px var(--pan-in) 2px;
   padding: 12px;
   font-size: 14px;
 }
@@ -608,7 +631,7 @@ input[type='range']:disabled {
 .cands {
   display: grid;
   gap: 6px;
-  padding: 6px 4px;
+  padding: 6px var(--pan-in);
 }
 .cand {
   padding: 0;
@@ -644,7 +667,7 @@ input[type='range']:disabled {
   font-size: 11px;
 }
 .drophint {
-  margin: 0 4px;
+  margin: 0 var(--pan-in);
   padding: 16px 12px;
   border: 1px dashed var(--edge);
   border-radius: 9px;
@@ -656,7 +679,7 @@ input[type='range']:disabled {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 12px 4px 0;
+  margin: 12px var(--pan-in) 0;
   padding: 9px 12px;
   border-radius: 8px;
   background: var(--raised);
@@ -673,7 +696,7 @@ input[type='range']:disabled {
 /* a section header. Every panel groups its rows under one of these, so the
    eye learns one shape instead of six. */
 .asec {
-  padding: 12px 4px 4px;
+  padding: 12px var(--pan-in) 4px;
   color: var(--dim);
   font: 600 10px/1 var(--font-mono);
   letter-spacing: 0.12em;
@@ -693,7 +716,8 @@ input[type='range']:disabled {
   margin-top: 0;
 }
 .keys summary {
-  padding: 5px 8px;
+  margin: 0 calc(var(--pan-in) - var(--pan-pill));
+  padding: 5px var(--pan-pill);
   border-radius: 7px;
   color: var(--dim);
   font: 10px/1 var(--font-mono);
@@ -715,7 +739,7 @@ input[type='range']:disabled {
   color: var(--ink);
 }
 .keys-body {
-  padding: 4px 10px 2px;
+  padding: 4px var(--pan-in) 2px;
   color: var(--dim);
   font: 11px/1.6 var(--font-mono);
   animation: panel-in 160ms ease;
@@ -726,7 +750,7 @@ input[type='range']:disabled {
 /* the two halves of the assets panel: place what exists, or make something
    new. Nothing is hidden, it is one press away. */
 .seg.tabs {
-  margin: 2px 4px 6px;
+  margin: 2px var(--pan-in) 6px;
 }
 .seg.tabs .seg-opt {
   padding: 7px 8px;
@@ -747,7 +771,7 @@ input[type='range']:disabled {
   display: grid;
   gap: 6px;
   min-width: 0;
-  margin: 2px 4px 4px;
+  margin: 2px var(--pan-in) 4px;
   padding: 8px 8px 9px;
   border: 1px solid var(--edge);
   border-radius: 10px;
@@ -864,7 +888,7 @@ input[type='range']:disabled {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 2px 4px;
+  margin: 2px var(--pan-in);
   padding: 4px 4px 4px 10px;
   border: 1px dashed var(--edge);
   border-radius: 8px;
@@ -1070,7 +1094,7 @@ input[type='range']:disabled {
   align-items: center;
   gap: 8px;
   min-width: 0;
-  margin: 0 4px;
+  margin: 0 var(--pan-in);
   padding: 5px 10px;
   border: 1px solid var(--edge);
   border-radius: 8px;
@@ -1131,13 +1155,16 @@ input[type='range']:disabled {
   font-size: 10px;
   font-variant-numeric: tabular-nums;
 }
-/* groups as one wrapping line of chips, not a stacked list with nested rows */
+/* groups as one wrapping line of chips, not a stacked list with nested rows.
+   The rule runs the full column like the make strip's does and the chips sit
+   in on the line, so a chip edge and "nothing placed yet" start where every
+   other block in the panel starts. */
 .grpstrip {
   display: flex;
   flex-wrap: wrap;
   gap: 3px;
   min-width: 0;
-  padding-top: 6px;
+  padding: 6px var(--pan-in) 0;
   border-top: 1px solid var(--edge);
 }
 .grpchip {
@@ -1239,7 +1266,7 @@ input[type='range']:disabled {
    did not line up with the rest. */
 .areabtn {
   width: auto;
-  margin: 0 4px 2px;
+  margin: 0 var(--pan-in) 2px;
   justify-content: center;
 }
 .areabtn.on {
@@ -1255,7 +1282,7 @@ input[type='range']:disabled {
   align-items: stretch;
   gap: 6px;
   min-width: 0;
-  margin: 0 4px;
+  margin: 0 var(--pan-in);
 }
 .genrow .genbtn {
   flex: 1 1 auto;
@@ -1271,7 +1298,9 @@ input[type='range']:disabled {
   display: grid;
   gap: 4px;
   min-width: 0;
-  margin: 2px 0 6px;
+  /* the same inset the inspector and the tuner carry: all three are the one
+     zone card, and the plan was the only one whose edge sat at the panel */
+  margin: 2px var(--pan-in) 6px;
   padding: 8px 10px;
   border: 1px solid var(--edge);
   border-radius: 8px;
@@ -1350,11 +1379,14 @@ input[type='range']:disabled {
   display: grid;
   gap: 2px;
   min-width: 0;
-  margin: 6px 4px 0;
+  margin: 6px var(--pan-in) 0;
 }
+/* another fold that is bare text at rest, so the words go on the line and the
+   hover shape is pulled back out from under them */
 .asktoggle {
   justify-self: start;
-  padding: 3px 8px;
+  margin-left: calc(0px - var(--pan-pill));
+  padding: 3px var(--pan-pill);
   border: 0;
   border-radius: 6px;
   background: transparent;
@@ -1542,7 +1574,7 @@ input[type='range']:disabled {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 4px;
-  padding: 2px 4px;
+  padding: 2px var(--pan-in);
 }
 .lib {
   position: relative;
@@ -1586,23 +1618,27 @@ input[type='range']:disabled {
   color: var(--acc);
 }
 .lib-empty {
-  padding: 10px 8px;
+  padding: 10px var(--pan-in);
   color: var(--dim);
   font-size: 11.5px;
 }
 .lib-cap {
-  padding: 0 4px 4px;
+  padding: 0 var(--pan-in) 4px;
   color: var(--dim);
   font-size: 11px;
 }
 
 /* a section header with one quiet action on its right. The action is the way
-   out of generating, so it sits where the eye already is. */
+   out of generating, so it sits where the eye already is. Its words come in on
+   the left line through .asec's own padding, so only the right side needs
+   saying here: the link sat flush with the panel while every card beside it
+   stopped four pixels short. */
 .sechead {
   display: flex;
   align-items: baseline;
   gap: 8px;
   min-width: 0;
+  padding-right: var(--pan-in);
 }
 .sechead .asec {
   flex: 1 1 auto;
@@ -1642,7 +1678,7 @@ input[type='range']:disabled {
   grid-template-columns: minmax(0, 1fr);
   gap: 6px;
   min-width: 0;
-  margin: 2px 4px 4px;
+  margin: 2px var(--pan-in) 4px;
   padding: 8px 8px 6px;
   border: 1px solid var(--edge);
   border-radius: 10px;
@@ -1783,7 +1819,7 @@ input[type='range']:disabled {
 .seg {
   display: flex;
   gap: 2px;
-  margin: 2px 4px 4px;
+  margin: 2px var(--pan-in) 4px;
   padding: 2px;
   border: 1px solid var(--edge);
   border-radius: 9px;
@@ -1839,9 +1875,26 @@ input[type='range']:disabled {
   border-color: var(--acc);
   color: var(--acc);
 }
+/* The words on this button are a cost sentence, not a verb, and at 272px half
+   of them need two lines. The run label wanted 233px in a 199px box, wrapped,
+   took the button from 37.5px to 57px and shoved the panel down 19.5px the
+   moment it was pressed. A panel that jumps when you press its main button
+   reads cheap.
+
+   So two lines are reserved inside the height the button already had, rather
+   than the height being allowed to follow the label. The type is tightened to
+   pay for them, which suits a line that is a price rather than a shout: one
+   line centres, two lines fill, and the button measures the same before,
+   during and after a run. overflow guards the case nobody has written yet;
+   the longest label in the tool clears three lines by a quarter. */
 .genbtn {
-  width: calc(100% - 8px);
-  margin: 6px 4px 0;
+  width: calc(100% - var(--pan-in) * 2);
+  height: 38px;
+  margin: 6px var(--pan-in) 0;
+  padding: 4px 12px;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 1.2;
 }
 .genbtn.armed {
   background: #ffd166;
@@ -1869,7 +1922,7 @@ input[type='range']:disabled {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 4px;
-  margin: 8px 4px 2px;
+  margin: 8px var(--pan-in) 2px;
   padding: 8px 6px 6px;
   min-width: 0;
   max-width: 100%;
@@ -2062,7 +2115,7 @@ input[type='range']:disabled {
 .doorform {
   display: grid;
   gap: 6px;
-  margin: 2px 4px;
+  margin: 2px var(--pan-in);
   padding: 10px;
   border: 1px solid var(--edge);
   border-radius: 10px;
@@ -2125,7 +2178,7 @@ input[type='range']:disabled {
   align-items: center;
   gap: 8px;
   min-width: 0;
-  margin: 0 4px;
+  margin: 0 var(--pan-in);
   padding: 5px 8px;
   border-radius: 7px;
   border: 1px solid transparent;
@@ -2156,7 +2209,7 @@ input[type='range']:disabled {
 
 /* export step */
 .manifest {
-  margin: 2px 4px;
+  margin: 2px var(--pan-in);
   padding: 12px 14px;
   border: 1px solid var(--edge);
   border-radius: 10px;

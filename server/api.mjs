@@ -594,10 +594,21 @@ async function route(req, res, p, url) {
      * to rescue a garbled answer to a MOVING ask, so it falls through to
      * written motion; here there is no ask to read, so an anim with no how is
      * simply a malformed request and lands standing. A garbled request costs
-     * one generation, not nine. */
+     * one generation, not nine.
+     *
+     * The description is what the walk gate reads. It is the only account of
+     * the thing this route ever gets, and a route reachable without the router
+     * is exactly where a walk nobody asked for would otherwise get through.
+     * An action with no words in it is refused here, before the body: a 400 is
+     * cheaper than a sprite that came back doing the wrong thing. */
     const want = b.anim && typeof b.anim === 'object' ? b.anim : legacyAnim(b)
     const moving = want.how === 'template' || want.how === 'action'
-    const anim = spriteAnim(want, moving ? 'animated' : 'static', skeleton, '')
+    let anim
+    try {
+      anim = spriteAnim(want, moving ? 'animated' : 'static', skeleton, '', description)
+    } catch (e) {
+      return send(res, 400, { error: String((e && e.message) || e).slice(0, 200) })
+    }
     const seed = seedOf(b)
     // pixellab's own look controls, passed through only when the ui sent one
     const look = {}
@@ -2018,6 +2029,57 @@ const WALK_TEMPLATES = [
   'jumping-1', 'jumping-2', 'two-footed-jump', 'getting-up', 'throw-object',
 ]
 
+/* WHAT CANNOT WALK, and why a list is allowed to exist here.
+ *
+ * The template gate used to be two facts, both of them true on their own and
+ * neither of them about the thing being made: the router said template, and the
+ * rig is the upright one. A hovering wisp routed onto the mannequin satisfies
+ * both, and got a walk cycle. That is the exact failure the written path was
+ * built to end, so trusting the prompt not to ask for it is not enough.
+ *
+ * These are the words that say plainly the thing does not put one foot in front
+ * of the other: no legs, airborne, or incorporeal, and the verbs for moving
+ * without feet. It is not a taxonomy and does not need to be complete. A word
+ * it misses leaves things exactly where they were, and a word it catches only
+ * DEMOTES to written motion, which at these sizes is the same one generation
+ * per direction. Being wrong here costs nothing, so it leans toward catching.
+ *
+ * What is deliberately NOT on it: cart, wagon, boat, balloon, bird, bat. Those
+ * do not walk either, but they turn up in the hands of somebody who does, and a
+ * farmer pushing a cart losing his walk cycle to the word cart is the list
+ * grading the props instead of the subject. */
+const NO_WALK = new RegExp(
+  '\\b(' +
+    [
+      'dragon', 'wyvern', 'drake', 'wyrm', 'serpent', 'snake', 'eel',
+      'slime', 'blob', 'ooze', 'jellyfish', 'squid', 'octopus', 'mermaid', 'siren',
+      'ghost', 'spirit', 'wraith', 'phantom', 'spectre', 'specter', 'wisp', 'orb', 'drone',
+      'fairy', 'pixie',
+      'float', 'floats', 'floating', 'hover', 'hovers', 'hovering',
+      'fly', 'flies', 'flying', 'soar', 'soars', 'soaring',
+      'drift', 'drifts', 'drifting', 'glide', 'glides', 'gliding',
+      'levitate', 'levitates', 'levitating', 'slither', 'slithers', 'slithering',
+      'swim', 'swims', 'swimming',
+    ].join('|') +
+    ')\\b',
+  'i',
+)
+
+// An empty ask is not evidence that it walks, so it does not get a walk. The
+// only caller that could send one is an old client posting straight at
+// character-gen, and written motion is the same price.
+const walksOnFeet = (ask) => {
+  const s = String(ask || '').trim()
+  return !!s && !NO_WALK.test(s)
+}
+
+/* The words a demotion must not repeat back. A router that asked for a walk
+ * template usually wrote walking beside it, so for something that does not walk
+ * its own motion line is the one source that cannot be reused when the gate
+ * turns the template down. Catching the template and then describing a walk in
+ * words lands in the same place by a longer road. */
+const WALK_WORDS = /\b(walk|walks|walking|stride|strides|striding|step|steps|stepping|march|marches|marching|jog|jogs|jogging|run|runs|running|foot|feet|legs?)\b/i
+
 /* Eight headings, named out loud, and this is not decoration.
  *
  * Template mode defaults to every direction the character has. WRITTEN motion
@@ -2236,7 +2298,9 @@ async function planMake({ ask, what, kind, id, mapFile, boxFile, box, previous, 
     w: clampPx(o.w),
     h: clampPx(o.h),
   }
-  if (sprite) plan.sprite = spriteRoute(o.sprite, kind, plan.motion)
+  // both halves go to the walk gate: the ask names the thing, the prompt is
+  // where a hovering, winged or legless one gets described at length
+  if (sprite) plan.sprite = spriteRoute(o.sprite, kind, plan.motion, `${ask} ${plan.prompt}`)
   return plan
 }
 
@@ -2314,8 +2378,12 @@ function spriteLines(kind) {
  * Every clamp here is a generation. A skeleton that does not exist, a template
  * id that was invented, a quadruped handed a humanoid walk: each of those is a
  * 422 that arrives AFTER the body has been drawn and paid for. So a wrong
- * answer is corrected into the nearest honest one rather than sent. */
-function spriteRoute(raw, kind, motion) {
+ * answer is corrected into the nearest honest one rather than sent.
+ *
+ * subject is the words this route is allowed to judge the motion against: what
+ * the person asked for and what the router then wrote about it. The walk gate
+ * reads it. */
+function spriteRoute(raw, kind, motion, subject) {
   const s = raw && typeof raw === 'object' ? raw : {}
   const skeleton = SKELETONS.includes(String(s.skeleton)) ? String(s.skeleton) : 'mannequin'
   const view = CHAR_VIEWS.includes(String(s.view)) ? String(s.view) : OBJECT_VIEW
@@ -2325,12 +2393,12 @@ function spriteRoute(raw, kind, motion) {
     skeleton,
     view,
     size,
-    anim: spriteAnim(s.anim, kind, skeleton, motion),
+    anim: spriteAnim(s.anim, kind, skeleton, motion, subject),
     why: String(s.why || '').replace(/\s+/g, ' ').trim().slice(0, 200),
   }
 }
 
-/* how the thing moves, and the two demotions that save a paid body.
+/* how the thing moves, and the demotions that save a paid body.
  *
  * A template id off the list is the cheap, proven path and is left alone. A
  * name that is not on the list, or any template at all on a four-legged rig,
@@ -2345,19 +2413,45 @@ function spriteRoute(raw, kind, motion) {
  * The last-resort words are deliberately not "walking". Nothing here knows what
  * the thing is, and a default that walks is the one assumption this whole path
  * exists to get rid of: it would put a dragon on its feet. Neutral words let v3
- * work it out from the body it was handed. */
-function spriteAnim(raw, kind, skeleton, motion) {
+ * work it out from the body it was handed.
+ *
+ * ask is what the person typed plus what the router wrote about it, and it is
+ * here so the walk can be checked against the thing rather than trusted to the
+ * prompt. See NO_WALK. */
+function spriteAnim(raw, kind, skeleton, motion, ask) {
   const a = raw && typeof raw === 'object' ? raw : {}
   const how = String(a.how || '')
   if (kind !== 'animated' || how === 'none') return { how: 'none' }
-  const tpl = String(a.template || '').toLowerCase().trim()
-  if (how === 'template' && skeleton === 'mannequin' && WALK_TEMPLATES.includes(tpl))
-    return { how: 'template', template: tpl }
-  const words =
-    String(a.action || '').replace(/\s+/g, ' ').trim() || motion || 'moving in place, ending where it began'
   const f = Math.round(Number(a.frames))
   const frames = isFinite(f) && f >= 4 ? Math.min(16, f % 2 ? f + 1 : f) : 8
-  return { how: 'action', action: words.slice(0, 300), frames }
+  const written = (words) => ({ how: 'action', action: String(words).slice(0, 300), frames })
+  const said = String(a.action || '').replace(/\s+/g, ' ').trim()
+  /* WRITTEN MOTION IS TERMINAL, and this branch exists to make that structural.
+   * The router said this thing does not walk, so a walk is the one thing it
+   * cannot be handed from here, whatever else is wrong with the answer. An
+   * action with no words in it is a broken answer and says so out loud: the
+   * only other move is a guess, and the guess this whole path exists to stop is
+   * a walk. The read is free, so what saying no costs is one more press. */
+  if (how === 'action') {
+    const words = said || motion
+    if (!words) throw new Error('the router asked for written motion and wrote no motion words')
+    return written(words)
+  }
+  /* THE TEMPLATE GATE, four facts now and not two. The router has to have asked
+   * for a template out loud, the rig has to be the upright one, the id has to be
+   * real, and the THING has to be something that walks. The last one is the new
+   * one: without it a dragon on a mannequin rig walked, because every other
+   * check was about the request rather than about the dragon. */
+  const tpl = String(a.template || '').toLowerCase().trim()
+  const onFeet = walksOnFeet(ask)
+  if (how === 'template' && skeleton === 'mannequin' && WALK_TEMPLATES.includes(tpl) && onFeet)
+    return { how: 'template', template: tpl }
+  /* The demotion cannot hand the walk straight back in words. Refusing the
+   * template and then writing "walking steadily" is the same answer spelled
+   * differently, so for a thing that does not walk any candidate carrying walk
+   * words is dropped and the neutral line stands instead. */
+  const clean = (w) => (w && !(onFeet ? false : WALK_WORDS.test(w)) ? w : '')
+  return written(clean(said) || clean(motion) || 'moving in place, ending where it began')
 }
 
 /* Fill a boxed area: one look, a whole scene's worth of things planned at once.

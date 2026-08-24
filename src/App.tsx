@@ -2166,6 +2166,11 @@ export default function App() {
           if (e.sceneId !== sid) break
           setLib((prev) => [...(prev || []).filter((x) => x.name !== r.item.name), r.item])
           made.push(r.item)
+          // a motion that did not happen is said out loud, the same as a
+          // sprite's. Asked for moving, a stop between the base and its frames
+          // files the base as a still object, and a still where a moving one
+          // was asked for has to explain itself.
+          if ('note' in r && r.note) push(`${r.item.name} · ${r.note}`)
         } catch (err) {
           const m = String(err instanceof Error ? err.message : err)
           push(
@@ -2230,6 +2235,10 @@ export default function App() {
     if (genBox) {
       setGenBox(null)
       setGenPlan(null)
+      // a fill's plan is a list of positions INSIDE the box, so it means
+      // nothing once the box is gone. It used to survive, which left the draw
+      // button lit over a plan that had nowhere to land.
+      setScene(null)
       push('box cleared · it will read the whole map')
       return
     }
@@ -2237,6 +2246,7 @@ export default function App() {
       setGenBox(r)
       // a new area means the old reading is about a different place
       setGenPlan(null)
+      setScene(null)
       if (r) push(`boxed ${r.w}×${r.h} · now say what goes there`)
     })
   }, [genBox, push])
@@ -2339,6 +2349,10 @@ export default function App() {
             : await api.assetGen(sid, it.what, { job, thing: it.prompt, tw: it.w, th: it.h })
         if (e.sceneId !== sid) break
         setLib((prev) => [...(prev || []).filter((x) => x.name !== r.item.name), r.item])
+        // one of a fill can land still when the whole fill was asked for
+        // moving, so the reason travels with that item rather than being lost
+        // in the run's own summary
+        if ('note' in r && r.note) push(`${r.item.name} · ${r.note}`)
         // straight onto the map at the planned spot, so a run cut short still
         // leaves what it managed to draw
         e.addPlacements([
@@ -3775,7 +3789,12 @@ export default function App() {
     (makeWhat === 'effect'
       ? !fxAsk.trim() || fxBusy || !!fx
       : makeWhat === 'fill'
-        ? false
+        ? // the same rest state the other three have. It used to sit lit and
+          // pressable while its own label said "box the area first", which is a
+          // button telling you not to press it in the one colour that says
+          // press me. No box is nothing to read and nowhere to draw, and it is
+          // the only thing fill needs before it can do either.
+          !genBox
         : !genPrompt.trim() || (makeWhat === 'object' && genPick))
   // the sprite plan's own words for what it decided to make move, so the busy
   // line says hovering rather than walking when that is what it bought
@@ -3785,7 +3804,11 @@ export default function App() {
     ? // the one wait long enough to look broken, so it counts
       `${takes}${spriteMoves ? 'drawing it, then the motion' : 'drawing it'} · ${mmss(charSecs)}`
     : fillRun
-      ? `${fillRun.done + 1}/${fillRun.total} · ${fillRun.what}…`
+      ? // a planned item writes its own words long, "a weathered fishing net
+        // draped over a barrel beside the quay". The button holds one height and
+        // hides what does not fit, so an uncapped line loses its tail with
+        // nothing to show for it. Cut it here, where the ellipsis is meant.
+        `${fillRun.done + 1}/${fillRun.total} · ${fillRun.what.length > 34 ? fillRun.what.slice(0, 33).trimEnd() : fillRun.what}…`
       : genRun
         ? genRun.total > 1
           ? `generating ${Math.min(genRun.done + 1, genRun.total)}/${genRun.total}…`
@@ -3814,6 +3837,12 @@ export default function App() {
    * on the button after it, because the read is where he decides whether four
    * was a sensible number and by then it is too late to be told. */
   const takeWord = genCount === 1 ? '' : `, ${genCount} takes · ${genCost} generations`
+  /* Fill's own multiplication, and it is the biggest one in the panel: an
+   * animated thing is a base plus its frames, so twenty-four of them is
+   * forty-eight generations. It was the one mode that named no number before it
+   * read, which put the largest spend here behind the least warning. */
+  const fillGens = fillCount * (genType === 'animated' ? 2 : 1)
+  const fillWord = `${fillCount} different thing${fillCount === 1 ? '' : 's'} · ${fillGens} generation${fillGens === 1 ? '' : 's'}`
   const makeDesc =
     makeWhat === 'effect'
       ? 'free · built from this map’s colours'
@@ -3828,7 +3857,7 @@ export default function App() {
              * and the motion is what most of them go on */
             `${CHAR_DIRS} ways${genType === 'animated' ? ' + motion' : ''} · ${genType === 'animated' ? 'five to fifteen minutes' : 'two to five minutes'}${takeWord}${usd ? ` · ${usd} left` : ''}`
         : makeWhat === 'fill'
-          ? `${genBox ? `the boxed ${genBox.w}×${genBox.h}` : 'box an area'} · ${fillCount} different thing${fillCount === 1 ? '' : 's'}${usd ? ` · ${usd} left` : ''}`
+          ? `${genBox ? `the boxed ${genBox.w}×${genBox.h}` : 'box an area'} · ${fillWord}${usd ? ` · ${usd} left` : ''}`
           : `${genBox ? `reads the boxed ${genBox.w}×${genBox.h}` : 'reads the whole map'} · ${genType === 'animated' ? 'sprite + 8 frames' : 'one png'}${takeWord}${usd ? ` · ${usd} left` : ''}`
 
   /* ---- the make strip -------------------------------------------------
@@ -3864,6 +3893,11 @@ export default function App() {
               setMakeWhat(m)
               setGenPlan(null)
               setScene(null)
+              // the takes go back to one with the plan. Eight of them set
+              // against a thing, which is eight generations, is seventy-two the
+              // moment the mode says sprite, and a number chosen for one price
+              // is not a number he agreed to at the other.
+              setGenCount(1)
               // an arm does not survive a change of mind about what is being
               // made, or the next press spends on the new thing
               disarm()
@@ -3879,7 +3913,10 @@ export default function App() {
           value={makeWhat === 'effect' ? fxAsk : genPrompt}
           placeholder={
             makeWhat === 'effect'
-              ? 'e.g. water splashing where the fall lands'
+              ? // short because it has to FIT. The long version measured 228px
+                // in a 210px box and rendered as "where the fall lai", and this
+                // hint is the only instruction motion has.
+                'e.g. water splashing at the falls'
               : makeWhat === 'fill'
                 ? 'anything to steer it, or leave empty'
                 : makeWhat === 'sprite'
@@ -4037,8 +4074,11 @@ export default function App() {
       )}
       {genPlan.crossing && <div className="planmeta">{genPlan.crossing}</div>}
       <div className="planmeta">
-        {genPlan.w}×{genPlan.h}
-        {genPlan.motion ? ` · ${genPlan.motion}` : ''}
+        {/* w and h are the PROP path's size and only the prop path sends them.
+            A sprite posts route.size and nothing else, so printing w×h here put
+            two different numbers on screen for one thing. The rig line above
+            already carries the size a sprite actually gets drawn at. */}
+        {spriteRoute ? '' : `${genPlan.w}×${genPlan.h}${genPlan.motion ? ` · ${genPlan.motion}` : ''}`}
         <button className="planshow" onClick={() => setGenShow((v) => !v)}>
           {genShow ? 'hide the words' : 'the words'}
         </button>
