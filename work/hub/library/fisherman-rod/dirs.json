@@ -1,7 +1,46 @@
 {
   "dirs": {
     "south": [
-      "/work/hub/library/fisherman-rod/south-0.png"
+      "/work/hub/library/fisherman-rod/south-0.png",
+      "/work/hub/library/fisherman-rod/south-1.png",
+      "/work/hub/library/fisherman-rod/south-2.png",
+      "/work/hub/library/fisherman-rod/south-3.png",
+      "/work/hub/library/fisherman-rod/south-4.png",
+      "/work/hub/library/fisherman-rod/south-5.png",
+      "/work/hub/library/fisherman-rod/south-6.png",
+      "/work/hub/library/fisherman-rod/south-7.png",
+      "/work/hub/library/fisherman-rod/south-8.png",
+      "/work/hub/library/fisherman-rod/south-9.png",
+      "/work/hub/library/fisherman-rod/south-10.png",
+      "/work/hub/library/fisherman-rod/south-11.png"
+    ],
+    "south-east": [
+      "/work/hub/library/fisherman-rod/south-east-0.png",
+      "/work/hub/library/fisherman-rod/south-east-1.png",
+      "/work/hub/library/fisherman-rod/south-east-2.png",
+      "/work/hub/library/fisherman-rod/south-east-3.png",
+      "/work/hub/library/fisherman-rod/south-east-4.png",
+      "/work/hub/library/fisherman-rod/south-east-5.png",
+      "/work/hub/library/fisherman-rod/south-east-6.png",
+      "/work/hub/library/fisherman-rod/south-east-7.png",
+      "/work/hub/library/fisherman-rod/south-east-8.png",
+      "/work/hub/library/fisherman-rod/south-east-9.png",
+      "/work/hub/library/fisherman-rod/south-east-10.png",
+      "/work/hub/library/fisherman-rod/south-east-11.png"
+    ],
+    "south-west": [
+      "/work/hub/library/fisherman-rod/south-west-0.png",
+      "/work/hub/library/fisherman-rod/south-west-1.png",
+      "/work/hub/library/fisherman-rod/south-west-2.png",
+      "/work/hub/library/fisherman-rod/south-west-3.png",
+      "/work/hub/library/fisherman-rod/south-west-4.png",
+      "/work/hub/library/fisherman-rod/south-west-5.png",
+      "/work/hub/library/fisherman-rod/south-west-6.png",
+      "/work/hub/library/fisherman-rod/south-west-7.png",
+      "/work/hub/library/fisherman-rod/south-west-8.png",
+      "/work/hub/library/fisherman-rod/south-west-9.png",
+      "/work/hub/library/fisherman-rod/south-west-10.png",
+      "/work/hub/library/fisherman-rod/south-west-11.png"
     ],
     "west": [
       "/work/hub/library/fisherman-rod/west-0.png"
@@ -12,17 +51,11 @@
     "north": [
       "/work/hub/library/fisherman-rod/north-0.png"
     ],
-    "south-east": [
-      "/work/hub/library/fisherman-rod/south-east-0.png"
-    ],
     "north-east": [
       "/work/hub/library/fisherman-rod/north-east-0.png"
     ],
     "north-west": [
       "/work/hub/library/fisherman-rod/north-west-0.png"
-    ],
-    "south-west": [
-      "/work/hub/library/fisherman-rod/south-west-0.png"
     ]
   },
   "fps": 8,

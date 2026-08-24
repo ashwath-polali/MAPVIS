@@ -1,5 +1,33 @@
 [
   {
+    "name": "fishmonger",
+    "kind": "motion",
+    "ask": "breathes slowly and shifts the fish from hand to hand",
+    "prompt": "breathes slowly, shoulders rising and falling, and shifts a fish from one hand to the other",
+    "at": "2026-08-24T20:38:09.333Z"
+  },
+  {
+    "name": "vendor-straw-hat-20",
+    "kind": "motion",
+    "ask": "breathes slowly while standing at the stall",
+    "prompt": "breathes slowly, chest and shoulders rising and settling, head drifting slightly",
+    "at": "2026-08-24T20:36:29.759Z"
+  },
+  {
+    "name": "woman-blue-wrap",
+    "kind": "motion",
+    "ask": "breathes slowly with arms folded, the shawl stirring",
+    "prompt": "breathes slowly with arms folded, chest rising and settling, the shawl stirring against her",
+    "at": "2026-08-24T20:32:36.825Z"
+  },
+  {
+    "name": "fisherman-rod",
+    "kind": "motion",
+    "ask": "casts the rod out over the water and slowly draws it back",
+    "prompt": "casts a rod forward, arms swinging out, then slowly reels it back, hands turning at the waist",
+    "at": "2026-08-24T20:29:27.011Z"
+  },
+  {
     "name": "dockhand-barrels",
     "kind": "motion",
     "ask": "breathes slowly with arms crossed, shifting weight now and then",
@@ -250,33 +278,5 @@
     "ask": "windswept dead tree",
     "prompt": "A small windswept dead tree, bare crooked trunk of grey-brown weathered wood leaning to the left, a few thin forked branches, one sparse tuft of dry olive leaves clinging near the top. Isometric pixel art, chunky pixels, limited warm palette of ochre and burnt umber, dark brown outline, lit from the upper left, shaded on its lower right, muted saturation.",
     "at": "2026-08-22T22:25:12.143Z"
-  },
-  {
-    "name": "nether-gate-veil",
-    "kind": "effect",
-    "ask": "dark / quite translucent purple colored animated thing, nether portal like. beautiful and grand, but also subtle",
-    "prompt": "written",
-    "at": "2026-08-21T06:31:08.326Z"
-  },
-  {
-    "name": "palm-island-trees-animated-3",
-    "kind": "asset",
-    "ask": "palm island trees. animated swaying. beautiful trees, grand, maybe in 3s. no ugly base at the bottom, like stone or stand circle.",
-    "prompt": "A trio of tall coconut palms with slender curved trunks, three grand crowns of long arching fronds. Warm sandy-tan and burnt-orange trunk bark ringed with darker brown notches, olive and mossy green fronds with deep brown shadow undersides, small brown coconut clusters at the crown. Sunlight from the upper left, warm highlights on the left of each trunk, cool brown shade right. Chunky pixels, dark brown outline, muted warm palette, isometric, transparent background.",
-    "at": "2026-08-20T07:10:06.848Z"
-  },
-  {
-    "name": "palm-island-trees-animated-2",
-    "kind": "asset",
-    "ask": "palm island trees. animated swaying. beautiful trees, grand, maybe in 3s. no ugly base at the bottom, like stone or stand circle.",
-    "prompt": "A trio of tall coconut palms with slender curved trunks, three grand crowns of long arching fronds. Warm sandy-tan and burnt-orange trunk bark ringed with darker brown notches, olive and mossy green fronds with deep brown shadow undersides, small brown coconut clusters at the crown. Sunlight from the upper left, warm highlights on the left of each trunk, cool brown shade right. Chunky pixels, dark brown outline, muted warm palette, isometric, transparent background.",
-    "at": "2026-08-20T07:08:08.493Z"
-  },
-  {
-    "name": "palm-island-trees-animated-1",
-    "kind": "asset",
-    "ask": "palm island trees. animated swaying. beautiful trees, grand, maybe in 3s. no ugly base at the bottom, like stone or stand circle.",
-    "prompt": "A trio of tall coconut palms with slender curved trunks, three grand crowns of long arching fronds. Warm sandy-tan and burnt-orange trunk bark ringed with darker brown notches, olive and mossy green fronds with deep brown shadow undersides, small brown coconut clusters at the crown. Sunlight from the upper left, warm highlights on the left of each trunk, cool brown shade right. Chunky pixels, dark brown outline, muted warm palette, isometric, transparent background.",
-    "at": "2026-08-20T07:04:59.682Z"
   }
 ]

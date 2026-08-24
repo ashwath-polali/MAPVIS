@@ -1007,7 +1007,12 @@ async function route(req, res, p, url) {
         // undoing.
         const st = await stageViews(id, name, byDir, it.fps || 8)
         if (!st) throw new Error('the headings did not save')
-        swapFolder(id, name, st.stage, { dirs: st.dirs, fps: st.fps, characterId: plan.characterId })
+        /* The id is the only way back to the rig that drew this, and a rewrite
+         * that forgets it strands the art for good: nothing on disk says which
+         * character it came from and the motion can never be replaced or
+         * recovered again. Never write undefined over one that was there. */
+        const keepId = plan.characterId || (it.meta && it.meta.characterId) || ''
+        swapFolder(id, name, st.stage, { dirs: st.dirs, fps: st.fps, characterId: keepId })
         noteAsk(id, name, ask, plan.motion, 'motion')
         return send(res, 200, {
           item: {
@@ -2341,9 +2346,14 @@ async function recoverCharacterMotion(plan) {
     }
     const hit = Object.keys(byDir).filter((k) => wanted.has(k)).length
     if (Object.keys(byDir).length && (!best || hit > best.hit))
-      best = { byDir: withStills(byDir, rot), hit, name: g.display_name || g.animation_type }
+      best = { byDir: withStills(byDir, rot), hit, moves: Object.keys(byDir).length, name: g.display_name || g.animation_type }
   }
-  return best
+  /* withStills fills every heading that did not move with its own still, so a
+   * group that turned out to hold nothing but rotations comes back looking like
+   * a complete set of eight. Recovering that writes stills over the art and
+   * reports success, which is how the fishmonger lost his motion AND the id that
+   * could have got it back. Nothing moving is a failure, not a result. */
+  return best && best.moves ? best : null
 }
 
 /* The frames of the group just paid for, by heading.
