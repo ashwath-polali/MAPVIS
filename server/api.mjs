@@ -990,7 +990,18 @@ async function route(req, res, p, url) {
     const { gate, halt, done } = gateFor(job)
     try {
       if (plan.path === 'character') {
-        const byDir = await runCharacterMotion(plan, seed, gate, halt)
+        /* Frames bought by an earlier attempt that could not read them back.
+         * Charging a second time for art already sitting on the account is the
+         * worst thing this route could do, so recovery is offered before the
+         * spend rather than as a repair afterwards. */
+        let byDir = null
+        if (b.recover) {
+          const found = await recoverCharacterMotion(plan)
+          if (!found) return send(res, 409, { error: 'nothing already paid for was found on this one' })
+          byDir = found.byDir
+        } else {
+          byDir = await runCharacterMotion(plan, seed, gate, halt)
+        }
         // past here every generation is bought and every frame is theirs, so
         // the download runs to the end whatever a stop says. Stopping is not
         // undoing.
@@ -2271,11 +2282,68 @@ async function runCharacterMotion(plan, seed, gate, halt) {
   // the wait is told what was already there for the same reason: without it, a
   // character that already moves reports finished on the first tick
   d = await raceStop(gate, pixellab.awaitAnimation(plan.characterId, h, { timeoutMs: WALK_WAIT, known: before }))
-  const byDir = newGroupDirs(d, group, before, heads, rot)
+  let byDir = newGroupDirs(d, group, before, heads, rot)
+  /* The job can report finished a moment before the detail lists the group it
+   * made. That happened on the hub's two knights: the frames were on their side,
+   * named and complete, and the reading taken at the same instant still showed
+   * no groups at all, so a paid motion was thrown away as unrecognisable. Read
+   * again a few times before believing it. The frames are already bought, so
+   * the only thing patience costs here is seconds. */
+  for (let tries = 0; !byDir && tries < 5; tries++) {
+    await new Promise((r) => setTimeout(r, 4000))
+    halt()
+    d = await raceStop(gate, pixellab.characterDetail(plan.characterId))
+    byDir = newGroupDirs(d, group, before, heads, rot)
+  }
   // refusing here costs the generations and keeps the item. Guessing would
   // write the OLD motion over it and call the result the new one.
   if (!byDir) throw new Error('the frames that came back could not be told from the motion it already had, so nothing was replaced')
-  return byDir
+  return withStills(byDir, rot)
+}
+
+/* A partial motion, put back into a whole set.
+ *
+ * stageViews rebuilds the folder from what it is handed, so handing it the three
+ * headings that were animated would delete the five that were not. Every heading
+ * the character has comes back, the animated ones as their new frames and the
+ * rest as the single rotation still they already were. Both renderers index a
+ * heading's own list, so eight frames on three of them and one on five is a
+ * legal set rather than a broken one. */
+function withStills(byDir, rot) {
+  const out = { ...byDir }
+  for (const [k, u] of Object.entries(rot || {})) {
+    const key = String(k).toLowerCase()
+    if (!out[key] && typeof u === 'string' && u) out[key] = [u]
+  }
+  return out
+}
+
+/* Frames already paid for, pulled without buying them again.
+ *
+ * A motion that landed on their side but could not be read back here is bought
+ * and sitting there. Re-running the ask would charge for it twice, so this finds
+ * the newest group that is not a rotation and hands back its frames. Free, and
+ * the reason it exists is that the reading above was once wrong. */
+async function recoverCharacterMotion(plan) {
+  const d = await pixellab.characterDetail(plan.characterId)
+  const rot = (d && d.rotation_urls) || {}
+  const rotSet = new Set(Object.values(rot).filter((u) => typeof u === 'string'))
+  const groups = Array.isArray(d && d.animations) ? d.animations : []
+  const wanted = new Set(plan.headings || [])
+  let best = null
+  for (const g of groups) {
+    const byDir = {}
+    for (const dd of Array.isArray(g.directions) ? g.directions : []) {
+      const k = String(dd.direction || '').toLowerCase()
+      const frames = (Array.isArray(dd.frames) ? dd.frames : []).filter(Boolean)
+      // a heading whose whole set is the rotation still is not a motion
+      if (k && frames.length > 1 && !frames.every((u) => rotSet.has(u))) byDir[k] = frames
+    }
+    const hit = Object.keys(byDir).filter((k) => wanted.has(k)).length
+    if (Object.keys(byDir).length && (!best || hit > best.hit))
+      best = { byDir: withStills(byDir, rot), hit, name: g.display_name || g.animation_type }
+  }
+  return best
 }
 
 /* The frames of the group just paid for, by heading.
