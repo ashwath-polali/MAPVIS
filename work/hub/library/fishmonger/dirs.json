@@ -1,51 +1,28 @@
 {
   "dirs": {
     "south": [
-      "/work/hub/library/fishmonger/south-0.png",
-      "/work/hub/library/fishmonger/south-1.png",
-      "/work/hub/library/fishmonger/south-2.png",
-      "/work/hub/library/fishmonger/south-3.png",
-      "/work/hub/library/fishmonger/south-4.png",
-      "/work/hub/library/fishmonger/south-5.png",
-      "/work/hub/library/fishmonger/south-6.png",
-      "/work/hub/library/fishmonger/south-7.png"
+      "/work/hub/library/fishmonger/south.png"
     ],
     "south-east": [
-      "/work/hub/library/fishmonger/south-east-0.png",
-      "/work/hub/library/fishmonger/south-east-1.png",
-      "/work/hub/library/fishmonger/south-east-2.png",
-      "/work/hub/library/fishmonger/south-east-3.png",
-      "/work/hub/library/fishmonger/south-east-4.png",
-      "/work/hub/library/fishmonger/south-east-5.png",
-      "/work/hub/library/fishmonger/south-east-6.png",
-      "/work/hub/library/fishmonger/south-east-7.png"
+      "/work/hub/library/fishmonger/south-east.png"
     ],
     "south-west": [
-      "/work/hub/library/fishmonger/south-west-0.png",
-      "/work/hub/library/fishmonger/south-west-1.png",
-      "/work/hub/library/fishmonger/south-west-2.png",
-      "/work/hub/library/fishmonger/south-west-3.png",
-      "/work/hub/library/fishmonger/south-west-4.png",
-      "/work/hub/library/fishmonger/south-west-5.png",
-      "/work/hub/library/fishmonger/south-west-6.png",
-      "/work/hub/library/fishmonger/south-west-7.png"
+      "/work/hub/library/fishmonger/south-west.png"
     ],
     "west": [
-      "/work/hub/library/fishmonger/west-0.png"
+      "/work/hub/library/fishmonger/west.png"
     ],
     "east": [
-      "/work/hub/library/fishmonger/east-0.png"
+      "/work/hub/library/fishmonger/east.png"
     ],
     "north": [
-      "/work/hub/library/fishmonger/north-0.png"
+      "/work/hub/library/fishmonger/north.png"
     ],
     "north-east": [
-      "/work/hub/library/fishmonger/north-east-0.png"
+      "/work/hub/library/fishmonger/north-east.png"
     ],
     "north-west": [
-      "/work/hub/library/fishmonger/north-west-0.png"
+      "/work/hub/library/fishmonger/north-west.png"
     ]
-  },
-  "fps": 8,
-  "characterId": "c01f3ebe-5813-4365-afc4-948d4dfd98ed"
+  }
 }

@@ -2250,6 +2250,18 @@ export class Editor {
         return this.assetImg(set[i])
       }
     }
+    /* Standing still is not the same as holding one frame. Someone breathing at
+     * a stall never travels, so nothing ever handed this a facing and the loop
+     * sat on frame zero forever. The heading it rests in is whichever one its
+     * own src belongs to, and those frames run on the same clock a walker uses. */
+    if (!facing && a.dirs) {
+      const rest = Object.keys(a.dirs).find((k) => a.dirs![k].includes(a.src || '')) || 'south'
+      const set = a.dirs[rest] || a.dirs.south
+      if (set && set.length) {
+        const i = set.length > 1 ? Math.floor(now * (a.fps || 6)) % set.length : 0
+        return this.assetImg(set[i])
+      }
+    }
     if (a.kind === 'animated' && a.frames && a.frames.length) {
       const i = Math.floor(now * (a.fps || 6)) % a.frames.length
       return this.assetImg(a.frames[i])
@@ -2921,7 +2933,14 @@ export class Editor {
     if (
       this.assetMode &&
       this.doc.assets.some(
-        (a) => (a.kind === 'animated' || (this.lifePlay && a.life)) && !this.hiddenGroups.has(a.group),
+        (a) =>
+          (a.kind === 'animated' ||
+            (this.lifePlay && a.life) ||
+            // a view set whose heading holds more than one frame is a loop too,
+            // and it is kind 'static', so without this a breathing figure that
+            // never travels stopped the canvas from repainting at all
+            (a.dirs && Object.values(a.dirs).some((s) => s.length > 1))) &&
+          !this.hiddenGroups.has(a.group),
       )
     )
       this.dirty = true
