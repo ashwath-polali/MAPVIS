@@ -563,6 +563,52 @@ export async function fetchPNG(url) {
   return Buffer.from(await r.arrayBuffer())
 }
 
+/* A SHEET: several things painted TOGETHER, in a reference image's own hand.
+ *
+ * The same endpoint that paints a whole island, pointed at a small canvas. The
+ * style_image is the map, and style_options carries its palette, outline, detail
+ * and shading across, which is what makes the result belong to it. The object
+ * endpoints have no equivalent, and that is why one boat asked for four times
+ * came back in four different projections.
+ *
+ * no_background is the other half: the things arrive on transparency, apart from
+ * each other, ready to be cut into separate items. */
+export async function paintSheet({ description, w, h, style, styleW, styleH, seed }) {
+  const body = {
+    description,
+    image_size: { width: w, height: h },
+    no_background: true,
+    style_image: { image: { type: 'base64', base64: style }, size: { width: styleW, height: styleH } },
+    style_options: { color_palette: true, outline: true, detail: true, shading: true },
+  }
+  if (seed != null) body.seed = seed
+  const out = await call('POST', '/v2/generate-image-v2', body)
+  const id = out.background_job_id
+  if (!id) throw new Error('the painting returned no job id')
+  return id
+}
+
+/* Wait for a painted image and hand back its png bytes.
+ *
+ * The payload is a url on some models and the base64 itself on others. Assuming
+ * the first cost a finished painting once: it was bought, sitting in the answer,
+ * and thrown away by a downloader that only understood urls. */
+export async function awaitImage(id, { timeoutMs = 600000 } = {}) {
+  for (let waited = 0; waited < timeoutMs; waited += 5000) {
+    await new Promise((r) => setTimeout(r, 5000))
+    const j = await job(id)
+    if (j.state === 'failed') throw new Error(j.error || 'the painting failed')
+    if (j.state !== 'done') continue
+    const im = (j.images || [])[0]
+    if (!im) throw new Error('the painting came back with no image')
+    const raw = typeof im === 'string' ? im : im.base64 || im.image || im.url || ''
+    if (/^https?:/i.test(raw)) return fetchPNG(raw)
+    if (!raw) throw new Error('the painting came back in a shape this cannot read')
+    return Buffer.from(String(raw).replace(/^data:image\/\w+;base64,/, ''), 'base64')
+  }
+  throw new Error('the painting timed out')
+}
+
 export async function job(id) {
   const j = await call('GET', '/v2/background-jobs/' + encodeURIComponent(id))
   const st = String(j.status || '').toLowerCase()

@@ -1595,6 +1595,61 @@ async function route(req, res, p, url) {
     return send(res, 200, { dir, files })
   }
 
+  /* A SHEET: several things PAINTED TOGETHER in the map's own hand, then cut apart.
+   *
+   * This exists because the object endpoint cannot be relied on for projection.
+   * Asked four times for a boat it returned a side elevation, a straight
+   * overhead, a flat raft and a rectangular trough, none of them at the island's
+   * angle. Every piece of art on this project that has ever been accepted came
+   * out of ONE painting, and the reason is structural rather than lucky: inside a
+   * single image everything shares a vanishing point, a light and a palette
+   * because it was all drawn at once.
+   *
+   * So it paints instead of generating objects. /v2/generate-image-v2 takes a
+   * style_image, and style_options carries the palette, the outline, the detail
+   * and the shading across, so the reference is the map itself. no_background
+   * gives transparency, the things come back separated, and a flood fill takes
+   * them apart into one library item each.
+   *
+   * THE SHEET IS PAINTED AT MAP SCALE, which is the whole trick and the same law
+   * the characters taught: four boats that will occupy a 144x128 patch of harbour
+   * are painted as a 144x128 sheet. Nothing is ever scaled down afterwards,
+   * because a thing drawn finer than its map is exactly what looks pasted on.
+   *
+   * One call buys the whole set, which is also why it is cheaper than asking
+   * four times and throwing three away. */
+  if (p === '/api/sheet-gen' && req.method === 'POST') {
+    const b = await body(req)
+    const id = safeId(b.id)
+    const desc = String(b.prompt || '').replace(/\s+/g, ' ').trim().slice(0, PROMPT_MAX)
+    if (!desc) return send(res, 400, { error: 'no prompt' })
+    if (!b.style) return send(res, 400, { error: 'no style image: the map is what makes it match' })
+    // nothing above this line costs anything
+    if (b.confirm !== true) return send(res, 400, { error: 'this spends generations: send confirm true' })
+    const w = Math.max(64, Math.min(320, Math.round(Number(b.w) || 144)))
+    const h = Math.max(64, Math.min(320, Math.round(Number(b.h) || 128)))
+    const style = stripDataURL(String(b.style))
+    const sz = pngSizeBuf(Buffer.from(style, 'base64'))
+    if (!(sz.w > 0)) return send(res, 400, { error: 'the style image did not read as a png' })
+    const { gate, halt, done } = gateFor(String(b.job || '').slice(0, 64))
+    try {
+      halt()
+      const jobId = await raceStop(gate, pixellab.paintSheet({ description: desc, w, h, style, styleW: sz.w, styleH: sz.h, seed: seedOf(b) }))
+      const png = await raceStop(gate, pixellab.awaitImage(jobId, { timeoutMs: 600000 }))
+      // past here the painting is bought, so the split runs whatever a stop says
+      const parts = splitSheet(png, Number(b.minPx) || 120)
+      if (!parts.length) return send(res, 200, { items: [], note: 'nothing separable came back: the things may be touching, ask for clear space between them' })
+      const base = b.name ? cleanName(b.name) : slugName(desc)
+      const items = parts.map((p, i) => saveStatic(id, p.png.toString('base64'), `${base}-${i + 1}`, desc, desc))
+      return send(res, 200, { items, sheet: parts.length })
+    } catch (e) {
+      const m = String((e && e.message) || e)
+      return send(res, m === 'stopped' ? 499 : 502, { error: m.slice(0, 300) })
+    } finally {
+      done()
+    }
+  }
+
   /* The doc exactly as the editor holds it, written on the same beat as the
    * browser autosave. A map used to live in one localStorage key on one machine
    * behind a quota failure that says nothing, so hours of masking had no second
@@ -2578,6 +2633,75 @@ async function stillOnStop(gate, start) {
 /* one png into this map's library under a name nothing else has taken. Written
  * once because three paths land here: the still answer of both object routes,
  * and the base of an animated one whose motion half never happened. */
+/* One painted sheet, taken apart into the things on it.
+ *
+ * Everything drawn on a transparent sheet that touches is one thing, so this is
+ * a flood fill over alpha and nothing cleverer. Eight-connected, because a plank
+ * hull drawn at this size joins its own oar diagonally and a four-connected pass
+ * would hand back a boat and a stick.
+ *
+ * minPx throws away the specks anti-aliasing leaves behind. Sorted top to bottom
+ * then left to right, so the names come out in reading order and a person can
+ * tell which is which without opening them.
+ *
+ * The crop is tight to the blob and carries only that blob's pixels, so two
+ * things whose boxes overlap still come apart cleanly. */
+function splitSheet(png, minPx = 120) {
+  const im = decodePNG(png)
+  const { w: W, h: H, data } = im
+  const A = 40
+  const lab = new Int32Array(W * H).fill(-1)
+  const found = []
+  let n = 0
+  for (let i = 0; i < W * H; i++) {
+    if (lab[i] !== -1 || data[i * 4 + 3] <= A) continue
+    const stack = [i]
+    lab[i] = n
+    let x0 = W, y0 = H, x1 = -1, y1 = -1, px = 0
+    while (stack.length) {
+      const p = stack.pop()
+      const x = p % W
+      const y = (p / W) | 0
+      px++
+      if (x < x0) x0 = x
+      if (x > x1) x1 = x
+      if (y < y0) y0 = y
+      if (y > y1) y1 = y
+      for (let dy = -1; dy <= 1; dy++)
+        for (let dx = -1; dx <= 1; dx++) {
+          const nx = x + dx
+          const ny = y + dy
+          if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue
+          const q = ny * W + nx
+          if (lab[q] !== -1 || data[q * 4 + 3] <= A) continue
+          lab[q] = n
+          stack.push(q)
+        }
+    }
+    found.push({ n, x0, y0, x1, y1, px })
+    n++
+  }
+  return found
+    .filter((b) => b.px >= minPx)
+    .sort((a, b) => a.y0 - b.y0 || a.x0 - b.x0)
+    .map((b) => {
+      const w = b.x1 - b.x0 + 1
+      const h = b.y1 - b.y0 + 1
+      const rgba = new Uint8ClampedArray(w * h * 4)
+      for (let y = 0; y < h; y++)
+        for (let x = 0; x < w; x++) {
+          const s = (b.y0 + y) * W + (b.x0 + x)
+          if (lab[s] !== b.n) continue
+          const d = (y * w + x) * 4
+          rgba[d] = data[s * 4]
+          rgba[d + 1] = data[s * 4 + 1]
+          rgba[d + 2] = data[s * 4 + 2]
+          rgba[d + 3] = data[s * 4 + 3]
+        }
+      return { w, h, px: b.px, png: encodePNG(w, h, rgba) }
+    })
+}
+
 function saveStatic(id, b64, wantName, ask, prompt) {
   const dir = libDirOf(id)
   fs.mkdirSync(dir, { recursive: true })
