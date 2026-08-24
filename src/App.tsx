@@ -1412,12 +1412,16 @@ export default function App() {
           if (bounds) life.bounds = bounds
           if (walkOnly) life.walkOnly = true
           if (bounds) life.walkPct = walkPct
-          e.setLife(placeId, life)
+          /* One ask, everything picked. A market is one place and the crowd in
+           * it shares the box; what they do not share is the seed and the phase,
+           * or a dozen figures step in perfect time and read as one thing. */
+          const ids = e.selIds()
+          const n = ids.length > 1 ? e.setLifeMany(ids, life) : (e.setLife(placeId, life), 1)
           setLifeNote(r.note || '')
           setLifeOpen(false)
           setLifeAsk('')
           push(
-            (r.note || `${assetLabel(a)} is moving`) +
+            (r.note || `${n > 1 ? `${n} are moving` : `${assetLabel(a)} is moving`}`) +
               (walkOnly ? ` · keeps to the floor (${Math.round(walkPct * 100)}% walkable)` : '') +
               ' · z undoes',
           )
@@ -3295,6 +3299,50 @@ export default function App() {
   // one picture off any library item, whichever of the three shapes it is: a
   // png, a folder of frames, or a set of headings
   const shotOf = (a: api.LibItem) => a.src || a.frames?.[0] || a.dirs?.south?.[0] || ''
+  /* The movement ask. One value, rendered against one placement or against a
+   * whole picked set, because the question is identical either way: say how it
+   * moves, then draw where. runLife reads the live selection, so a set gets the
+   * one answer applied to all of it. */
+  const lifeBoxFor = (id: string) => (
+    <div className="lifebox">
+      <input
+        autoFocus
+        value={lifeAsk}
+        placeholder="e.g. scuttles about the wet sand, stopping often"
+        onChange={(ev) => setLifeAsk(ev.target.value)}
+        onKeyDown={(ev) => {
+          if (ev.key === 'Enter' && lifeAsk.trim() && !lifeBusy) void runLife(id)
+          if (ev.key === 'Escape') {
+            setLifeOpen(false)
+            ev.currentTarget.blur()
+          }
+        }}
+        spellCheck={false}
+      />
+      <div className="liferow">
+        <button className="abtn tiny" onClick={() => void runLife(id)} disabled={!lifeAsk.trim() || lifeBusy}>
+          {lifeBusy ? 'working it out…' : 'send'}
+        </button>
+        {assets.some((a) => selAll.includes(a.id) && a.life) && (
+          <button className="abtn tiny" onClick={() => ed?.setLifeMany(selAll, null)}>
+            stand still
+          </button>
+        )}
+        {lifeBusy && (
+          <button className="abtn tiny" onClick={doStop}>
+            stop
+          </button>
+        )}
+      </div>
+      <div className="lifehint">
+        {lifeNote ||
+          (selAll.length > 1
+            ? `send, then draw where all ${selAll.length} may roam · esc leaves them unfenced`
+            : 'send, then draw where it may roam · esc there leaves it unfenced')}
+      </div>
+    </div>
+  )
+
   /* The real price of the armed click, per take.
    *
    * An animated object is two generations, a base sprite then its animation. A
@@ -3501,46 +3549,7 @@ export default function App() {
           {selA.kind === 'animated' ? 'anim' : 'static'}
         </span>
       </div>
-      {lifeOpen && (
-        <div className="lifebox">
-          <input
-            autoFocus
-            value={lifeAsk}
-            placeholder="e.g. scuttles about the wet sand, stopping often"
-            onChange={(ev) => setLifeAsk(ev.target.value)}
-            onKeyDown={(ev) => {
-              if (ev.key === 'Enter' && lifeAsk.trim() && !lifeBusy) void runLife(selA.id)
-              if (ev.key === 'Escape') {
-                setLifeOpen(false)
-                ev.currentTarget.blur()
-              }
-            }}
-            spellCheck={false}
-          />
-          <div className="liferow">
-            <button
-              className="abtn tiny"
-              onClick={() => void runLife(selA.id)}
-              disabled={!lifeAsk.trim() || lifeBusy}
-            >
-              {lifeBusy ? 'working it out…' : 'send'}
-            </button>
-            {selA.life && (
-              <button className="abtn tiny" onClick={() => ed?.setLife(selA.id, null)}>
-                stand still
-              </button>
-            )}
-            {lifeBusy && (
-              <button className="abtn tiny" onClick={doStop}>
-                stop
-              </button>
-            )}
-          </div>
-          <div className="lifehint">
-            {lifeNote || 'send, then draw where it may roam · esc there leaves it unfenced'}
-          </div>
-        </div>
-      )}
+      {lifeOpen && lifeBoxFor(selA.id)}
       {selA.life && !lifeOpen && (
         <div className="lifeline">
           <span>
@@ -3904,10 +3913,24 @@ export default function App() {
     <div className="insp many">
       <div className="insp-head">
         <span className="insp-name">{selAll.length} picked</span>
+        {/* one behaviour onto the whole set. Placing a crowd one figure at a
+            time and asking each of them separately is the same answer typed
+            twelve times, and it is the thing a crowd most obviously wants. */}
+        <button
+          className={'lifedot' + (lifeOpen ? ' on' : '')}
+          data-tip={`give all ${selAll.length} the same way of moving`}
+          onClick={() => {
+            setLifeOpen((v) => !v)
+            setLifeNote('')
+          }}
+        >
+          <Icon name="sparkle" />
+        </button>
         <button className="abtn tiny" onClick={() => ed?.setSel([])}>
           clear
         </button>
       </div>
+      {lifeOpen && lifeBoxFor(selAll[0])}
       <div className="manygrid">
         {(
           [

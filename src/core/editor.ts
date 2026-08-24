@@ -656,12 +656,10 @@ export class Editor {
               for (const m of d.many) {
                 const q = this.doc.assets.find((z) => z.id === m.id)
                 if (!q) continue
-                q.x = clamp(Math.round(m.x + ddx), 0, this.doc.W - 1)
-                q.y = clamp(Math.round(m.y + ddy), 0, this.doc.H - 1)
+                this.moveTo(q, m.x + ddx, m.y + ddy)
               }
             } else {
-              a.x = nx
-              a.y = ny
+              this.moveTo(a, nx, ny)
             }
           } else if (d.mode === 'rotate') {
             let rot = d.rot0 + Math.atan2(fy - a.y, fx - a.x) - d.a0
@@ -683,8 +681,7 @@ export class Editor {
               q.sx = clamp(+(m.sx * f).toFixed(3), 0.02, 8)
               q.sy = clamp(+(m.sy * f).toFixed(3), 0.02, 8)
               q.scale = q.sx
-              q.x = clamp(Math.round(d.box.cx + (m.x - d.box.cx) * f), 0, this.doc.W - 1)
-              q.y = clamp(Math.round(d.box.cy + (m.y - d.box.cy) * f), 0, this.doc.H - 1)
+              this.moveTo(q, d.box.cx + (m.x - d.box.cx) * f, d.box.cy + (m.y - d.box.cy) * f)
             }
           } else {
             const [ux, uy] = this.rotFrame(a, fx, fy)
@@ -888,10 +885,10 @@ export class Editor {
           this.nudgeId = key
           this.nudgeAt = now
           for (const a of picked) {
-            if (k === 'arrowleft') a.x = clamp(a.x - step, 0, this.doc.W - 1)
-            else if (k === 'arrowright') a.x = clamp(a.x + step, 0, this.doc.W - 1)
-            else if (k === 'arrowup') a.y = clamp(a.y - step, 0, this.doc.H - 1)
-            else a.y = clamp(a.y + step, 0, this.doc.H - 1)
+            if (k === 'arrowleft') this.moveTo(a, a.x - step, a.y)
+            else if (k === 'arrowright') this.moveTo(a, a.x + step, a.y)
+            else if (k === 'arrowup') this.moveTo(a, a.x, a.y - step)
+            else this.moveTo(a, a.x, a.y + step)
           }
           this.touched()
         }
@@ -1560,12 +1557,12 @@ export class Editor {
     const cy = (all.y0 + all.y1) / 2
     this.doc.snap()
     for (const { a, b } of boxes) {
-      if (edge === 'left') a.x = clamp(Math.round(a.x + (all.x0 - b.x0)), 0, this.doc.W - 1)
-      else if (edge === 'right') a.x = clamp(Math.round(a.x + (all.x1 - b.x1)), 0, this.doc.W - 1)
-      else if (edge === 'hcenter') a.x = clamp(Math.round(a.x + (cx - b.cx)), 0, this.doc.W - 1)
-      else if (edge === 'top') a.y = clamp(Math.round(a.y + (all.y0 - b.y0)), 0, this.doc.H - 1)
-      else if (edge === 'bottom') a.y = clamp(Math.round(a.y + (all.y1 - b.y1)), 0, this.doc.H - 1)
-      else a.y = clamp(Math.round(a.y + (cy - b.cy)), 0, this.doc.H - 1)
+      if (edge === 'left') this.moveTo(a, a.x + (all.x0 - b.x0), a.y)
+      else if (edge === 'right') this.moveTo(a, a.x + (all.x1 - b.x1), a.y)
+      else if (edge === 'hcenter') this.moveTo(a, a.x + (cx - b.cx), a.y)
+      else if (edge === 'top') this.moveTo(a, a.x, a.y + (all.y0 - b.y0))
+      else if (edge === 'bottom') this.moveTo(a, a.x, a.y + (all.y1 - b.y1))
+      else this.moveTo(a, a.x, a.y + (cy - b.cy))
     }
     this.touched()
     this.say(`aligned ${picked.length} · ${edge}`)
@@ -1593,10 +1590,10 @@ export class Editor {
     let cur = axis === 'h' ? first.x0 : first.y0
     for (const { a, b } of boxes) {
       if (axis === 'h') {
-        a.x = clamp(Math.round(a.x + (cur - b.x0)), 0, this.doc.W - 1)
+        this.moveTo(a, a.x + (cur - b.x0), a.y)
         cur += b.w + gap
       } else {
-        a.y = clamp(Math.round(a.y + (cur - b.y0)), 0, this.doc.H - 1)
+        this.moveTo(a, a.x, a.y + (cur - b.y0))
         cur += b.h + gap
       }
     }
@@ -1771,6 +1768,30 @@ export class Editor {
   // copies of everything picked, and the copies become the selection so a
   // duplicate can be dragged straight off the originals. offset drops them
   // beside; ctrl+d asks for them in place, right on top.
+  /* Move a placement, and take its roaming box with it.
+   *
+   * life.bounds is in painting pixels, absolute, and nothing anywhere used to
+   * shift it. So dragging a wanderer across the map left its box behind and the
+   * thing walked back to where it had been placed, and duplicating one gave the
+   * copy the original's box, which is worse: a row of walkers all pacing the
+   * same square. The box is part of the placement, so it rides along.
+   *
+   * Everything that moves a placement goes through here. Nothing else should
+   * write x or y directly on something that might carry life. */
+  private moveTo(a: PlacedAsset, nx: number, ny: number) {
+    const x = clamp(Math.round(nx), 0, this.doc.W - 1)
+    const y = clamp(Math.round(ny), 0, this.doc.H - 1)
+    const b = a.life && a.life.bounds
+    if (b) {
+      // clamped so a box dragged off the edge keeps its size rather than
+      // collapsing against the border
+      b.x = clamp(Math.round(b.x + (x - a.x)), 0, Math.max(0, this.doc.W - b.w))
+      b.y = clamp(Math.round(b.y + (y - a.y)), 0, Math.max(0, this.doc.H - b.h))
+    }
+    a.x = x
+    a.y = y
+  }
+
   duplicateSelected(offset = true) {
     const picked = this.selAssets()
     if (!picked.length) {
@@ -1784,11 +1805,23 @@ export class Editor {
         ...a,
         id: 'a' + this.doc.assetNext++,
         frames: a.frames ? a.frames.slice() : undefined,
-        x: clamp(a.x + (offset ? 12 : 0), 0, this.doc.W - 1),
-        y: clamp(a.y + (offset ? 6 : 0), 0, this.doc.H - 1),
-        // the copy gets its own movement, or the pair moves as one thing
-        ...(a.life ? { life: this.freshLife(a.life) as Life } : {}),
+        x: a.x,
+        y: a.y,
+        // the copy gets its own movement, or the pair moves as one thing. The
+        // bounds are cloned rather than shared, because two placements pointing
+        // at one box means dragging either drags both their roaming areas.
+        ...(a.life
+          ? {
+              life: {
+                ...(this.freshLife(a.life) as Life),
+                ...(a.life.bounds ? { bounds: { ...a.life.bounds } } : {}),
+              },
+            }
+          : {}),
       }
+      // through moveTo, so the copy's box comes with it instead of being left
+      // on top of the original's and pacing a square it does not stand in
+      if (offset) this.moveTo(b, a.x + 12, a.y + 6)
       this.doc.assets.push(b)
       made.push(b.id)
     }
@@ -1848,10 +1881,22 @@ export class Editor {
         ...c,
         id: 'a' + this.doc.assetNext++,
         frames: c.frames ? c.frames.slice() : undefined,
-        x: clamp(Math.round(tx + (c.x - x0)), 0, this.doc.W - 1),
-        y: clamp(Math.round(ty + (c.y - y0)), 0, this.doc.H - 1),
-        ...(c.life ? { life: this.freshLife(c.life) as Life } : {}),
+        x: c.x,
+        y: c.y,
+        // cloned, not shared: two placements pointing at one box means dragging
+        // either drags both their roaming areas
+        ...(c.life
+          ? {
+              life: {
+                ...(this.freshLife(c.life) as Life),
+                ...(c.life.bounds ? { bounds: { ...c.life.bounds } } : {}),
+              },
+            }
+          : {}),
       }
+      // the box travels with the paste, so a walker dropped on the far quay
+      // roams there rather than pacing where it was copied from
+      this.moveTo(b, tx + (c.x - x0), ty + (c.y - y0))
       this.doc.assets.push(b)
       this.hiddenGroups.delete(b.group)
       made.push(b.id)
@@ -1889,7 +1934,11 @@ export class Editor {
     const same = (Object.keys(next) as (keyof AssetPatch)[]).every((k) => a[k] === next[k])
     if (same) return false
     this.doc.snap()
-    Object.assign(a, next)
+    // x and y go through moveTo so a typed coordinate carries the roaming box
+    // the same way a drag does. Everything else is a plain field.
+    const { x: nx, y: ny, ...rest } = next
+    Object.assign(a, rest)
+    if (nx !== undefined || ny !== undefined) this.moveTo(a, nx ?? a.x, ny ?? a.y)
     a.scale = a.sx
     if (next.group) this.hiddenGroups.delete(next.group)
     this.touched()
@@ -1913,10 +1962,9 @@ export class Editor {
     }
     if (item.dirs && Object.keys(item.dirs).length) a.dirs = { ...item.dirs }
     else delete a.dirs
-    if (at) {
-      a.x = clamp(Math.round(at.x), 0, this.doc.W - 1)
-      a.y = clamp(Math.round(at.y), 0, this.doc.H - 1)
-    }
+    // through moveTo like every other move: a crop that shifts the anchor moves
+    // the figure on screen, so its roaming box shifts with it
+    if (at) this.moveTo(a, at.x, at.y)
     this.touched()
     return true
   }
@@ -2027,6 +2075,34 @@ export class Editor {
     this.lifeT0 = performance.now() / 1000
     this.touched()
     return true
+  }
+  /* One behaviour onto everything picked, which is how a crowd gets made.
+   *
+   * They share the box, because the box is the place they are milling about in
+   * and a market is one place. What they do not share is the seed and the phase:
+   * identical numbers make a dozen figures step in perfect time, which reads as
+   * one thing rather than twelve people. Each also gets its own copy of the
+   * bounds, so dragging one later moves only its own area.
+   *
+   * One snapshot for the whole set, so z walks the crowd back in one press. */
+  setLifeMany(ids: string[], life: Life | null) {
+    const want = new Set(ids)
+    const picked = this.doc.assets.filter((a) => want.has(a.id))
+    if (!picked.length) return 0
+    this.doc.snap()
+    for (const a of picked) {
+      if (!life) {
+        delete a.life
+        continue
+      }
+      a.life = {
+        ...(this.freshLife(life) as Life),
+        ...(life.bounds ? { bounds: { ...life.bounds } } : {}),
+      }
+    }
+    this.lifeT0 = performance.now() / 1000
+    this.touched()
+    return picked.length
   }
   /* pause the preview: a thing that will not hold still is hard to place, and
    * hard to judge the LOOK of */
@@ -3130,6 +3206,9 @@ export class Editor {
       g.restore()
       this.drawGroupBox(g, z)
     }
+    // under the handles and over the map: it explains the picked thing, so it
+    // belongs with the selection chrome rather than with the art
+    this.drawLifeBounds(g, z)
     if (this.bandSt) this.drawBand(g, z)
     if (this.cropSt) this.drawCrop(g, z)
     if (this.placing && this.cursor && !this.dragAsset) {
@@ -3248,6 +3327,44 @@ export class Editor {
     }
     g.restore()
   }
+  /* The roaming box of whatever is picked, and the ground it may actually use.
+   *
+   * A wander is a box plus, when the box is mostly walkable, the floor inside it.
+   * Neither was ever drawn, so the area a figure would pace was invisible and
+   * the only way to find out was to press play and watch. Faint on purpose: this
+   * is a thing being explained, not a thing being edited.
+   *
+   * The walkable wash uses the same standsAt the preview and the game run, so
+   * the highlighted pixels are exactly the ones a leg can end on. */
+  private drawLifeBounds(g: CanvasRenderingContext2D, z: number) {
+    const picked = this.selAssets().filter((a) => a.life && a.life.bounds)
+    if (!picked.length) return
+    g.save()
+    for (const a of picked) {
+      const b = a.life!.bounds!
+      if (a.life!.walkOnly) {
+        /* only where it can stand, at one dot per pixel. Stepped by whole map
+         * pixels so the wash lines up with the mask rather than blurring across
+         * it, and skipped entirely when zoomed out far enough that it would
+         * read as a solid block. */
+        if (z >= 1) {
+          g.fillStyle = 'rgba(120,220,170,0.20)'
+          for (let y = b.y; y < b.y + b.h; y++)
+            for (let x = b.x; x < b.x + b.w; x++) if (this.standsAt(x, y)) g.fillRect(x * z, y * z, z, z)
+        }
+      } else {
+        g.fillStyle = 'rgba(143,147,245,0.10)'
+        g.fillRect(b.x * z, b.y * z, b.w * z, b.h * z)
+      }
+      g.strokeStyle = a.life!.walkOnly ? 'rgba(120,220,170,0.75)' : 'rgba(143,147,245,0.75)'
+      g.lineWidth = 1
+      g.setLineDash([3, 3])
+      g.strokeRect(b.x * z + 0.5, b.y * z + 0.5, b.w * z - 1, b.h * z - 1)
+      g.setLineDash([])
+    }
+    g.restore()
+  }
+
   private drawBand(g: CanvasRenderingContext2D, z: number) {
     const b = this.bandSt
     if (!b) return
