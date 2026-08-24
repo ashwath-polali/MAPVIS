@@ -2095,13 +2095,27 @@ async function animatePlan(it, ask, id, job, b) {
   if (!who.id) return { ...base, path: 'blocked', price: 0, why: who.why }
   noteCharacterId(it, who.id)
   const per = priceOf(who.w, who.h, said.frames, CHAR_BUDGET)
+  /* WHICH HEADINGS TO PAY FOR.
+   *
+   * Every heading is drawn for free when the character is created; animation is
+   * the thing priced per direction. A walker turns as it goes and needs all of
+   * them. Someone standing at a stall is placed facing one way and never turns,
+   * so paying for eight breathing loops buys seven nobody will ever see.
+   *
+   * A heading left out keeps its single still frame, and both renderers index a
+   * heading's own list, so a set that is animated on three headings and still on
+   * five is a legal thing rather than a broken one. */
+  const want = Array.isArray(b.headings)
+    ? it.heads.filter((k) => b.headings.map((h) => String(h).toLowerCase().trim()).includes(k))
+    : it.heads
+  const heads = want.length ? want : it.heads
   return {
     ...base,
     path: 'character',
-    headings: it.heads,
+    headings: heads,
     characterId: who.id,
     found: who.from,
-    price: per * it.heads.length,
+    price: per * heads.length,
   }
 }
 
