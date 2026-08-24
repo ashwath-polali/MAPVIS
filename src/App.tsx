@@ -1381,6 +1381,11 @@ export default function App() {
         push('no painting to read')
         return
       }
+      /* Taken NOW, for the same reason placeId is. markArea does not answer
+       * until a box has been drawn on the canvas, and drawing on the canvas is
+       * itself a selection gesture, so by the time the callback runs the set
+       * that was picked is down to one. */
+      const ids = e.selIds().includes(placeId) ? e.selIds() : [placeId]
       e.markArea(async (bounds) => {
         const job = 'life-' + Date.now()
         jobRef.current = job
@@ -1415,7 +1420,6 @@ export default function App() {
           /* One ask, everything picked. A market is one place and the crowd in
            * it shares the box; what they do not share is the seed and the phase,
            * or a dozen figures step in perfect time and read as one thing. */
-          const ids = e.selIds()
           const n = ids.length > 1 ? e.setLifeMany(ids, life) : (e.setLife(placeId, life), 1)
           setLifeNote(r.note || '')
           setLifeOpen(false)
@@ -3494,6 +3498,47 @@ export default function App() {
   const libMoves = (it: api.LibItem) =>
     it.kind === 'animated' ? (it.frames?.length ?? 0) > 1 : (Object.values(it.dirs ?? {})[0]?.length ?? 0) > 1
 
+  /* Which way a standing figure looks, laid out the way a compass is.
+   *
+   * Only for a view set, and only while it stands: a walker faces where it is
+   * going and lifeAt settles that every frame, so a chosen heading would be
+   * overwritten before it was seen. The middle of the grid is empty because
+   * there is no such thing as facing nowhere.
+   *
+   * It rewrites the placement's src, which is where both renderers read the
+   * resting heading from, so nothing else has to be told. */
+  const FACE_GRID = [
+    ['north-west', 'north', 'north-east'],
+    ['west', '', 'east'],
+    ['south-west', 'south', 'south-east'],
+  ] as const
+  const faceable = assets.filter((a) => selAll.includes(a.id) && a.dirs && Object.keys(a.dirs).length >= 4 && !a.life)
+  const facingNow = faceable.length === 1 ? Object.keys(faceable[0].dirs!).find((k) => faceable[0].dirs![k][0] === faceable[0].src) : ''
+  const faceRow = faceable.length > 0 && (
+    <div className="facerow">
+      <span className="grainlab">facing</span>
+      <div className="facegrid">
+        {FACE_GRID.flat().map((k, i) =>
+          k && faceable[0].dirs![k] ? (
+            <button
+              key={k}
+              className={'abtn tiny' + (k === facingNow ? ' on' : '')}
+              data-tip={k}
+              onClick={() => {
+                const n = ed?.faceAsset(faceable.map((a) => a.id), k) || 0
+                if (n) push(n > 1 ? `${n} now face ${k} · z undoes` : `facing ${k} · z undoes`)
+              }}
+            >
+              <span className="facearrow">{'↖↑↗←·→↙↓↘'[i]}</span>
+            </button>
+          ) : (
+            <span key={'gap' + i} className="facegap" />
+          ),
+        )}
+      </div>
+    </div>
+  )
+
   // the selected placement, in numbers you can type. Every field commits on
   // enter or blur and each commit is one undo step, so a typed 0.62 walks back
   // exactly like a dragged corner.
@@ -3688,6 +3733,7 @@ export default function App() {
         </button>
       </div>
       {selItem && selA && selBit >= 1.25 && grainRow}
+      {faceRow}
       {animBox}
     </div>
   )

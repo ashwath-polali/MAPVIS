@@ -1,51 +1,28 @@
 {
   "dirs": {
     "south": [
-      "/work/hub/library/net-mender/south-0.png",
-      "/work/hub/library/net-mender/south-1.png",
-      "/work/hub/library/net-mender/south-2.png",
-      "/work/hub/library/net-mender/south-3.png",
-      "/work/hub/library/net-mender/south-4.png",
-      "/work/hub/library/net-mender/south-5.png",
-      "/work/hub/library/net-mender/south-6.png",
-      "/work/hub/library/net-mender/south-7.png"
+      "/work/hub/library/net-mender/south.png"
     ],
     "south-east": [
-      "/work/hub/library/net-mender/south-east-0.png",
-      "/work/hub/library/net-mender/south-east-1.png",
-      "/work/hub/library/net-mender/south-east-2.png",
-      "/work/hub/library/net-mender/south-east-3.png",
-      "/work/hub/library/net-mender/south-east-4.png",
-      "/work/hub/library/net-mender/south-east-5.png",
-      "/work/hub/library/net-mender/south-east-6.png",
-      "/work/hub/library/net-mender/south-east-7.png"
+      "/work/hub/library/net-mender/south-east.png"
     ],
     "south-west": [
-      "/work/hub/library/net-mender/south-west-0.png",
-      "/work/hub/library/net-mender/south-west-1.png",
-      "/work/hub/library/net-mender/south-west-2.png",
-      "/work/hub/library/net-mender/south-west-3.png",
-      "/work/hub/library/net-mender/south-west-4.png",
-      "/work/hub/library/net-mender/south-west-5.png",
-      "/work/hub/library/net-mender/south-west-6.png",
-      "/work/hub/library/net-mender/south-west-7.png"
+      "/work/hub/library/net-mender/south-west.png"
     ],
     "west": [
-      "/work/hub/library/net-mender/west-0.png"
+      "/work/hub/library/net-mender/west.png"
     ],
     "east": [
-      "/work/hub/library/net-mender/east-0.png"
+      "/work/hub/library/net-mender/east.png"
     ],
     "north": [
-      "/work/hub/library/net-mender/north-0.png"
+      "/work/hub/library/net-mender/north.png"
     ],
     "north-east": [
-      "/work/hub/library/net-mender/north-east-0.png"
+      "/work/hub/library/net-mender/north-east.png"
     ],
     "north-west": [
-      "/work/hub/library/net-mender/north-west-0.png"
+      "/work/hub/library/net-mender/north-west.png"
     ]
-  },
-  "fps": 8,
-  "characterId": "027aea53-db83-4337-ae02-77cb49ab8eec"
+  }
 }

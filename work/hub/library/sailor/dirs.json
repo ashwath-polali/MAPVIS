@@ -1,86 +1,28 @@
 {
   "dirs": {
     "west": [
-      "/work/hub/library/sailor/west-0.png",
-      "/work/hub/library/sailor/west-1.png",
-      "/work/hub/library/sailor/west-2.png",
-      "/work/hub/library/sailor/west-3.png",
-      "/work/hub/library/sailor/west-4.png",
-      "/work/hub/library/sailor/west-5.png",
-      "/work/hub/library/sailor/west-6.png",
-      "/work/hub/library/sailor/west-7.png"
+      "/work/hub/library/sailor/west.png"
     ],
     "east": [
-      "/work/hub/library/sailor/east-0.png",
-      "/work/hub/library/sailor/east-1.png",
-      "/work/hub/library/sailor/east-2.png",
-      "/work/hub/library/sailor/east-3.png",
-      "/work/hub/library/sailor/east-4.png",
-      "/work/hub/library/sailor/east-5.png",
-      "/work/hub/library/sailor/east-6.png",
-      "/work/hub/library/sailor/east-7.png"
+      "/work/hub/library/sailor/east.png"
     ],
     "south": [
-      "/work/hub/library/sailor/south-0.png",
-      "/work/hub/library/sailor/south-1.png",
-      "/work/hub/library/sailor/south-2.png",
-      "/work/hub/library/sailor/south-3.png",
-      "/work/hub/library/sailor/south-4.png",
-      "/work/hub/library/sailor/south-5.png",
-      "/work/hub/library/sailor/south-6.png",
-      "/work/hub/library/sailor/south-7.png"
+      "/work/hub/library/sailor/south.png"
     ],
     "north-east": [
-      "/work/hub/library/sailor/north-east-0.png",
-      "/work/hub/library/sailor/north-east-1.png",
-      "/work/hub/library/sailor/north-east-2.png",
-      "/work/hub/library/sailor/north-east-3.png",
-      "/work/hub/library/sailor/north-east-4.png",
-      "/work/hub/library/sailor/north-east-5.png",
-      "/work/hub/library/sailor/north-east-6.png",
-      "/work/hub/library/sailor/north-east-7.png"
+      "/work/hub/library/sailor/north-east.png"
     ],
     "north-west": [
-      "/work/hub/library/sailor/north-west-0.png",
-      "/work/hub/library/sailor/north-west-1.png",
-      "/work/hub/library/sailor/north-west-2.png",
-      "/work/hub/library/sailor/north-west-3.png",
-      "/work/hub/library/sailor/north-west-4.png",
-      "/work/hub/library/sailor/north-west-5.png",
-      "/work/hub/library/sailor/north-west-6.png",
-      "/work/hub/library/sailor/north-west-7.png"
+      "/work/hub/library/sailor/north-west.png"
     ],
     "south-east": [
-      "/work/hub/library/sailor/south-east-0.png",
-      "/work/hub/library/sailor/south-east-1.png",
-      "/work/hub/library/sailor/south-east-2.png",
-      "/work/hub/library/sailor/south-east-3.png",
-      "/work/hub/library/sailor/south-east-4.png",
-      "/work/hub/library/sailor/south-east-5.png",
-      "/work/hub/library/sailor/south-east-6.png",
-      "/work/hub/library/sailor/south-east-7.png"
+      "/work/hub/library/sailor/south-east.png"
     ],
     "south-west": [
-      "/work/hub/library/sailor/south-west-0.png",
-      "/work/hub/library/sailor/south-west-1.png",
-      "/work/hub/library/sailor/south-west-2.png",
-      "/work/hub/library/sailor/south-west-3.png",
-      "/work/hub/library/sailor/south-west-4.png",
-      "/work/hub/library/sailor/south-west-5.png",
-      "/work/hub/library/sailor/south-west-6.png",
-      "/work/hub/library/sailor/south-west-7.png"
+      "/work/hub/library/sailor/south-west.png"
     ],
     "north": [
-      "/work/hub/library/sailor/north-0.png",
-      "/work/hub/library/sailor/north-1.png",
-      "/work/hub/library/sailor/north-2.png",
-      "/work/hub/library/sailor/north-3.png",
-      "/work/hub/library/sailor/north-4.png",
-      "/work/hub/library/sailor/north-5.png",
-      "/work/hub/library/sailor/north-6.png",
-      "/work/hub/library/sailor/north-7.png"
+      "/work/hub/library/sailor/north.png"
     ]
-  },
-  "fps": 8,
-  "characterId": "14cccf0f-cb29-4754-8d2d-e3f2f1bcb114"
+  }
 }

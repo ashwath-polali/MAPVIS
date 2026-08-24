@@ -2076,6 +2076,26 @@ export class Editor {
     this.touched()
     return true
   }
+  /* Which way a standing figure looks.
+   *
+   * Only a view set can answer this, and only one that is standing: a walker
+   * faces where it is going and lifeAt decides that every frame, so a chosen
+   * facing would be overwritten before it was ever seen.
+   *
+   * It is one field. Both renderers read the resting heading off the
+   * placement's own src, so pointing src at another heading turns the figure in
+   * the editor and in the game with nothing else to keep in step.
+   */
+  faceAsset(ids: string[], heading: string): number {
+    const want = new Set(ids)
+    const picked = this.doc.assets.filter((a) => want.has(a.id) && a.dirs && a.dirs[heading] && !a.life)
+    if (!picked.length) return 0
+    this.doc.snap()
+    for (const a of picked) a.src = a.dirs![heading][0]
+    this.touched()
+    return picked.length
+  }
+
   /* One behaviour onto everything picked, which is how a crowd gets made.
    *
    * They share the box, because the box is the place they are milling about in

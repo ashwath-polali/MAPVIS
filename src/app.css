@@ -1656,6 +1656,35 @@ input[type='range']:disabled {
 .lib.on .lib-name {
   color: var(--acc);
 }
+/* the facing picker, laid out the way a compass is. The middle cell is empty
+   because there is no such thing as facing nowhere. */
+.facerow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 6px var(--pan-in) 0;
+}
+.facegrid {
+  display: grid;
+  grid-template-columns: repeat(3, 22px);
+  grid-auto-rows: 22px;
+  gap: 2px;
+}
+.facegrid .abtn.tiny {
+  width: 22px;
+  min-width: 0;
+  height: 22px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+}
+.facegap {
+  display: block;
+}
+.facearrow {
+  font-size: 12px;
+  line-height: 1;
+}
 /* one dot on a row whose art moves. A walk cycle and a still are both kind
    'static' when they are a set of headings, so without this the list showed a
    walker and a statue as the same thing. Corner, not inline, so it never
