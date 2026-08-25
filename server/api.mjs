@@ -3130,37 +3130,39 @@ async function planMake({ ask, what, kind, id, mapFile, boxFile, box, previous, 
       `are. You can see the map, so use what is actually in it rather than generic pixel-art ` +
       `words. If the user asked for a mood the map does not have, follow the user.`,
     ``,
-    /* THE SHAPE, taken off the 690 objects on this account rather than invented.
-     *
-     * Left to its own devices this router wrote things like "clean pixel art,
-     * low top-down three quarter view, strong dark outline, saturated palette"
-     * and got back a side elevation, a straight overhead and a rectangular
-     * trough that was not a boat. The kept objects are all written one way, and
-     * writing a rowboat that way instead produced a correct one first try at
-     * the same price. Two differences did most of it: naming the projection
-     * ISOMETRIC rather than a second view that fights the endpoint's own view
-     * parameter, and MUTED saturation rather than saturated. */
-    `SHAPE. Every object he has kept is written as TWO SENTENCES and you must match it. ` +
-      `First the subject and its own materials in physical detail: what it is made of, how it ` +
-      `is worn, which parts show, what is cracked or coiled or missing. Then a full stop, then ` +
-      `the style as its own separate sentence. Never blend the two.`,
-    ``,
-    `THE STYLE SENTENCE. Begin it with "Isometric pixel art" and never any other projection ` +
-      `wording. The endpoint is already told its view, and a second differently worded one ` +
-      `fights it: that is measured, it is what returned a side-on boat for a top-down map. ` +
-      `Then chunky pixels, a limited palette named by its real colours, a dark outline named ` +
-      `by its colour, the light direction and the shaded side as separate facts, and MUTED ` +
-      `saturation. Muted, never saturated. Saturated is what makes a thing sit on the map like ` +
-      `a sticker.`,
-    ``,
-    `One he kept, verbatim, so the shape is not in doubt: "A small wooden rowboat listing on ` +
-      `its side, hull of overlapping planks in faded red-brown and bleached tan with peeling ` +
-      `paint, one cracked oar laid across the gunwale, coil of frayed rope at the bow, a plank ` +
-      `missing amidships. Isometric pixel art, chunky pixels, limited warm palette, dark brown ` +
-      `outline, lit from the upper left, shaded right, muted saturation."`,
   )
   if (sprite) lines.push(...spriteLines(kind))
   else {
+    lines.push(
+      /* THE SHAPE, taken off the 690 objects on this account rather than invented.
+       *
+       * Left to its own devices this router wrote things like "clean pixel art,
+       * low top-down three quarter view, strong dark outline, saturated palette"
+       * and got back a side elevation, a straight overhead and a rectangular
+       * trough that was not a boat. The kept objects are all written one way, and
+       * writing a rowboat that way instead produced a correct one first try at
+       * the same price. Two differences did most of it: naming the projection
+       * ISOMETRIC rather than a second view that fights the endpoint's own view
+       * parameter, and MUTED saturation rather than saturated. */
+      `SHAPE. Every object he has kept is written as TWO SENTENCES and you must match it. ` +
+        `First the subject and its own materials in physical detail: what it is made of, how it ` +
+        `is worn, which parts show, what is cracked or coiled or missing. Then a full stop, then ` +
+        `the style as its own separate sentence. Never blend the two.`,
+      ``,
+      `THE STYLE SENTENCE. Begin it with "Isometric pixel art" and never any other projection ` +
+        `wording. The endpoint is already told its view, and a second differently worded one ` +
+        `fights it: that is measured, it is what returned a side-on boat for a top-down map. ` +
+        `Then chunky pixels, a limited palette named by its real colours, a dark outline named ` +
+        `by its colour, the light direction and the shaded side as separate facts, and MUTED ` +
+        `saturation. Muted, never saturated. Saturated is what makes a thing sit on the map like ` +
+        `a sticker.`,
+      ``,
+      `One he kept, verbatim, so the shape is not in doubt: "A small wooden rowboat listing on ` +
+        `its side, hull of overlapping planks in faded red-brown and bleached tan with peeling ` +
+        `paint, one cracked oar laid across the gunwale, coil of frayed rope at the bow, a plank ` +
+        `missing amidships. Isometric pixel art, chunky pixels, limited warm palette, dark brown ` +
+        `outline, lit from the upper left, shaded right, muted saturation."`,
+    )
     lines.push(
       ``,
       `Choose the sprite's pixel size so it is in scale with things already there. Say what you ` +
