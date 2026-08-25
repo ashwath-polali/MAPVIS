@@ -3213,7 +3213,11 @@ export class Editor {
       if (img) {
         g.save()
         g.translate((a.x + (L ? L.dx : 0)) * z, (a.y + (L ? L.dy : 0)) * z)
-        g.rotate(a.rot)
+        // the placement's own rotation, plus whatever tilt its behaviour is
+        // leaning through right now. Rotating about the feet, which is where the
+        // transform is already centred, so a boat leans on its waterline rather
+        // than swinging around its mast.
+        g.rotate(a.rot + (L ? L.rot : 0))
         g.scale(a.sx * (a.fx !== !!(L && L.flip && !a.dirs) ? -1 : 1) * z, a.sy * (a.fy ? -1 : 1) * z)
         g.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight)
         g.restore()

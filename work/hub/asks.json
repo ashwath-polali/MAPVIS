@@ -1,5 +1,12 @@
 [
   {
+    "name": "rowboat",
+    "kind": "asset",
+    "ask": "A small open wooden rowboat seen from above and to one side so the inside of the hull is visible, bow pointing up and to the right, hull of overlapping planks in faded red-brown and bleached tan, two oars shipped across the thwarts, a coil of rope at the bow. Isometric pixel art, chunky pixels, limited warm palette, dark brown outline, lit from the upper left, shaded lower right, muted saturation.",
+    "prompt": "A small open wooden rowboat seen from above and to one side so the inside of the hull is visible, bow pointing up and to the right, hull of overlapping planks in faded red-brown and bleached tan, two oars shipped across the thwarts, a coil of rope at the bow. Isometric pixel art, chunky pixels, limited warm palette, dark brown outline, lit from the upper left, shaded lower right, muted saturation.",
+    "at": "2026-08-25T00:07:37.136Z"
+  },
+  {
     "name": "ship-paw-iso",
     "kind": "asset",
     "ask": "A single-masted sailing ship seen FROM ABOVE AND SLIGHTLY BEHIND so its whole open deck is visible looking down into it, the hull foreshortened away from the viewer, bow pointing up and to the right. Deep planked hull in warm red-brown with a bleached tan strake, a tall upright mast rising toward the viewer, one broad square sail of cream canvas carrying ONE LARGE DARK PANTHER PAW PRINT, rope rigging, a small raised stern deck, no crew. Isometric pixel art, chunky pixels, limited warm palette, d",
@@ -271,12 +278,5 @@
     "ask": "a water carrier balancing a yoke across the shoulders with a clay jar hanging at each end, moss green tunic, bare arms, dark skin, chunky readable pixel art, few colours, strong dark outline, saturated warm palette, golden-hour light from the left",
     "prompt": "a water carrier balancing a yoke across the shoulders with a clay jar hanging at each end, moss green tunic, bare arms, dark skin, chunky readable pixel art, few colours, strong dark outline, saturated warm palette, golden-hour light from the left",
     "at": "2026-08-24T19:14:42.501Z"
-  },
-  {
-    "name": "sailor",
-    "kind": "character",
-    "ask": "a young sailor in a blue and white striped shirt, navy trousers, a coil of rope over one shoulder, red kerchief at the neck, chunky readable pixel art, few colours, strong dark outline, saturated warm palette, golden-hour light from the left",
-    "prompt": "a young sailor in a blue and white striped shirt, navy trousers, a coil of rope over one shoulder, red kerchief at the neck, chunky readable pixel art, few colours, strong dark outline, saturated warm palette, golden-hour light from the left",
-    "at": "2026-08-24T19:11:39.452Z"
   }
 ]

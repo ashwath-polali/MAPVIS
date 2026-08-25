@@ -77,6 +77,20 @@ export interface Life {
    * the air, which is not standing on the ground it is drawn over */
   airborne?: boolean
 
+  /* ---- rock: a tilt, on any behaviour --------------------------------------
+   *
+   * A boat at its mooring does not travel and does not change shape, it LEANS.
+   * That is a rotation over time, and baking a rotation into frames is what
+   * turns a gentle rock into a generic wobble that loops wrong: the animator is
+   * handed a still and asked to invent motion it has no physics for.
+   *
+   * So it lives here with the rest of the movement-as-data. Degrees either side
+   * of upright, and how many leans a second. It rides on top of whatever the
+   * placement is already doing, so a moored boat drifting an inch can tilt while
+   * it does it, and a hanging sign can tilt while standing perfectly still. */
+  rock?: number
+  rockRate?: number
+
   // ---- orbit: a circuit ---------------------------------------------------
   /* seconds for one lap */
   period?: number
@@ -136,6 +150,9 @@ export function cleanLife(raw: unknown): Life | null {
   if (r.walkOnly) out.walkOnly = true
   if (isFinite(Number(r.walkPct))) out.walkPct = clamp(num(r.walkPct, 0), 0, 1)
   if (isFinite(Number(r.phase))) out.phase = clamp(num(r.phase, 0), 0, 100000)
+  // the tilt rides on every kind, so it is read before the kind is branched on
+  if (isFinite(Number(r.rock))) out.rock = clamp(num(r.rock, 0), 0, 45)
+  if (isFinite(Number(r.rockRate))) out.rockRate = clamp(num(r.rockRate, 0.35), 0.01, 8)
 
   if (kind === 'wander') {
     out.range = clamp(num(r.range, 40), 4, 4000)
@@ -208,6 +225,9 @@ export interface LifeAt {
    * spot until the next one. The frames are right, the question is when to run
    * them. A caller with a single-frame sprite can ignore it. */
   moving: boolean
+  /* Extra tilt in radians, added to whatever rotation the placement already
+   * carries. Zero unless the behaviour asked to rock. */
+  rot: number
 }
 export type LifeFacing =
   | 'east'
@@ -328,7 +348,12 @@ export function lifeAt(
   // the phase is what keeps two copies of one behaviour out of step
   const t = t0 + (life.phase || 0)
   const floor = life.walkOnly && canStand ? canStand : null
-  const still: LifeAt = { dx: 0, dy: 0, flip: false, alpha: 1, facing: 'south', moving: false }
+  /* the tilt, worked out once and added to every answer below. It is on top of
+   * the behaviour rather than one of them, so a moored boat can drift an inch
+   * and lean at the same time, and a sign can lean while standing still. */
+  const rock = life.rock ? (life.rock * Math.PI) / 180 : 0
+  const rot = rock ? rock * Math.sin(t * Math.PI * 2 * (life.rockRate ?? 0.35)) : 0
+  const still: LifeAt = { dx: 0, dy: 0, flip: false, alpha: 1, facing: 'south', moving: false, rot }
   if (!life) return still
   /* THE PATH, not only where it ends.
    *
@@ -410,6 +435,7 @@ export function lifeAt(
           alpha: 1,
           facing: facingFrom(tx - px, ty - py),
           moving: true,
+          rot,
         }
       }
       clock += moveT
@@ -423,6 +449,7 @@ export function lifeAt(
           alpha: 1,
           facing: facingFrom(tx - px, ty - py),
           moving: false,
+          rot,
         }
       }
       clock += pause
@@ -436,7 +463,7 @@ export function lifeAt(
     const cycle = life.cycle ?? 35
     const travel = Math.min(life.travel ?? 9, cycle)
     const u = (t % cycle) / travel
-    if (u > 1) return { dx: 0, dy: 0, flip: false, alpha: 0, facing: 'south', moving: false }
+    if (u > 1) return { dx: 0, dy: 0, flip: false, alpha: 0, facing: 'south', moving: false, rot }
     const b = life.bounds
     const fx = life.fromX ?? (b ? b.x - 20 : home.x - 200)
     const fy = life.fromY ?? (b ? b.y + b.h * 0.3 : home.y)
@@ -454,6 +481,7 @@ export function lifeAt(
       facing: facingFrom(tx - fx, ty - fy),
       // a pass is travel end to end; there is no standing about in it
       moving: true,
+      rot,
     }
   }
 
@@ -472,6 +500,7 @@ export function lifeAt(
       facing: facingFrom(-Math.sin(a) * rx, Math.cos(a) * ry),
       // an orbit never stops going round
       moving: true,
+      rot,
     }
   }
 
@@ -485,5 +514,6 @@ export function lifeAt(
     facing: 'south',
     // a drift is a sway that never settles, so its frames keep running
     moving: true,
+    rot,
   }
 }
