@@ -419,6 +419,40 @@ ok(
   `${sn}/20000 frames off, worst ${sw.toFixed(2)}px, with a four state round`,
 )
 
+/* AND THE SAME PATH TURNED ON ITS SIDE, WHICH IS NOT THE SAME QUESTION.
+ *
+ * The reading above passed for a long time on code that had not solved this. The
+ * share used to squeeze a state's HEIGHT to 0.35 of its width and touched
+ * nothing else, so a path lying ACROSS the box came out inside the squeeze with
+ * 2.5px to spare and a path running UP it did not. Same box, same four states,
+ * same 20000 frames, corridor turned ninety degrees: 1360 frames off it and
+ * 9.40px out, against 0 for the flat one. A fixture that only works one way up
+ * is not a fixture, and a fault the check cannot see is one that ships. */
+const UPPATH = { x0: 130, x1: 170 }
+const upPath = (x: number, y: number) => y >= BOX.y && y < BOX.y + BOX.h && x >= UPPATH.x0 && x < UPPATH.x1
+const strayedUp = (l: Life): [number, number] => {
+  let n = 0
+  let w = 0
+  for (let i = 0; i < 20000; i++) {
+    const a = lifeAt(l, i * 0.016, fh, upPath)
+    const x = fh.x + a.dx
+    const y = fh.y + a.dy
+    const e = Math.max(0, UPPATH.x0 - x, x - UPPATH.x1, BOX.y - y, y - (BOX.y + BOX.h))
+    if (e > 0.001) {
+      n++
+      if (e > w) w = e
+    }
+  }
+  return [n, w]
+}
+const [un, uw] = strayedUp(fencedSeq)
+const [upn] = strayedUp(fencedPlain)
+ok(
+  'and it keeps to that path with the corridor turned on its side too',
+  un < upn * 4 + 40 && uw < 1,
+  `${un}/20000 frames off, worst ${uw.toFixed(2)}px, against ${upn} with no round`,
+)
+
 /* and the anchor walking with the round must not have cost the continuity the
  * sequence work bought. Same three seams as the troll below, on the fenced
  * walker, where the anchor is the thing that moves. */
@@ -746,6 +780,234 @@ ok(
   `${((100 * sameAsLast) / 20000).toFixed(1)}% of 20000 frames sat exactly on the last moving state, against 55.8% before`,
 )
 
+/* ---- WHAT A BOX MEANS INSIDE A ROUND ------------------------------------
+ *
+ * The box is the room the WHOLE ROUND has and the states that move divide it.
+ * The live state decides everything anyone can watch happen, the speed and the
+ * gait and the facing and the picture, at full asking. A state that is not live
+ * decides one thing, how far it has already carried the thing, which is the
+ * memory that lets a state resume where it froze.
+ *
+ * The fixture is deliberately lopsided, 15 px/s against 120, because a pair that
+ * far apart is what showed the fault, and it is read from the middle of the box
+ * AND from 5px inside its corner. A placement is not usually dropped dead
+ * centre, and the corner is where the share used to run out of room: it handed
+ * every state the same reach in both directions, so the sum overran the short
+ * side and the hold took the difference. Measured from the corner before: 54.9%
+ * of 60000 frames held against the fence and 8.6% of the moving frames covering
+ * no ground at all, which is marching on the spot. After: 0.0% and 0.0%.
+ *
+ * Read from three sweep starts, because a state divides its own clock by the
+ * round, so anything wrong in where it is worked out from multiplies by the
+ * rounds already gone. t=0 is where a fault of this kind hides. */
+const NBOX = { x: 100, y: 100, w: 100, h: 100 }
+const nRound = (slow: number) =>
+  cleanLife({
+    kind: 'wander',
+    bounds: NBOX,
+    range: 60,
+    speedMin: slow,
+    speedMax: slow,
+    pauseMin: 0.5,
+    pauseMax: 2,
+    bob: 0,
+    bobRate: 0,
+    seed: 11,
+    states: [
+      { secs: 22 },
+      { secs: 18, art: 1, move: { kind: 'wander', speedMin: 120, speedMax: 120, pauseMin: 0.5, pauseMax: 2, bob: 0, seed: 511 } },
+    ],
+  }) as Life
+const nAlone = (sp: number, seed: number) =>
+  cleanLife({ kind: 'wander', bounds: NBOX, range: 60, speedMin: sp, speedMax: sp, pauseMin: 0.5, pauseMax: 2, bob: 0, bobRate: 0, seed }) as Life
+const NR = 40
+const nLive = (t: number) => (((t % NR) + NR) % NR < 22 ? 0 : 1)
+
+/* one sweep, every reading taken off it. `want` picks which state's live windows
+ * to read, or null for the whole round. */
+const readRound = (l: Life, h: { x: number; y: number }, want: number | null, t0: number, n: number) => {
+  let dist = 0
+  let movT = 0
+  let allT = 0
+  let lox = Infinity
+  let hix = -Infinity
+  let loy = Infinity
+  let hiy = -Infinity
+  let fence = 0
+  let pinned = 0
+  let movN = 0
+  let frames = 0
+  let run = 0
+  let longestStill = 0
+  for (let i = 0; i < n; i++) {
+    const t = t0 + i * 0.016
+    if (want !== null && (nLive(t) !== want || nLive(t + 0.016) !== want)) continue
+    const a = lifeAt(l, t, h)
+    const b = lifeAt(l, t + 0.016, h)
+    const x = h.x + a.dx
+    const y = h.y + a.dy
+    const d = Math.hypot(b.dx - a.dx, b.dy - a.dy)
+    allT += 0.016
+    frames++
+    lox = Math.min(lox, x)
+    hix = Math.max(hix, x)
+    loy = Math.min(loy, y)
+    hiy = Math.max(hiy, y)
+    /* sitting EXACTLY on an edge is the hold biting. A walk that merely arrives
+     * near one lands on a real number and misses it, so this counts the hold and
+     * not the walk. */
+    if (
+      Math.abs(x - NBOX.x) < 1e-9 ||
+      Math.abs(x - (NBOX.x + NBOX.w)) < 1e-9 ||
+      Math.abs(y - NBOX.y) < 1e-9 ||
+      Math.abs(y - (NBOX.y + NBOX.h)) < 1e-9
+    )
+      fence++
+    if (a.moving) {
+      dist += d
+      movT += 0.016
+      movN++
+      // bob is 0 on this fixture, so a moving frame that covers nothing is
+      // genuinely pinned rather than at the top of a hop
+      if (d < 1e-9) pinned++
+      run = 0
+    } else {
+      run += 0.016
+      if (run > longestStill) longestStill = run
+    }
+  }
+  return {
+    px: dist / movT,
+    movPct: (100 * movT) / allT,
+    spanX: hix - lox,
+    spanY: hiy - loy,
+    fencePct: (100 * fence) / frames,
+    pinPct: (100 * pinned) / Math.max(1, movN),
+    longestStill,
+  }
+}
+
+const nMid = { x: 150, y: 150 }
+const nCorner = { x: 105, y: 105 }
+let worstSlow = [Infinity, -Infinity]
+let worstFast = [Infinity, -Infinity]
+let leastSpan = Infinity
+let worstFence = 0
+let worstPin = 0
+let worstStill = 0
+console.log('\na two state round in a 100x100 box, one state asking 15 px/s and one asking 120:')
+for (const [h, where] of [
+  [nMid, 'from the middle'],
+  [nCorner, '5px in from the corner'],
+] as [{ x: number; y: number }, string][]) {
+  for (const t0 of [0, 12000, 300000]) {
+    const l = nRound(15)
+    const s0 = readRound(l, h, 0, t0, 60000)
+    const s1 = readRound(l, h, 1, t0, 60000)
+    const whole = readRound(l, h, null, t0, 60000)
+    worstSlow = [Math.min(worstSlow[0], s0.px), Math.max(worstSlow[1], s0.px)]
+    worstFast = [Math.min(worstFast[0], s1.px), Math.max(worstFast[1], s1.px)]
+    leastSpan = Math.min(leastSpan, whole.spanX, whole.spanY)
+    worstFence = Math.max(worstFence, whole.fencePct)
+    worstPin = Math.max(worstPin, whole.pinPct)
+    worstStill = Math.max(worstStill, s1.longestStill)
+    console.log(
+      `  ${where.padEnd(23)} t0=${String(t0).padStart(6)}s  drew ${s0.px.toFixed(1)} / ${s1.px.toFixed(1)} px/s  ` +
+        `covers ${whole.spanX.toFixed(0)}x${whole.spanY.toFixed(0)}  on the fence ${whole.fencePct.toFixed(1)}%  pinned ${whole.pinPct.toFixed(1)}%`,
+    )
+  }
+}
+/* The band is wide on the fast state for the same reason the older reading above
+ * says: a 16ms frame that straddles the end of a leg counts the whole frame and
+ * only part of the travel, which costs a 120 more than it costs a 15. */
+ok(
+  'every state of a boxed round draws the speed IT asked for',
+  worstSlow[0] > 13.5 && worstSlow[1] < 16.5 && worstFast[0] > 105 && worstFast[1] < 132,
+  `asked 15 / 120, drew ${worstSlow[0].toFixed(1)}-${worstSlow[1].toFixed(1)} / ${worstFast[0].toFixed(1)}-${worstFast[1].toFixed(1)} px/s over 6 sweeps`,
+)
+/* The whole box and not most of it is too much to ask of a walk that picks its
+ * targets at random, so the bar is that the round is clearly using the room it
+ * was given rather than a slice of it. The twelve readings land between 84 and
+ * 96px of the 100. The number this replaces is 32, which is what the flattening
+ * left of the box's height, and no threshold between them is arguable. */
+ok(
+  'and the round uses the box the person actually drew',
+  leastSpan > 80,
+  `the tightest of 12 readings covers ${leastSpan.toFixed(0)}px of a 100px box, against 32 before`,
+)
+ok(
+  'and the hold on the sum never has to bite, wherever it stands in its box',
+  worstFence < 0.5 && worstPin < 0.1,
+  `worst ${worstFence.toFixed(1)}% of 60000 frames on the fence and ${worstPin.toFixed(1)}% of the moving ones pinned, against 54.9% and 8.6%`,
+)
+
+/* and a state boxed into a round must not spend its life standing about. Its
+ * legs ARE shorter, because its share of the room is, and at a fixed speed a
+ * shorter leg is a shorter walk between the same pauses. That is the price of
+ * the sum and it is arithmetic: two movers, so half the leg, so a state that
+ * walked L/(L + pause*speed) of the time alone walks (L/2)/((L/2) + pause*speed)
+ * inside a round. On this fixture that predicts 15% against 26%, and 15% is what
+ * it measures. What is NOT allowed is the collapse the old share caused, which
+ * squeezed the same state into a fifth of the box's height and took it to 11%.
+ * The stretch it stands still for is the pause it asked for either way. */
+const aloneFast = readRound(nAlone(120, 511), nMid, null, 12000, 60000)
+const inRoundFast = readRound(nRound(15), nMid, 1, 12000, 60000)
+ok(
+  'and a state in a round walks at least half as much of the time as it would alone',
+  inRoundFast.movPct > aloneFast.movPct * 0.5,
+  `moving ${inRoundFast.movPct.toFixed(0)}% of its live windows against ${aloneFast.movPct.toFixed(0)}% with no round, 11% before`,
+)
+ok(
+  'and it stands still for no longer at a stretch than it would alone',
+  worstStill < aloneFast.longestStill * 1.5 + 0.1,
+  `longest ${worstStill.toFixed(2)}s against ${aloneFast.longestStill.toFixed(2)}s, both inside the 2s pause it asked for`,
+)
+
+/* ---- AND A STATE THAT IS NOT LIVE DECIDES NOTHING YOU CAN SEE -----------
+ *
+ * Read without knowing anything about how the round is worked out inside, which
+ * is the point: a check that rebuilds the implementation only proves the
+ * implementation equals itself. Two rounds that differ ONLY in the speed of
+ * state zero. While state ONE is live, state zero's clock is stopped, so its
+ * contribution is a constant, so the two rounds must step by exactly the same
+ * amount on every frame. If a state that is not live is deciding anything, or if
+ * the hold on the sum is biting, the two disagree.
+ *
+ * The control on the same sweep is the half that makes it a reading rather than
+ * a tautology: while state ZERO is live the two MUST differ, because that is the
+ * state whose speed was changed. */
+const nA = nRound(15)
+const nB = nRound(60)
+let liveDiffer = 0
+let worstStepGap = 0
+let controlDiffer = 0
+for (let i = 0; i < 60000; i++) {
+  const t = 12000 + i * 0.016
+  const k = nLive(t)
+  if (nLive(t + 0.016) !== k) continue
+  const a1 = lifeAt(nA, t, nCorner)
+  const b1 = lifeAt(nA, t + 0.016, nCorner)
+  const a2 = lifeAt(nB, t, nCorner)
+  const b2 = lifeAt(nB, t + 0.016, nCorner)
+  const g = Math.hypot(b1.dx - a1.dx - (b2.dx - a2.dx), b1.dy - a1.dy - (b2.dy - a2.dy))
+  if (k === 1) {
+    if (g > 1e-9) {
+      liveDiffer++
+      worstStepGap = Math.max(worstStepGap, g)
+    }
+  } else if (g > 1e-9) controlDiffer++
+}
+ok(
+  'changing a state that is not live does not move the one that is',
+  liveDiffer === 0,
+  `${liveDiffer} frames moved by the other state's speed, worst ${worstStepGap.toFixed(3)}px`,
+)
+ok(
+  'and the reading can tell the difference when it should',
+  controlDiffer > 1000,
+  `${controlDiffer} frames differ while the state whose speed changed IS the live one`,
+)
+
 /* ---- NOBODY MARCHES ON THE SPOT -----------------------------------------
  *
  * moving is what runs the walk cycle, so a frame that says moving while the feet
@@ -805,46 +1067,76 @@ ok(
  * same broken code measured 0 over 2.5px at t=1200, 0 at t=4000, then 174 at
  * t=12000, 200 at t=30000 and 200 at t=60000. A worst step of 4.47px there.
  * Anchoring only the live state instead of every state put a 76 to 95px jump at
- * every state change on all 200 seeds from t=0. After: 0 of 200. */
+ * every state change on all 200 seeds from t=0. Re-measured here as the answer
+ * to keeping the box: 200 of 200 seeds step over 2.5px, worst 89.65px, and the
+ * jump exactly at a state change averages 32.5px over 1000 changes and reaches
+ * 92.2. That is the cost of letting the live state's box win outright, and it is
+ * why the round is a sum instead. After: 0 of 200.
+ *
+ * Read from the corner as well as the middle, because where the placement stands
+ * in its own box is what decides whether the hold on the sum has anything to do,
+ * and the hold is a second thing that can step. */
+const seedSweep = (h: { x: number; y: number }, t0: number) => {
+  let jumpy = 0
+  let worstJump = 0
+  let worstJumpSeed = 0
+  for (let s = 1; s <= 200; s++) {
+    const l = cleanLife({
+      kind: 'wander',
+      bounds: BOX,
+      walkOnly: true,
+      walkPct: 0.4,
+      range: 60,
+      speedMin: 12,
+      speedMax: 24,
+      pauseMin: 0.5,
+      pauseMax: 2,
+      bob: 0,
+      seed: s,
+      states: [
+        { secs: 22 },
+        { secs: 18, art: 1, move: { kind: 'wander', speedMin: 20, speedMax: 30, pauseMin: 0.3, pauseMax: 1.2, bob: 0, seed: s + 500 } },
+      ],
+    }) as Life
+    let w = 0
+    let prev = lifeAt(l, t0, h, onPath)
+    for (let i = 1; i < 2600; i++) {
+      const a = lifeAt(l, t0 + i * 0.016, h, onPath)
+      const d = Math.hypot(a.dx - prev.dx, a.dy - prev.dy)
+      if (d > w) w = d
+      prev = a
+    }
+    if (w > 2.5) jumpy++
+    if (w > worstJump) {
+      worstJump = w
+      worstJumpSeed = s
+    }
+  }
+  return { jumpy, worstJump, worstJumpSeed }
+}
 let jumpySeeds = 0
 let jumpiest = 0
 let jumpiestSeed = 0
-for (let s = 1; s <= 200; s++) {
-  const l = cleanLife({
-    kind: 'wander',
-    bounds: BOX,
-    walkOnly: true,
-    walkPct: 0.4,
-    range: 60,
-    speedMin: 12,
-    speedMax: 24,
-    pauseMin: 0.5,
-    pauseMax: 2,
-    bob: 0,
-    seed: s,
-    states: [
-      { secs: 22 },
-      { secs: 18, art: 1, move: { kind: 'wander', speedMin: 20, speedMax: 30, pauseMin: 0.3, pauseMax: 1.2, bob: 0, seed: s + 500 } },
-    ],
-  }) as Life
-  let w = 0
-  let prev = lifeAt(l, 12000, fh, onPath)
-  for (let i = 1; i < 2600; i++) {
-    const a = lifeAt(l, 12000 + i * 0.016, fh, onPath)
-    const d = Math.hypot(a.dx - prev.dx, a.dy - prev.dy)
-    if (d > w) w = d
-    prev = a
-  }
-  if (w > 2.5) jumpySeeds++
-  if (w > jumpiest) {
-    jumpiest = w
-    jumpiestSeed = s
+let jumpiestWhere = ''
+console.log('\ntwo fenced wanders on a round, 200 seeds each, worst single frame step:')
+for (const [h, where, t0] of [
+  [fh, 'from the middle', 12000],
+  [{ x: 105, y: 135 }, 'from the corner', 12000],
+  [{ x: 105, y: 135 }, 'from the corner', 300000],
+] as [{ x: number; y: number }, string, number][]) {
+  const r = seedSweep(h, t0)
+  console.log(`  ${where}, t0=${String(t0).padStart(6)}s: ${r.jumpy}/200 over 2.5px, worst ${r.worstJump.toFixed(2)}px on seed ${r.worstJumpSeed}`)
+  jumpySeeds += r.jumpy
+  if (r.worstJump > jumpiest) {
+    jumpiest = r.worstJump
+    jumpiestSeed = r.worstJumpSeed
+    jumpiestWhere = `${where} at t0=${t0}s`
   }
 }
 ok(
   'a fenced round holds together on every seed',
   jumpySeeds === 0 && jumpiest < 2.5,
-  `${jumpySeeds}/200 seeds step over 2.5px, worst ${jumpiest.toFixed(2)}px on seed ${jumpiestSeed}`,
+  `${jumpySeeds}/600 seed sweeps step over 2.5px, worst ${jumpiest.toFixed(2)}px on seed ${jumpiestSeed} ${jumpiestWhere}`,
 )
 
 /* ---- AND IT DOES NOT GET WORSE THE LONGER THE SESSION RUNS --------------
@@ -908,12 +1200,80 @@ const roundOf = (n: number): Life => {
     states.push({ secs: 10 + i * 3, art: i % 3, move: { kind: 'wander', speedMin: 10 + i, speedMax: 20 + i, pauseMin: 0.5, pauseMax: 2, bob: 0, seed: 30 + i } })
   return cleanLife({ ...mflat, states }) as Life
 }
+const cPlain = costOf(cleanLife(mflat) as Life, 1e5)
 const c2 = costOf(roundOf(2), 1e5)
+const c4 = costOf(roundOf(4), 1e5)
 const c6 = costOf(roundOf(6), 1e5)
 ok(
   'a six state round is still a frame budget a Chromebook can pay',
   c6 < 400 && c6 < c2 * 4,
-  `${costOf(cleanLife(mflat) as Life, 1e5).toFixed(1)}us plain, ${c2.toFixed(1)}us at two states, ${c6.toFixed(1)}us at six`,
+  `${cPlain.toFixed(1)}us plain, ${c2.toFixed(1)}us at two states, ${c4.toFixed(1)} at four, ${c6.toFixed(1)} at six`,
+)
+/* AND IT IS LINEAR IN THE STATES THAT MOVE, WHICH IS THE HONEST CEILING.
+ *
+ * A state that is not live cannot cost nothing, because the sum needs its term:
+ * the round's position is what every state has travelled on its own clock, and
+ * dropping the terms that are not live is the one design that makes the live
+ * state's box win outright, which measures an 89.65px step on 200 of 200 seeds
+ * further up. So the price is one walk per MOVING state, and this reading is
+ * here to say when that stops being true rather than to pretend it is not. A
+ * state that only changes the picture is genuinely free, and that is worth
+ * knowing, because it is the cheap half of what a round is usually for. */
+const stillOnly = cleanLife({
+  ...mflat,
+  states: [{ secs: 10 }, { secs: 9, art: 1 }, { secs: 8, art: 2 }, { secs: 7, art: 1 }, { secs: 6, art: 2 }, { secs: 5, art: 1 }],
+}) as Life
+const cStill = costOf(stillOnly, 1e5)
+ok(
+  'and a state that only changes the picture costs nothing at all',
+  cStill < cPlain * 1.6,
+  `${cStill.toFixed(1)}us for a six state round with one mover, against ${cPlain.toFixed(1)}us plain and ${c6.toFixed(1)}us with six movers`,
+)
+
+/* AND THE SAME READING WITH THE FLOOR IN FORCE, WHICH IS THE ONE THAT COSTS.
+ *
+ * The reading above has no floor, so it has never measured the expensive case.
+ * Every walk the 35% law fences tests the ground at each candidate and every two
+ * pixels along the leg, and that is where the time goes: a PLAIN fenced walk is
+ * 164.6us against 22.7 for the same walk with no floor, seven times, before any
+ * round exists.
+ *
+ * A round then multiplies it by the states that move, and it got dearer here
+ * rather than cheaper: two states 257.8 to 364.5us, six states 377.9 to 713.7.
+ * That is the price of the reach, not a slower walk. The old share squeezed a
+ * six-mover state into 5.83px of height, so its legs were a few pixels long and
+ * there was almost nothing to check; the legs are now as long as the box says
+ * and the check is proportional to their length. Cheap because it was not
+ * moving is not cheap.
+ *
+ * Worth watching rather than worth panicking about: no exported bundle carries a
+ * round at all, and the hub's 22 living placements are single behaviours at
+ * 164.6us here. What this gate is for is the day one of them gets a round on a
+ * Chromebook, which is several times slower than this machine. */
+const costWith = (l: Life, t: number, floor: (x: number, y: number) => boolean) => {
+  for (let i = 0; i < 200; i++) lifeAt(l, t + i * 1e-6, mh, floor)
+  let best = Infinity
+  for (let r = 0; r < 5; r++) {
+    const s = process.hrtime.bigint()
+    for (let i = 0; i < 800; i++) lifeAt(l, t + i * 1e-6, mh, floor)
+    best = Math.min(best, Number(process.hrtime.bigint() - s) / 1000 / 800)
+  }
+  return best
+}
+const mfenced = { ...mflat, bounds: BOX, walkOnly: true, walkPct: 0.4 }
+const roundFenced = (n: number): Life => {
+  const states: unknown[] = []
+  for (let i = 0; i < n; i++)
+    states.push({ secs: 10 + i * 3, art: i % 3, move: { kind: 'wander', speedMin: 10 + i, speedMax: 20 + i, pauseMin: 0.5, pauseMax: 2, bob: 0, seed: 30 + i } })
+  return cleanLife({ ...mfenced, states }) as Life
+}
+const fPlain = costWith(cleanLife(mfenced) as Life, 1e5, onPath)
+const f2 = costWith(roundFenced(2), 1e5, onPath)
+const f6 = costWith(roundFenced(6), 1e5, onPath)
+ok(
+  'and a floor-fenced round still costs about one walk per moving state',
+  f6 < fPlain * 6 && f6 < 1600,
+  `${fPlain.toFixed(0)}us plain with the floor, ${f2.toFixed(0)} at two states, ${f6.toFixed(0)} at six, against ${cPlain.toFixed(0)}/${c2.toFixed(0)}/${c6.toFixed(0)} with no floor`,
 )
 
 // ---- the round, sample by sample -----------------------------------------

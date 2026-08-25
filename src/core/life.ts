@@ -292,9 +292,20 @@ export function cleanLife(raw: unknown, depth = 0): Life | null {
       // simply does not move, which is a state the round already knows how to
       // draw, rather than the placement leaving the map
       if (mv && mv.kind !== 'cross') {
-        // the fence and the floor belong to the whole placement, so a state
-        // that did not name them is held by them anyway
-        if (!mv.bounds && out.bounds) mv.bounds = { ...out.bounds }
+        /* A STATE MAY NOT NAME A BOX OF ITS OWN, which is the third rule of the
+         * same kind as the two above and it is refused for the same reason.
+         *
+         * A box is a place on the painting: "this one stays over THERE". A round
+         * cannot honour that, because the round is a sum of displacements and a
+         * place is not one, and `share` below turns whatever box a state carries
+         * into a reach around where the placement stands. So a state that named
+         * a corner of the map got a box the size of that corner drawn around
+         * home instead, somewhere else entirely, and nothing said so. Silently
+         * moving a fence a person drew is worse than not letting them draw it.
+         *
+         * So the placement's fence and the placement's floor are the only ones,
+         * and a state keeps its seconds, its picture, its speed and its pauses. */
+        mv.bounds = out.bounds ? { ...out.bounds } : null
         if (out.walkOnly) mv.walkOnly = true
         // the phase is added to t before any of this, so a state carrying one
         // of its own would count it twice
@@ -500,20 +511,50 @@ export function liveState(states: LifeState[], t: number): { k: number; c: numbe
  * completed rounds. Anchoring only the live state instead put a 76 to 95px jump
  * at every state change, on 200 of 200 seeds of a fenced round. Neither ships.
  *
- * So a state inherits the fence's SHAPE and its REACH and not its position: the
- * same rectangle, centred on where the placement actually stands, and shared
- * between the states that move so the round's own total still fits inside the
- * fence that drew it. Not taller than the ground allows either, because a
- * wander's reach is already flattened by the map's foreshortening and a square
- * box would undo that. Measured after: 0 of 100000 frames pressed against the
- * fence, so the hold below never bites, each state draws the speed it asked for
- * to within the sampling (199.4 px/s for one asking 200), and nothing marches. */
+ * So a state inherits the fence's ROOM and not its position, and this is what
+ * the box MEANS inside a round: the box is the room the WHOLE ROUND has, and the
+ * states that move divide it. The live state decides everything anyone can watch
+ * happen, the speed and the gait and the facing and the picture, at full asking.
+ * A state that is not live decides one thing only, how far it has already
+ * carried the thing, which is the memory that lets a state resume where it
+ * froze. What no state gets is the whole box to itself, because n bounded walks
+ * summed inside one rectangle cannot each have all of it. That is arithmetic
+ * rather than a policy, and it is the price of the sum.
+ *
+ * The room is measured FROM WHERE THE PLACEMENT STANDS and on each side
+ * separately, so the n offsets add up to exactly the box and the hold below
+ * never has to bite. A rectangle of the right size centred on the placement is
+ * not the same thing and it was what shipped: a placement standing in the corner
+ * of its own box had the same reach in both directions, so the sum ran out of
+ * the box on the short side and the hold took the difference. Measured with a
+ * two state round in a 100x100 box, the placement 5px in from the corner: 60.5%
+ * of 60000 frames were held against the fence and 8.6% of the moving frames
+ * covered no ground at all, which is marching on the spot, back again on any
+ * placement not dropped dead centre.
+ *
+ * Nor is the room flattened. It used to be held to 0.35 of its own width, on the
+ * reasoning that a wander's reach is already flattened by the map's
+ * foreshortening. That reasoning belongs to a wander with NO box, which spreads
+ * range by range*0.35; one with a box uses the box's own height and always has.
+ * So the flattening made a state move differently from the identical behaviour
+ * outside a round, and it took most of the vertical room: the same 100x100 box
+ * gave the round 32px of dy against 95 for the same walk with no round.
+ *
+ * Measured after, on the same fixture: 0.0% of 60000 frames outside the box from
+ * the centre and from the corner alike, reach 96x95 and 95x91 of 100x100, and
+ * each state still draws the speed it asked for. Sharing less strictly was tried
+ * for the extra reach and is not worth it: box/n^0.75 bought 107x108 and put
+ * 5.5% of frames outside the box, and box/sqrt(n) bought 129x125 and put 23.3%
+ * outside, which is the hold biting again for reach the sum already has. */
 function share(m: Life, home: { x: number; y: number }, n: number): Life {
   const b = m.bounds
   if (!b) return m
-  const w = b.w / n
-  const h = Math.min(b.h / n, w * 0.35)
-  return { ...m, bounds: { x: home.x - w / 2, y: home.y - h / 2, w, h } }
+  // where it stands, held inside its own box, because a placement dropped
+  // outside the box it was given has no room at all on one side and the
+  // subtraction below would hand back a negative one
+  const hx = clamp(home.x, b.x, b.x + b.w)
+  const hy = clamp(home.y, b.y, b.y + b.h)
+  return { ...m, bounds: { x: home.x - (hx - b.x) / n, y: home.y - (hy - b.y) / n, w: b.w / n, h: b.h / n } }
 }
 
 /* a fixed 0..1 for a whole number, so a behaviour is random but repeatable */
@@ -602,6 +643,35 @@ export function lifeAt(
      * fence. A state that only changes the picture takes none of it. */
     let movers = 0
     for (let j = 0; j < st.length; j++) if (st[j].move) movers++
+    /* THE FLOOR IS SHARED FOR THE SAME REASON THE BOX IS.
+     *
+     * Every state is worked out from the placement's own home, so its floor test
+     * is taken there and not where the sprite is drawn. One state held to a 40px
+     * path is on the path; two of them, each held to it around the same point,
+     * add their offsets and the SUM is off it by as much as the path is wide.
+     * Measured on the 35% law's own case, a 40px path down a 100px box with a
+     * four state round: 1190 of 20000 frames off the path, 14.11px out.
+     *
+     * That used to be hidden rather than solved. The share held a state's height
+     * to 0.35 of its width, which on this fixture came to 8.75px against the
+     * path's 20, so the sum squeaked inside by 2.5px. It is luck and it is
+     * orientation, because the flattening only ever squeezed y: the same fixture
+     * turned on its side, a 40px corridor running up the box instead of across
+     * it, measures 1360 of 20000 frames and 9.40px out on the code that passes
+     * the flat one.
+     *
+     * So the floor is divided the same way the box is: a state may stand where
+     * the placement could stand if its step from home were multiplied by the
+     * number of movers. That gives each state a walkable region 1/n as wide
+     * about home, so n of them still sum to the region the placement really has,
+     * and it is the identity when only one state moves. Same fixture after: 0 of
+     * 20000 frames off the path both ways up, and it uses more of the path than
+     * the flattening allowed, 34.4px of the 40 across and 32.2 up, against 28.5
+     * across and 56.6 up-and-off-it before. */
+    const near =
+      movers > 1 && canStand
+        ? (x: number, y: number) => canStand(home.x + (x - home.x) * movers, home.y + (y - home.y) * movers)
+        : canStand
     let ax = home.x
     let ay = home.y
     let heldFlip = false
@@ -617,7 +687,7 @@ export function lifeAt(
       // plus this round's share, which is all of it for one already finished,
       // part of it for the live one and none of it for one still to come
       const own = (j < k ? c + 1 : c) * st[j].secs + (j === k ? into : 0)
-      const a = lifeAt(m, own, home, canStand)
+      const a = lifeAt(m, own, home, near)
       ax += a.dx
       ay += a.dy
       if (j > 0) {
@@ -625,7 +695,7 @@ export function lifeAt(
         // state arrives already displaced by wherever its own behaviour sits at
         // second zero, which is the second seam: a pixel for a drift, the whole
         // radius for an orbit, the length of a leg for a wander.
-        const z = lifeAt(m, 0, home, canStand)
+        const z = lifeAt(m, 0, home, near)
         ax -= z.dx
         ay -= z.dy
       }

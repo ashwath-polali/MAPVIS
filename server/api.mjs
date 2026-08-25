@@ -963,16 +963,18 @@ async function route(req, res, p, url) {
        * A style image was tried as the fix and it is not one. style_options
        * carries colour_palette, outline, detail and shading, so a painted ship
        * came back in the map's exact palette and outline and pointing the wrong
-       * way, because none of those four is the angle. The two boats that came
-       * out right went through here with view low top-down, and the paw ship
-       * that came out broadside went through the painter. */
+       * way, because none of those four is the angle.
+       *
+       * The view is read back out of the prompt that is about to be sent, so
+       * the parameter and the words are the same decision by construction and
+       * not by anybody remembering to pass a field. See viewFor. */
       const b64 = await raceStop(
           gate,
           pixellab.mapObject({
             description: t.thing,
             w: useBg ? bgSize.w : w,
             h: useBg ? bgSize.h : h,
-            view: OBJECT_VIEW,
+            view: viewFor(t.thing),
             ...(useBg
               ? {
                   background: bg,
@@ -1031,7 +1033,8 @@ async function route(req, res, p, url) {
           description: t.thing,
           w: cs.w,
           h: cs.h,
-          view: OBJECT_VIEW,
+          // the same one decision, read off the same bytes. See viewFor.
+          view: viewFor(t.thing),
           background: crop,
           fraction,
           seed: seedOf(b),
@@ -1113,7 +1116,8 @@ async function route(req, res, p, url) {
           description: t.thing,
           w: aw,
           h: ah,
-          view: OBJECT_VIEW,
+          // the same one decision, read off the same bytes. See viewFor.
+          view: viewFor(t.thing),
           seed,
         }),
       )
@@ -1497,6 +1501,9 @@ async function route(req, res, p, url) {
       map: fs.existsSync(mapFile) ? mapFile : '',
       ask,
       prompt: String(b.prompt || ''),
+      // read off the prompt that drew it, the same way the generator read it, so
+      // the reviewer is judging against the camera that was actually sent
+      view: b.what === 'sprite' ? '' : viewFor(String(b.prompt || '')),
       n: frames.length,
       what: b.what === 'sprite' ? 'sprite' : 'object',
       size: Number(b.w) > 0 && Number(b.h) > 0 ? { w: Math.round(b.w), h: Math.round(b.h) } : null,
@@ -3123,6 +3130,10 @@ const PROMPT_MAX = 1200
  * read in full and refused beats one that is quietly cut in half. */
 const ASK_MAX = 1200
 
+// how much of an object plan's one printed line survives. See planMake, where
+// the measurement that moved it off 240 is written down.
+const NOTE_MAX = 400
+
 /* HOW LONG A ROUND CAN BE, and the one number every other cap is worked out
  * from.
  *
@@ -3160,11 +3171,98 @@ const STATES_MAX = 6
  * silence, not the number. */
 const NAMES_CHARS = 4000
 
-// the camera angle every object on this tool is drawn at. The maps are 2:1
-// isometric paintings, so a standing thing has to show its sides; "high
-// top-down" looks down on a lid. One constant, so the projection can never
-// disagree with the words in the prompt.
+/* THE CAMERA, WHICH IS A DECISION ABOUT THE THING AND NOT A HOUSE CONSTANT.
+ *
+ * This used to read "the camera angle every object on this tool is drawn at ...
+ * one constant, so the projection can never disagree with the words in the
+ * prompt", and both halves were wrong. It did not stop the disagreement, it WAS
+ * one half of it: the constant went out as the view parameter while the router
+ * was separately ordered to open every style sentence with "Isometric pixel
+ * art". Measured over 24 free reads on that text, 24 of 24 opened exactly
+ * "Isometric pixel art": a boat, a well and a stall, which want it, and a
+ * puddle, a rope coil, a lamp post and a big shady tree, which do not. The router already knew: asked for a puddle it wrote "it is
+ * flat so the height is spent low" and then had to spend that knowledge on the
+ * aspect ratio, because projection was the one thing it was forbidden to say.
+ *
+ * The map settles it. Open work/hub/.ask/map.png: the palm belt has dead
+ * vertical trunks and symmetric fronds with no foreshortening anywhere, and the
+ * houses forty pixels away have two roof faces and a wall receding at two to
+ * one. One painting, one hand, projection chosen per object. A prompt that says
+ * isometric for everything contradicts the map it claims to match.
+ *
+ * So the router answers view, once, and both channels are written from that one
+ * value. See planMake's THE CAMERA and objectPrompt.
+ *
+ * OBJECT_VIEW stays exactly where it is and keeps its value. It is the
+ * CHARACTER default at /api/character-gen and spriteRoute, and characters are
+ * the one path on this tool that is reliable; an earlier session degraded them
+ * by leaking object rules across. On the object side it is now the fallback for
+ * an answer that is missing or unreadable, which lands silence on the value
+ * that has evidence behind it rather than on the endpoint's own documented
+ * default of high top-down. */
 const OBJECT_VIEW = 'low top-down'
+
+/* What /v2/map-objects will actually take, read off its own schema.
+ *
+ * Deliberately NOT CHAR_VIEWS. That list carries perspective, which the object
+ * endpoint does not know, and a word the schema rejects is a 422 charged after
+ * the draw. Three values, and they are not three tastes: high top-down is the
+ * ground plane, side is the picture plane, low top-down is the raked corner
+ * between them that shows a top and a side at once. The endpoint has had the
+ * whole range all along and this tool fenced two thirds of it off as a bug. */
+const OBJECT_VIEWS = ['low top-down', 'high top-down', 'side']
+
+/* The one place a projection is written in English, keyed by the value that
+ * goes on the wire. Nothing else in this file is allowed to name a camera.
+ *
+ * low top-down is byte for byte what the 47 objects he kept say, and that is
+ * the point of it: every ask that routes to the common camera produces exactly
+ * the prompt it produces today, so the path with evidence behind it is not
+ * gambled on this change. The other two get the minimum, because there is no
+ * measurement behind any wording for them yet.
+ *
+ * Two channels DO speak here, and that is not the old bug. The account settles
+ * it: read 2026-08-25 over all 739 objects on it, 315 carry the word isometric
+ * in their prompt while their view parameter says high top-down, and they were
+ * made anyway. A parameter and a word are not what fights. What fights is a
+ * word and a parameter that neither of them can change, so they drift apart.
+ * Here they are the same variable read twice and cannot express two cameras.
+ *
+ * The same read says the other two values are not theoretical either: that
+ * account holds 527 objects at high top-down and 30 at side. It is this tool
+ * that has only ever sent one of the three. */
+const CAMERA_WORDS = {
+  'low top-down': 'Isometric pixel art',
+  'high top-down': 'Pixel art seen from straight above',
+  'side': 'Flat pixel art drawn straight on with no foreshortening',
+}
+
+const objectView = (v) => (OBJECT_VIEWS.includes(String(v)) ? String(v) : OBJECT_VIEW)
+
+/* READING THE CAMERA BACK OFF THE FINISHED PROMPT, which is what makes this
+ * survive the round trip through files this change does not own.
+ *
+ * The plan goes to the browser, the browser holds it, and the browser sends the
+ * finished prompt back as `thing` when the person presses spend. If the view
+ * had to travel as its own field it would have to be carried by MakePlan, two
+ * option types, runGen and the fill path, and any one of those dropping it puts
+ * the constant back silently while the prompt still says "drawn straight on
+ * with no foreshortening". That is the same two-cameras-disagree bug, pointed the
+ * other way, on a sprite that looks like the tool merely not being smart. That
+ * hole is not hypothetical: `count` is documented in the client and read in the
+ * ui and has never once been set by this server.
+ *
+ * So the camera is recovered from the bytes that carry it. The three openers
+ * are code-owned strings, so this is not pattern-matching model prose, it is
+ * looking for a phrase this file wrote. An older client, a hand-edited prompt
+ * and a prompt from before this change all land on OBJECT_VIEW, which is what
+ * they got yesterday. Two openers in one string is a prompt nobody here wrote,
+ * so it falls back rather than guessing which was meant. */
+function viewFor(prompt) {
+  const t = String(prompt || '').toLowerCase()
+  const hits = OBJECT_VIEWS.filter((v) => t.includes(CAMERA_WORDS[v].toLowerCase()))
+  return hits.length === 1 ? hits[0] : OBJECT_VIEW
+}
 
 /* What /v2/characters will actually take, read off its own schema.
  *
@@ -3350,9 +3448,90 @@ function groundless(s) {
  * and the instruction names this exact failure; what gets through is caught by
  * the base trim, which reads pixels and cannot be talked around. */
 
-function housePrompt({ subject, detail, palette, clause }) {
+/* THE SAME FENCE, FOR THE CAMERA, and it works for the same reason groundless
+ * does: it drops whole comma-clauses out of the STYLE half only, where every
+ * clause is one fact and losing one is survivable.
+ *
+ * It is a fence and not the mechanism. The mechanism is that code owns the join
+ * in objectPrompt, so the router is never handed a sentence it could put a
+ * camera into. This catches the case where it names one anyway inside the style
+ * clauses it does write. Measured over 24 free reads after the change it had
+ * nothing to do: 0 of 24 prompts carried a projection word anywhere outside
+ * the phrase code itself put in. That is the state it
+ * is supposed to be in, and it stays because the day it does fire is the day a
+ * second camera would otherwise have gone out at full price.
+ *
+ * The subject is left alone here too, for the reason written above: a regex on
+ * the subject was tried and thrown away the same hour. */
+const PROJECTION =
+  /\b(isometric|2:1|two[- ]to[- ]one|top[- ]?down|overhead|bird'?s[- ]?eye|three[- ]quarter|3\/4|side[- ]on|side view|side elevation|front elevation|orthographic|axonometric|oblique|perspective|foreshorten\w*|projection|vanishing point|(?:seen|viewed|drawn|looking)\s+(?:from|down|straight))/i
+
+function projectionless(s) {
+  return String(s || '')
+    .split(',')
+    .map((c) => c.trim())
+    .filter((c) => c && !PROJECTION.test(c))
+    .join(', ')
+}
+
+/* THE ONE PLACE AN OBJECT PROMPT IS ASSEMBLED, so the camera in the words and
+ * the camera on the wire are the same variable read twice.
+ *
+ * The router answers a subject and a style as two separate fields and never a
+ * finished sentence, which is the whole trick: there is no string it writes
+ * that a projection could hide in, so nothing has to remember a rule. Code puts
+ * the camera in, between them, in the position the kept objects put it.
+ *
+ * At low top-down the output is byte for byte the shape of the one he kept that
+ * is quoted in planMake: subject sentence, full stop, "Isometric pixel art",
+ * then the style clauses. The common ask is therefore unchanged by this whole
+ * change, which is deliberate. 47 objects say that wording works and none of
+ * them says anything at all about the other two. */
+function objectPrompt({ subject, style, view }) {
+  const one = (s) => String(s || '').replace(/\s+/g, ' ').trim()
+  const sub = one(subject).replace(/[.,;:\s]+$/, '')
+  // the style can come back capitalised and full-stopped, because it was asked
+  // for as its own field. It is a tail in the joined sentence, so it joins as
+  // one rather than starting a second one.
+  const sty = projectionless(one(style).replace(/^[.,;:\s]+/, '').replace(/[.\s]+$/, ''))
+  const cam = CAMERA_WORDS[objectView(view)]
+  const tail = sty ? `${cam}, ${sty.charAt(0).toLowerCase()}${sty.slice(1)}` : cam
+  /* THE REFUSAL OF GROUND, PUT BACK, AND PUT BACK IN CODE.
+   *
+   * housePrompt has carried these two clauses since the palms came back standing
+   * on discs of sand with stone rims. When the router started writing its own
+   * prompts they were left behind, and housePrompt stopped being reachable from
+   * the ui, so the live path has been asking for objects with nothing said about
+   * ground or transparency at all. The only thing refusing a plinth since then
+   * is the pixel base-trim, which reads bytes after the generation is paid for
+   * and cannot stop one being drawn.
+   *
+   * It matters more now that the camera varies. A side elevation is exactly
+   * where a generator volunteers a horizon line or a shadow disc, and side is
+   * the value this tool has never once sent.
+   *
+   * Code appends it rather than the model, for the reason the old comment gives:
+   * a model asked to hold seven clauses forgets one, and the one it forgets is
+   * the refusal of ground, which is the failure being fixed. Assembled here it
+   * rides every object prompt whether or not the interpreter answered well.
+   *
+   * And it says what IS there rather than what is not. The refusal used to read
+   * "no ground, no terrain, no base, no plinth", which handed four ground nouns
+   * to a generator that draws every noun it is given, and summoned the slab it
+   * meant to forbid. */
+  const alone =
+    'the object alone as a cut-out sprite on a fully transparent background, ' +
+    'the base of the object is where its own material ends'
+  return `${sub ? sub + '. ' : ''}${tail}, ${alone}.`.slice(0, PROMPT_MAX)
+}
+
+function housePrompt({ subject, detail, palette, clause, view }) {
   const bits = [
-    subject + ' in strict 2:1 isometric pixel art',
+    // the fallback path is not reachable from the ui: App.tsx always sends
+    // the finished prompt as `thing`, so translateAsk never runs there. It still
+    // reads its camera off the same table, because a constant left sitting in
+    // the interpreter-down path is exactly how this bug comes back.
+    subject + ' in ' + CAMERA_WORDS[objectView(view)].toLowerCase(),
     detail,
     'warm golden-hour sunlight from the upper left',
     'blue-tinted shadow on the right side',
@@ -3443,27 +3622,63 @@ async function planMake({ ask, what, kind, id, mapFile, boxFile, box, previous, 
        * and got back a side elevation, a straight overhead and a rectangular
        * trough that was not a boat. The kept objects are all written one way, and
        * writing a rowboat that way instead produced a correct one first try at
-       * the same price. Two differences did most of it: naming the projection
-       * ISOMETRIC rather than a second view that fights the endpoint's own view
-       * parameter, and MUTED saturation rather than saturated. */
-      `SHAPE. Every object he has kept is written as TWO SENTENCES and you must match it. ` +
-        `First the subject and its own materials in physical detail: what it is made of, how it ` +
-        `is worn, which parts show, what is cracked or coiled or missing. Then a full stop, then ` +
-        `the style as its own separate sentence. Never blend the two.`,
+       * the same price. MUTED saturation rather than saturated did much of it.
+       *
+       * The other half of that old fix was ordering every style sentence to open
+       * with "Isometric pixel art", and that half was wrong. It is asked for as
+       * a decision now and the two fields exist so that code can own the join.
+       * See THE CAMERA below and objectPrompt. */
+      `SHAPE. Every object he has kept is written the same way and you must match it, but you ` +
+        `answer it as TWO FIELDS rather than as one finished sentence. subject: the thing and ` +
+        `its own materials in physical detail, what it is made of, how it is worn, which parts ` +
+        `show, what is cracked or coiled or missing. style: how it is drawn. Never blend the ` +
+        `two and never write the joined sentence yourself. Code joins them.`,
       ``,
-      `THE STYLE SENTENCE. Begin it with "Isometric pixel art" and never any other projection ` +
-        `wording. The endpoint is already told its view, and a second differently worded one ` +
-        `fights it: that is measured, it is what returned a side-on boat for a top-down map. ` +
-        `Then chunky pixels, a limited palette named by its real colours, a dark outline named ` +
-        `by its colour, the light direction and the shaded side as separate facts, and MUTED ` +
-        `saturation. Muted, never saturated. Saturated is what makes a thing sit on the map like ` +
-        `a sticker.`,
+      `THE CAMERA. You choose it, and it is one of exactly three the generator takes: ` +
+        `${OBJECT_VIEWS.join(', ')}. Decide it from THIS THING'S SHAPE and never from what the ` +
+        `thing is called. There is no list of objects to look the answer up in and there is ` +
+        `never going to be one, because the next person will ask for something neither of us ` +
+        `has thought of.`,
       ``,
-      `One he kept, verbatim, so the shape is not in doubt: "A small wooden rowboat listing on ` +
-        `its side, hull of overlapping planks in faded red-brown and bleached tan with peeling ` +
-        `paint, one cracked oar laid across the gunwale, coil of frayed rope at the bow, a plank ` +
-        `missing amidships. Isometric pixel art, chunky pixels, limited warm palette, dark brown ` +
-        `outline, lit from the upper left, shaded right, muted saturation."`,
+      `Two measurements settle it and both can be made on anything in the world. Turn the thing ` +
+        `slowly on the spot and watch its outline, and ask whether its TOP is a different ` +
+        `surface from its sides.`,
+      `- its top IS a different surface from its sides, a roof, a deck, a lid, an open mouth, a ` +
+        `face you would look down into: low top-down. The raked corner is the only view that ` +
+        `shows a top and a side at once and that is the whole reason to spend it. A house, a ` +
+        `boat, a crate, a well.`,
+      `- no top worth seeing, and it stands up taller than its own footprint is wide: side. Its ` +
+        `upright outline is the whole of what it is, turning it shows you nothing new, and from ` +
+        `straight above it collapses into a blob. A palm, a mast, a web strung between two ` +
+        `posts. The palm belt on this map is drawn exactly this way.`,
+      `- no top worth seeing, and it lies in the ground: high top-down. Its shape IS its ` +
+        `footprint and raking it only smears it. A puddle, a coil of rope, a set of prints.`,
+      `- when its parts answer differently the TOP wins: if any real part of it has a top ` +
+        `surface you would look down into, take low top-down. The lighthouse on this map stands ` +
+        `taller against its footprint than any palm and is still drawn as a solid.`,
+      ``,
+      `Then, in the look you have already had at the map, find something of this same SHAPE ` +
+        `already painted in it and say in the note what you found and how it is drawn. If there ` +
+        `is nothing of that shape in there, say "nothing like it in the map" and leave it. Never ` +
+        `report seeing something you did not see: a guess about the painting is worse here than ` +
+        `no look at all. What you find goes in the note and does not overrule the two ` +
+        `measurements above.`,
+      ``,
+      `THE STYLE FIELD. No projection and no camera in it, and none in the subject either. Not ` +
+        `"isometric", not "top-down", not "seen from above", not "three quarter", not "side ` +
+        `view". The projection is written in by code from the view you chose, in the one ` +
+        `position it belongs, so a word for it here can only be a second camera fighting the ` +
+        `first. Begin style at "chunky pixels", then a limited palette named by its real ` +
+        `colours, a dark outline named by its colour, the light direction and the shaded side ` +
+        `as separate facts, and MUTED saturation. Muted, never saturated. Saturated is what ` +
+        `makes a thing sit on the map like a sticker.`,
+      ``,
+      `One he kept, split into the two fields so the shape is not in doubt.`,
+      `subject: "A small wooden rowboat listing on its side, hull of overlapping planks in ` +
+        `faded red-brown and bleached tan with peeling paint, one cracked oar laid across the ` +
+        `gunwale, coil of frayed rope at the bow, a plank missing amidships"`,
+      `style: "chunky pixels, limited warm palette, dark brown outline, lit from the upper ` +
+        `left, shaded right, muted saturation"`,
     )
     lines.push(
       ``,
@@ -3513,18 +3728,33 @@ async function planMake({ ask, what, kind, id, mapFile, boxFile, box, previous, 
     sprite ? SPRITE_ANSWER : OBJECT_ANSWER,
   )
   const raw = await runPlanner(lines.join('\n'), 240000, job)
-  const o = planJSON(raw, 'prompt')
-  if (!o || !o.prompt) throw new Error('the interpreter did not answer')
+  // a sprite still answers one finished prompt; an object answers the two
+  // halves and never the joined sentence, so the anchor moves with it
+  const o = planJSON(raw, sprite ? 'prompt' : 'subject')
+  if (!o || !(sprite ? o.prompt : o.subject)) throw new Error('the interpreter did not answer')
   const clean = (v, n) => String(v || '').replace(/\s+/g, ' ').trim().slice(0, n)
+  const view = sprite ? '' : objectView(o.view)
   const plan = {
     kind: sprite ? 'sprite' : 'object',
-    prompt: clean(o.prompt, PROMPT_MAX),
+    prompt: sprite ? clean(o.prompt, PROMPT_MAX) : objectPrompt({ subject: o.subject, style: o.style, view }),
     motion: clean(o.motion, 160),
-    note: clean(o.note, 240),
+    /* The note is the only line the plan card prints for an object, so it is
+     * the whole of what a person reads before spending. It was 240 and the
+     * camera reason pushed straight through it. Measured over 24 free reads
+     * after this change, object notes ran 193 to 373 characters and 17 of 24
+     * were over 240, and the part that fell off the end was the SIZING half,
+     * which is the half someone can act on. 400 holds all 24 with room. The
+     * same 24 reads on the old text ran 133 to 240 and never once needed more,
+     * so this is the camera reason's own cost and not a general creep. A
+     * sprite's note stays at 240: its routing reason has its own field. */
+    note: clean(o.note, sprite ? 240 : NOTE_MAX),
     crossing: clean(o.crossing, 200),
     w: clampPx(o.w),
     h: clampPx(o.h),
   }
+  // the decision, carried on the plan so the ui can print it. It is not how the
+  // camera reaches the generator: see viewFor.
+  if (!sprite) plan.view = view
   // both halves go to the walk gate: the ask names the thing, the prompt is
   // where a hovering, winged or legless one gets described at length
   if (sprite) plan.sprite = spriteRoute(o.sprite, kind, plan.motion, `${ask} ${plan.prompt}`)
@@ -3532,9 +3762,11 @@ async function planMake({ ask, what, kind, id, mapFile, boxFile, box, previous, 
 }
 
 const OBJECT_ANSWER =
-  `{"kind":"object","prompt":"the full generator prompt, 40 to 90 words","w":96,"h":128,` +
-  `"motion":"movement words only, or empty","crossing":"",` +
-  `"note":"one short line, lower case, telling the user what you decided and what you sized it against"}`
+  `{"kind":"object","view":"one of ${OBJECT_VIEWS.join(' | ')}",` +
+  `"subject":"the thing and its own materials, 30 to 70 words, no projection wording",` +
+  `"style":"chunky pixels, ... , muted saturation, and no projection wording",` +
+  `"w":96,"h":128,"motion":"movement words only, or empty","crossing":"",` +
+  `"note":"one short line, lower case: the camera you chose and why, and what you sized it against"}`
 
 const SPRITE_ANSWER =
   `{"kind":"sprite","prompt":"the full character description, 30 to 70 words","w":48,"h":48,` +
@@ -3726,9 +3958,30 @@ async function planScene({ ask, id, mapFile, boxFile, box, count, kind, job }) {
     ``,
     `Every prompt goes to a generator that draws every noun it is given and understands no ` +
       `negation or context. Any ground, place or setting word comes back as a disc of sand or ` +
-      `stone under the object. Name the object and its own materials only, and write each prompt ` +
+      `stone under the object. Name the object and its own materials only, and write each one ` +
       `so the result looks painted by the same hand as this map: its light direction, its value ` +
       `range, its outline treatment, its saturation, its pixel chunkiness.`,
+    ``,
+    /* The fill path used to say nothing at all about projection while its items
+     * went out on the same hardcoded camera as everything else, so it was the
+     * worst of the three prompt writers: a free wording and a fixed parameter.
+     * It answers the same field the single ask does, PER ITEM, because a stall
+     * and the palm beside it do not want the same camera and the whole point of
+     * this is that the answer is per thing. */
+    `THE CAMERA, per object, one of exactly three: ${OBJECT_VIEWS.join(', ')}. Decide it from ` +
+      `each THING'S SHAPE and never from what it is called. If its top is a different surface ` +
+      `from its sides, a roof or a deck or a lid or a face you would look down into, that is ` +
+      `low top-down. If it has no top worth seeing and stands taller than its footprint is ` +
+      `wide, that is side, which is how the palm belt on this map is drawn. If it has no top ` +
+      `worth seeing and lies in the ground, that is high top-down. When the parts of one thing ` +
+      `answer differently the top wins. Two things side by side in this area can and often ` +
+      `should answer differently.`,
+    ``,
+    `subject and style are TWO FIELDS and you never join them. subject is the thing and its own ` +
+      `materials; style begins at "chunky pixels" and carries the palette, the outline colour, ` +
+      `the light direction, the shaded side and MUTED saturation. Put NO projection or camera ` +
+      `wording in either one: code writes the projection in from the view you chose, and a ` +
+      `second wording for it can only fight the first.`,
     ``,
     `Sizes are in pixels, both sides between 24 and 128, and in scale with what is already in the ` +
       `area.`,
@@ -3736,8 +3989,9 @@ async function planScene({ ask, id, mapFile, boxFile, box, count, kind, job }) {
     ``,
     `Answer with ONLY this JSON, no prose:`,
     `{"note":"one short lower-case line on what you decided","items":[{"what":"two or three words ` +
-      `naming it","prompt":"the full generator prompt, 30 to 70 words","w":64,"h":80,"x":0,"y":0,` +
-      `"motion":""}]}`,
+      `naming it","view":"one of ${OBJECT_VIEWS.join(' | ')}","subject":"the thing and its own ` +
+      `materials, 25 to 60 words","style":"chunky pixels, ... , muted saturation","w":64,"h":80,` +
+      `"x":0,"y":0,"motion":""}]}`,
   ].filter((l) => l !== null)
   const raw = await runPlanner(lines.join('\n'), 300000, job)
   const o = planJSON(raw, 'items')
@@ -3749,7 +4003,14 @@ async function planScene({ ask, id, mapFile, boxFile, box, count, kind, job }) {
   }
   const items = o.items.slice(0, count).map((it) => ({
     what: clean(it.what, 60) || 'a thing',
-    prompt: clean(it.prompt, PROMPT_MAX),
+    // one assembler for every object prompt this file writes, so a filled area
+    // and a single ask cannot end up with two different ideas of the camera. An
+    // older answer that still writes one finished prompt is taken as it comes
+    // and lands on the fallback view, which is what it got before.
+    prompt: it.subject
+      ? objectPrompt({ subject: it.subject, style: it.style, view: it.view })
+      : clean(it.prompt, PROMPT_MAX),
+    view: objectView(it.view),
     motion: clean(it.motion, 160),
     w: num(it.w, 24, 128, 64),
     h: num(it.h, 24, 128, 80),
@@ -3777,7 +4038,7 @@ async function translateAsk(ask, kind, styleClause, id, job) {
   // always match the map, so a fall-back belongs. The DNA still goes on: a
   // dead interpreter is not a reason to send a prompt that invents a plinth.
   const fallback = {
-    thing: housePrompt({ subject: ask, detail: '', palette: 'muted natural palette', clause }),
+    thing: housePrompt({ subject: ask, detail: '', palette: 'muted natural palette', clause, view: OBJECT_VIEW }),
     motion: '',
     w: 96,
     h: 96,
@@ -3789,7 +4050,7 @@ async function translateAsk(ask, kind, styleClause, id, job) {
         `around them afterwards, so do NOT write anything about projection, light, shading, ` +
         `background or ground: those are already handled and repeating them wastes words.\n\n` +
         `Request: "${ask}"\n` +
-        `Kind: ${kind} object for a 2:1 isometric pixel-art game map.\n` +
+        `Kind: ${kind} object for a hand-painted pixel-art game map.\n` +
         keepsHint(id, 'asset') +
         `\n` +
         `The generator draws every noun it is given and cannot understand negation, destination ` +
@@ -3819,9 +4080,18 @@ async function translateAsk(ask, kind, styleClause, id, job) {
         `- belongs: 0 to 1, how much this should look like it came from this map. Something that ` +
         `grew or was built there (a palm, a fishing net, a wooden fence) is 1. An everyday object ` +
         `that could sit anywhere (a crate, a barrel) is 0.8. Something with its own identity that ` +
-        `arrived from elsewhere (an alien artifact, a magic item, a neon sign) is 0.2.\n\n` +
+        `arrived from elsewhere (an alien artifact, a magic item, a neon sign) is 0.2.\n` +
+        // this path has no map in front of it, so it answers the camera from the
+        // thing's shape alone. That is a weaker read than planMake's and it is
+        // still the right question, and it is the same three words on the wire.
+        `- view: the camera, one of ${OBJECT_VIEWS.join(' | ')}. If its top is a different ` +
+        `surface from its sides (a roof, a deck, a lid) it is low top-down. If it has no top ` +
+        `worth seeing and stands taller than its footprint is wide it is side. If it has no top ` +
+        `worth seeing and lies in the ground it is high top-down. When the parts disagree the ` +
+        `top wins. Never write the projection into subject or detail; it is added from this.\n\n` +
         `Answer immediately with ONLY this JSON, no prose:\n` +
-        `{"subject":"...","detail":"...","palette":"...","motion":"","w":96,"h":128,"belongs":1}`,
+        `{"subject":"...","detail":"...","palette":"...","view":"low top-down","motion":"",` +
+        `"w":96,"h":128,"belongs":1}`,
       60000,
       job,
     )
@@ -3835,6 +4105,7 @@ async function translateAsk(ask, kind, styleClause, id, job) {
         detail: String(o.detail || '').slice(0, 520),
         palette: String(o.palette || 'muted natural palette').slice(0, 120),
         clause: belongs >= BELONGS_MIN ? clause : '',
+        view: o.view,
       }),
       motion: String(o.motion || '').slice(0, 120),
       w: clampPx(o.w),
@@ -4419,7 +4690,22 @@ async function reviewRule(file, ask, frames, type, params, job) {
  *
  * fix is a corrected prompt and only means anything on a revise. Spending it
  * stays behind the ui's armed confirm. */
-async function reviewObjects({ file, map, ask, prompt, n, what, size, job }) {
+/* THE FREE LOOK, and it has to move in the same commit as the camera or it
+ * undoes the whole thing one press later.
+ *
+ * It used to be told the painting "is seen from a low top-down camera at two to
+ * one", which is not true of a painting whose palm belt is dead flat; it was
+ * told a side elevation is "the failure this question exists for"; and it was
+ * then forbidden to write flatness back into the corrected prompt. Measured:
+ * handed a legitimately flat fir standing on the hub painting it answered
+ * revise 2 out of 2, named "a clean side-elevation fir" as the fault, and its
+ * fix asked for the crown "seen mostly from above" with the trunk foreshortened
+ * away. It did that even when the ask said to draw it flat like the palms.
+ *
+ * So the reviewer is handed the camera that was chosen and judges against THAT.
+ * The ban on it writing a camera of its own stays, because its fix goes back
+ * out as a prompt and the projection is code's to write. */
+async function reviewObjects({ file, map, ask, prompt, view, n, what, size, job }) {
   const many = n !== 1
   const lines = [
     `Look at what a pixel-art generator just made and say whether it answers what was asked for.`,
@@ -4456,14 +4742,22 @@ async function reviewObjects({ file, map, ask, prompt, n, what, size, job }) {
       ``,
       `The map it has to stand on, absolute path:`,
       map,
-      `That painting is the standard. It was painted by hand, it is seen from a low top-down ` +
-        `camera at two to one, and a generated thing has to look painted INTO it rather than ` +
-        `pasted on top of it.`,
+      `That painting is the standard. It was painted by hand and a generated thing has to look ` +
+        `painted INTO it rather than pasted on top of it. It does NOT have one camera: look at ` +
+        `it and you will see its palm belt drawn dead flat with vertical trunks while its houses ` +
+        `forty pixels away show two roof faces and a wall receding at two to one. One hand, the ` +
+        `projection chosen per object. Judge each thing against the things in there that STAND ` +
+        `the way it does, not against a house rule.`,
     )
   lines.push(
     ``,
     `What was asked for, in the person's own words: "${ask}"`,
     `The prompt that drew it: "${String(prompt).slice(0, 700)}"`,
+    view
+      ? `The camera it was drawn at, chosen for this thing and sent to the generator: ${view}. ` +
+        `low top-down is the raked corner that shows a top and a side at once, side is drawn ` +
+        `straight on with no foreshortening, high top-down looks straight down at it.`
+      : ``,
     ``,
     `Judge only what you can see, and judge it small.`,
     `The sprite on its own: is it the thing that was asked for, does its silhouette read at a ` +
@@ -4474,12 +4768,15 @@ async function reviewObjects({ file, map, ask, prompt, n, what, size, job }) {
   if (map)
     lines.push(
       `The sprite AGAINST THAT MAP, which is the half a grey field cannot show you. Is it drawn ` +
-        `from the same camera as the things already painted in there? A side elevation on a ` +
-        `top-down map is the failure this question exists for and it is the common one, because ` +
-        `it looks like a perfectly good drawing until it is next to the painting. Is its pixel as ` +
-        `chunky as the painting's own, or finer? A thing drawn finer than its map reads as pasted ` +
-        `on however good it is. And its light: same direction, same shaded side, same value ` +
-        `range, and muted rather than saturated.`,
+        `at the camera it was SENT at, and does it read as standing on the same plane as the ` +
+        `things in the painting that stand the way it does? A flat thing among the flat things ` +
+        `is right, and so is a raked one among the roofs; a raked one standing in the palm belt ` +
+        `is not, and neither is a flat one among the houses. That mismatch is the failure this ` +
+        `question exists for and it is the common one, because it looks like a perfectly good ` +
+        `drawing until it is next to the painting. Is its pixel as chunky as the painting's own, ` +
+        `or finer? A thing drawn finer than its map reads as pasted on however good it is. And ` +
+        `its light: same direction, same shaded side, same value range, and muted rather than ` +
+        `saturated.`,
     )
   lines.push(
     ``,
@@ -4488,8 +4785,9 @@ async function reviewObjects({ file, map, ask, prompt, n, what, size, job }) {
     }. Naming one is not approving it. Say which is closest even when every one of them is wrong.`,
     `verdict: "good" if you would put the one you named on that map as it stands, and good is the ` +
       `NORMAL answer. A thing plainer or rougher than you would have drawn it yourself is still ` +
-      `good. Say "revise" only for something a person would see on the map and call wrong: the ` +
-      `wrong thing entirely, the wrong camera, ground or a shadow disc drawn under it, a piece cut ` +
+      `good, and so is a flat one when flat is the camera it was sent at. Say "revise" only for ` +
+      `something a person would see on the map and call wrong: the wrong thing entirely, a ` +
+      `camera that is not the one it was sent at, ground or a shadow disc drawn under it, a piece cut ` +
       `off at the canvas edge, or a pixel so much finer than the painting's that it reads as ` +
       `pasted on. Never revise over taste, and never over a detail nobody could see at that size. ` +
       `Both halves matter: a confident line about a rectangular trough is worse than no line at ` +
@@ -4498,26 +4796,28 @@ async function reviewObjects({ file, map, ask, prompt, n, what, size, job }) {
       `one the keeper. On a revise, what is wrong with them and what should be done about it. ` +
       `Never a score, never a mark out of anything, never "consider" or "could be improved". Name ` +
       `the thing.`,
-    /* THE ONE THING THE REVIEWER MUST NOT DO. Told the map is a low top-down
-     * two-to-one, it helpfully writes "seen from a low top-down camera" into
-     * the corrected prompt and drops the word isometric. That is the measured
-     * mistake: the generator is already given its camera as a parameter, and a
-     * second differently worded one in the prompt fights it and comes back a
-     * side elevation. See the shape rules in planMake. */
+    /* THE ONE THING THE REVIEWER MUST NOT DO, and the reason has changed.
+     *
+     * It is not that a camera in the prompt fights the parameter: 161 of the 739
+     * objects on this account say "isometric" while their view parameter says
+     * high top-down and they came back fine. It is that the projection is now
+     * ONE decision written into the prompt by code, so a camera the reviewer
+     * types is the one wording in the whole file that nothing else read. The
+     * projection sentence at the front of that prompt is not the reviewer's to
+     * edit; everything after it is. */
     `fix: on a revise, a corrected prompt to try instead, in the SAME SHAPE as the one above, ` +
-      `changing only what went wrong. Never write a camera or a projection into it. No "top-down", ` +
-      `no "two to one", no "seen from above", no "three quarter view", and do not drop the word ` +
-      `isometric if it is in there. The generator is told its camera separately and a second ` +
-      `wording in the prompt fights it: that is measured, and it is what returned a side-on boat ` +
-      `for a top-down map. If the angle is what is wrong, fix it by saying which parts of the ` +
-      `thing should be visible and which should be foreshortened, not by naming a camera. EMPTY ` +
-      `on a good.`,
+      `changing only what went wrong. Leave the projection wording it opens with exactly as it ` +
+      `is, and never write a camera or a projection of your own anywhere in it: no "top-down", ` +
+      `no "two to one", no "seen from above", no "three quarter view". Code puts that phrase in ` +
+      `from the camera above and nothing else in the tool reads a second one. If the angle is ` +
+      `what is wrong, fix it by saying which parts of the thing should be visible and which ` +
+      `should be foreshortened, not by naming a camera. EMPTY on a good.`,
     ``,
     `Answer immediately with ONLY this JSON, no prose:`,
     `{"best":1,"verdict":"good","why":"the only one whose shape reads small","fix":""}`,
     `or, when none of them will do:`,
-    `{"best":2,"verdict":"revise","why":"all three are drawn side-on, the map looks down at two ` +
-      `to one","fix":"<the corrected prompt>"}`,
+    `{"best":2,"verdict":"revise","why":"all three are raked over onto a corner and the palms ` +
+      `they stand among are flat","fix":"<the corrected prompt>"}`,
   )
   try {
     const raw = await runPlanner(lines.join('\n'), 120000, job)
