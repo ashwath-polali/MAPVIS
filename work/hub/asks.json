@@ -1,5 +1,12 @@
 [
   {
+    "name": "boat-moored",
+    "kind": "asset",
+    "ask": "A small wooden rowboat floating upright, hull of overlapping planks in faded red-brown and bleached tan with paint worn thin along the waterline, a plain bench thwart across the middle, two oars stowed inside, a coil of frayed rope at the bow, damp dark boards in the bottom. Isometric pixel art, chunky pixels, limited warm palette of faded red-brown, bleached tan and weathered grey-brown, dark brown outline, lit from the upper left, shaded on the right side, muted saturation.",
+    "prompt": "A small wooden rowboat floating upright, hull of overlapping planks in faded red-brown and bleached tan with paint worn thin along the waterline, a plain bench thwart across the middle, two oars stowed inside, a coil of frayed rope at the bow, damp dark boards in the bottom. Isometric pixel art, chunky pixels, limited warm palette of faded red-brown, bleached tan and weathered grey-brown, dark brown outline, lit from the upper left, shaded on the right side, muted saturation.",
+    "at": "2026-08-25T00:35:49.356Z"
+  },
+  {
     "name": "rowboat",
     "kind": "asset",
     "ask": "A small open wooden rowboat seen from above and to one side so the inside of the hull is visible, bow pointing up and to the right, hull of overlapping planks in faded red-brown and bleached tan, two oars shipped across the thwarts, a coil of rope at the bow. Isometric pixel art, chunky pixels, limited warm palette, dark brown outline, lit from the upper left, shaded lower right, muted saturation.",
@@ -271,12 +278,5 @@
     "ask": "breathes slowly at attention, chest rising and falling",
     "prompt": "breathes slowly at attention, chest rising and falling, shoulders settling",
     "at": "2026-08-24T19:25:49.468Z"
-  },
-  {
-    "name": "water-carrier",
-    "kind": "character",
-    "ask": "a water carrier balancing a yoke across the shoulders with a clay jar hanging at each end, moss green tunic, bare arms, dark skin, chunky readable pixel art, few colours, strong dark outline, saturated warm palette, golden-hour light from the left",
-    "prompt": "a water carrier balancing a yoke across the shoulders with a clay jar hanging at each end, moss green tunic, bare arms, dark skin, chunky readable pixel art, few colours, strong dark outline, saturated warm palette, golden-hour light from the left",
-    "at": "2026-08-24T19:14:42.501Z"
   }
 ]

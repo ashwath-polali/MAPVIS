@@ -448,6 +448,18 @@ async function route(req, res, p, url) {
           `orbit   a circuit: period, radiusX, radiusY.`,
           `drift   barely moving, for something moored or idling: driftX, driftY, period.`,
           ``,
+          /* rock is not a fifth kind and must not read as one. It was added to
+           * Life and then never mentioned here, so the planner could not choose
+           * a thing it did not know existed and a boat asked to rock came back
+           * drifting sideways instead. */
+          `AND SEPARATELY, on any of the four: rock and rockRate. A tilt, in degrees either side ` +
+            `of upright and leans per second. This is how something LEANS rather than travels: a ` +
+            `boat at its mooring, a hanging sign, a lantern on a bracket. It rides on top of the ` +
+            `kind you chose, so a moored boat is drift with a small rock, and a sign that never ` +
+            `moves at all is drift with driftX and driftY at zero and a rock on top. Gentle is ` +
+            `right: 2 to 5 degrees and about a third of a lean a second reads as water. Ten ` +
+            `degrees reads as a storm.`,
+          ``,
           `Judge it against the map. A creature that scuttles wants short fast dashes and long ` +
             `stillness, not a steady glide. Something in the air wants a long cycle and a lot of ` +
             `absence, or it turns into traffic. Slow is usually righter than fast: this sits in the ` +
