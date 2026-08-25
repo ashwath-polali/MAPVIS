@@ -1,5 +1,12 @@
 [
   {
+    "name": "ship-paw-iso",
+    "kind": "asset",
+    "ask": "A single-masted sailing ship seen FROM ABOVE AND SLIGHTLY BEHIND so its whole open deck is visible looking down into it, the hull foreshortened away from the viewer, bow pointing up and to the right. Deep planked hull in warm red-brown with a bleached tan strake, a tall upright mast rising toward the viewer, one broad square sail of cream canvas carrying ONE LARGE DARK PANTHER PAW PRINT, rope rigging, a small raised stern deck, no crew. Isometric pixel art, chunky pixels, limited warm palette, d",
+    "prompt": "A single-masted sailing ship seen FROM ABOVE AND SLIGHTLY BEHIND so its whole open deck is visible looking down into it, the hull foreshortened away from the viewer, bow pointing up and to the right. Deep planked hull in warm red-brown with a bleached tan strake, a tall upright mast rising toward the viewer, one broad square sail of cream canvas carrying ONE LARGE DARK PANTHER PAW PRINT, rope rigging, a small raised stern deck, no crew. Isometric pixel art, chunky pixels, limited warm palette, dark brown outline, lit from the upper left, shaded lower right, muted saturation.",
+    "at": "2026-08-25T00:01:01.653Z"
+  },
+  {
     "name": "ship-paw-painted",
     "kind": "asset",
     "ask": "A proud single-masted sailing ship moored alongside, deep curved hull of overlapping planks in warm red-brown with a bleached tan strake, a tall upright mast, one broad square sail spread full in cream canvas carrying ONE LARGE DARK PANTHER PAW PRINT as its emblem, rope rigging fore and aft, a small raised stern deck, empty of crew. Isometric pixel art, chunky pixels, limited warm palette, dark brown outline, lit from the upper left, shaded lower right, muted saturation.",
@@ -271,12 +278,5 @@
     "ask": "a young sailor in a blue and white striped shirt, navy trousers, a coil of rope over one shoulder, red kerchief at the neck, chunky readable pixel art, few colours, strong dark outline, saturated warm palette, golden-hour light from the left",
     "prompt": "a young sailor in a blue and white striped shirt, navy trousers, a coil of rope over one shoulder, red kerchief at the neck, chunky readable pixel art, few colours, strong dark outline, saturated warm palette, golden-hour light from the left",
     "at": "2026-08-24T19:11:39.452Z"
-  },
-  {
-    "name": "running-child",
-    "kind": "character",
-    "ask": "a barefoot child in a bright yellow tunic, tousled dark hair, arms swinging wide, mid stride, chunky readable pixel art, few colours, strong dark outline, saturated warm palette, golden-hour light from the left",
-    "prompt": "a barefoot child in a bright yellow tunic, tousled dark hair, arms swinging wide, mid stride, chunky readable pixel art, few colours, strong dark outline, saturated warm palette, golden-hour light from the left",
-    "at": "2026-08-24T19:08:31.753Z"
   }
 ]

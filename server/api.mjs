@@ -746,72 +746,18 @@ async function route(req, res, p, url) {
       // next, so everything below still writes it to disk.
       halt()
 
-      /* PAINTED, NOT ILLUSTRATED, and this is the whole route now rather than a
-       * lane beside it.
+      /* THE ILLUSTRATOR, and it is the primary because it is the only one with
+       * a CAMERA. Read off the live schema: /v2/map-objects takes view with an
+       * enum of low top-down, high top-down and side. /v2/generate-image-v2,
+       * which paints, has no view, no camera, no projection parameter at all.
        *
-       * The object endpoint draws each ask as an independent illustration with
-       * nothing anchoring its angle. Asked four times for a boat it gave a side
-       * elevation, a straight overhead, a flat raft and a rectangular trough.
-       * Painting with the MAP as the style image inherits its palette, outline,
-       * detail and shading, and everything inside one image shares a vanishing
-       * point because it was all drawn at once. That is not a trick for boats,
-       * it is why cand-1, wave23 and the hub all worked.
-       *
-       * One thing or twenty is the same call: a sheet of one is a painting of
-       * one. So there is no separate sheet route, and fill is this with a bigger
-       * canvas and more nouns.
-       *
-       * The style reference is whatever the client already sends to give context:
-       * a boxed crop when there is one, the cut painting otherwise. Both are the
-       * map, which is the only thing that has to be true here.
-       *
-       * The object endpoint stays as the fallback, because a paint can fail and
-       * something is better than an error, and because painting is about two
-       * minutes against thirty seconds. */
-      const styleRef = bg || stripDataURL(String(b.style || ''))
-      const styleSize = styleRef ? pngSizeBuf(Buffer.from(styleRef, 'base64')) : null
-      let b64 = ''
-      let painted = false
-      if (styleSize && styleSize.w > 0) {
-        try {
-          const jobId = await raceStop(
-            gate,
-            pixellab.paintSheet({
-              description: t.thing,
-              // painted at MAP SCALE and placed at 1:1. A bigger canvas does not
-              // buy detail, it buys a pixel finer than the painting's own, which
-              // is the exact look of a thing sitting on top of a map rather than
-              // in it.
-              w: Math.max(64, Math.min(320, w)),
-              h: Math.max(64, Math.min(320, h)),
-              style: styleRef,
-              styleW: styleSize.w,
-              styleH: styleSize.h,
-              seed: seedOf(b),
-            }),
-          )
-          const png = await raceStop(gate, pixellab.awaitImage(jobId, { timeoutMs: 600000 }))
-          /* One ask can paint several things, and they arrive apart from each
-           * other on transparency. Cut them into one library row each: asking
-           * for "a few boats" and getting a single png with four boats welded
-           * into it is not an asset, it is a picture of assets. */
-          const parts = splitSheet(png, Number(b.minPx) || 120)
-          if (parts.length > 1) {
-            const base = b.name ? cleanName(b.name) : slugName(prompt)
-            const items = parts.map((pt, i) => saveStatic(id, pt.png.toString('base64'), `${base}-${i + 1}`, prompt, t.thing))
-            return send(res, 200, { item: items[0], items, painted: true })
-          }
-          if (parts.length === 1) {
-            b64 = parts[0].png.toString('base64')
-            painted = true
-          }
-        } catch (e) {
-          if (String((e && e.message) || e) === 'stopped') throw e
-          // and fall through to the illustrator rather than answering an error
-        }
-      }
-      if (!b64) {
-        b64 = await raceStop(
+       * A style image was tried as the fix and it is not one. style_options
+       * carries colour_palette, outline, detail and shading, so a painted ship
+       * came back in the map's exact palette and outline and pointing the wrong
+       * way, because none of those four is the angle. The two boats that came
+       * out right went through here with view low top-down, and the paw ship
+       * that came out broadside went through the painter. */
+      const b64 = await raceStop(
           gate,
           pixellab.mapObject({
             description: t.thing,
@@ -826,12 +772,11 @@ async function route(req, res, p, url) {
                   fraction: Math.max(0.15, Math.min(0.8, (w * h) / (bgSize.w * bgSize.h))),
                 }
               : {}),
-            seed: seedOf(b),
-          }),
-        )
-      }
+          seed: seedOf(b),
+        }),
+      )
       const item = saveStatic(id, b64, b.name ? cleanName(b.name) : 'gen-' + slugName(prompt), prompt, t.thing)
-      return send(res, 200, { item, painted })
+      return send(res, 200, { item })
     } catch (e) {
       const m = String((e && e.message) || e)
       return send(res, m === 'stopped' ? 499 : 502, { error: m.slice(0, 300) })
