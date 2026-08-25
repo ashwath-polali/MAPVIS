@@ -1333,6 +1333,45 @@ input[type='range']:disabled {
   flex: 0 0 auto;
   padding: 0 14px;
 }
+/* what the tool saw in what just came back, under the button that drew it.
+   Quiet on purpose: it is advice, the thing is already in the library, and it
+   must never look like the panel is refusing to go on. It sits on the same
+   left line as the button and the words wrap rather than being clipped, since
+   a reason cut in half is worse than no reason. */
+.saidline {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  margin: 0 var(--pan-in);
+  padding: 2px 0;
+}
+.saidlook {
+  color: var(--acc);
+  font: 10.5px/1.4 var(--font-mono);
+}
+.saidline .saidwhy {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--dim);
+  font: 10.5px/1.4 var(--font-mono);
+  overflow-wrap: anywhere;
+}
+/* a miss reads warm, not red. Red is the colour this panel uses for delete and
+   for an armed confirm, and nothing here is either: every candidate is still
+   keepable and the next press is still free. */
+.saidline .saidwhy.miss {
+  color: #d9bb55;
+}
+/* named through the line, not on its own, because .abtn further down the file
+   hands every button flex: 1 1 76px and a bare class here loses to it. The
+   sentence takes the room; the button takes its own words. */
+.saidline .saidgo {
+  flex: 0 0 auto;
+  padding: 2px 8px;
+  font-size: 10.5px;
+  white-space: nowrap;
+}
 .planbox {
   display: grid;
   gap: 4px;
@@ -2596,6 +2635,14 @@ footer [data-tip]:hover::after {
 }
 .pllook {
   padding: 2px 4px;
+}
+/* the look said none of these answer the ask. It sits above the rows because
+   nothing is chosen in that case, in the same warm colour the line under the
+   button uses, and every row below it is still keepable. */
+.plmiss {
+  color: #d9bb55;
+  font: 10.5px/1.4 var(--font-mono);
+  overflow-wrap: anywhere;
 }
 
 /* ---- the review loop: the tool judging its own render, in the open ------

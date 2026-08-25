@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { CSSProperties, DragEvent, ReactNode } from 'react'
 import { Editor, isCutTool, loadImage, groupFor, type EditorStatus, type Tool } from './core/editor'
-import { PAL, mkCanvas, nameOf, assetLabel, type PlacedAsset } from './core/mask'
+import { PAL, mkCanvas, nameOf, assetLabel, type AssetLook, type PlacedAsset } from './core/mask'
 import { computeRegions } from './core/regions'
 import { debase } from './core/debase'
 import { bitify, bitFactor } from './core/bitify'
@@ -111,6 +111,12 @@ interface FxState {
 // it. Every pass is free: the render is local and the look generates nothing.
 const FX_PASSES = 3
 
+/* How many things go on one contact sheet. The review route slices to this
+ * whatever it is sent, so a run of eight takes or a fill of twenty-four has to
+ * cut its own list to the same number: naming twenty-four things over a strip
+ * with six cells in it is asking about pictures that are not there. */
+const LOOK_CELLS = 6
+
 /* The one thing about a made sprite that is not a creative choice.
  *
  * Eight views because life.ts works out an eight-way facing and four makes the
@@ -160,10 +166,35 @@ const slug = (s: string) =>
  * for those, and bustAssets('') returns without doing anything, so a person
  * whose frames were rewritten under the same names went on being drawn out of
  * the cache from the old pixels. It only started to matter when an item could
- * gain frames in place. */
+ * gain frames in place.
+ *
+ * A plain png has no folder at all, and it answered '' for the same reason and
+ * with the same result: keep matched wrote new pixels under the same name and
+ * the placement on the canvas went on drawing the old ones. Its own url is the
+ * prefix that matches exactly itself, which is all bustAssets needs. */
 const folderOf = (it: api.LibItem): string => {
   const f = (it.frames && it.frames[0]) || (it.dirs && Object.values(it.dirs)[0]?.[0]) || ''
-  return f ? f.slice(0, f.lastIndexOf('/') + 1) : ''
+  return f ? f.slice(0, f.lastIndexOf('/') + 1) : it.src || ''
+}
+
+/* one library row as ONE APPEARANCE, which is what a sequence switches to.
+ *
+ * The same three shapes placeAt reads when it turns a row into a placement, in
+ * the same order: a set of views carries a src as well, pointing at whichever
+ * heading came first, so views have to be taken before the src branch claims it
+ * and loses the other seven. */
+const lookOfItem = (it: api.LibItem): AssetLook => {
+  const L: AssetLook =
+    it.kind === 'animated'
+      ? { kind: 'animated', frames: (it.frames || []).slice(), fps: it.fps || 6 }
+      : { kind: 'static', src: it.src }
+  if (it.dirs && Object.keys(it.dirs).length) {
+    L.dirs = { ...it.dirs }
+    // a heading holds a whole walk cycle on a character, so a view set needs a
+    // rate the same way an animated item does
+    if (it.fps && it.fps > 0) L.fps = it.fps
+  }
+  return L
 }
 
 // ---- the palette lock ---------------------------------------------------
@@ -609,9 +640,8 @@ export default function App() {
   // the compare panel. raw is what came back; the matched side is rendered
   // locally at whatever the slider is on, and neither has been written yet.
   // ask and prompt are what made these, kept so a keep can be recorded. pick is
-  // the one the tool chose after looking at all of them (-1 when nothing
-  // looked), why is its one line, and fix is a corrected prompt for when none
-  // of them were usable.
+  // the one the tool chose after looking at all of them, and -1 when nothing
+  // looked or when the look said none of them are it.
   const [pl, setPl] = useState<{
     mode: 'gen' | 'sel'
     selId: string
@@ -619,10 +649,21 @@ export default function App() {
     ask: string
     prompt: string
     pick: number
-    why: string
-    fix: string
-    looking: boolean
   } | null>(null)
+  /* WHAT THE TOOL SAW IN WHAT CAME BACK, and it belongs to the run rather than
+   * to the compare panel, because most runs open no panel at all. A moving
+   * object, a sprite and a whole planned set all landed unlooked-at while a
+   * still object did not, and a thing that came back at the wrong angle is the
+   * same thing whichever of the four made it.
+   *
+   * It is advice and it reads as advice: one line, never a block. Whatever it
+   * says, the item is already in the library and stays there. fix is the only
+   * part with money behind it, so it is a button and the button only fills the
+   * box and reads the map again, both free. */
+  const [said, setSaid] = useState<{ why: string; verdict: 'good' | 'revise'; fix: string } | null>(null)
+  // the look itself, in flight. One flag for every path, so the stop button's
+  // line has one thing to name however the run got here.
+  const [looking, setLooking] = useState(false)
   const [plStr, setPlStr] = useState(80)
   const [plOut, setPlOut] = useState<HTMLCanvasElement[][]>([])
   const [plBusy, setPlBusy] = useState(false)
@@ -962,14 +1003,84 @@ export default function App() {
     setAnimNote('')
   }, [animSel])
 
-  /* Hold a multi-take run after the first one and put the actual picture on the
-   * panel. Answers whether to carry on.
+  /* THE ONE LOOK AT WHAT A RUN CAME BACK WITH, and the only caller of the
+   * review route.
    *
-   * This is the whole reason the take slider can go to eight. A moving sprite
-   * is nine generations and the best part of five minutes, so four of them is
-   * half an hour, and finding out at the end that the first one was wrong costs
-   * every minute of it. What has already been drawn is in the library before
-   * this opens, so a no here throws nothing away. */
+   * Free, every time: the strip is written locally and the look never touches
+   * pixellab. It runs at the end of every run whatever was made, because a
+   * moving object, a sprite and a whole planned set all landed unlooked-at
+   * while a still object did not, and a thing that came back at the wrong
+   * angle is the same thing whichever of the four drew it.
+   *
+   * What it answers is advice. The items are already paid for and already in
+   * the library, so nothing here removes one, and a look that fails or is
+   * stopped costs the run nothing. It returns the verdict for the compare
+   * panel to preselect from, and it writes the line either way. */
+  const lookAt = useCallback(
+    async (sid: string, ask: string, prompt: string, all: api.LibItem[]): Promise<api.ObjVerdict | null> => {
+      // the sheet holds six, so six is what gets sent. Cut here rather than at
+      // the far end, so what the words name is what the picture shows.
+      const made = all.slice(0, LOOK_CELLS)
+      if (!made.length) return null
+      setSaid(null)
+      setLooking(true)
+      // one line rather than silence when the look cannot happen. It used to
+      // return having said nothing, which is indistinguishable from a look that
+      // ran and approved.
+      const quiet = (why: string) => {
+        setLooking(false)
+        setSaid({ why, verdict: 'good', fix: '' })
+        return null
+      }
+      let shots: string[] = []
+      try {
+        const cans = await Promise.all(made.map(async (it) => (await framesOf(it))[0]))
+        // one candidate that will not decode would shift every index, and then
+        // "the second one" would name the wrong sprite: skip the look instead
+        if (cans.some((c) => !c)) return quiet('did not look · one of these would not decode')
+        shots = cans.map((c) => c.toDataURL('image/png'))
+      } catch {
+        return quiet('did not look · those pixels would not decode')
+      }
+      // the look runs after the spend, so the job that bought them is finished
+      // and stop has nothing to post against. It gets its own.
+      const job = newJob('look')
+      jobRef.current = job
+      /* HOW BIG THEY REALLY ARE, which is half of what the look is for: a thing
+       * drawn at a finer pixel than the map reads as pasted on, and that cannot
+       * be judged off a strip blown up 3x without being told the real number.
+       * Read off what actually landed rather than threaded down from three
+       * callers. Sent only when every candidate agrees: a run of takes shares
+       * one size, a planned set does not, and a wrong number is worse than
+       * none. */
+      const w = made[0].w
+      const h = made[0].h
+      const oneSize = w > 0 && h > 0 && made.every((m) => m.w === w && m.h === h)
+      try {
+        const v = await api.objReview({ id: sid, ask, prompt, frames: shots, job, ...(oneSize ? { w, h } : {}) })
+        setLooking(false)
+        // anything that is not the word revise is good, the same default the
+        // effect loop takes, so a server that has not been given a verdict yet
+        // still says its line and nothing else changes
+        setSaid({ why: v.why, verdict: v.verdict === 'revise' ? 'revise' : 'good', fix: v.fix || '' })
+        return v
+      } catch {
+        setLooking(false)
+        return null
+      }
+    },
+    [],
+  )
+
+  /* Hold a run after the first thing that landed and put the actual picture on
+   * the panel. Answers whether to carry on.
+   *
+   * This is the whole reason the take slider can go to eight and the fill
+   * slider to twenty-four. A moving sprite is nine generations and the best
+   * part of five minutes, so four of them is half an hour, and finding out at
+   * the end that the first one was wrong costs every minute of it. What has
+   * already been drawn is in the library before this opens, so a no here throws
+   * nothing away. */
   const askGate = useCallback(async (item: api.LibItem, done: number, total: number) => {
     setGate({ item, done, total })
     const go = await new Promise<boolean>((res) => {
@@ -1014,6 +1125,8 @@ export default function App() {
       const moves = route.anim.how !== 'none'
       setCharRun({ at: Date.now() })
       setGenRun({ done: 0, total: runs.length })
+      // what the last run came back with is not what this one is drawing
+      setSaid(null)
       const made: api.LibItem[] = []
       // asked once per run, and only once something is on screen to ask about
       let gated = false
@@ -1090,8 +1203,12 @@ export default function App() {
             ? `${made[0].name} added · ${ways} ways${moves ? ', moving' : ''} · click it, then the map`
             : `${made.length} sprites added · click one, then the map`,
       )
+      // the same free look every other run gets. A sprite is the most expensive
+      // thing here and it was the least checked: nine generations came back and
+      // nothing said whether the body was the one that was asked for.
+      void lookAt(sid, p, plan.prompt, made)
     },
-    [genCount, charRun, askGate, push],
+    [genCount, charRun, askGate, lookAt, push],
   )
 
   // the search box, one call behind the typing so a full listing is not walked
@@ -1145,6 +1262,9 @@ export default function App() {
   const closeMatch = useCallback(() => {
     setPl(null)
     setPlOut([])
+    // the line under the button and the line in the panel are the same words,
+    // so closing the panel must not make them reappear somewhere else
+    setSaid(null)
   }, [])
 
   // one thing he KEPT, on the record for this map. Fire and forget: it shapes
@@ -1409,6 +1529,10 @@ export default function App() {
             bounds,
             walkPct: bounds ? walkPct : undefined,
             walkOnly,
+            // what it is allowed to name when it wants the picture to change.
+            // The server picks out of this list and nothing else, so a sequence
+            // cannot ask for a boulder this map has never had.
+            names: (lib || []).map((x) => x.name),
             job,
           })
           if (stopRef.current) return
@@ -1417,15 +1541,47 @@ export default function App() {
           if (bounds) life.bounds = bounds
           if (walkOnly) life.walkOnly = true
           if (bounds) life.walkPct = walkPct
+          /* The pictures a sequence switches between, resolved from names to
+           * the pixels they stand for.
+           *
+           * art counts through this list and index 0 is the placement's own,
+           * which lookOf answers off the placement itself, so only 1 and up are
+           * written down. A name this browser's library has not caught up with
+           * sends its state back to picture 0 rather than being dropped out of
+           * the list: dropping one shifts every later index down by one, and a
+           * troll/boulder/troll then draws the third picture where the second
+           * was meant. */
+          const named = Array.isArray(r.looks) ? r.looks.slice(0, 8) : []
+          const looks: AssetLook[] = []
+          const artAt = [0]
+          for (const nm of named.slice(1)) {
+            const row = (lib || []).find((x) => x.name === nm)
+            if (!row) {
+              artAt.push(0)
+              continue
+            }
+            looks.push(lookOfItem(row))
+            // looks[0] is art 1, so the length after the push IS the index
+            artAt.push(looks.length)
+          }
+          if (life.states) for (const s of life.states) s.art = artAt[s.art || 0] || 0
+          const swaps = looks.length ? ` · changes into ${looks.length} other picture${looks.length > 1 ? 's' : ''}` : ''
+          // a name that went missing is said out loud, because a picture that
+          // quietly stays put is exactly what this whole lane looked like while
+          // it was broken
+          const missed = named.length - 1 - looks.length
+          const gone = missed > 0 ? ` · ${missed} not in the library, left as it was` : ''
           /* One ask, everything picked. A market is one place and the crowd in
            * it shares the box; what they do not share is the seed and the phase,
            * or a dozen figures step in perfect time and read as one thing. */
-          const n = ids.length > 1 ? e.setLifeMany(ids, life) : (e.setLife(placeId, life), 1)
+          const n = ids.length > 1 ? e.setLifeMany(ids, life, looks) : (e.setLife(placeId, life, looks), 1)
           setLifeNote(r.note || '')
           setLifeOpen(false)
           setLifeAsk('')
           push(
             (r.note || `${n > 1 ? `${n} are moving` : `${assetLabel(a)} is moving`}`) +
+              swaps +
+              gone +
               (walkOnly ? ` · keeps to the floor (${Math.round(walkPct * 100)}% walkable)` : '') +
               ' · z undoes',
           )
@@ -1563,7 +1719,7 @@ export default function App() {
       mode: 'gen' | 'sel',
       items: api.LibItem[],
       selId: string,
-      o?: { ask?: string; prompt?: string; looking?: boolean },
+      o?: { ask?: string; prompt?: string },
     ) => {
       const e = edRef.current
       if (!e || !items.length) return
@@ -1588,17 +1744,7 @@ export default function App() {
         const live = rows.filter((r) => r.raw.length)
         if (!live.length) return
         setPlOut([])
-        setPl({
-          mode,
-          selId,
-          items: live,
-          ask: o?.ask || '',
-          prompt: o?.prompt || '',
-          pick: -1,
-          why: '',
-          fix: '',
-          looking: !!o?.looking,
-        })
+        setPl({ mode, selId, items: live, ask: o?.ask || '', prompt: o?.prompt || '', pick: -1 })
       } catch {
         push('those pixels did not load')
       }
@@ -1691,39 +1837,21 @@ export default function App() {
   // The candidates, looked at before he is asked to choose. They are already
   // paid for, so this only says which one and why: the compare opens on that
   // one preselected with all of them still on screen, and one click overrules
-  // it. Looking generates nothing. If none of them are usable the answer is a
-  // corrected prompt instead, which does cost, so it goes in the box and the
-  // confirm still asks.
+  // it. Looking generates nothing. A look that says none of them are it picks
+  // NOTHING instead, so every row stays keepable and the line above them says
+  // why, with a corrected prompt behind one press.
   const reviewMade = useCallback(
     async (sid: string, ask: string, prompt: string, made: api.LibItem[]) => {
-      await openMatch('gen', made, '', { ask, prompt, looking: true })
-      const clear = () => setPl((q) => (q ? { ...q, looking: false } : q))
-      let shots: string[] = []
-      try {
-        const cans = await Promise.all(made.map(async (it) => (await framesOf(it))[0]))
-        // one candidate that will not decode would shift every index, and then
-        // "the second one" would name the wrong sprite: skip the look instead
-        if (cans.some((c) => !c)) return clear()
-        shots = cans.map((c) => c.toDataURL('image/png'))
-      } catch {
-        return clear()
-      }
-      // the look runs after the spend, so the job that bought them is finished
-      // and stop has nothing to post against. It gets its own.
-      const job = newJob('look')
-      jobRef.current = job
-      try {
-        const v = await api.objReview(sid, ask, prompt, shots, job)
-        setPl((q) =>
-          q && q.mode === 'gen' && q.items.length === shots.length
-            ? { ...q, pick: Math.max(0, Math.min(q.items.length - 1, v.best - 1)), why: v.why, fix: v.fix, looking: false }
-            : q && { ...q, looking: false },
-        )
-      } catch {
-        clear()
-      }
+      await openMatch('gen', made, '', { ask, prompt })
+      const v = await lookAt(sid, ask, prompt, made)
+      if (!v || v.verdict === 'revise') return
+      setPl((q) =>
+        q && q.mode === 'gen' && q.items.length === made.length
+          ? { ...q, pick: Math.max(0, Math.min(q.items.length - 1, v.best - 1)) }
+          : q,
+      )
     },
-    [openMatch],
+    [openMatch, lookAt],
   )
 
   // ---- the effect engine -----------------------------------------------
@@ -2301,6 +2429,9 @@ export default function App() {
           ? Array.from({ length: genCount }, (_, i) => ({ name: `${slug(p)}-${i + 1}`, seed: seed0 + i + 1 }))
           : [{}]
       setGenRun({ done: 0, total: runs.length })
+      // the line under the button is about what LAST came back, so it goes the
+      // moment something new is being drawn
+      setSaid(null)
       const made: api.LibItem[] = []
       // asked once per run, and only once something is on screen to ask about
       let gated = false
@@ -2387,12 +2518,17 @@ export default function App() {
         // and it is looked at before he is asked to choose: a run of takes comes
         // back with one of them picked and a line saying why, a single one comes
         // back confirmed or with a corrected prompt to try. Looking is free.
-        if (genType === 'static') {
-          // the prompt was written against this map's own pixels, so the take
-          // already belongs here: the lock opens matched
-          setPlStr(80)
-          void reviewMade(sid, p, t.prompt, made)
-        }
+        //
+        // Both kinds, now. This used to read `if (genType === 'static')`, which
+        // meant a campfire came back in the generator's own colours with nobody
+        // having looked at it, on the same endpoint and from the same words as a
+        // well that did. The panel already handles a folder of frames: the
+        // inspector's own match button opens it on one.
+        //
+        // the prompt was written against this map's own pixels, so the take
+        // already belongs here: the lock opens matched
+        setPlStr(80)
+        void reviewMade(sid, p, t.prompt, made)
       }
     },
     [genCount, genType, askGate, reviewMade, push],
@@ -2440,34 +2576,34 @@ export default function App() {
     push('stopped')
   }, [push])
 
-  /* Read the boxed area and plan what belongs in it. Free, and the whole point
-   * of doing it separately from the spend: what comes back is a list you can
-   * read, drop items from, and only then buy. */
-  const doScenePlan = useCallback(async () => {
-    const e = edRef.current
-    if (!e || genBusy || fillRun) return
-    if (!genBox) {
-      push('box an area first · that is what gets filled')
-      return
-    }
-    const map = e.cutSceneDataURL()
-    if (!map) {
-      push('no painting to read')
-      return
-    }
-    const job = 'scene-' + Date.now() + '-' + Math.floor(Math.random() * 1e6)
-    jobRef.current = job
-    stopRef.current = false
-    setGenBusy(true)
-    setScene(null)
-    e.setBusy(`planning ${fillCount} for the area`)
-    try {
+  /* SEVERAL THINGS, PLANNED IN ONE LOOK. Free, and the whole point of doing it
+   * separately from the spend: what comes back is a list you can read, drop
+   * items from, and only then buy.
+   *
+   * One call for both asks that end up here, because they are the same
+   * question. "fill this courtyard" says how many out loud; "a few crates" says
+   * it in the words and the router counts them. Either way the answer is a list
+   * of things to draw, and the press after this one buys it.
+   *
+   * A box is required by fill and optional here, exactly as it is for the
+   * single read: with no box the whole painting is the area, which is a real
+   * answer rather than a missing step. Throws on failure so the caller that
+   * owns the busy line owns the message too. */
+  const readMany = useCallback(
+    async (ask: string, count: number, job: string) => {
+      const e = edRef.current
+      if (!e) return
+      const map = e.cutSceneDataURL()
+      if (!map) throw new Error('no painting to read')
+      const box = genBox || { x: 0, y: 0, w: e.doc.W, h: e.doc.H }
       const r = await api.scenePlan(e.sceneId, {
         map,
-        boxImage: e.areaDataURL(genBox, 2),
-        box: genBox,
-        ask: genPrompt.trim(),
-        count: fillCount,
+        // the boxed area goes at 2x because a 40px strip is easier to judge
+        // enlarged. With no box the area IS the map, which is already in hand.
+        boxImage: genBox ? e.areaDataURL(genBox, 2) : map,
+        box,
+        ask,
+        count,
         kind: genType,
         job,
       })
@@ -2475,6 +2611,25 @@ export default function App() {
       setScene(r.plan)
       setSceneOff(new Set())
       push(r.plan.note || `${r.plan.items.length} planned · look, then draw`)
+    },
+    [genBox, genType, push],
+  )
+
+  const doScenePlan = useCallback(async () => {
+    const e = edRef.current
+    if (!e || genBusy || fillRun) return
+    if (!genBox) {
+      push('box an area first · that is what gets filled')
+      return
+    }
+    const job = newJob('scene')
+    jobRef.current = job
+    stopRef.current = false
+    setGenBusy(true)
+    setScene(null)
+    e.setBusy(`planning ${fillCount} for the area`)
+    try {
+      await readMany(genPrompt.trim(), fillCount, job)
     } catch (err) {
       const m = String(err instanceof Error ? err.message : err)
       push(m.includes('stopped') ? 'stopped' : 'could not plan the area · ' + m.slice(0, 90))
@@ -2482,34 +2637,50 @@ export default function App() {
       setGenBusy(false)
       e.setBusy('')
     }
-  }, [genBusy, fillRun, genBox, genPrompt, fillCount, genType, push])
+  }, [genBusy, fillRun, genBox, genPrompt, fillCount, readMany, push])
 
-  /* Draw the planned things, one at a time, into the boxed area.
+  /* DRAW A PLANNED SET, ONE AT A TIME. The second press behind both asks that
+   * produce several things, because past the plan they are the same job.
+   *
+   * The only difference is where they land, and it is one line. A fill was
+   * asked to populate an area, so each thing goes onto the map at the spot the
+   * plan chose for it. An asset ask was asked for THINGS, so they go in the
+   * library and the map is a later click, the same as every other asset ask.
+   * That is the whole of it: same planner, same loop, same gate, same stop.
    *
    * Sequential on purpose. Each generation is a spend, so stopping has to mean
-   * stopping: the flag is checked before every one, and whatever has already
-   * been drawn stays on the map rather than being rolled back. Each sprite is
-   * placed at its planned spot as soon as it lands, so a fill you cut short
-   * still leaves you something.
+   * stopping: the flag is checked before every one, whatever has already been
+   * drawn stays rather than being rolled back, and the first one to land is
+   * held up for a yes exactly as a run of takes is.
    */
-  const doFill = useCallback(async () => {
+  const runMany = useCallback(async () => {
     const e = edRef.current
-    if (!e || !scene || !genBox || fillRun) return
+    if (!e || !scene || fillRun) return
+    // the map half is what needs the area. A library row does not stand
+    // anywhere yet, so it does not need one.
+    const place = makeWhat === 'fill'
+    if (place && !genBox) return
     const wanted = scene.items.filter((_, i) => !sceneOff.has(i))
     if (!wanted.length) {
       push('nothing left in the plan')
       return
     }
     const sid = e.sceneId
-    // one job for the whole fill. Without it a stop mid-fill posted the id of
+    // what this set came from, held before the box is cleared. A fill's box can
+    // be empty, and then the plan's own line is the nearest thing to an ask.
+    const ask = genPrompt.trim() || scene.note || `${wanted.length} things`
+    // one job for the whole run. Without it a stop mid-run posted the id of
     // the planner that had already finished, so only the flag between items did
     // anything and the generation in flight ran to the end.
-    const job = newJob('fill')
+    const job = newJob(place ? 'fill' : 'many')
     jobRef.current = job
     stopRef.current = false
     setScene(null)
+    setSaid(null)
     setFillRun({ done: 0, total: wanted.length, what: wanted[0].what })
-    const made: { item: api.LibItem; x: number; y: number }[] = []
+    const made: api.LibItem[] = []
+    // asked once per run, and only once something is on screen to ask about
+    let gated = false
     for (let i = 0; i < wanted.length; i++) {
       if (stopRef.current || e.sceneId !== sid) break
       const it = wanted[i]
@@ -2522,24 +2693,34 @@ export default function App() {
             : await api.assetGen(sid, it.what, { job, thing: it.prompt, tw: it.w, th: it.h })
         if (e.sceneId !== sid) break
         setLib((prev) => [...(prev || []).filter((x) => x.name !== r.item.name), r.item])
-        // one of a fill can land still when the whole fill was asked for
-        // moving, so the reason travels with that item rather than being lost
-        // in the run's own summary
+        // one of a set can land still when the whole set was asked for moving,
+        // so the reason travels with that item rather than being lost in the
+        // run's own summary
         if ('note' in r && r.note) push(`${r.item.name} · ${r.note}`)
         // straight onto the map at the planned spot, so a run cut short still
         // leaves what it managed to draw
-        e.addPlacements([
-          {
-            item: r.item,
-            x: Math.round(genBox.x + it.x),
-            y: Math.round(genBox.y + it.y),
-            scale: 1,
-            group: groupFor(r.item.name),
-          },
-        ])
-        made.push({ item: r.item, x: it.x, y: it.y })
+        if (place && genBox)
+          e.addPlacements([
+            {
+              item: r.item,
+              x: Math.round(genBox.x + it.x),
+              y: Math.round(genBox.y + it.y),
+              scale: 1,
+              group: groupFor(r.item.name),
+            },
+          ])
+        made.push(r.item)
       } catch (err) {
         push(`${it.what} failed · ` + String(err instanceof Error ? err.message : err).slice(0, 80))
+      }
+      /* The same hold a run of takes has, and for the same reason: twenty-four
+       * moving things is forty-eight generations, and finding out at the end
+       * that the first one was wrong costs all of them. Keyed on what LANDED,
+       * not on the index, so a first item that failed does not carry the gate
+       * away with it. */
+      if (!gated && made.length && i < wanted.length - 1 && !stopRef.current) {
+        gated = true
+        if (!(await askGate(made[0], i + 1, wanted.length))) break
       }
     }
     e.setBusy('')
@@ -2547,11 +2728,32 @@ export default function App() {
     push(
       made.length
         ? stopRef.current
-          ? `stopped · ${made.length} of ${wanted.length} placed, they stay`
-          : `${made.length} placed · z undoes`
+          ? `stopped · ${made.length} of ${wanted.length} ${place ? 'placed' : 'drawn'}, they stay`
+          : place
+            ? `${made.length} placed · z undoes`
+            : `${made.length} added to the library · click one, then the map`
         : 'nothing was drawn',
     )
-  }, [scene, sceneOff, genBox, fillRun, genType, push])
+    if (!made.length) return
+    // the words go on the record and out of the box in the same breath, the
+    // same as a single asset ask. A fill's box is steering rather than an ask,
+    // so it keeps what was typed.
+    if (!place) setGenPrompt('')
+    api
+      .asks(sid)
+      .then((q) => setAsks(q.asks))
+      .catch(() => {})
+    /* and the same free look. It reads the set as a set, because these all came
+     * from one ask and what it says about them is about that ask.
+     *
+     * The words it is given are the ones a person typed when there are any, and
+     * the plan's own line when the box was empty. What each candidate was
+     * MEANT to be goes in place of a prompt, named off what actually landed so
+     * the names line up with the strip even when one of them failed: six
+     * different things need six different names, and one item's full prompt
+     * would describe the first cell and none of the rest. */
+    void lookAt(sid, ask, made.slice(0, LOOK_CELLS).map((m) => m.name).join(' · '), made)
+  }, [scene, sceneOff, genBox, fillRun, genType, makeWhat, genPrompt, askGate, lookAt, push])
 
   /* The whole flow, in two presses.
    *
@@ -2573,9 +2775,12 @@ export default function App() {
    * to be one armed press against a row of dropdowns. The read is where the
    * skeleton, the view, the size and the meaning of moving get decided, so the
    * card can say "lion rig, hovering, wings beating" before a penny is spent. */
-  const doGen = useCallback(async () => {
+  const doGen = useCallback(async (askIn?: string) => {
     const e = edRef.current
-    const p = genPrompt.trim()
+    // the words are normally the ones in the box. They are handed in only by
+    // try-again, whose whole point is that one press both fills the box and
+    // reads the map, and state set a line earlier is not readable yet.
+    const p = (askIn ?? genPrompt).trim()
     if (!e || !p || genRun || genBusy || charRun) return
     const what = makeWhat === 'sprite' ? 'sprite' : 'object'
 
@@ -2602,6 +2807,31 @@ export default function App() {
           job,
         })
         if (stopRef.current) return
+        // held to the same 1..24 the area planner clamps to, so the busy line
+        // and the price can never name a number the next call will not honour
+        const many = Math.min(24, Math.max(1, Math.round(r.plan.count || 1)))
+        /* SEVERAL FROM ONE ASK, and it is still the same free press.
+         *
+         * "a few crates" came back as one png with three crates welded into it,
+         * because the generator draws every noun it is given and one ask bought
+         * one picture. Nothing about that is fixable in the words.
+         *
+         * So the router now says how many things the ask is, and when it is
+         * more than one the read carries straight on into the planner that
+         * already writes a set of them for a fill. Same list card, same rows to
+         * strike out, same second press, same stop. What changes is where they
+         * land: an asset ask fills the library, not the map. */
+        if (what === 'object' && many > 1) {
+          e.setBusy(`working out the ${many}`)
+          await readMany(p, many, job)
+          return
+        }
+        /* A sprite is priced per body, so several of THOSE is the takes slider
+         * rather than a set of different things: each one is its own rig and its
+         * own nine generations, and the fill planner writes prompts for a flat
+         * prop endpoint. Setting the number here is what makes the button state
+         * the real total before it is armed. */
+        if (what === 'sprite' && many > 1) setGenCount(Math.min(8, many))
         setGenPlan(r.plan)
         push(r.plan.note || 'read · press again to draw it')
       } catch (err) {
@@ -2633,7 +2863,26 @@ export default function App() {
     // into that before it is sent; without a box it generates on bare canvas
     const bg = genBox ? e.areaDataURL(genBox, 0, 192) : ''
     runGen(p, plan, bg)
-  }, [genPrompt, genRun, genBusy, charRun, makeWhat, genPlan, genBox, genType, genLast, push, runGen, runSpriteGen])
+  }, [genPrompt, genRun, genBusy, charRun, makeWhat, genPlan, genBox, genType, genLast, readMany, push, runGen, runSpriteGen])
+
+  /* ONE PRESS BACK TO THE MAP, when the look said none of these are it.
+   *
+   * The corrected prompt goes in the box and the free read runs on it straight
+   * away, because a correction nobody acts on is a sentence. Nothing is armed
+   * by this: the read is free, and the press after it is still the one that
+   * states a price and spends. */
+  const tryAgain = useCallback(
+    (fix: string) => {
+      setGenPrompt(fix)
+      setGenPlan(null)
+      setScene(null)
+      setSaid(null)
+      closeMatch()
+      push('reading the map again · the button still asks before it spends')
+      void doGen(fix)
+    },
+    [closeMatch, doGen, push],
+  )
 
   // deleting a library item: the file goes for good, and every placement of
   // it comes off the canvas in one undo step (z restores the placements)
@@ -3755,12 +4004,25 @@ export default function App() {
       </div>
       {/* looked at before he is asked to choose: the chosen one is outlined
           with the reason under it, all of them stay on screen, and one click
-          on any other row overrules it */}
-      {pl.looking && <div className="fxlooking pllook">looking at them…</div>}
+          on any other row overrules it.
+
+          A look that says NONE of them are it chooses nothing and says so up
+          here instead, because a reason printed under a preselected row is a
+          recommendation and this is the opposite of one. Every row is still
+          keepable: the pictures are paid for and this is advice. */}
+      {looking ? (
+        <div className="fxlooking pllook">looking at them…</div>
+      ) : said && said.verdict === 'revise' ? (
+        <div className="pllook plmiss">{said.why}</div>
+      ) : null}
       <div className="plrows">
         {pl.items.map((it, i) => {
           const chosen = pl.pick === i
-          const pickable = pl.pick >= 0 && pl.items.length > 1
+          /* clickable as soon as the look is over, whatever it said. It used to
+             need the tool to have chosen one first, so a look that came back
+             "none of these" left three candidates on screen and no way to keep
+             just one of them. */
+          const pickable = !looking && pl.items.length > 1
           return (
             <div key={it.name}>
               <div
@@ -3777,19 +4039,13 @@ export default function App() {
                   <em>matched</em>
                 </span>
               </div>
-              {chosen && pl.why && <div className="plwhy">{pl.why}</div>}
+              {chosen && said && said.verdict === 'good' && said.why && <div className="plwhy">{said.why}</div>}
             </div>
           )
         })}
       </div>
-      {pl.fix && (
-        <button
-          className="abtn plfix"
-          onClick={() => {
-            setGenPrompt(pl.fix)
-            push('put in the box · the button still asks before it spends')
-          }}
-        >
+      {said && said.fix && (
+        <button className="abtn plfix" onClick={() => tryAgain(said.fix)}>
           try again with this
         </button>
       )}
@@ -4163,15 +4419,23 @@ export default function App() {
    * of how many it is on. Two presses to spend, always. */
   const doMake = useCallback(() => {
     if (makeWhat === 'effect') return void armFx()
-    if (makeWhat === 'fill') return scene ? void doFill() : void doScenePlan()
+    // a planned set is the same second press whichever ask produced it: fill
+    // asked for an area, an asset ask turned out to be more than one thing
+    if (scene) return void runMany()
+    if (makeWhat === 'fill') return void doScenePlan()
     // a sprite runs the same two presses a thing does now. It used to be one
     // armed press against a row of dropdowns, which is what the router replaced.
     return void doGen()
-  }, [makeWhat, scene, armFx, doFill, doScenePlan, doGen])
+  }, [makeWhat, scene, armFx, runMany, doScenePlan, doGen])
 
   const wantedInScene = scene ? scene.items.length - sceneOff.size : 0
-  const makeArmed =
-    makeWhat === 'fill' ? !!scene : makeWhat === 'effect' ? fxPick : !!genPlan
+  /* The real total behind an armed set, and it is the multiplication nobody
+   * does in their head: an animated thing is a base plus its frames, so nine
+   * of them is eighteen. Same arithmetic whether the set came from a fill or
+   * from an ask that turned out to be more than one thing, because past the
+   * plan they are the same run. */
+  const manyGens = wantedInScene * perTake
+  const makeArmed = makeWhat === 'effect' ? fxPick : !!scene || (makeWhat !== 'fill' && !!genPlan)
   const makeOff =
     genBusy ||
     !!genRun ||
@@ -4214,15 +4478,18 @@ export default function App() {
               ? 'click where it goes'
               : makeWhat === 'effect'
                 ? 'make it move'
-                : makeWhat === 'fill'
-                  ? scene
-                    ? `${wantedInScene * (genType === 'animated' ? 2 : 1)} generation${wantedInScene * (genType === 'animated' ? 2 : 1) === 1 ? '' : 's'} · draw them`
-                    : genBox
+                : /* a planned set states its real total whichever ask planned
+                     it, and it is the total for the rows still in the list, so
+                     striking one out changes the number on the button */
+                  scene
+                  ? `${manyGens} generation${manyGens === 1 ? '' : 's'} · draw ${wantedInScene === 1 ? 'it' : 'them'}`
+                  : makeWhat === 'fill'
+                    ? genBox
                       ? 'read the area · free'
                       : 'box the area first'
-                  : genPlan
-                    ? `${genCost} generation${genCost === 1 ? '' : 's'} · ${genCount > 1 ? 'draw them' : 'draw it'}`
-                    : 'read the map · free'
+                    : genPlan
+                      ? `${genCost} generation${genCost === 1 ? '' : 's'} · ${genCount > 1 ? 'draw them' : 'draw it'}`
+                      : 'read the map · free'
   /* The multiplication is the part nobody does in their head: four takes of a
    * moving sprite is thirty-six generations. Said before the read as well as
    * on the button after it, because the read is where he decides whether four
@@ -4249,7 +4516,12 @@ export default function App() {
             `${CHAR_DIRS} ways${genType === 'animated' ? ' + motion' : ''} · ${genType === 'animated' ? 'five to fifteen minutes' : 'two to five minutes'}${takeWord}${usd ? ` · ${usd} left` : ''}`
         : makeWhat === 'fill'
           ? `${genBox ? `the boxed ${genBox.w}×${genBox.h}` : 'box an area'} · ${fillWord}${usd ? ` · ${usd} left` : ''}`
-          : `${genBox ? `reads the boxed ${genBox.w}×${genBox.h}` : 'reads the whole map'} · ${genType === 'animated' ? 'sprite + 8 frames' : 'one png'}${takeWord}${usd ? ` · ${usd} left` : ''}`
+          : /* the ask turned out to be several. It says so here rather than
+               going on describing one png, and it says where they land, because
+               that is the one thing this differs from a fill in. */
+            scene
+            ? `${wantedInScene} thing${wantedInScene === 1 ? '' : 's'} · ${manyGens} generation${manyGens === 1 ? '' : 's'} · into the library${usd ? ` · ${usd} left` : ''}`
+            : `${genBox ? `reads the boxed ${genBox.w}×${genBox.h}` : 'reads the whole map'} · ${genType === 'animated' ? 'sprite + 8 frames' : 'one png'}${takeWord}${usd ? ` · ${usd} left` : ''}`
 
   /* ---- the make strip -------------------------------------------------
    *
@@ -4284,6 +4556,9 @@ export default function App() {
               setMakeWhat(m)
               setGenPlan(null)
               setScene(null)
+              // the line about the last thing that came back belongs to the
+              // mode that drew it, so it goes with the mode
+              setSaid(null)
               // the takes go back to one with the plan. Eight of them set
               // against a thing, which is eight generations, is seventy-two the
               // moment the mode says sprite, and a number chosen for one price
@@ -4314,9 +4589,13 @@ export default function App() {
                   ? // deliberately not a person and not an animal. Whatever is
                     // typed here is what the router has to find a rig for.
                     'e.g. a hooded figure with a lantern'
-                  : genType === 'animated'
-                    ? 'e.g. a campfire'
-                    : 'e.g. a stone well'
+                  : /* one thing or several, in the same box. This hint is the
+                       only place anybody finds out that a plural ask is allowed,
+                       and like the effect one it has to fit the box rather than
+                       be clipped halfway through the second half. */
+                    genType === 'animated'
+                    ? 'e.g. a campfire · or three of them'
+                    : 'e.g. a stone well · or a few crates'
           }
           onChange={(ev) => {
             if (makeWhat === 'effect') {
@@ -4433,13 +4712,37 @@ export default function App() {
           lifeBusy ||
           animBusy ||
           !!animRun ||
-          !!pl?.looking ||
+          looking ||
           !!fxRev?.running) && (
           <button className="abtn stopbtn" onClick={doStop}>
             stop
           </button>
         )}
       </div>
+      {/* WHAT THE TOOL SAW, under the button that drew it.
+          Free, and it is advice: whatever it says, the thing is in the library
+          and stays there. An object run opens the compare and the same words go
+          in its head, so this is the line for the runs that open no panel at
+          all: a sprite, a whole planned set, and any run where the compare could
+          not open because the painting had no colours to lock onto yet. */}
+      {!pl && (looking || said) && (
+        <div className="saidline">
+          {looking ? (
+            <span className="saidlook">looking at what came back…</span>
+          ) : (
+            said && (
+              <>
+                <span className={'saidwhy' + (said.verdict === 'revise' ? ' miss' : '')}>{said.why}</span>
+                {said.fix && (
+                  <button className="abtn tiny saidgo" onClick={() => tryAgain(said.fix)}>
+                    try again
+                  </button>
+                )}
+              </>
+            )
+          )}
+        </div>
+      )}
     </div>
   )
 
@@ -4495,8 +4798,14 @@ export default function App() {
    * money. */
   const gateCard = gate && (
     <div className="planbox gatebox">
+      {/* a run of takes is the same thing drawn again, a planned set is several
+          different things, and calling the second one a take would be a lie
+          about what the picture below is. fillRun is what tells them apart:
+          only a set has one. */}
       <div className="plannote">
-        take {gate.done} of {gate.total} · keep going?
+        {fillRun
+          ? `${gate.done} of ${gate.total} drawn · keep going?`
+          : `take ${gate.done} of ${gate.total} · keep going?`}
       </div>
       <div className="gateshot">
         <img src={shotOf(gate.item)} alt="" />
@@ -4546,8 +4855,12 @@ export default function App() {
           )
         })}
       </div>
+      {/* the one thing this list does not otherwise say: a fill puts them on
+          the map where the plan chose, an asset ask puts them in the library
+          and the map is a later click */}
       <div className="planmeta">
-        {wantedInScene} of {scene.items.length} · click one to drop it
+        {wantedInScene} of {scene.items.length} · click one to drop it ·{' '}
+        {makeWhat === 'fill' ? 'onto the map' : 'into the library'}
       </div>
     </div>
   )

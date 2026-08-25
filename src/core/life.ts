@@ -32,6 +32,47 @@ export interface LifeBounds {
   h: number
 }
 
+/* A SEQUENCE: one placement, several states, on a round.
+ *
+ * A troll rolls around the rocks, goes still as a boulder, then rolls off
+ * again. That is not a fifth kind of movement. It is the SAME placement wearing
+ * a different picture and following a different behaviour for a stretch of the
+ * round, and then the round starts over.
+ *
+ * The only new idea is the clock. A state keeps its OWN time, which is the time
+ * it has been live, not the time on the wall. So a wander that stops to be a
+ * boulder for fifteen seconds resumes exactly where it froze rather than
+ * fifteen seconds further down a walk nobody saw. That is what makes the change
+ * back look like the same creature and not a teleport, and it is arithmetic
+ * rather than something remembered between frames.
+ */
+export interface LifeState {
+  /* seconds this state is live, once round */
+  secs: number
+  /* which picture to draw, as an INDEX and never a name. 0 is the art the
+   * placement already carries; 1 and up are the extra looks it was given, so 1
+   * is looks[0]. A caller that knows nothing about looks draws 0 and is right
+   * about a placement that never changes.
+   *
+   * The planner answers in names, because a name is the only thing a model can
+   * write about a picture. The SERVER turns that name into this number, since
+   * the server is the side that can see the map's library and can refuse a name
+   * that has no row. By the time a Life reaches here the name is gone, and
+   * anything that is not a number lands on 0, which is always the placement's
+   * own picture and so is always safe. */
+  art?: number
+  /* seconds of fade at each end, so a change of picture dissolves rather than
+   * cuts. One sprite per placement means the seam dips through nothing for an
+   * instant; at these sizes that reads as a puff, which is what a
+   * transformation looks like anyway. */
+  fade?: number
+  /* how it moves while this state is live. Absent means it does not move at
+   * all: it stands exactly where the sequence left it, which is what a creature
+   * freezing in place looks like. A state's own move may not carry states of
+   * its own. */
+  move?: Life | null
+}
+
 export interface Life {
   kind: LifeKind
   /* Where it is allowed to be, in painting pixels. Absent means it stays near
@@ -123,6 +164,10 @@ export interface Life {
   /* every behaviour is driven from this, so two crabs side by side do not move
    * as one. Any integer. */
   seed?: number
+
+  /* the round, if this thing changes over time. Two to six states. Absent on
+   * almost everything, and absent means the fields above are the whole story. */
+  states?: LifeState[]
 }
 
 const num = (v: unknown, d: number) => {
@@ -136,7 +181,7 @@ export const LIFE_KINDS: LifeKind[] = ['wander', 'cross', 'orbit', 'drift']
 /* Whatever came off the wire, held inside what the evaluator can actually do.
  * Anything missing takes the beach map's own numbers, because those are the
  * ones that have been looked at and liked. */
-export function cleanLife(raw: unknown): Life | null {
+export function cleanLife(raw: unknown, depth = 0): Life | null {
   if (!raw || typeof raw !== 'object') return null
   const r = raw as Record<string, unknown>
   const kind = LIFE_KINDS.includes(r.kind as LifeKind) ? (r.kind as LifeKind) : null
@@ -190,6 +235,86 @@ export function cleanLife(raw: unknown): Life | null {
     out.period = clamp(num(r.period, 4), 0.2, 600)
     out.faceMotion = !!r.faceMotion
   }
+
+  /* Read last, because the flat fields above ARE the first state's behaviour
+   * when the first state does not name one of its own. One level only: a
+   * state's move may not carry states, so working out which state is live stays
+   * a division and a walk of at most six numbers.
+   *
+   * A PASS IS NOT A STATE, so a cross never gets a round.
+   *
+   * Every other kind answers with an offset from where the thing lives, which is
+   * what lets a round add its states up. A cross does not: it is an absolute
+   * scripted line from fx,fy to tx,ty across the whole painting, and for most of
+   * its cycle it is not on the map at all, where it answers dx 0 dy 0 meaning
+   * absent rather than meaning here. A round cannot add absent to anything. On a
+   * 688px map, a two state round of a wander then a cross measured max |dx| 737px
+   * and a single frame step of 404px: the placement walks clean off the island.
+   *
+   * It is not a wording problem and it is not fixable by holding the sum inside
+   * the box, because the thing being summed is not a displacement. A gull that
+   * crosses the cove and a crab that wanders the sand are two placements, and
+   * asking for one that does both is asking for two. So this is refused here,
+   * which is the same kind of validity rule as a state not being allowed states
+   * of its own, and refusing it costs nothing anybody has: no exported bundle
+   * carries a sequence at all.
+   *
+   * A cross carrying states loses the states and stays the pass it always was.
+   * That covers the flat-field path as well, which is the one that hides: the
+   * first state is BUILT from the fields around here when it does not name a
+   * move of its own, so a cross placement with a round would have had a cross
+   * quietly installed as state one. That path measured 356px on its own. */
+  if (depth === 0 && kind !== 'cross' && Array.isArray(r.states)) {
+    const st: LifeState[] = []
+    for (const s of (r.states as unknown[]).slice(0, 6)) {
+      if (!s || typeof s !== 'object') continue
+      const q = s as Record<string, unknown>
+      const secs = clamp(num(q.secs, 12), 0.2, 3600)
+      const state: LifeState = {
+        secs,
+        /* an index into the placement's pictures, never a name: the server has
+         * already turned the planner's name into this number. A name that got
+         * this far is not a number, so it lands on the default 0, which is the
+         * placement's own picture. The top is 7 because a placement carries at
+         * most 7 extra looks, so 0..7 is every picture there can be. */
+        art: clamp(Math.round(num(q.art, 0)), 0, 7),
+        /* no fade unless the state asked for one. A fade here is a dip through
+         * nothing, because one placement is one sprite: alpha runs to 0 and back
+         * at BOTH ends of every state it is set on. Measured with the old 0.15
+         * default on a three-state round where nothing asked to fade: alpha 0.00
+         * at t=0, so the thing is invisible on the first frame it is ever drawn,
+         * and it blanks again at every state change, three times a round. A
+         * state that wants the puff still says so. */
+        fade: clamp(num(q.fade, 0), 0, Math.min(2, secs / 2)),
+      }
+      const mv = q.move ? cleanLife(q.move, 1) : null
+      // a state that asked to be a pass keeps its seconds and its picture and
+      // simply does not move, which is a state the round already knows how to
+      // draw, rather than the placement leaving the map
+      if (mv && mv.kind !== 'cross') {
+        // the fence and the floor belong to the whole placement, so a state
+        // that did not name them is held by them anyway
+        if (!mv.bounds && out.bounds) mv.bounds = { ...out.bounds }
+        if (out.walkOnly) mv.walkOnly = true
+        // the phase is added to t before any of this, so a state carrying one
+        // of its own would count it twice
+        delete mv.phase
+        state.move = mv
+      }
+      st.push(state)
+    }
+    // one state is not a sequence, and the fields above already say what it does
+    if (st.length > 1) {
+      if (!st[0].move) st[0].move = { ...out, bounds: out.bounds ? { ...out.bounds } : null }
+      delete (st[0].move as Life).phase
+      /* the lean is a rider on the whole placement, added to every state below,
+       * so the copy that becomes the first state must not carry it as well or
+       * the thing tilts twice as far while state one is live and normally after */
+      delete (st[0].move as Life).rock
+      delete (st[0].move as Life).rockRate
+      out.states = st
+    }
+  }
   return out
 }
 
@@ -228,6 +353,10 @@ export interface LifeAt {
   /* Extra tilt in radians, added to whatever rotation the placement already
    * carries. Zero unless the behaviour asked to rock. */
   rot: number
+  /* which picture to draw, an index the caller resolves against the placement's
+   * own list. Always 0 when there is no sequence, so a caller that ignores it
+   * is right about everything that ships today. */
+  art: number
 }
 export type LifeFacing =
   | 'east'
@@ -326,6 +455,67 @@ export function separate(
   return out
 }
 
+/* WHICH STATE IS LIVE AT t: the division, then a walk of at most six numbers.
+ *
+ * Exported because the editor has to draw the fence that is in force right now,
+ * and a second copy of this walk somewhere else would be a second law. c is how
+ * many whole rounds have gone by, which is what gives each state its own clock:
+ * a state has been live for c of its own durations plus however far into it we
+ * are. into is that remainder. */
+export function liveState(states: LifeState[], t: number): { k: number; c: number; into: number } {
+  let T = 0
+  for (let i = 0; i < states.length; i++) T += states[i].secs
+  const c = Math.floor(t / T)
+  const p = t - c * T
+  let k = 0
+  let start = 0
+  while (k < states.length - 1 && p >= start + states[k].secs) {
+    start += states[k].secs
+    k++
+  }
+  return { k, c, into: p - start }
+}
+
+/* A BOX IS A PLACE, AND A PLACE IS NOT A TERM IN A SUM.
+ *
+ * A round is the sum of what every state has travelled on its own clock, and
+ * that sum only closes if each term is a DISPLACEMENT: a fixed function of that
+ * state's clock and of nothing else. A behaviour with no box is one, because it
+ * moves by offset from wherever it stands. A behaviour fenced to a box is not.
+ * The box is a rectangle on the painting, so the walk lands inside it whatever
+ * it was handed, and the term stops meaning "how far this state carried the
+ * thing" and starts meaning "where this state is", which REPLACES the sum
+ * instead of adding to it. The last state carrying a move overwrites every
+ * earlier one. Measured on a three state round in a 200x200 box: the drawn
+ * position was the last moving state's own position on 55.8% of 20000 frames, a
+ * state asking 12-24 px/s drew 3.9, and the placement stood still with its walk
+ * cycle running on 27.8% of 187499 frames, up to 8.30s unbroken.
+ *
+ * Anchoring each state where the round has left it looks like the fix and is
+ * not. It makes every term a function of the anchor as well as the clock, and
+ * with the floor in force a walk's legs are a step function of where it starts,
+ * so the term jumps the moment the anchor moves. Measured two ways. Anchoring
+ * every state walked the worst single frame step from 0.71px to 128.56px by
+ * t=300000s, and it grew with the session because the error multiplies by
+ * completed rounds. Anchoring only the live state instead put a 76 to 95px jump
+ * at every state change, on 200 of 200 seeds of a fenced round. Neither ships.
+ *
+ * So a state inherits the fence's SHAPE and its REACH and not its position: the
+ * same rectangle, centred on where the placement actually stands, and shared
+ * between the states that move so the round's own total still fits inside the
+ * fence that drew it. Not taller than the ground allows either, because a
+ * wander's reach is already flattened by the map's foreshortening and a square
+ * box would undo that. Measured after: 0 of 100000 frames pressed against the
+ * fence, so the hold below never bites, each state draws the speed it asked for
+ * to within the sampling (199.4 px/s for one asking 200), and nothing marches. */
+function share(m: Life, home: { x: number; y: number }, n: number): Life {
+  const b = m.bounds
+  if (!b) return m
+  const w = b.w / n
+  const h = Math.min(b.h / n, w * 0.35)
+  return { ...m, bounds: { x: home.x - w / 2, y: home.y - h / 2, w, h } }
+}
+
 /* a fixed 0..1 for a whole number, so a behaviour is random but repeatable */
 function rnd(n: number, seed: number): number {
   let x = (Math.imul(n ^ seed, 2246822519) ^ Math.imul(n + seed, 3266489917)) >>> 0
@@ -353,8 +543,141 @@ export function lifeAt(
    * and lean at the same time, and a sign can lean while standing still. */
   const rock = life.rock ? (life.rock * Math.PI) / 180 : 0
   const rot = rock ? rock * Math.sin(t * Math.PI * 2 * (life.rockRate ?? 0.35)) : 0
-  const still: LifeAt = { dx: 0, dy: 0, flip: false, alpha: 1, facing: 'south', moving: false, rot }
+  const still: LifeAt = { dx: 0, dy: 0, flip: false, alpha: 1, facing: 'south', moving: false, rot, art: 0 }
   if (!life) return still
+  /* WHICH STATE IS LIVE, AND WHERE THE ROUND LEFT IT, AS ARITHMETIC.
+   *
+   * The round is the sum of the durations, so t modulo that sum says where in
+   * the round it is and walking the durations says which state that lands in.
+   *
+   * The part that matters is the clock each state keeps. A state's own time is
+   * the time it has been LIVE: the number of completed rounds times its
+   * duration, plus however far into it we are now. A state that finished earlier
+   * this round has one more whole run behind it; one still to come this round
+   * has one fewer. So a wander that stops to be a boulder resumes at exactly the
+   * second it froze, and there is nothing to remember between frames.
+   *
+   * The position is the SUM of what every state has travelled on that clock.
+   * State zero is the placement's own behaviour drawn as it stands, which is why
+   * a reader that knows nothing about states sees the same creature. Every later
+   * state adds only its displacement since it first went live, so one that has
+   * not run yet this round adds nothing and one that has adds exactly what it
+   * covered.
+   *
+   * That sum is what closes the round. Anchoring each state where the walk of
+   * the states before it left off looks like the same thing and is not: state
+   * zero is then anchored at home every round with no memory of the round
+   * before, so the wrap throws away everything states one and up travelled.
+   * Measured on the check file's troll, five rounds of a 63s sequence with a
+   * rolling state at 40-45 px/s: wrap jumps of 58.37 / 22.27 / 28.99 / 117.47 /
+   * 166.76px and a worst single-frame step of 166.69px. A travelling state also
+   * arrived carrying its own offset for the round, which is the seam the old
+   * comment here called half a pixel for a drift: 58.39px for a wander.
+   *
+   * A state's live clock is continuous in t, since it only ever stops and starts
+   * again where it stopped, and each behaviour is continuous in its own clock.
+   * So the sum is continuous everywhere, at a state change and at the wrap
+   * alike. Same measurement after: worst wrap jump 0.019px, worst state change
+   * 0.044px, worst step 1.31px. That 1.31 is not a seam, it is the hop a wander
+   * rides while dashing dropping to nothing when the dash ends, which every
+   * wander has always done: the plain beach crab measures 2.86px the same way.
+   *
+   * The price is that every state is worked out from the placement's own home
+   * rather than from wherever the sequence has wandered to, because a sum only
+   * telescopes when each term is a fixed function of its own clock. The note on
+   * `share` above has the two measurements that killed the alternative. What it
+   * costs is that a state's floor test is taken in the placement's frame and not
+   * in the drawn one, so it is right to within the reach the other states have,
+   * and sharing the fence between the movers is what bounds that reach. On the
+   * 35% law's own case, a 40px path down a 100px box, that measures 0 frames off
+   * the path in 20000, and on an L of two 40px arms 0 in 40000. On a box that is
+   * mostly NOT walkable, a 12px corridor down a 300x40 box, it measures 9384 of
+   * 40000 frames and 6px out, which is the case the 35% law says to hold by the
+   * box alone rather than by the floor.
+   */
+  if (life.states && life.states.length > 1) {
+    const st = life.states
+    const { k, c, into } = liveState(st, t)
+    /* how many states actually move, because they are the ones that share the
+     * fence. A state that only changes the picture takes none of it. */
+    let movers = 0
+    for (let j = 0; j < st.length; j++) if (st[j].move) movers++
+    let ax = home.x
+    let ay = home.y
+    let heldFlip = false
+    let heldFace: LifeFacing = 'south'
+    let cur: LifeAt | null = null
+    for (let j = 0; j < st.length; j++) {
+      const raw = st[j].move
+      if (!raw) continue
+      // the fence, turned from a place into a reach, so this state's answer is a
+      // displacement and the round can add it up. See the note on `share`.
+      const m = share(raw, home, movers)
+      // seconds this state has been live: a whole run for every round behind us,
+      // plus this round's share, which is all of it for one already finished,
+      // part of it for the live one and none of it for one still to come
+      const own = (j < k ? c + 1 : c) * st[j].secs + (j === k ? into : 0)
+      const a = lifeAt(m, own, home, canStand)
+      ax += a.dx
+      ay += a.dy
+      if (j > 0) {
+        // only what it has travelled since it first went live. Without this a
+        // state arrives already displaced by wherever its own behaviour sits at
+        // second zero, which is the second seam: a pixel for a drift, the whole
+        // radius for an orbit, the length of a leg for a wander.
+        const z = lifeAt(m, 0, home, canStand)
+        ax -= z.dx
+        ay -= z.dy
+      }
+      if (j === k) cur = a
+      else if (j < k) {
+        // the way it was facing when it stopped, so a state that holds keeps it.
+        // Only states already finished this round count: a state still to come
+        // has not faced anywhere yet.
+        heldFlip = a.flip
+        heldFace = a.facing
+      }
+    }
+    let dx = ax - home.x
+    let dy = ay - home.y
+    /* the fence, on the sum rather than on any one state. Every behaviour holds
+     * itself inside the box already, so this only bites when several states each
+     * walk a box and their distances from home pile up. Held rather than wrapped
+     * or bounced, because holding is the one that stays continuous. */
+    const box = life.bounds
+    if (box) {
+      dx = clamp(home.x + dx, box.x, box.x + box.w) - home.x
+      dy = clamp(home.y + dy, box.y, box.y + box.h) - home.y
+    }
+    const f = st[k].fade || 0
+    /* the opening of the very first round has nothing to dissolve out of. The
+     * placement has not been drawn yet, so a fade in there is a fade in from
+     * nothing and the game draws no sprite at all while it lasts, because it
+     * drops anything at 0.01 alpha or under (PmapScene.tsx:918). Measured on the
+     * example the planner prompt itself hands over, whose first state asks for
+     * 0.25s: alpha 0.00 at t=0, so the thing was invisible on the first frame it
+     * ever had. The round opens at full and only the seams inside it melt. */
+    const opening = k === 0 && c === 0
+    const fa = f > 0 ? Math.max(0, Math.min(1, Math.min(opening ? f : into, st[k].secs - into) / f)) : 1
+    const art = st[k].art || 0
+    if (cur) {
+      return {
+        dx,
+        dy,
+        flip: cur.flip,
+        alpha: cur.alpha * fa,
+        facing: cur.facing,
+        moving: cur.moving,
+        // the placement's own lean rides on every state, on top of whatever the
+        // state's own behaviour is leaning through
+        rot: cur.rot + rot,
+        art,
+      }
+    }
+    // no behaviour of its own: it stands where the round left it, facing the way
+    // it was facing when it stopped
+    return { dx, dy, flip: heldFlip, alpha: fa, facing: heldFace, moving: false, rot, art }
+  }
   /* THE PATH, not only where it ends.
    *
    * The floor test used to ask whether the far end of a leg was standable and
@@ -390,71 +713,128 @@ export function lifeAt(
     let py = home.y
     let clock = 0
     let flip = false
-    // a cap, so a huge t cannot spin here: after this many legs it wraps, which
-    // is far longer than anyone watches one crab
-    for (let k = 0; k < 512; k++) {
-      let tx = cx + (rnd(k * 2 + 1, seed) * 2 - 1) * halfW
-      let ty = cy + (rnd(k * 2 + 2, seed) * 2 - 1) * halfH
-      /* the second fence. Candidates are drawn from the same fixed sequence and
-       * the first standable one wins, so this stays reproducible: the editor
-       * and the game pick the identical target as long as they agree about the
-       * floor, which they do, it is the same mask. If none of the tries land on
-       * floor the thing simply stays put for that leg, which is what a creature
-       * boxed into a wall would do anyway. */
-      if (floor && (!floor(tx, ty) || !clearPath(px, py, tx, ty))) {
-        let found = false
-        for (let try_ = 0; try_ < 12; try_++) {
-          const ax = cx + (rnd(k * 40 + try_ * 2 + 3001, seed) * 2 - 1) * halfW
-          const ay = cy + (rnd(k * 40 + try_ * 2 + 3002, seed) * 2 - 1) * halfH
-          if (floor(ax, ay) && clearPath(px, py, ax, ay)) {
-            tx = ax
-            ty = ay
-            found = true
-            break
+    /* THE CAP IS A ROUND, NOT A CLIFF.
+     *
+     * 512 legs bounds the cost, and it has to: this walk is the whole per-call
+     * price, the hub has 94 placements, and it runs on school Chromebooks. But
+     * the walk used to fall off the end of those legs and answer `still`, which
+     * put the thing back on its anchor at dx 0 dy 0 and left it standing there
+     * for the rest of the session. Measured on the beach crab: moving at
+     * t=1800s, frozen from t=1932.92s, 32.2 minutes. An advisory session is 30
+     * to 45 minutes, so every wandering placement in every bundle already
+     * exported reaches that during real play.
+     *
+     * So the legs close into a round instead. Leg 512 walks back to the anchor,
+     * which is where leg 0 starts, so the last position of the round is the
+     * first position of the next one and the walk simply carries on. The round's
+     * length is not known until the legs have been walked, so a t past the end
+     * costs a second walk: one to learn the round, one to place the thing inside
+     * it. That is bounded and it never grows again, which is the property that
+     * matters. Measured on the crab: 0.07us at t=0 either way, 14.1us at t=3600s
+     * before, 21.9us after, and flat from there to any t.
+     *
+     * Legs 0 to 511 are untouched, so nothing that has ever been exported moves
+     * by a rounding error before the 32 minute mark. */
+    let tw = t
+    for (let pass = 0; pass < 2; pass++) {
+      px = home.x
+      py = home.y
+      clock = 0
+      for (let k = 0; k <= 512; k++) {
+        /* the leg home. It is not offered to the floor test the way the others
+         * are, because a leg that got refused would end somewhere else and the
+         * round would not close: the wrap would be a teleport again. The anchor
+         * is the pixel a person dropped the placement on, so it is ground it can
+         * stand on, and this line is walked once every 32 minutes. */
+        const homing = k === 512
+        let tx = homing ? home.x : cx + (rnd(k * 2 + 1, seed) * 2 - 1) * halfW
+        let ty = homing ? home.y : cy + (rnd(k * 2 + 2, seed) * 2 - 1) * halfH
+        /* the second fence. Candidates are drawn from the same fixed sequence and
+         * the first standable one wins, so this stays reproducible: the editor
+         * and the game pick the identical target as long as they agree about the
+         * floor, which they do, it is the same mask. If none of the tries land on
+         * floor the thing simply stays put for that leg, which is what a creature
+         * boxed into a wall would do anyway. */
+        if (!homing && floor && (!floor(tx, ty) || !clearPath(px, py, tx, ty))) {
+          let found = false
+          for (let try_ = 0; try_ < 12; try_++) {
+            const ax = cx + (rnd(k * 40 + try_ * 2 + 3001, seed) * 2 - 1) * halfW
+            const ay = cy + (rnd(k * 40 + try_ * 2 + 3002, seed) * 2 - 1) * halfH
+            if (floor(ax, ay) && clearPath(px, py, ax, ay)) {
+              tx = ax
+              ty = ay
+              found = true
+              break
+            }
+          }
+          /* Blocked everywhere, so it stays put for that leg, which is what a
+           * creature boxed into a wall would do anyway.
+           *
+           * Sliding along x and then y instead, the rule Thor walks by, was
+           * tried here and taken back out. It only fires when all twelve
+           * candidates are refused, which is a thin path rather than a plaza, so
+           * it was measured on the two worst: a 12px corridor 300 long and an L
+           * of two 20px arms, 20000 frames each, walkOnly on. Sliding covered
+           * the same 284px of the corridor and the same 186px of the L, left the
+           * same 36 frames off the floor on the L and twice as many on the
+           * corridor, and shrank the L's vertical coverage from 181px to 140px.
+           * The one thing it bought was walking 77% of the time instead of 72%.
+           * Against that it moved 19298 of 20000 frames of an ordinary fenced
+           * walk, by up to 264.6px, and four bundles are already exported. The
+           * fence bug it was suggested for is the anchor above, and that is
+           * fixed: this fixture goes from 19.7px off the path to 0.2px without
+           * any of this. */
+          if (!found) {
+            tx = px
+            ty = py
           }
         }
-        if (!found) {
-          tx = px
-          ty = py
+        const dist = Math.hypot(tx - px, ty - py)
+        const sp = (life.speedMin ?? 14) + rnd(k + 977, seed) * ((life.speedMax ?? 26) - (life.speedMin ?? 14))
+        const moveT = dist / Math.max(sp, 0.5)
+        const pause = (life.pauseMin ?? 1.2) + rnd(k + 5501, seed) * ((life.pauseMax ?? 4.7) - (life.pauseMin ?? 1.2))
+        if (tw < clock + moveT) {
+          const u = moveT > 0 ? (tw - clock) / moveT : 1
+          const x = px + (tx - px) * u
+          const y = py + (ty - py) * u
+          flip = tx < px
+          const hop = (life.bob ?? 1.5) * Math.abs(Math.sin(tw * Math.PI * (life.bobRate ?? 3.5)))
+          return {
+            dx: x - home.x,
+            dy: y - home.y - hop,
+            flip: (life.faceMotion ?? true) && flip,
+            alpha: 1,
+            facing: facingFrom(tx - px, ty - py),
+            moving: true,
+            rot,
+            art: 0,
+          }
         }
-      }
-      const dist = Math.hypot(tx - px, ty - py)
-      const sp = (life.speedMin ?? 14) + rnd(k + 977, seed) * ((life.speedMax ?? 26) - (life.speedMin ?? 14))
-      const moveT = dist / Math.max(sp, 0.5)
-      const pause = (life.pauseMin ?? 1.2) + rnd(k + 5501, seed) * ((life.pauseMax ?? 4.7) - (life.pauseMin ?? 1.2))
-      if (t < clock + moveT) {
-        const u = moveT > 0 ? (t - clock) / moveT : 1
-        const x = px + (tx - px) * u
-        const y = py + (ty - py) * u
-        flip = tx < px
-        const hop = (life.bob ?? 1.5) * Math.abs(Math.sin(t * Math.PI * (life.bobRate ?? 3.5)))
-        return {
-          dx: x - home.x,
-          dy: y - home.y - hop,
-          flip: (life.faceMotion ?? true) && flip,
-          alpha: 1,
-          facing: facingFrom(tx - px, ty - py),
-          moving: true,
-          rot,
+        clock += moveT
+        if (tw < clock + pause) {
+          flip = tx < px
+          // stood still, still facing wherever the last dash pointed
+          return {
+            dx: tx - home.x,
+            dy: ty - home.y,
+            flip: (life.faceMotion ?? true) && flip,
+            alpha: 1,
+            facing: facingFrom(tx - px, ty - py),
+            moving: false,
+            rot,
+            art: 0,
+          }
         }
+        clock += pause
+        px = tx
+        py = ty
       }
-      clock += moveT
-      if (t < clock + pause) {
-        flip = tx < px
-        // stood still, still facing wherever the last dash pointed
-        return {
-          dx: tx - home.x,
-          dy: ty - home.y,
-          flip: (life.faceMotion ?? true) && flip,
-          alpha: 1,
-          facing: facingFrom(tx - px, ty - py),
-          moving: false,
-          rot,
-        }
-      }
-      clock += pause
-      px = tx
-      py = ty
+      /* past the end of the round, so `clock` is now the length of the whole
+       * round and the second pass lands inside it. A round of no length means a
+       * thing that neither travels nor pauses, and there is nowhere for that to
+       * be but its anchor, so stop rather than divide by zero. */
+      if (!(clock > 0)) break
+      tw = tw % clock
     }
     return still
   }
@@ -463,7 +843,7 @@ export function lifeAt(
     const cycle = life.cycle ?? 35
     const travel = Math.min(life.travel ?? 9, cycle)
     const u = (t % cycle) / travel
-    if (u > 1) return { dx: 0, dy: 0, flip: false, alpha: 0, facing: 'south', moving: false, rot }
+    if (u > 1) return { dx: 0, dy: 0, flip: false, alpha: 0, facing: 'south', moving: false, rot, art: 0 }
     const b = life.bounds
     const fx = life.fromX ?? (b ? b.x - 20 : home.x - 200)
     const fy = life.fromY ?? (b ? b.y + b.h * 0.3 : home.y)
@@ -482,6 +862,7 @@ export function lifeAt(
       // a pass is travel end to end; there is no standing about in it
       moving: true,
       rot,
+      art: 0,
     }
   }
 
@@ -501,6 +882,7 @@ export function lifeAt(
       // an orbit never stops going round
       moving: true,
       rot,
+      art: 0,
     }
   }
 
@@ -515,5 +897,6 @@ export function lifeAt(
     // a drift is a sway that never settles, so its frames keep running
     moving: true,
     rot,
+    art: 0,
   }
 }

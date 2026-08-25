@@ -72,7 +72,29 @@ export interface PlacedAsset {
    * travel cannot be baked into an animation. Absent means it stands still,
    * which is almost everything. */
   life?: Life | null
+  /* the extra appearances a sequence switches to, index 1 and up. Absent on
+   * everything that does not change. */
+  looks?: AssetLook[]
 }
+
+/* ONE APPEARANCE of a placement: exactly the four fields that say what to draw.
+ * A placement's own src / frames / dirs / fps are look 0, and `looks` holds the
+ * extra ones a sequence switches to, so nothing that edits look 0 today has to
+ * learn about this. */
+export interface AssetLook {
+  kind: 'static' | 'animated'
+  src?: string
+  frames?: string[]
+  fps?: number
+  dirs?: Record<string, string[]>
+}
+
+/* look 0 is the placement itself, so index 1 is looks[0]. That off-by-one lives
+ * here and nowhere else. */
+export const lookOf = (a: PlacedAsset, i: number): AssetLook =>
+  i > 0 && a.looks && a.looks[i - 1]
+    ? a.looks[i - 1]
+    : { kind: a.kind, src: a.src, frames: a.frames, fps: a.fps, dirs: a.dirs }
 
 // an asset from an older save or bundle: before the transform fields only
 // `scale` existed, so absent ones fill in as the identity transform. Mutates

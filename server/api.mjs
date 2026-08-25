@@ -369,7 +369,12 @@ async function route(req, res, p, url) {
    * src/core/life.ts.
    *
    * The map rides along so the movement can suit the ground it happens on, and
-   * the boxed area, if one was drawn, is the fence it stays inside. */
+   * the boxed area, if one was drawn, is the fence it stays inside.
+   *
+   * The answer carries "looks" beside the life: the names of the pictures the
+   * states point at, in the order their indices count. looks[0] is always the
+   * placement's own picture, so an answer with no states is looks of one and a
+   * state that names nothing keeps what it had. */
   if (p === '/api/life-plan' && req.method === 'POST') {
     const b = await body(req)
     const id = safeId(b.id)
@@ -387,6 +392,38 @@ async function route(req, res, p, url) {
     const thing = String(b.name || 'it').slice(0, 80)
     const at = b.at && isFinite(Number(b.at.x)) ? { x: Math.round(b.at.x), y: Math.round(b.at.y) } : null
     const size = b.size && Number(b.size.w) > 0 ? { w: Math.round(b.size.w), h: Math.round(b.size.h) } : null
+    /* the pictures this map already holds, by name.
+     *
+     * A thing that CHANGES over time wears a different picture for part of its
+     * round, and it has to name which one. Only a name that really exists is
+     * any use: the name leaves here as an INDEX and the editor turns each
+     * index back into a png, so a name nobody has drawn has nothing to become.
+     *
+     * Two sides have to agree on the list. The library on disk is what exists;
+     * the names the client sends are what the editor can hand back to a
+     * placement right now, and its copy can be a generate or a discard behind.
+     * A name on one side and not the other cannot survive the round trip, so
+     * the list is what both can see. Sent nothing, which is what an older
+     * client does, and disk stands alone: the indices are still valid, the
+     * client simply ignores them and every state draws the picture it had. */
+    const fold = (s) => String(s == null ? '' : s).replace(/\s+/g, ' ').trim().toLowerCase()
+    const sent = new Set((Array.isArray(b.names) ? b.names : []).map(fold).filter(Boolean))
+    const onDisk = libraryItems(id)
+      .map((it) => String(it.name || '').trim())
+      .filter(Boolean)
+    /* Bounded by characters, because the prompt is made of characters. See
+     * NAMES_CHARS. What is left over is counted here and named in the note
+     * below, so a library too big to offer whole says so instead of dropping
+     * whatever happened to be last in the directory. */
+    const pool = sent.size ? onDisk.filter((n) => sent.has(fold(n))) : onDisk
+    const names = []
+    let namesLen = 0
+    for (const n of pool) {
+      namesLen += n.length + 2 // the ", " it is joined with
+      if (namesLen > NAMES_CHARS) break
+      names.push(n)
+    }
+    const namesCut = pool.length - names.length
     try {
       const raw = await runPlanner(
         [
@@ -400,6 +437,10 @@ async function route(req, res, p, url) {
           ``,
           `The thing is called "${thing}"${size ? `, drawn ${size.w} by ${size.h} pixels` : ''}` +
             `${at ? `, standing at ${at.x}, ${at.y}` : ''}.`,
+          names.length
+            ? `The pictures this map already has, by name: ${names.join(', ')}. Nothing else has ` +
+              `been drawn for it.`
+            : ``,
           box
             ? `It must stay inside the box the person drew: x ${Math.round(box.x)} to ` +
               `${Math.round(box.x + box.w)}, y ${Math.round(box.y)} to ${Math.round(box.y + box.h)}.`
@@ -460,6 +501,76 @@ async function route(req, res, p, url) {
             `right: 2 to 5 degrees and about a third of a lean a second reads as water. Ten ` +
             `degrees reads as a storm.`,
           ``,
+          /* A SEQUENCE is not a fifth kind either, and it sits here with rock
+           * for the same reason: it rides on top of whatever kind was chosen
+           * rather than replacing it. The flat fields above ARE the first
+           * state, so everything written above stays true and the answer is
+           * still one object with an array on the end. See LifeState in
+           * src/core/life.ts. */
+          `AND SEPARATELY AGAIN: if what they asked for is not one behaviour but a THING THAT ` +
+            `CHANGES, add a "states" list to the same answer. A troll that rolls around, turns to ` +
+            `stone, then comes back is three facts, not one: it rolls for a while, it is a boulder ` +
+            `for a while, it rolls again. Everything you already wrote above stays, because the ` +
+            `first state uses it.`,
+          // the count comes off STATES_MAX so the words and the guard below can
+          // never drift apart. Asking for seven and keeping six is how a state
+          // used to vanish without a word.
+          `Each state is a length in seconds, optionally the name of a picture to draw, and ` +
+            `optionally a behaviour of its own. Two to ${STATES_MAX} states, and a longer list is ` +
+            `cut to ${STATES_MAX}. The list is a ROUND: after the last one it starts again at the ` +
+            `first, so write the last state so that following it with the first reads right.`,
+          `A state with no "move" does not move. It stands exactly where the thing was when the ` +
+            `state before it ended, which is what a creature freezing in place looks like, and it ` +
+            `is the right answer far more often than a behaviour is. Give a state a "move" only ` +
+            `when it should travel while it is in that state, and write that move as a whole ` +
+            `behaviour of its own with its own kind and numbers. A move inside a state may not ` +
+            `have states of its own.`,
+          /* The guard in cleanLife REFUSES a cross inside a state, so the prompt
+           * has to stop inviting one or the answer comes back and that state
+           * silently loses its movement with nobody told.
+           *
+           * The reason is structural rather than taste. Every other kind answers
+           * with an OFFSET from where the thing lives, which is what lets a round
+           * add its states up. A cross is an absolute scripted line across the
+           * whole painting, and for most of its cycle it is not on the map at
+           * all, where it answers nothing to mean ABSENT rather than to mean
+           * here. A round cannot add absent to anything: measured, a cross state
+           * put the placement 430px away on a 688px painting and jumped it 200px
+           * in a frame, every round. */
+          `A move inside a state may NOT be a cross. A cross is a one-off pass across the whole ` +
+            `painting, which is a thing that appears and leaves rather than a thing that is doing ` +
+            `something for a while, so it cannot be one stage of a round. If the ask really is a ` +
+            `bird that crosses now and then, that is a cross placement on its own with NO states, ` +
+            `not a state inside one.`,
+          /* The list of pictures is a fence, not a preference.
+           *
+           * "art" leaves this route as an INDEX into the pictures this map
+           * holds, so a name nobody has drawn has no index to become and that
+           * state falls back to the picture it already had. The old wording
+           * invited it to name one anyway and said somebody would be told what
+           * was missing. Nobody was: it read on screen as a sequence that
+           * changed timing and never once changed the picture. */
+          names.length
+            ? `"art" is the NAME of a picture and it must be copied exactly off that list of ` +
+              `pictures this map already has. Leave it out for every state where the thing looks ` +
+              `the way it already does, which is most of them. Name one only when it genuinely ` +
+              `looks different: a boulder is a different picture, a troll pausing is not. A name ` +
+              `that is not on the list is thrown away and that state keeps the picture it had, so ` +
+              `do not invent one and do not describe a picture that would have to be drawn first.`
+            : `Leave "art" out of every state. Nothing else has been drawn for this map, so the ` +
+              `thing looks the way it already does the whole way round and a state changes how it ` +
+              `MOVES rather than how it looks.`,
+          `"fade" is seconds of dissolve at each end of a state, so a change of picture melts ` +
+            `rather than cuts. A quarter of a second suits a creature curling up; leave it near ` +
+            `zero for something that should snap.`,
+          `Use states only when the ask really says the thing becomes something else, or stops ` +
+            `being one thing and starts being another. Movement that merely varies, a wander that ` +
+            `sometimes pauses longer, is ONE wander and its own pauses already cover it. When in ` +
+            `doubt, leave states out.`,
+          `Times: a state should last long enough to be noticed and short enough to come round ` +
+            `again while someone is still looking. Ten to forty seconds is usually right. Under ` +
+            `three seconds reads as a flicker rather than a change.`,
+          ``,
           `Judge it against the map. A creature that scuttles wants short fast dashes and long ` +
             `stillness, not a steady glide. Something in the air wants a long cycle and a lot of ` +
             `absence, or it turns into traffic. Slow is usually righter than fast: this sits in the ` +
@@ -469,14 +580,100 @@ async function route(req, res, p, url) {
           `{"kind":"wander","note":"one short lower-case line on what it will do","seed":1,` +
             `"range":40,"speedMin":14,"speedMax":26,"pauseMin":1.2,"pauseMax":4.7,"bob":1.5,` +
             `"bobRate":3.5,"faceMotion":true}`,
+          `Or, when it changes, the same object with a states list on the end:`,
+          /* the middle state is the only one that names a picture, and the last
+           * one names none on purpose: leaving it out is how the thing goes
+           * back to looking the way it does the rest of the time. An example
+           * that named "mossy boulder" taught it to invent, whatever the words
+           * above said, so with no library to draw from it names nothing. */
+          `{"kind":"wander","note":"rolls the rocks, goes still as a boulder, then rolls off",` +
+            `"seed":1,"range":70,"speedMin":10,"speedMax":22,"pauseMin":0.8,"pauseMax":3,"bob":1,` +
+            `"bobRate":3,"faceMotion":true,` +
+            `"states":[{"secs":26,"fade":0.25},` +
+            (names.length
+              ? `{"secs":16,"art":"a name copied from the list above","fade":0.4},`
+              : `{"secs":16,"fade":0.4},`) +
+            `{"secs":9,"move":{"kind":"drift","driftX":1,"driftY":0.5,"period":1.2}}]}`,
         ].join('\n'),
         180000,
         String(b.job || ''),
       )
       const o = planJSON(raw, 'kind')
       if (!o || !o.kind) throw new Error('no answer')
-      const note = String(o.note || '').replace(/\s+/g, ' ').trim().slice(0, 240)
-      return send(res, 200, { life: o, note })
+      /* A NAME on the wire, an INDEX in the data.
+       *
+       * The planner answers with a name because a name is the only handle it
+       * has. src/core/life.ts is numeric and stays numeric: lifeAt runs for
+       * every placement on every frame, so an index is a lookup and a name
+       * would be a search. This is the one place that holds both the answer
+       * and the map's library, so the swap happens here, before it is sent.
+       *
+       * looks[0] is always the placement's own picture. That is what makes a
+       * state with no art keep what it had, what makes the placement's own
+       * name resolve to itself instead of a second copy, and what makes an
+       * unresolvable name safe: 0 is the one index that always draws. */
+      /* A round is cut to STATES_MAX HERE, where there is somebody to tell.
+       *
+       * cleanLife cuts it anyway, silently, on both sides of the wire, so a
+       * seventh state used to reach the editor, be thrown away, and leave a
+       * round that reads as one that just stops early. Cutting it before the
+       * pictures are resolved also stops a dropped state spending a look slot
+       * that nothing will ever draw. */
+      const overStates = Array.isArray(o.states) ? Math.max(0, o.states.length - STATES_MAX) : 0
+      if (overStates) o.states = o.states.slice(0, STATES_MAX)
+      const looks = [thing]
+      const real = new Map(names.map((n) => [fold(n), n]))
+      const slot = new Map([[fold(thing), 0]])
+      const missing = []
+      for (const st of Array.isArray(o.states) ? o.states : []) {
+        if (!st || typeof st !== 'object') continue
+        const want = fold(st.art)
+        if (!want) {
+          delete st.art
+          continue
+        }
+        const hit = real.get(want)
+        if (!hit) {
+          const said = String(st.art).replace(/\s+/g, ' ').trim().slice(0, 40)
+          if (typeof st.art === 'string' && !missing.includes(said)) missing.push(said)
+          st.art = 0
+          continue
+        }
+        let i = slot.get(fold(hit))
+        if (i === undefined) {
+          // one extra picture per state is the ceiling, because a round is at
+          // most STATES_MAX states and each of them can name one. looks[0] is
+          // the placement itself, so the list is full at STATES_MAX + 1. The
+          // export and a reopen hold the same number, worked out the same way.
+          // Past it the honest answer is the picture it already has rather
+          // than an index nothing will resolve.
+          if (looks.length > STATES_MAX) {
+            st.art = 0
+            continue
+          }
+          i = looks.length
+          looks.push(hit)
+          slot.set(fold(hit), i)
+        }
+        st.art = i
+      }
+      /* say what was thrown away. A picture that does not exist reads on
+       * screen as nothing happening, which looks exactly like the sequence
+       * not working at all, so the one line the person sees has to name it. */
+      const gone = missing.length
+        ? ` · nothing here is called ${missing.slice(0, 2).map((m) => `"${m}"`).join(' or ')}, so ` +
+          `that state keeps the picture it has`
+        : ''
+      /* and what was cut, for the same reason: a round one state short and a
+       * library three pictures short both read on screen as the tool ignoring
+       * the ask. Neither used to say anything at all. */
+      const cutSt = overStates ? ` · a round holds ${STATES_MAX} states, so the last ${overStates} went` : ''
+      const cutNm = namesCut
+        ? ` · ${pool.length} pictures here, too many to list, so the last ${namesCut} could not be named`
+        : ''
+      const tail = gone + cutSt + cutNm
+      const note = String(o.note || '').replace(/\s+/g, ' ').trim().slice(0, Math.max(0, 240 - tail.length)) + tail
+      return send(res, 200, { life: o, note, looks })
     } catch (e) {
       const m = String((e && e.message) || e)
       return send(res, m === 'stopped' ? 499 : 502, { error: m })
@@ -1258,10 +1455,23 @@ async function route(req, res, p, url) {
     return send(res, 200, { strip: file, ...v })
   }
 
-  // The same look, over generated objects instead of rendered frames: the
-  // candidates side by side with an index number over each, and an answer of
-  // which one and why. Looking costs nothing; only regenerating spends, and
-  // that stays behind the ui's own armed confirm.
+  /* THE SAME LOOK, over anything a generator just made: the candidates side by
+   * side with an index number over each, an answer of which one, whether it is
+   * good enough, and why.
+   *
+   * It is FREE. Nothing on this path touches pixellab; only regenerating
+   * spends, and that stays behind the ui's own armed confirm.
+   *
+   * It CANNOT block a save. The item is already in the library before this is
+   * called and stays there whatever comes back, so a planner that times out or
+   * answers nonsense costs a spinner and nothing else. Do not move this in
+   * front of the write.
+   *
+   * One route for every kind of thing. A prop, an animated prop, a character
+   * sheet and a fill's candidates all land here, because what is being asked is
+   * the same question in every case and a second route asking it again is the
+   * segregation this tool keeps having to undo. `what` only changes one honest
+   * sentence about what the strip shows. */
   if (p === '/api/obj-review' && req.method === 'POST') {
     const b = await body(req)
     const id = safeId(b.id)
@@ -1275,7 +1485,23 @@ async function route(req, res, p, url) {
     } catch (e) {
       return send(res, 500, { error: 'the sheet did not write · ' + String(e.message || e).slice(0, 160) })
     }
-    const v = await reviewObjects(file, ask, String(b.prompt || ''), frames.length, String(b.job || ''))
+    /* THE PAINTING ITSELF, free and already on disk. asset-plan, scene-plan and
+     * life-plan each rewrite work/<id>/.ask/map.png, and a generation always
+     * follows a plan, so the copy sitting there is the map this thing was made
+     * for. Not box.png: that one is only written when a box was drawn, so it
+     * goes stale and would have the reviewer judging against another session's
+     * crop. Missing is fine and the look falls back to the sprites alone. */
+    const mapFile = path.join(WORK, id, '.ask', 'map.png')
+    const v = await reviewObjects({
+      file,
+      map: fs.existsSync(mapFile) ? mapFile : '',
+      ask,
+      prompt: String(b.prompt || ''),
+      n: frames.length,
+      what: b.what === 'sprite' ? 'sprite' : 'object',
+      size: Number(b.w) > 0 && Number(b.h) > 0 ? { w: Math.round(b.w), h: Math.round(b.h) } : null,
+      job: String(b.job || ''),
+    })
     if (!v) return send(res, 502, { error: 'the planner did not answer', strip: file })
     return send(res, 200, { strip: file, ...v })
   }
@@ -1333,20 +1559,11 @@ async function route(req, res, p, url) {
       name = base
       for (let i = 2; taken(name); i++) name = `${base}-${i}`
     } else {
-      const prev = path.join(WORK, id, '.prev')
-      try {
-        fs.mkdirSync(prev, { recursive: true })
-        const png = path.join(dir, name + '.png')
-        const fdir = path.join(dir, name)
-        if (fs.existsSync(png)) fs.copyFileSync(png, path.join(prev, name + '.png'))
-        else if (fs.existsSync(fdir) && fs.statSync(fdir).isDirectory()) {
-          const pd = path.join(prev, name)
-          fs.mkdirSync(pd, { recursive: true })
-          for (const f of fs.readdirSync(fdir)) fs.copyFileSync(path.join(fdir, f), path.join(pd, f))
-        }
-      } catch {
-        /* a backup that cannot be written is not a reason to block the edit */
-      }
+      // the same two helpers the animate and swap paths use, so an in-place
+      // edit cannot roll its own original away. See PREV_MAX.
+      const png = path.join(dir, name + '.png')
+      if (fs.existsSync(png)) keepPrevFile(id, png, name + '.png')
+      else keepPrevDir(id, path.join(dir, name), name)
     }
     /* a set of VIEWS goes back under its own names, not as 0.png, 1.png.
      * Without this an edit on eight-sided art wrote frame files beside the
@@ -1482,6 +1699,104 @@ async function route(req, res, p, url) {
     const assetsDir = path.join(dir, 'assets')
     const outAssets = []
     const writes = new Map() // rel path inside assets/ -> png buffer
+    /* ONE NAME PER DISTINCT SOURCE, because assets/ is one flat folder and two
+     * libraries can both hold a tree.png. The key used to be the filename
+     * alone, so the second one silently overwrote the first and both
+     * placements drew the same picture. Looks make that likelier, since a troll
+     * and the boulder it turns into come out of the same run. The same source
+     * used by two placements still writes once, which is the point of keying by
+     * the absolute path rather than counting. */
+    const named = new Map() // absolute source file or folder -> name inside assets/
+    const uniq = (abs, want, ext) => {
+      const had = named.get(abs)
+      if (had) return had
+      const used = new Set(named.values())
+      let n = want + ext
+      for (let i = 2; used.has(n); i++) n = `${want}-${i}${ext}`
+      named.set(abs, n)
+      return n
+    }
+    /* ONE APPEARANCE, packed: views, frames or a bare src, in that order, with
+     * its pngs read into the shared buffer map. It runs for the placement
+     * itself and again for each extra look a sequence switches to, so a look is
+     * written exactly the way the placement is and no reader learns a second
+     * shape. Returns null when nothing resolved, which drops the entry the same
+     * way the branches always did. */
+    const packLook = (s) => {
+      if (!s || typeof s !== 'object') return null
+      /* a placement with VIEWS: every rotation goes into the bundle under one
+       * folder, keyed by the heading it faces. The game picks by where the
+       * thing is walking, which is what stops a figure moon-walking. */
+      if (s.dirs && typeof s.dirs === 'object' && Object.keys(s.dirs).length) {
+        // read into the same buffer map everything else uses: the folder is
+        // rebuilt further down, so anything written straight to disk here would
+        // be deleted by its own export
+        const outDirs = {}
+        let metaFile = ''
+        for (const [k, arr] of Object.entries(s.dirs)) {
+          if (!Array.isArray(arr) || !arr[0]) continue
+          /* EVERY frame of the heading, not the first one alone. A character is
+           * a walk cycle, six frames to a heading, so keeping frame 0 handed the
+           * game a statue that slid across the ground: the exact moon-walk the
+           * views were added to stop. A stop at the first missing file, the way
+           * the animated branch below stops, keeps the run contiguous. */
+          const out = []
+          for (const u of arr) {
+            const abs = resolveAssetFile(u, dir)
+            if (!abs) break
+            const srcDir = path.dirname(abs)
+            const rel = uniq(srcDir, path.basename(srcDir), '') + '/' + path.basename(abs)
+            writes.set(rel, fs.readFileSync(abs))
+            out.push('assets/' + rel)
+            if (!metaFile) metaFile = path.join(srcDir, 'dirs.json')
+          }
+          if (out.length) outDirs[k] = out
+        }
+        if (Object.keys(outDirs).length) {
+          // the rate those frames play at, off the item's own dirs.json the way
+          // an animated item carries its fps. A set of single views has nothing
+          // to cycle, so the number only ever matters to a walker.
+          let fps = Number(s.fps) > 0 ? Math.round(Number(s.fps)) : 8
+          try {
+            const meta = JSON.parse(fs.readFileSync(metaFile, 'utf8'))
+            if (Number(meta.fps) > 0) fps = Math.round(Number(meta.fps))
+          } catch {
+            /* no dirs.json beside the views, or unreadable: the default stands */
+          }
+          return {
+            dirs: outDirs,
+            // frame 0 of the front view: a reader that knows nothing about
+            // headings still gets a picture rather than a blank
+            src: outDirs.south ? outDirs.south[0] : Object.values(outDirs)[0][0],
+            fps,
+          }
+        }
+      }
+      if (Array.isArray(s.frames) && s.frames.length) {
+        // an animated placement: the frames live together in one folder
+        const first = resolveAssetFile(s.frames[0], dir)
+        if (!first) return null
+        const srcDir = path.dirname(first)
+        const dirName = uniq(srcDir, path.basename(srcDir), '')
+        const frames = []
+        for (let i = 0; i < s.frames.length; i++) {
+          const from = path.join(srcDir, i + '.png')
+          if (!fs.existsSync(from)) break
+          writes.set(dirName + '/' + i + '.png', fs.readFileSync(from))
+          frames.push(`assets/${dirName}/${i}.png`)
+        }
+        return frames.length ? { frames, fps: Number(s.fps) > 0 ? Number(s.fps) : 6 } : null
+      }
+      if (s.src) {
+        const from = resolveAssetFile(s.src, dir)
+        if (!from) return null
+        const ext = path.extname(from)
+        const file = uniq(from, path.basename(from, ext), ext)
+        writes.set(file, fs.readFileSync(from))
+        return { src: 'assets/' + file }
+      }
+      return null
+    }
     for (const a of Array.isArray(b.assets) ? b.assets : []) {
       if (!a || typeof a !== 'object') continue
       const x = Number(a.x)
@@ -1498,84 +1813,41 @@ async function route(req, res, p, url) {
       const flipY = !!a.fy
       // how it MOVES, if it does, straight through as the numbers the editor
       // holds. The game works out where it is each frame from these; there are
-      // no extra pixels and nothing to load.
+      // no extra pixels and nothing to load. A sequence is more of the same:
+      // life.states is numbers too, so it rides this spread untouched and the
+      // exporter needs no idea that it exists.
       const life = a.life && typeof a.life === 'object' ? a.life : null
       const tf = { scale: scaleX, scaleX, scaleY, rot, flipX, flipY, ...(life ? { life } : {}) }
-      /* a placement with VIEWS: every rotation goes into the bundle under one
-       * folder, keyed by the heading it faces. The game picks by where the
-       * thing is walking, which is what stops a figure moon-walking. */
-      if (a.dirs && typeof a.dirs === 'object' && Object.keys(a.dirs).length) {
-        // read into the same buffer map everything else uses: the folder is
-        // rebuilt further down, so anything written straight to disk here would
-        // be deleted by its own export
-        const outDirs = {}
-        let metaFile = ''
-        for (const [k, arr] of Object.entries(a.dirs)) {
-          if (!Array.isArray(arr) || !arr[0]) continue
-          /* EVERY frame of the heading, not the first one alone. A character is
-           * a walk cycle, six frames to a heading, so keeping frame 0 handed the
-           * game a statue that slid across the ground: the exact moon-walk the
-           * views were added to stop. A stop at the first missing file, the way
-           * the animated branch below stops, keeps the run contiguous. */
-          const out = []
-          for (const u of arr) {
-            const abs = resolveAssetFile(u, dir)
-            if (!abs) break
-            const rel = path.basename(path.dirname(abs)) + '/' + path.basename(abs)
-            writes.set(rel, fs.readFileSync(abs))
-            out.push('assets/' + rel)
-            if (!metaFile) metaFile = path.join(path.dirname(abs), 'dirs.json')
-          }
-          if (out.length) outDirs[k] = out
-        }
-        if (Object.keys(outDirs).length) {
-          // the rate those frames play at, off the item's own dirs.json the way
-          // an animated item carries its fps. A set of single views has nothing
-          // to cycle, so the number only ever matters to a walker.
-          let fps = Number(a.fps) > 0 ? Math.round(Number(a.fps)) : 8
-          try {
-            const meta = JSON.parse(fs.readFileSync(metaFile, 'utf8'))
-            if (Number(meta.fps) > 0) fps = Math.round(Number(meta.fps))
-          } catch {
-            /* no dirs.json beside the views, or unreadable: the default stands */
-          }
-          outAssets.push({
-            id: String(a.id),
-            group: String(a.group || 'props'),
-            dirs: outDirs,
-            // frame 0 of the front view: a reader that knows nothing about
-            // headings still gets a picture rather than a blank
-            src: outDirs.south ? outDirs.south[0] : Object.values(outDirs)[0][0],
-            fps,
-            x,
-            y,
-            ...tf,
-          })
-          continue
-        }
-      }
-      if (Array.isArray(a.frames) && a.frames.length) {
-        // an animated placement: the frames live together in one folder
-        const first = resolveAssetFile(a.frames[0], dir)
-        if (!first) continue
-        const srcDir = path.dirname(first)
-        const dirName = path.basename(srcDir)
-        const frames = []
-        for (let i = 0; i < a.frames.length; i++) {
-          const from = path.join(srcDir, i + '.png')
-          if (!fs.existsSync(from)) break
-          writes.set(path.join(dirName, i + '.png'), fs.readFileSync(from))
-          frames.push(`assets/${dirName}/${i}.png`)
-        }
-        if (frames.length)
-          outAssets.push({ id: String(a.id), group: String(a.group || 'props'), frames, fps: Number(a.fps) > 0 ? Number(a.fps) : 6, x, y, ...tf })
-      } else if (a.src) {
-        const from = resolveAssetFile(a.src, dir)
-        if (!from) continue
-        const file = path.basename(from)
-        writes.set(file, fs.readFileSync(from))
-        outAssets.push({ id: String(a.id), group: String(a.group || 'props'), src: 'assets/' + file, x, y, ...tf })
-      }
+      /* look 0 is the entry itself, in exactly the shape every existing reader
+       * knows, so a placement that never changes moves not an inch. The extra
+       * appearances a sequence switches to ride alongside under one optional
+       * key, and a reader that has never heard of looks ignores it and draws
+       * the thing the way it starts. */
+      const look0 = packLook(a)
+      if (!look0) continue
+      /* a look whose png has gone KEEPS ITS SLOT, holding look 0.
+       *
+       * art is an index, so dropping one here shifts every later look down and
+       * the bundle then draws the wrong picture rather than a missing one.
+       * Measured on a placement whose looks were [gone, boulder] with states at
+       * art 1 and 2: the boulder came out at index 1 and art 2 fell off the end
+       * back to the boat, so both states drew something that was never asked
+       * for. The game reader already holds the slot the same way, and so does
+       * a reopen, so all three sides agree that a look that did not arrive
+       * shows the thing the way it started. */
+      const looks = []
+      // STATES_MAX extras, because a round is at most that many states and each
+      // of them can name one picture that is not look 0. See STATES_MAX.
+      for (const L of Array.isArray(a.looks) ? a.looks.slice(0, STATES_MAX) : []) looks.push(packLook(L) || look0)
+      outAssets.push({
+        id: String(a.id),
+        group: String(a.group || 'props'),
+        ...look0,
+        x,
+        y,
+        ...tf,
+        ...(looks.length ? { looks } : {}),
+      })
     }
     fs.rmSync(assetsDir, { recursive: true, force: true })
     for (const [rel, buf] of writes) {
@@ -2488,14 +2760,67 @@ function stageFrames(id, name, frames) {
   return { stage, frames: rel, w: sz.w, h: sz.h }
 }
 
-// one file copied to work/<id>/.prev, which is not the library and is never
-// listed. The same contract /api/asset-crop keeps: these bytes cost generations
-// and an edit is not worth losing them over.
+/* .PREV KEEPS THE ORIGINAL, NOT THE LAST THING THAT HAPPENED TO BE THERE.
+ *
+ * It used to be one slot per name, copied over on every edit. Two in-place
+ * edits therefore rolled the backup forward: the first saved the original, the
+ * second overwrote it with the first one's output, and the bytes a generation
+ * was actually paid for were gone with nothing left pointing at them.
+ *
+ * That is not a hypothetical. work/hub/library/skiff-rowboat.png came back
+ * 7x7 and 231 bytes after a base-trim ran on an already-cropped file, and the
+ * .prev beside it held a 1291-byte middle step rather than the 13073-byte
+ * original. Only git still had the real one, and the library is the one place
+ * in this tool where "only git has it" is luck rather than design: a map that
+ * is not a repo would simply have lost it.
+ *
+ * So the first slot is written once and never again, and every later edit
+ * lands in a numbered one beside it. work/<id>/.prev/<name>.png is always the
+ * thing as it was generated, the highest number is always the step just taken,
+ * and no edit can reach back past the first. Slots stop at PREV_MAX so a
+ * hundred trims cannot fill a disk; when they run out it is the most recent
+ * step that rolls, never the original.
+ *
+ * .prev is not the library and is never listed, so none of this shows up as a
+ * row. These bytes cost generations and an edit is not worth losing them over. */
+const PREV_MAX = 8
+
+// the path to write this backup to: the plain name while it is free, then
+// -2, -3 and up. Answers null only if the folder itself cannot be made.
+function prevPath(id, as, isDir) {
+  const prev = path.join(WORK, safeId(id), '.prev')
+  fs.mkdirSync(prev, { recursive: true })
+  const first = path.join(prev, as)
+  if (!fs.existsSync(first)) return first
+  // a heading set is a folder and has no extension to keep the number out of
+  const dot = isDir ? -1 : as.lastIndexOf('.')
+  const stem = dot > 0 ? as.slice(0, dot) : as
+  const ext = dot > 0 ? as.slice(dot) : ''
+  for (let i = 2; i < PREV_MAX; i++) {
+    const p = path.join(prev, `${stem}-${i}${ext}`)
+    if (!fs.existsSync(p)) return p
+  }
+  return path.join(prev, `${stem}-${PREV_MAX}${ext}`)
+}
+
 function keepPrevFile(id, from, as) {
   try {
-    const prev = path.join(WORK, safeId(id), '.prev')
-    fs.mkdirSync(prev, { recursive: true })
-    fs.copyFileSync(from, path.join(prev, as))
+    fs.copyFileSync(from, prevPath(id, as, false))
+  } catch {
+    /* a backup that cannot be written is not a reason to block the edit */
+  }
+}
+
+// the folder half of the same law, for a heading set or an animation's frames
+function keepPrevDir(id, from, as) {
+  try {
+    if (!fs.existsSync(from) || !fs.statSync(from).isDirectory()) return
+    const to = prevPath(id, as, true)
+    fs.mkdirSync(to, { recursive: true })
+    for (const f of fs.readdirSync(from)) {
+      const src = path.join(from, f)
+      if (fs.statSync(src).isFile()) fs.copyFileSync(src, path.join(to, f))
+    }
   } catch {
     /* a backup that cannot be written is not a reason to block the edit */
   }
@@ -2510,15 +2835,11 @@ function keepPrevFile(id, from, as) {
  * would leave flat <heading>.png files beside the indexed ones. */
 function swapFolder(id, name, stage, meta) {
   const folder = path.join(libDirOf(id), name)
-  const prev = path.join(WORK, safeId(id), '.prev', name)
-  try {
-    fs.rmSync(prev, { recursive: true, force: true })
-    fs.mkdirSync(prev, { recursive: true })
-    if (fs.existsSync(folder))
-      for (const f of fs.readdirSync(folder)) fs.copyFileSync(path.join(folder, f), path.join(prev, f))
-  } catch {
-    /* a backup that cannot be written is not a reason to block the edit */
-  }
+  /* This used to rmSync the .prev folder before refilling it, which is the
+   * rollover in its most direct form: re-animating a figure twice deleted the
+   * original eight headings outright. It goes through the shared helper now,
+   * so take one is kept and take two lands beside it. */
+  keepPrevDir(id, folder, name)
   fs.mkdirSync(folder, { recursive: true })
   const keep = new Set()
   for (const f of fs.readdirSync(stage)) {
@@ -2801,6 +3122,43 @@ const PROMPT_MAX = 1200
  * can go missing. If it ever needs raising again, raise it: a request that is
  * read in full and refused beats one that is quietly cut in half. */
 const ASK_MAX = 1200
+
+/* HOW LONG A ROUND CAN BE, and the one number every other cap is worked out
+ * from.
+ *
+ * Four numbers used to say this and they said different things: cleanLife kept
+ * six states, the art field clamped to 0..7, the export sliced looks to seven,
+ * and the prompt below asked for two to six. A seven-state answer therefore
+ * lost its last state on the way into the editor with nothing said to anybody,
+ * which reads on screen as a round that just stops early.
+ *
+ * cleanLife owns the real ceiling (src/core/life.ts, the slice inside
+ * cleanLife), so this side matches it rather than inventing a second one, and
+ * everything else here is arithmetic on it:
+ *   states in a round            STATES_MAX
+ *   extra pictures a round needs STATES_MAX, since every state can name a
+ *                                picture and none of them need be look 0
+ *   highest art index            STATES_MAX, which sits inside life.ts's 0..7
+ *                                clamp with one slot spare
+ * If cleanLife's ceiling ever moves, move this and nothing else. */
+const STATES_MAX = 6
+
+/* HOW MUCH OF THE PICTURE LIST FITS IN A PROMPT, in characters rather than in
+ * names.
+ *
+ * This was a count of 60 and the hub library is 63 items, so three pictures
+ * were unnameable and which three was directory order. A count cannot bound a
+ * prompt anyway: measured on the hub, names run 1 to 41 characters and average
+ * 17.2, so sixty of them is anywhere between one line and a paragraph. The
+ * clause is the thing that has to stay small, so the budget sits on the clause.
+ *
+ * 4000 characters is roughly a thousand tokens beside a prompt whose fixed body
+ * is already several thousand. It holds the whole hub library three times over
+ * (63 names, 1205 characters joined, measured), and about 230 names of average
+ * length, so a 300-item library loses a tail instead of blowing the prompt. The
+ * tail is counted and said out loud, which is the part that was actually wrong:
+ * silence, not the number. */
+const NAMES_CHARS = 4000
 
 // the camera angle every object on this tool is drawn at. The maps are 2:1
 // isometric paintings, so a standing thing has to show its sides; "high
@@ -4040,40 +4398,146 @@ async function reviewRule(file, ask, frames, type, params, job) {
   }
 }
 
-/* The objects, looked at. They are already paid for, so this only decides which
- * one and says why, and the ui opens on that one with all of them still on
- * screen. fix is the escape hatch when none of them are usable: a corrected
- * prompt, which costs generations and so stays behind the armed confirm. */
-async function reviewObjects(file, ask, prompt, n, job) {
-  try {
-    const raw = await runPlanner(
-      `Look at these ${n} sprite${n === 1 ? '' : 's'} and say whether the ask was answered.\n\n` +
-        `The file, an absolute path, read it first:\n${file}\n\n` +
-        `${
-          n === 1
-            ? `It is one pixel-art sprite with a 1 drawn over it, blown up 3x with no smoothing, on a flat grey field.`
-            : `It is ${n} pixel-art sprites side by side, each with its index number drawn over it, blown up 3x with no smoothing, on a flat grey field.`
-        } The grey is the sheet, not the art: every transparent pixel shows it.\n\n` +
-        `What was asked for, in the person's own words: "${ask}"\n` +
-        `The prompt that drew them: "${String(prompt).slice(0, 700)}"\n\n` +
-        `These stand on a hand-painted 2:1 isometric game map at a small size, so what matters is: ` +
-        `is it the thing that was asked for, does its silhouette read at a glance, is it one object ` +
-        `with nothing else drawn beside it, does it stand on nothing (no ground, no slab, no ` +
-        `plinth, no shadow disc), is anything cut off at the edge of the canvas, and is the ` +
-        `shading solid rather than muddy.\n\n` +
-        `best: the index number of the one you would keep${n === 1 ? ', which is 1' : ''}.\n` +
-        `why: one short line, lowercase, plain words, saying what makes that one the keeper.\n` +
-        `fix: EMPTY unless none of them are usable. Only when none are, write a corrected prompt ` +
-        `to try instead, in the same shape as the one above, changing only what went wrong.\n\n` +
-        `Answer immediately with ONLY this JSON, no prose:\n` +
-        `{"best":1,"why":"the only one whose shape reads small","fix":""}`,
-      120000,
-      job,
+/* WHAT CAME BACK, LOOKED AT. Already paid for, so nothing here generates and
+ * nothing here can stop it being saved.
+ *
+ * It used to answer which one and why, and that was all. Which one is a number
+ * between 1 and n, so it could not fail a batch: handed a single rectangular
+ * trough it said "1" and wrote a confident line about it. A batch of three
+ * broadside ships came back with a favourite ship. So there are two answers
+ * now. best is which is closest. verdict is whether any of them will do, and it
+ * runs through the same verdictOf the effect reviews use, so an unclear answer
+ * reads as good and the loop's default stays "stop" in one place.
+ *
+ * THE PAINTING RIDES ALONG, and that is the other half. Half of what is wrong
+ * with a generated sprite cannot be seen on a grey field: a broadside ship
+ * looks like a fine ship until it sits next to a painting that looks down at
+ * two to one, and a sprite drawn at a finer pixel than the map's own looks
+ * sharper right up to the moment it is pasted on. Twenty generations of
+ * broadside ships is the measured cost of not asking. The file is already on
+ * disk from the plan that preceded the spend, so asking costs nothing.
+ *
+ * fix is a corrected prompt and only means anything on a revise. Spending it
+ * stays behind the ui's armed confirm. */
+async function reviewObjects({ file, map, ask, prompt, n, what, size, job }) {
+  const many = n !== 1
+  const lines = [
+    `Look at what a pixel-art generator just made and say whether it answers what was asked for.`,
+    ``,
+    /* two files means the two-file wording, not the one-file wording. A planner
+     * handed two images without ONCE EACH re-reads to check itself and burns
+     * the whole timeout: measured 300s down to 16s once the words were right. */
+    map
+      ? `Read the two image files below ONCE EACH with the Read tool, then answer in your next ` +
+        `message. Do not read them again to check yourself and do not open anything else.`
+      : `Read the image file below ONCE with the Read tool, then answer in your next message. Do ` +
+        `not read it again to check yourself and do not open anything else.`,
+    ``,
+    `What came back, absolute path:`,
+    file,
+    `${
+      many
+        ? `It is ${n} candidates side by side, each with its index number drawn over it`
+        : `It is one sprite with a 1 drawn over it`
+    }, blown up 3x with no smoothing, on a flat grey field. The grey is the sheet, not the art: ` +
+      `every transparent pixel shows it.` +
+      (what === 'sprite'
+        ? ` They came off one character sheet, the same body seen from different headings or part ` +
+          `way through a walk, so they are MEANT to look alike. Judge the body, not which of them ` +
+          `is prettiest.`
+        : ``),
+    size
+      ? `Each one is really ${size.w} by ${size.h} pixels. That is the size it will be on the map; ` +
+        `the 3x is only so you can see it at all.`
+      : ``,
+  ]
+  if (map)
+    lines.push(
+      ``,
+      `The map it has to stand on, absolute path:`,
+      map,
+      `That painting is the standard. It was painted by hand, it is seen from a low top-down ` +
+        `camera at two to one, and a generated thing has to look painted INTO it rather than ` +
+        `pasted on top of it.`,
     )
-    const o = planJSON(raw)
+  lines.push(
+    ``,
+    `What was asked for, in the person's own words: "${ask}"`,
+    `The prompt that drew it: "${String(prompt).slice(0, 700)}"`,
+    ``,
+    `Judge only what you can see, and judge it small.`,
+    `The sprite on its own: is it the thing that was asked for, does its silhouette read at a ` +
+      `glance, is it one thing with nothing else drawn beside it, does it stand on nothing (no ` +
+      `ground, no slab, no plinth, no shadow disc), is anything cut off at the edge of the ` +
+      `canvas, and is the shading solid rather than muddy.`,
+  )
+  if (map)
+    lines.push(
+      `The sprite AGAINST THAT MAP, which is the half a grey field cannot show you. Is it drawn ` +
+        `from the same camera as the things already painted in there? A side elevation on a ` +
+        `top-down map is the failure this question exists for and it is the common one, because ` +
+        `it looks like a perfectly good drawing until it is next to the painting. Is its pixel as ` +
+        `chunky as the painting's own, or finer? A thing drawn finer than its map reads as pasted ` +
+        `on however good it is. And its light: same direction, same shaded side, same value ` +
+        `range, and muted rather than saturated.`,
+    )
+  lines.push(
+    ``,
+    `best: the index number of the one closest to the ask${
+      many ? `` : `, which is 1 because there is only one`
+    }. Naming one is not approving it. Say which is closest even when every one of them is wrong.`,
+    `verdict: "good" if you would put the one you named on that map as it stands, and good is the ` +
+      `NORMAL answer. A thing plainer or rougher than you would have drawn it yourself is still ` +
+      `good. Say "revise" only for something a person would see on the map and call wrong: the ` +
+      `wrong thing entirely, the wrong camera, ground or a shadow disc drawn under it, a piece cut ` +
+      `off at the canvas edge, or a pixel so much finer than the painting's that it reads as ` +
+      `pasted on. Never revise over taste, and never over a detail nobody could see at that size. ` +
+      `Both halves matter: a confident line about a rectangular trough is worse than no line at ` +
+      `all, and so is nagging about art that would have been fine.`,
+    `why: ONE short lowercase line of plain words saying what you saw. On a good, what makes that ` +
+      `one the keeper. On a revise, what is wrong with them and what should be done about it. ` +
+      `Never a score, never a mark out of anything, never "consider" or "could be improved". Name ` +
+      `the thing.`,
+    /* THE ONE THING THE REVIEWER MUST NOT DO. Told the map is a low top-down
+     * two-to-one, it helpfully writes "seen from a low top-down camera" into
+     * the corrected prompt and drops the word isometric. That is the measured
+     * mistake: the generator is already given its camera as a parameter, and a
+     * second differently worded one in the prompt fights it and comes back a
+     * side elevation. See the shape rules in planMake. */
+    `fix: on a revise, a corrected prompt to try instead, in the SAME SHAPE as the one above, ` +
+      `changing only what went wrong. Never write a camera or a projection into it. No "top-down", ` +
+      `no "two to one", no "seen from above", no "three quarter view", and do not drop the word ` +
+      `isometric if it is in there. The generator is told its camera separately and a second ` +
+      `wording in the prompt fights it: that is measured, and it is what returned a side-on boat ` +
+      `for a top-down map. If the angle is what is wrong, fix it by saying which parts of the ` +
+      `thing should be visible and which should be foreshortened, not by naming a camera. EMPTY ` +
+      `on a good.`,
+    ``,
+    `Answer immediately with ONLY this JSON, no prose:`,
+    `{"best":1,"verdict":"good","why":"the only one whose shape reads small","fix":""}`,
+    `or, when none of them will do:`,
+    `{"best":2,"verdict":"revise","why":"all three are drawn side-on, the map looks down at two ` +
+      `to one","fix":"<the corrected prompt>"}`,
+  )
+  try {
+    const raw = await runPlanner(lines.join('\n'), 120000, job)
+    // anchored on best, because a model asked to look at a strip likes to warm
+    // up by saying what it is looking at, and that first little object parses
+    // fine while carrying none of the answer
+    const o = planJSON(raw, 'best')
     if (!o) return null
     const best = Math.max(1, Math.min(n, Math.round(Number(o.best)) || 1))
-    return { best, why: oneLine(o.why), fix: oneLine(o.fix, 1200) }
+    /* A spoken verdict wins, through the same verdictOf the effect reviews use,
+     * so "anything unclear means stop" stays one law in one place. An answer
+     * with no verdict at all is from before there was one, and back then fix
+     * was the only "none of these are usable" channel there was, so a real
+     * corrected prompt still has to be heard as a revise. A real corrected
+     * prompt is forty to ninety words; anything shorter is the model writing
+     * "none" in prose rather than a fix. */
+    const fix = oneLine(o.fix, 1200)
+    const spoke = typeof o.verdict === 'string' && o.verdict.trim() !== ''
+    const verdict = spoke ? verdictOf(o) : fix.length > 40 ? 'revise' : 'good'
+    return { best, verdict, why: oneLine(o.why), fix: verdict === 'revise' ? fix : '' }
   } catch {
     return null
   }

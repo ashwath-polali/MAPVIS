@@ -48,6 +48,10 @@ export interface SavedAssetEntry {
   /* how it MOVES, if it does: a core/life.ts Life, written through untouched by
    * the exporter. Off the wire, so it is only a Life once cleanLife says so. */
   life?: unknown
+  /* the extra appearances a sequence switches to, index 1 and up, each written
+   * in the same shape as the entry itself. Absent on everything that does not
+   * change, and a reader that has never heard of them draws the entry. */
+  looks?: { src?: string; frames?: string[]; fps?: number; dirs?: Record<string, string[]> }[]
   x?: number
   y?: number
   scale?: number
@@ -327,6 +331,18 @@ export interface MakePlan {
   // switches on its own, because a switch changes the price.
   crossing?: string
   sprite?: SpriteRoute
+  /* HOW MANY DIFFERENT THINGS the ask is asking for. A stone well is one. "a
+   * few crates" is three, and one png with three crates welded into it is the
+   * wrong answer to it: the generator draws every noun it is given, so a plural
+   * ask bought a single picture of a pile.
+   *
+   * The router already reads the ask and the map, so this is one more number on
+   * the answer it was giving anyway rather than a second reading. Absent or 1
+   * means one thing, which is every ask the tool had until now, so the single
+   * path does not move. Above 1 the client carries the same free press on into
+   * scenePlan, which already writes a set of them, and prompt/w/h above describe
+   * only the first. */
+  count?: number
 }
 export const assetPlan = (
   id: string,
@@ -352,7 +368,14 @@ export const assetPlan = (
  * start is a dance. See src/core/life.ts.
  *
  * bounds is the box drawn on the map, and skipping it is a real answer: with no
- * fence the movement is judged from the map itself. */
+ * fence the movement is judged from the map itself.
+ *
+ * names is what this map's library already holds. A sequence that CHANGES the
+ * picture can only name something that exists, so without the list the answer
+ * was invented names and every art index landed on 0, so the sequence changed
+ * timing and movement and never the picture, which is the whole point of it.
+ * looks comes back as the pictures those indices count through, index 0 being
+ * the placement's own, so a state with no picture keeps the one it had. */
 export const lifePlan = (
   id: string,
   ask: string,
@@ -368,9 +391,12 @@ export const lifePlan = (
      * crossed the line where the floor becomes a second fence */
     walkPct?: number
     walkOnly?: boolean
+    // every library item this map has, by name. The server picks from these
+    // and never names anything else.
+    names?: string[]
     job?: string
   },
-) => jpost<{ life: unknown; note: string }>('/api/life-plan', { id, ask, ...o })
+) => jpost<{ life: unknown; note: string; looks?: string[] }>('/api/life-plan', { id, ask, ...o })
 
 export const stop = (job: string) => jpost<{ stopped: boolean }>('/api/stop', { job })
 
@@ -615,9 +641,33 @@ export interface ObjVerdict {
   best: number
   why: string
   fix: string
+  /* Whether what came back ANSWERS THE ASK, which best on its own cannot say:
+   * best is clamped into 1..n, so a row of things that are all wrong still
+   * comes back with one of them praised. revise means none of them are it, and
+   * the client shows that as advice next to every candidate still keepable.
+   *
+   * Absent from a server that has not been given it yet, and absent reads as
+   * good, which is the same default the effect loop takes: anything unclear
+   * means stop and leave it alone. */
+  verdict?: 'good' | 'revise'
 }
-export const objReview = (id: string, ask: string, prompt: string, frames: string[], job?: string) =>
-  jpost<ObjVerdict>('/api/obj-review', { id, ask, prompt, frames, job })
+/* An options object, not a positional list. The one that was here took five
+ * ordered arguments, so the day the look is given something more to judge with
+ * every call site has to be counted out again. fx-review already takes an
+ * object; this matches it. */
+export const objReview = (o: {
+  id: string
+  ask: string
+  prompt: string
+  frames: string[]
+  /* the real size of every candidate on the strip, in map pixels. The strip is
+   * blown up 3x to be visible at all, so without this the look cannot tell a
+   * sprite drawn at the map's own chunky pixel from one drawn finer. Left out
+   * when the candidates are different sizes. */
+  w?: number
+  h?: number
+  job?: string
+}) => jpost<ObjVerdict>('/api/obj-review', o)
 
 // one KEPT thing, appended to work/<id>/keeps.json. Only keeps, never discards.
 export const keepNote = (

@@ -4,8 +4,8 @@
  * Everything that happens per frame or per pixel happens here, outside React,
  * so a brush stroke never runs a render pass.
  */
-import { cleanLife, lifeAt, separate, type Life, type LifeAt } from './life'
-import { MaskDoc, PAL, colOf, nameOf, mkCanvas, bresenham, assetLabel, migrateEvent, type Pt, type PlacedAsset, type MapEvent } from './mask'
+import { cleanLife, lifeAt, liveState, separate, type Life, type LifeAt } from './life'
+import { MaskDoc, PAL, colOf, nameOf, mkCanvas, bresenham, assetLabel, lookOf, migrateEvent, type Pt, type PlacedAsset, type MapEvent, type AssetLook } from './mask'
 import { Walker, canStand, checkReach, defaultCfg, type WalkCfg, type ReachResult } from './walk'
 import { savedScene, saveDoc, loadDoc, type LibItem } from '../api'
 
@@ -24,6 +24,163 @@ export type Tool =
   | 'cutpoly'
 
 export const isCutTool = (t: Tool) => t === 'cut' || t === 'cuterase' || t === 'cutfill' || t === 'cutpoly'
+
+/* How many EXTRA pictures a placement can switch to, which is one per state
+ * because a round is at most six states and none of them need name look 0.
+ *
+ * Six is cleanLife's ceiling on states (src/core/life.ts, the slice inside
+ * cleanLife) and the export and the planner route work the same number out the
+ * same way (server/api.mjs, STATES_MAX). It is a separate line here only
+ * because life.ts does not export it; if that ceiling moves, all three move
+ * together or a reopen quietly drops the pictures the round still points at. */
+const LOOKS_MAX = 6
+
+/* PERSONAL SPACE: the four numbers the push is made of.
+ *
+ * These are a verbatim copy of the same four in the game's
+ * src/game/pmap/PmapScene.tsx, for the reason life.ts is copied there verbatim:
+ * the preview has to work the answer out the way the game does or it is lying
+ * about the map. If one changes, copy it again; do not edit one side only.
+ * They want to live in life.ts with separate(), and they are here instead only
+ * because that file is shared by a hand copy rather than by an import.
+ */
+
+/* the smallest body anything gets, in painting pixels. separate() is handed
+ * circles, and a circle of no radius is nothing to push off, so every figure
+ * carries at least this much of one. It is also the walker used by the reach
+ * test below, so the floor is one number in both places. */
+const BODY_MIN = 2
+
+/* how much of a body's DRAWN width its keep-out circle is.
+ *
+ * Half the width is the body itself. A circle exactly that big leaves a pair
+ * touching the moment a push cannot be delivered whole, and on this map that is
+ * often, so the circle is a fifth wider than the body. Measured on the hub, 30000
+ * frames at 1/60, the 17 walking figures against the 21 standing ones, judged by
+ * their real half-widths: at 0.5 the bodies still overlapped in 34.36 percent of
+ * frames, at 0.6 in 8.59 percent. 0.7 bought nothing more, the same 8.59 percent,
+ * while the worst walker-on-walker depth went 4.83px to 6.05px and the worst
+ * shift in a single frame 14.79px to 17.27px. */
+const BODY_R = 0.6
+
+// the keep-out circle of something whose drawn art is w pixels across
+function bodyRadius(w: number) {
+  return Math.max(BODY_MIN, (w || 8) * BODY_R)
+}
+
+/* HOW WIDE A BODY IS: the ink, not the canvas it was saved on.
+ *
+ * PixelLab hands back a character centred on a square sheet. The proof bundle's
+ * harbour-walker south-0.png is 144x144 holding 52px of actual ink, so reading
+ * the canvas gave a body 2.8 times its real width, and at scale 0.3 a figure
+ * about 5px across wore a 15.12px keep-out circle. Every figure on the map was
+ * several times its own size, the circles overlapped constantly, and the pushes
+ * they asked for were larger than any gap on the map could deliver.
+ *
+ * The columns that hold any opaque pixel are the body. Reading pixels is far too
+ * slow to do per frame, so both sides do it once per picture and keep the number
+ * against the picture, which cannot change while the picture does not. */
+function inkWidth(data: Uint8ClampedArray, w: number, h: number) {
+  let x0 = w
+  let x1 = -1
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++) {
+      if (data[(y * w + x) * 4 + 3] === 0) continue
+      if (x < x0) x0 = x
+      if (x > x1) x1 = x
+    }
+  // a picture with nothing in it at all keeps the canvas, which is what this
+  // measured before and is never worse than answering zero
+  return x1 >= x0 ? x1 - x0 + 1 : w
+}
+
+/* CAN A WALKER GET CLOSE ENOUGH TO TOUCH IT.
+ *
+ * A thing that never moves is an obstacle when a walker can reach it, and the
+ * old test asked something narrower: whether the thing's OWN FEET stand on
+ * ground a walker could stand on. That dropped five standing figures on the hub
+ * whose anchor sits a pixel or three off the mask, the gate guard 3.31px off and
+ * an old fisherman 2.78px, and a walker with a body a few pixels wide walked
+ * straight through them.
+ *
+ * So the question is the right one now: is there any pixel a walker could stand
+ * on inside this thing's circle. The circle is its body plus the smallest body
+ * there is, which is the walker, so this is one law with the floor the
+ * behaviours are already fenced by and with the radius above. It is measured in
+ * separate()'s own geometry, x straight and y unsquashed, because that is the
+ * geometry the overlap it is deciding about will be measured in.
+ *
+ * It reads better than the feet test rather than differently: a thing standing
+ * on ground is at distance zero from ground, so everything the old test kept is
+ * still kept. On the hub it keeps 20 of the 72 standing placements, the old 16
+ * plus the gate guard and the old fisherman the owner complained about, plus two
+ * effects that cost nothing: a portal veil no behaviour goes near, and one
+ * lighthouse sweep whose nearest standable pixel is 12.32px away against a
+ * 12.80px reach, so the deepest shove it can ever ask for is half a pixel.
+ *
+ * A marginal keep is always a marginal push, by construction, which is what
+ * makes this safe to derive from the data instead of from a list of names. */
+function walkerCanReach(x: number, y: number, r: number, yScale: number, stands: (x: number, y: number) => boolean) {
+  const ys = yScale || 1
+  const reach = r + BODY_MIN
+  const x0 = Math.ceil(x - reach)
+  const x1 = Math.floor(x + reach)
+  const y0 = Math.ceil(y - reach * ys)
+  const y1 = Math.floor(y + reach * ys)
+  for (let py = y0; py <= y1; py++)
+    for (let px = x0; px <= x1; px++) {
+      if (Math.hypot(px - x, (py - y) / ys) >= reach) continue
+      if (stands(px, py)) return true
+    }
+  return false
+}
+
+/* WHAT OF A PUSH CAN ACTUALLY BE DELIVERED.
+ *
+ * Shoving someone out of a neighbour and into a wall is not an improvement, so
+ * a push that would land somewhere it could not stand has to be held back. It
+ * used to be thrown away WHOLE, and the worst overlaps on this map are exactly
+ * the ones on thin ground: on a narrow quay the shove out of a fishmonger lands
+ * in the water, so the figure did not move a pixel and stayed fully inside.
+ * Traced on the hub at t=276.97s.
+ *
+ * So it delivers what it can. The whole vector, then each axis on its own,
+ * which is the rule the character himself already walks by, so the map has one
+ * law about a move that only partly fits rather than two. A previous try at an
+ * axis slide was measured inside the WANDER's leg search and correctly taken
+ * back out there, because it moved 19298 of 20000 frames of ordinary walking.
+ * This is not that place: a push happens only where two bodies already overlap.
+ * Measured here on its own, 30000 frames of the hub: the number of figure-frames
+ * shifted more than 4px in one frame fell from 142 to 73, and the worst
+ * walker-on-stander depth from 7.20px to 6.86px.
+ *
+ * It lives in the caller and not inside separate() because separate() is shared
+ * with the editor by a hand copy and both sides have to run the identical rule;
+ * the `stands` argument separate() still takes is no longer passed by either.
+ */
+function floorPush(
+  pts: { x: number; y: number }[],
+  push: { dx: number; dy: number }[],
+  stands: (x: number, y: number) => boolean,
+) {
+  for (let i = 0; i < pts.length; i++) {
+    const o = push[i]
+    if (!o.dx && !o.dy) continue
+    const p = pts[i]
+    if (stands(p.x + o.dx, p.y + o.dy)) continue
+    if (stands(p.x + o.dx, p.y)) {
+      o.dy = 0
+      continue
+    }
+    if (stands(p.x, p.y + o.dy)) {
+      o.dx = 0
+      continue
+    }
+    o.dx = 0
+    o.dy = 0
+  }
+  return push
+}
 
 export interface EditorStatus {
   x: number
@@ -180,6 +337,23 @@ export class Editor {
    * from its beginning rather than from wherever the page happened to be */
   lifePlay = true
   lifeT0 = performance.now() / 1000
+  /* the preview clock, stopped, while an editing gesture has hold of something
+   * that moves. Null the rest of the time. lifeNow says why. */
+  private lifeHold: number | null = null
+  /* Where every moving placement's PICTURE is this frame, keyed by id.
+   *
+   * A behaviour draws a placement at its anchor plus however far it has walked,
+   * so the anchor is not where the picture is. The draw works that offset out
+   * once a frame and leaves it here; the picker, the handles and the outline all
+   * read these same numbers, so a click lands on the sprite that is on screen
+   * rather than on an empty box the wander left behind. Asking lifeAt a second
+   * time from the picker would answer for a different instant and miss by a
+   * pixel or two, which is this same bug again, smaller. */
+  private liveAt = new Map<string, LifeAt>()
+  // the clock those offsets were worked out at, and -1 until the first frame
+  // has drawn. A hold stops on THIS reading rather than on the wall clock, so
+  // the offsets the gesture carries on with are the ones it grabbed.
+  private liveT = -1
   hiddenGroups = new Set<string>()
   // groups the sparkle run landed that no one has accepted yet: they render
   // ghosted until the check keeps them or the x removes them
@@ -662,7 +836,8 @@ export class Editor {
               this.moveTo(a, nx, ny)
             }
           } else if (d.mode === 'rotate') {
-            let rot = d.rot0 + Math.atan2(fy - a.y, fx - a.x) - d.a0
+            const [ax, ay] = this.assetOrigin(a)
+            let rot = d.rot0 + Math.atan2(fy - ay, fx - ax) - d.a0
             // shift snaps to 15 degree steps
             if (e.shiftKey) rot = Math.round(rot / (Math.PI / 12)) * (Math.PI / 12)
             while (rot > Math.PI) rot -= Math.PI * 2
@@ -1262,6 +1437,10 @@ export class Editor {
         const h = this.hitHandle(a, fx, fy)
         if (h) {
           const [ux, uy] = this.rotFrame(a, fx, fy)
+          // the turn is measured about the DRAWN feet, which is the pixel the
+          // sprite pivots on: measuring it about the anchor of something that
+          // has wandered off would swing the box round a point on empty ground
+          const [ax, ay] = this.assetOrigin(a)
           const d: NonNullable<typeof this.dragAsset> = {
             id: a.id,
             mode: h.mode,
@@ -1273,7 +1452,7 @@ export class Editor {
             d0: Math.max(Math.hypot(ux, uy), 1e-3),
             u0: 1e-3,
             rot0: a.rot,
-            a0: Math.atan2(fy - a.y, fx - a.x),
+            a0: Math.atan2(fy - ay, fx - ax),
             edge: h.edge || 'top',
           }
           if (h.mode === 'stretchx') d.u0 = Math.max(Math.abs(ux), 1e-3)
@@ -1309,7 +1488,15 @@ export class Editor {
       } else {
         this._selAsset = hit.id
       }
-      // dragging moves everything picked, so each one's start point is kept
+      /* dragging moves everything picked, so each one's start point is kept.
+       *
+       * What the pointer carries is the ANCHOR, offset from the cursor by the
+       * same amount it was when the drag began, so the sprite travels exactly
+       * as far as the pointer does and the behaviour underneath it is untouched:
+       * a walker dragged across the quay goes on walking the same walk, and its
+       * roaming box comes with it (moveTo carries the bounds). Dragging the
+       * drawn position instead would have to fold the wander into the anchor and
+       * the figure would jump the moment the clock moved on. */
       this.dragAsset = {
         id: hit.id,
         mode: 'move',
@@ -1409,19 +1596,39 @@ export class Editor {
     if (img) return { w: img.naturalWidth, h: img.naturalHeight }
     return { w: 24, h: 24 }
   }
-  private assetPt(a: PlacedAsset, lx: number, ly: number): Pt {
+  /* The feet as DRAWN, which for anything that moves is not a.x,a.y.
+   *
+   * Everything the pointer touches hangs off this, so the box, the handles and
+   * the rotate stalk sit on the sprite. The live tilt rides with it for the same
+   * reason: a boat leaning 30 degrees is a box leaning 30 degrees. The live FLIP
+   * deliberately does not, because the box is symmetric about the feet so a
+   * mirror does not move it, and honouring it would swap which edge handle is
+   * "left" every time a figure turned round mid-drag. */
+  private assetOrigin(a: PlacedAsset): Pt {
+    const L = this.liveAt.get(a.id)
+    return [a.x + (L ? L.dx : 0), a.y + (L ? L.dy : 0)]
+  }
+  /* live=false asks for the placement's own geometry with wherever its behaviour
+   * has walked to left out: what a crop or an align works on is the thing, not
+   * the moment. */
+  private assetPt(a: PlacedAsset, lx: number, ly: number, live = true): Pt {
+    const L = live ? this.liveAt.get(a.id) : undefined
     const px = lx * a.sx * (a.fx ? -1 : 1)
     const py = ly * a.sy * (a.fy ? -1 : 1)
-    const c = Math.cos(a.rot)
-    const s = Math.sin(a.rot)
-    return [a.x + px * c - py * s, a.y + px * s + py * c]
+    const rot = a.rot + (L ? L.rot : 0)
+    const c = Math.cos(rot)
+    const s = Math.sin(rot)
+    return [a.x + (L ? L.dx : 0) + px * c - py * s, a.y + (L ? L.dy : 0) + px * s + py * c]
   }
-  // painting point into the asset's rotated (but unscaled) frame around the anchor
+  // painting point into the asset's rotated (but unscaled) frame around the
+  // drawn feet, so the pointer is measured against the sprite it is over
   private rotFrame(a: PlacedAsset, x: number, y: number): Pt {
-    const dx = x - a.x
-    const dy = y - a.y
-    const c = Math.cos(a.rot)
-    const s = Math.sin(a.rot)
+    const L = this.liveAt.get(a.id)
+    const dx = x - (a.x + (L ? L.dx : 0))
+    const dy = y - (a.y + (L ? L.dy : 0))
+    const rot = a.rot + (L ? L.rot : 0)
+    const c = Math.cos(rot)
+    const s = Math.sin(rot)
     return [dx * c + dy * s, -dx * s + dy * c]
   }
   // painting point all the way into local png space, for hit-testing
@@ -1429,13 +1636,13 @@ export class Editor {
     const [rx, ry] = this.rotFrame(a, x, y)
     return [rx / (a.sx * (a.fx ? -1 : 1)), ry / (a.sy * (a.fy ? -1 : 1))]
   }
-  private assetCorners(a: PlacedAsset): Pt[] {
+  private assetCorners(a: PlacedAsset, live = true): Pt[] {
     const { w, h } = this.assetNat(a)
     return [
-      this.assetPt(a, -w / 2, -h),
-      this.assetPt(a, w / 2, -h),
-      this.assetPt(a, w / 2, 0),
-      this.assetPt(a, -w / 2, 0),
+      this.assetPt(a, -w / 2, -h, live),
+      this.assetPt(a, w / 2, -h, live),
+      this.assetPt(a, w / 2, 0, live),
+      this.assetPt(a, -w / 2, 0, live),
     ]
   }
   // topmost first: the draw order is y-sorted, so hit-test it backwards
@@ -1443,6 +1650,11 @@ export class Editor {
     const list = this.assetsSorted()
     for (let i = list.length - 1; i >= 0; i--) {
       const a = list[i]
+      // a pass that has faded right out is not on screen, and the draw skipped
+      // it: a click goes through to whatever is behind, which is what the eye
+      // expects of something it cannot see
+      const L = this.liveAt.get(a.id)
+      if (L && L.alpha <= 0.01) continue
       const { w, h } = this.assetNat(a)
       const [lx, ly] = this.assetLocal(a, x, y)
       if (lx >= -w / 2 && lx <= w / 2 && ly >= -h && ly <= 0) return a
@@ -1477,9 +1689,10 @@ export class Editor {
   // 16 screen px out from the top edge's midpoint, along the box's own up
   private rotHandlePos(a: PlacedAsset): Pt {
     const { h } = this.assetNat(a)
+    const [ax, ay] = this.assetOrigin(a)
     const top = this.assetPt(a, 0, -h)
-    const vx = top[0] - a.x
-    const vy = top[1] - a.y
+    const vx = top[0] - ax
+    const vy = top[1] - ay
     const L = Math.hypot(vx, vy) || 1
     const out = 16 / this.z
     return [top[0] + (vx / L) * out, top[1] + (vy / L) * out]
@@ -1532,13 +1745,75 @@ export class Editor {
     let y0 = Infinity
     let x1 = -Infinity
     let y1 = -Infinity
-    for (const [px, py] of this.assetCorners(a)) {
+    /* Where a behaviour has walked to is deliberately left out: aligning a crowd
+     * off the pixel each figure happened to be standing on this frame would drag
+     * their anchors to wherever the clock had them. */
+    for (const [px, py] of this.assetCorners(a, false)) {
       x0 = Math.min(x0, px)
       y0 = Math.min(y0, py)
       x1 = Math.max(x1, px)
       y1 = Math.max(y1, py)
     }
     return { x0, y0, x1, y1, cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, w: x1 - x0, h: y1 - y0 }
+  }
+  /* How wide a BODY is, for the separation pass and nothing else.
+   *
+   * The INK of the placement's own picture times the x scale, which is the
+   * number the game uses (PmapScene.tsx, bodyW). Not the canvas the picture was
+   * saved on: see inkWidth at the top of this file for what that cost. Not
+   * drawnBox either, which is the rotated bounding box: that folds in the height
+   * and the rotation, so a tall thing laid on its side would carry a keep-out
+   * circle several times its body here and its body's worth in the game, and the
+   * tool would be drawing a shove nobody gets. Where a behaviour has walked to is
+   * left out for the same reason it is left out of drawnBox: personal space
+   * belongs to the placement, and a width that breathed as a boat rocked would be
+   * a preview the game does not run.
+   *
+   * Look 0's first picture, which is the one the game measures too, so a troll
+   * and the boulder it becomes shove alike on both sides. */
+  private bodyW(a: PlacedAsset) {
+    const img = this.assetImg(a.kind === 'animated' ? (a.frames && a.frames[0]) || '' : a.src || '')
+    return (img ? this.inkOf(img) : this.assetNat(a).w) * Math.abs(a.sx)
+  }
+  private bodyR(a: PlacedAsset) {
+    return bodyRadius(this.bodyW(a))
+  }
+  /* the ink width of one loaded picture, read once and kept against that very
+   * Image. An in-place edit builds a new Image for the rewritten png, so it is
+   * measured again without anything having to remember to invalidate this. */
+  private inkCache = new Map<HTMLImageElement, number>()
+  private inkOf(img: HTMLImageElement) {
+    const hit = this.inkCache.get(img)
+    if (hit !== undefined) return hit
+    const w = img.naturalWidth
+    const h = img.naturalHeight
+    let out = w
+    try {
+      const c = mkCanvas(w, h)
+      const g = c.getContext('2d') as CanvasRenderingContext2D
+      g.drawImage(img, 0, 0)
+      out = inkWidth(g.getImageData(0, 0, w, h).data, w, h)
+    } catch {
+      // a picture that cannot be read back keeps its canvas width, which is
+      // what this measured by before it measured anything better
+    }
+    this.inkCache.set(img, out)
+    return out
+  }
+  /* Whether a walker can reach this standing placement, and so whether it is
+   * something to go round. Worked out per placement and kept, because the answer
+   * only moves when the floor or the placement does, and touched() empties this
+   * for both. The key carries the radius so a picture that was still loading
+   * when the question was first asked is asked again once it has arrived. */
+  private reachCache = new Map<string, boolean>()
+  private walkerCanTouch(a: PlacedAsset) {
+    const r = this.bodyR(a)
+    const key = a.id + '@' + r
+    const hit = this.reachCache.get(key)
+    if (hit !== undefined) return hit
+    const out = walkerCanReach(a.x, a.y, r, this.cfg.yScale, this.standsAt)
+    this.reachCache.set(key, out)
+    return out
   }
   align(edge: 'left' | 'hcenter' | 'right' | 'top' | 'vcenter' | 'bottom') {
     const picked = this.selAssets()
@@ -2045,11 +2320,32 @@ export class Editor {
    * turns a pasted row into a crowd instead of a chorus line. */
   private freshLife(life: Life | null | undefined): Life | null {
     if (!life) return null
-    return {
+    const out: Life = {
       ...life,
       seed: 1 + Math.floor(Math.random() * 2147483000),
       phase: Math.random() * 60,
     }
+    // a copy's states have to be re-seeded too, or the crowd transforms as one
+    if (life.states)
+      out.states = life.states.map((s) =>
+        s.move ? { ...s, move: { ...s.move, seed: 1 + Math.floor(Math.random() * 2147483000) } } : { ...s },
+      )
+    return out
+  }
+  /* The behaviour a placement is following RIGHT NOW.
+   *
+   * Without a sequence that is the placement's own life and nothing changes.
+   * With one it is whichever state is live at the preview clock, off life.ts's
+   * own walk rather than a second copy of it, so the panel and the box agree
+   * with what the thing is doing. A state that holds has no behaviour at all. */
+  private liveLife(a: PlacedAsset): Life | null {
+    const l = a.life
+    if (!l) return null
+    // paused, the preview draws every placement at home wearing its first
+    // picture, so the fence it shows is the placement's own one
+    if (!l.states || l.states.length < 2 || !this.lifePlay) return l
+    const t = this.lifeNow() + (l.phase || 0)
+    return l.states[liveState(l.states, t).k].move || null
   }
   /* re-roll one placement's movement without asking for a new behaviour: same
    * kind, same numbers, different life */
@@ -2058,7 +2354,7 @@ export class Editor {
     if (!a || !a.life) return false
     this.doc.snap()
     a.life = this.freshLife(a.life) as Life
-    this.lifeT0 = performance.now() / 1000
+    this.restartLife()
     this.touched()
     this.say('reshuffled')
     return true
@@ -2066,13 +2362,22 @@ export class Editor {
   /* Give a placement a way of moving, or take it away. One undo step, and the
    * preview clock restarts so a fresh behaviour is judged from its beginning
    * rather than from wherever the page happened to be. */
-  setLife(id: string, life: Life | null) {
+  setLife(id: string, life: Life | null, looks?: AssetLook[]) {
     const a = this.doc.assets.find((q) => q.id === id)
     if (!a) return false
     this.doc.snap()
     if (life) a.life = life
     else delete a.life
-    this.lifeT0 = performance.now() / 1000
+    /* the behaviour and the pictures it switches to land in ONE undo step, or z
+     * leaves half a sequence behind.
+     *
+     * The pictures given here are the whole truth about this placement, so
+     * nothing is kept from before: a troll that was a sequence and is now a
+     * plain wander would otherwise carry its boulder into the export, indexed
+     * by an art nobody sets any more. */
+    if (looks && looks.length) a.looks = looks.map((l) => ({ ...l }))
+    else delete a.looks
+    this.restartLife()
     this.touched()
     return true
   }
@@ -2105,7 +2410,7 @@ export class Editor {
    * bounds, so dragging one later moves only its own area.
    *
    * One snapshot for the whole set, so z walks the crowd back in one press. */
-  setLifeMany(ids: string[], life: Life | null) {
+  setLifeMany(ids: string[], life: Life | null, looks?: AssetLook[]) {
     const want = new Set(ids)
     const picked = this.doc.assets.filter((a) => want.has(a.id))
     if (!picked.length) return 0
@@ -2113,22 +2418,67 @@ export class Editor {
     for (const a of picked) {
       if (!life) {
         delete a.life
+        delete a.looks
         continue
       }
       a.life = {
         ...(this.freshLife(life) as Life),
         ...(life.bounds ? { bounds: { ...life.bounds } } : {}),
       }
+      /* the same pictures for the whole set, each its own copy: one snapshot
+       * above already holds the lot, so z walks the crowd back in one press.
+       *
+       * Whatever they were switching to before goes, for the reason setLife
+       * drops it: a crowd re-lifed with a plain wander that kept its old looks
+       * would export pictures no art index can ever reach. */
+      if (looks && looks.length) a.looks = looks.map((l) => ({ ...l }))
+      else delete a.looks
     }
-    this.lifeT0 = performance.now() / 1000
+    this.restartLife()
     this.touched()
     return picked.length
+  }
+  /* THE PREVIEW CLOCK, and the one place anything reads it.
+   *
+   * It stands still while a living placement is being dragged, scaled, turned or
+   * cropped. A sprite whose position is a function of the clock walks out from
+   * under the cursor while you are holding it, so you cannot put it anywhere on
+   * purpose and the handle you grabbed is somewhere else by the time you have
+   * moved a pixel. Coming out of the hold the clock is rewound by however long
+   * the gesture took, so nothing jumps the instant the pointer comes up and no
+   * behaviour skips a beat. It is an editing gesture and nothing more: it is not
+   * saved, not exported, and the game never sees it. */
+  private lifeNow(): number {
+    return this.lifeHold !== null ? this.lifeHold : performance.now() / 1000 - this.lifeT0
+  }
+  /* the clock back to the beginning, so a fresh behaviour is judged from its
+   * start rather than from wherever the page happened to be. Any hold goes with
+   * it, or releasing that hold would put the old clock back over the restart. */
+  private restartLife() {
+    this.lifeT0 = performance.now() / 1000
+    this.lifeHold = null
+  }
+  /* Has a gesture got hold of something that MOVES?
+   *
+   * Asked every frame rather than latched at pointer-down, so no path can end a
+   * gesture and leave the clock stopped: whatever clears the drag or the crop
+   * releases the hold on the next frame without having to know it must. */
+  private gestureOnLife(): boolean {
+    const d = this.dragAsset
+    const ids = d
+      ? d.many && d.many.length
+        ? d.many.map((m) => m.id)
+        : [d.id]
+      : this.cropSt && this.cropSt.id
+        ? [this.cropSt.id]
+        : []
+    return ids.some((id) => this.doc.assets.some((a) => a.id === id && !!a.life))
   }
   /* pause the preview: a thing that will not hold still is hard to place, and
    * hard to judge the LOOK of */
   toggleLifePlay() {
     this.lifePlay = !this.lifePlay
-    this.lifeT0 = performance.now() / 1000
+    this.restartLife()
     this.dirty = true
     this.emit()
     return this.lifePlay
@@ -2278,7 +2628,10 @@ export class Editor {
     const a = this.doc.assets.find((q) => q.id === id)
     if (!a) return null
     const { w, h } = this.assetNat(a)
-    const [px, py] = this.assetPt(a, r.x + r.w / 2 - w / 2, r.y + r.h - h)
+    // the placement's own frame, not the drawn one: this answer BECOMES the
+    // anchor, so folding in how far a behaviour has wandered would bake the
+    // wander into it and shift the thing for good
+    const [px, py] = this.assetPt(a, r.x + r.w / 2 - w / 2, r.y + r.h - h, false)
     return { x: Math.round(px), y: Math.round(py) }
   }
   // a propose lands as one batch: one snapshot, one z takes it all back
@@ -2336,13 +2689,25 @@ export class Editor {
     }
     return e.ok ? e.img : null
   }
-  private assetFrame(a: PlacedAsset, now: number, facing?: string): HTMLImageElement | null {
+  /* art is which appearance to draw: 0 is the placement's own pictures, and a
+   * sequence names the others. Everything below reads the look rather than the
+   * placement, so a thing that never changes takes the same path it always did.
+   *
+   * moving is the GAIT gate, and it belongs to a view set alone. A walk cycle is
+   * what the legs do while the thing travels, so a figure stood at the end of a
+   * leg holds the pose it was drawn from. A plain frame list is not a gait: a
+   * fire burns and a flag flaps whether or not the thing is going anywhere, and
+   * the game has always run those off the clock, so freezing them here made the
+   * preview lie about the bundle. */
+  private assetFrame(a: PlacedAsset, now: number, facing?: string, art = 0, moving = true): HTMLImageElement | null {
+    const L = lookOf(a, art)
+    const gait = moving ? now : 0
     // a thing with views faces where it is walking; the nearest view it
     // actually has wins, so a four-view import still works
-    if (facing && a.dirs) {
-      const set = a.dirs[facing] || a.dirs[NEAREST_DIR[facing] || 'south'] || a.dirs.south
+    if (facing && L.dirs) {
+      const set = L.dirs[facing] || L.dirs[NEAREST_DIR[facing] || 'south'] || L.dirs.south
       if (set && set.length) {
-        const i = set.length > 1 ? Math.floor(now * (a.fps || 6)) % set.length : 0
+        const i = set.length > 1 ? Math.floor(gait * (L.fps || 6)) % set.length : 0
         return this.assetImg(set[i])
       }
     }
@@ -2350,19 +2715,19 @@ export class Editor {
      * a stall never travels, so nothing ever handed this a facing and the loop
      * sat on frame zero forever. The heading it rests in is whichever one its
      * own src belongs to, and those frames run on the same clock a walker uses. */
-    if (!facing && a.dirs) {
-      const rest = Object.keys(a.dirs).find((k) => a.dirs![k].includes(a.src || '')) || 'south'
-      const set = a.dirs[rest] || a.dirs.south
+    if (!facing && L.dirs) {
+      const rest = Object.keys(L.dirs).find((k) => L.dirs![k].includes(L.src || '')) || 'south'
+      const set = L.dirs[rest] || L.dirs.south
       if (set && set.length) {
-        const i = set.length > 1 ? Math.floor(now * (a.fps || 6)) % set.length : 0
+        const i = set.length > 1 ? Math.floor(gait * (L.fps || 6)) % set.length : 0
         return this.assetImg(set[i])
       }
     }
-    if (a.kind === 'animated' && a.frames && a.frames.length) {
-      const i = Math.floor(now * (a.fps || 6)) % a.frames.length
-      return this.assetImg(a.frames[i])
+    if (L.kind === 'animated' && L.frames && L.frames.length) {
+      const i = Math.floor(now * (L.fps || 6)) % L.frames.length
+      return this.assetImg(L.frames[i])
     }
-    return a.src ? this.assetImg(a.src) : null
+    return L.src ? this.assetImg(L.src) : null
   }
 
   // the workflow steps own the view: entering a step announces its default
@@ -2636,6 +3001,10 @@ export class Editor {
     this.dirty = true
     this.changed = true
     this.cutApplied = null
+    // whether a walker can reach a standing placement is a question about the
+    // floor and about where the thing was put, and this is the one hook both a
+    // brush stroke and a drag already run through
+    this.reachCache.clear()
     this.emit()
   }
 
@@ -2857,6 +3226,42 @@ export class Editor {
             .replace(/^\//, '')
           return rel ? `/work/${this.sceneId}/assets/${rel}` : ''
         }
+        /* ONE APPEARANCE, read back: views, then frames, then a bare src, in
+         * exactly the order the exporter packs them (server/api.mjs, packLook)
+         * and the game loads them. A set of views carries a src as well,
+         * pointing at whichever heading came first, so views have to be taken
+         * before the src branch claims it and loses the other seven.
+         *
+         * It runs for the placement itself and again for each extra picture a
+         * sequence switches to, so a look comes back exactly the way the
+         * placement does. There used to be two copies of this precedence, one
+         * for look 0 and one for the rest, and only one of them was right. */
+        type LookRec = { src?: string; frames?: string[]; fps?: number; dirs?: Record<string, string[]> }
+        const readLook = (s: LookRec | null | undefined): AssetLook | null => {
+          if (!s || typeof s !== 'object') return null
+          const fps = Number(s.fps) > 0 ? Number(s.fps) : 0
+          if (s.dirs && typeof s.dirs === 'object') {
+            const views: Record<string, string[]> = {}
+            for (const [k, arr] of Object.entries(s.dirs)) {
+              if (!Array.isArray(arr) || !arr.length) continue
+              // one path per heading from the old exporter, a whole walk cycle
+              // from a newer one; both are just the list that was written
+              const set = arr.map(workURL).filter(Boolean)
+              if (set.length) views[k] = set
+            }
+            const keys = Object.keys(views)
+            if (keys.length) return { kind: 'static', dirs: views, src: (views.south || views[keys[0]])[0], ...(fps ? { fps } : {}) }
+          }
+          if (Array.isArray(s.frames) && s.frames.length) {
+            const frames = s.frames.map(workURL).filter(Boolean)
+            if (frames.length) return { kind: 'animated', frames, fps: fps || 6 }
+          }
+          if (s.src) {
+            const url = workURL(s.src)
+            if (url) return { kind: 'static', src: url }
+          }
+          return null
+        }
         for (const d of listed) {
           const x = Number(d.x)
           const y = Number(d.y)
@@ -2869,10 +3274,15 @@ export class Editor {
           const us = Number(d.scale) > 0 ? Number(d.scale) : 0.25
           const sx = Number(d.scaleX) > 0 ? Number(d.scaleX) : us
           const sy = Number(d.scaleY) > 0 ? Number(d.scaleY) : us
+          // look 0 is the entry itself, in the same shape and by the same rules
+          // as every extra look below it. Nothing resolved means nothing to
+          // draw, which is where a placement has always been dropped.
+          const look0 = readLook(d)
+          if (!look0) continue
           const base: PlacedAsset = {
             id,
             group: typeof d.group === 'string' && d.group ? d.group : 'props',
-            kind: 'static',
+            ...look0,
             x,
             y,
             scale: sx,
@@ -2887,41 +3297,24 @@ export class Editor {
           // on a reopen-and-re-export.
           const life = cleanLife(d.life)
           if (life) base.life = life
-          // a placement with VIEWS is decided first: it carries a src as well,
-          // pointing at one heading inside the folder, so the src branch below
-          // would otherwise claim it and lose the other seven views
-          if (d.dirs && typeof d.dirs === 'object') {
-            const views: Record<string, string[]> = {}
-            for (const [k, arr] of Object.entries(d.dirs)) {
-              if (!Array.isArray(arr) || !arr.length) continue
-              // one path per heading from the old exporter, a whole walk cycle
-              // from a newer one; both are just the list that was written
-              const set = arr.map(workURL).filter(Boolean)
-              if (set.length) views[k] = set
-            }
-            const keys = Object.keys(views)
-            if (keys.length) {
-              base.dirs = views
-              base.src = (views.south || views[keys[0]])[0]
-              if (Number(d.fps) > 0) base.fps = Number(d.fps)
-              out.push(base)
-              continue
-            }
-          }
-          if (Array.isArray(d.frames) && d.frames.length) {
-            const parts = String(d.frames[0]).split('/')
-            const dirName = parts[parts.length - 2]
-            if (!dirName) continue
-            base.kind = 'animated'
-            base.frames = d.frames.map((_, i) => `/work/${this.sceneId}/assets/${dirName}/${i}.png`)
-            base.fps = Number(d.fps) > 0 ? Number(d.fps) : 6
-          } else if (d.src) {
-            const url = workURL(d.src)
-            if (!url) continue
-            base.src = url
-          } else {
-            continue
-          }
+          /* and the extra pictures a sequence switches to.
+           *
+           * A look that resolves to NOTHING KEEPS ITS SLOT, holding look 0.
+           * art is an index, so dropping one here shifts every later look down
+           * and the placement then draws the wrong picture rather than a
+           * missing one: a troll whose looks were [gone, boulder] with states
+           * at art 1 and 2 comes back with the boulder at index 1 and art 2
+           * falling off the end, so both states draw something nobody asked
+           * for. The exporter holds the slot this way (server/api.mjs) and so
+           * does the game reader (PmapScene), so all three sides agree that a
+           * look that did not arrive shows the thing the way it started.
+           *
+           * Dropping the list entirely would delete every look on a
+           * reopen-and-re-export and turn the troll back into one boulder
+           * forever, which is the same bug life and dirs already shipped once. */
+          const looks: AssetLook[] = []
+          for (const L of Array.isArray(d.looks) ? d.looks.slice(0, LOOKS_MAX) : []) looks.push(readLook(L) || look0)
+          if (looks.length) base.looks = looks
           out.push(base)
         }
         if (out.length) {
@@ -3040,6 +3433,23 @@ export class Editor {
       )
     )
       this.dirty = true
+    /* The editing hold, taken and let go in ONE place so no gesture has to
+     * remember to. Both edges repaint: taking it must show the sprite stopping,
+     * and letting it go must show it moving again. */
+    const hold = this.assetMode && this.lifePlay && this.liveT >= 0 && this.gestureOnLife()
+    if (hold && this.lifeHold === null) {
+      // stopped on the reading the drawn offsets came from, not on the wall
+      // clock a frame later, so lifeAt hands back the very numbers the pointer
+      // grabbed and a scale does not start with a jump
+      this.lifeHold = this.liveT
+      this.dirty = true
+    } else if (!hold && this.lifeHold !== null) {
+      // wound back by the length of the gesture, so the behaviour carries on
+      // from where it stopped instead of jumping to where the wall clock got to
+      this.lifeT0 = performance.now() / 1000 - this.lifeHold
+      this.lifeHold = null
+      this.dirty = true
+    }
     if (!this.dirty && !this.dirtyMask) return
     if (this.dirtyMask) this.bakeLayers()
     this.draw()
@@ -3173,23 +3583,56 @@ export class Editor {
      * pure function of the clock, so the whole set is knowable at once. Resolve,
      * separate, draw. The game runs the identical three passes.
      *
-     * Only things that MOVE take part. A crate does not step aside, and a figure
-     * standing at a stall was put there on purpose and should not drift off its
-     * spot because a walker brushed past. */
-    const t = now - this.lifeT0
+     * A placement that never moves was put on its spot on purpose and must never
+     * be shoved off it. Keeping it out of the push altogether is how that was
+     * done, and it is half right: out of the SET, it is also nothing to push off,
+     * so a walker went straight through it. It takes part now and its own answer
+     * is thrown away, so it pushes and never moves. */
+    const t = this.lifeNow()
     const movers = this.doc.assets.filter((a) => this.lifePlay && a.life && !this.hiddenGroups.has(a.group))
     const at = new Map<string, LifeAt>()
+    /* the picker reads this very map, so the box you can click is the sprite you
+     * can see. Handed over before a single pixel is drawn, because the chrome
+     * further down (the outline, the handles, the group frame) reads it too, and
+     * rebuilt empty every frame so a paused preview or a hidden group leaves
+     * nothing behind for a click to trip over. */
+    this.liveAt = at
+    this.liveT = t
     if (movers.length) {
       const res = movers.map((a) => lifeAt(a.life as Life, t, { x: a.x, y: a.y }, this.standsAt))
-      const push = separate(
-        movers.map((a, i) => ({
+      /* the things a walker has to go round: the ones it can get close enough to
+       * touch, which is the floor already in the mask rather than a list of
+       * names, and the same floor the behaviours are fenced by. Somewhere a
+       * walker can never reach is somewhere the floor is already keeping them
+       * apart, and a keep-out circle there would only shove people for a reason
+       * nobody on screen can see. See walkerCanReach at the top of this file for
+       * why it is a reach and not the feet, and for what it keeps on the hub. */
+      const fixed = this.doc.assets
+        .filter((a) => !a.life && !this.hiddenGroups.has(a.group) && this.walkerCanTouch(a))
+        .map((a) => ({ x: a.x, y: a.y, r: this.bodyR(a) }))
+      // the walk test's walker is one too, because the game's Thor is. The hip
+      // probe is the body half-width the walk already measures him by, and the
+      // one number about the character map.json and MAPVIS both carry.
+      if (this.walking) fixed.push({ x: this.walker.x, y: this.walker.y, r: Math.max(BODY_MIN, this.cfg.hip) })
+      const pts = [
+        ...movers.map((a, i) => ({
           x: a.x + res[i].dx,
           y: a.y + res[i].dy,
-          // half the drawn width is the body, which is what should not overlap
-          r: Math.max(2, (this.drawnBox(a).w || 8) * 0.35),
+          r: this.bodyR(a),
         })),
-        this.cfg.yScale,
-      )
+        /* LISTED TWICE. separate() splits a pair's correction down the middle,
+         * so a side that throws its half away leaves the walker half inside it.
+         * It is not an approximation of a fixed flag inside separate(); a pair
+         * splits evenly, so paying the discarded half a second time IS the whole
+         * correction. Verified over 180000 push vectors against a separate()
+         * carrying a real fixed flag: worst difference 1.8e-15px. */
+        ...fixed,
+        ...fixed,
+      ]
+      // the floor guard runs in the caller, not inside separate(), so that the
+      // slide it does with a push it cannot deliver whole is the same rule here
+      // and in the game. See floorPush at the top of this file.
+      const push = floorPush(pts, separate(pts, this.cfg.yScale, 1), this.standsAt)
       movers.forEach((a, i) => at.set(a.id, { ...res[i], dx: res[i].dx + push[i].dx, dy: res[i].dy + push[i].dy }))
     }
     for (const a of this.assetsSorted()) {
@@ -3200,8 +3643,9 @@ export class Editor {
       /* A walk cycle is a GAIT. A wander is mostly pauses, and running the cycle
        * off the clock alone made a figure stood at the end of a leg march on the
        * spot. Frozen on its first frame while it waits, which is the standing
-       * pose the cycle was drawn from. */
-      const img = this.assetFrame(a, L && !L.moving ? 0 : now, L ? L.facing : undefined)
+       * pose the cycle was drawn from. Which picture, and whether the gait runs,
+       * both come off the behaviour; assetFrame holds the rest. */
+      const img = this.assetFrame(a, now, L ? L.facing : undefined, L ? L.art : 0, !L || L.moving)
       // an unaccepted sparkle group rides ghosted until the check keeps it
       const ghost = this.proposedGroups.has(a.group)
       if (ghost) g.globalAlpha = 0.55
@@ -3218,7 +3662,15 @@ export class Editor {
         // transform is already centred, so a boat leans on its waterline rather
         // than swinging around its mast.
         g.rotate(a.rot + (L ? L.rot : 0))
-        g.scale(a.sx * (a.fx !== !!(L && L.flip && !a.dirs) ? -1 : 1) * z, a.sy * (a.fy ? -1 : 1) * z)
+        /* The mirror is suppressed for a thing that has its own views, because a
+         * west view is already drawn facing west and flipping it points it back
+         * east. That is a fact about the picture ON SCREEN RIGHT NOW, not about
+         * the placement: a troll drawn with eight headings that turns into a
+         * single boulder png has to start flipping again the second the boulder
+         * is live. Reading a.dirs asked look 0 forever, so the boulder faced one
+         * way here and the other way in the game, which is the preview lying. */
+        const noFlip = !!(L && L.flip && !lookOf(a, L.art).dirs)
+        g.scale(a.sx * (a.fx !== noFlip ? -1 : 1) * z, a.sy * (a.fy ? -1 : 1) * z)
         g.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight)
         g.restore()
       } else {
@@ -3249,9 +3701,10 @@ export class Editor {
         c4.forEach((p, i) => (i ? g.lineTo(p[0] * z, p[1] * z) : g.moveTo(p[0] * z, p[1] * z)))
         g.closePath()
         g.stroke()
-        // the feet anchor of each, the pixel the game y-sorts by
+        // the feet of each as drawn, the pixel the game y-sorts by
+        const [ax, ay] = this.assetOrigin(a)
         g.fillStyle = '#8f93f5aa'
-        g.fillRect(Math.round(a.x * z) - 1, Math.round(a.y * z) - 1, 2, 2)
+        g.fillRect(Math.round(ax * z) - 1, Math.round(ay * z) - 1, 2, 2)
       }
       g.restore()
       this.drawGroupBox(g, z)
@@ -3324,9 +3777,10 @@ export class Editor {
     g.fill()
     g.lineWidth = 1.5
     g.stroke()
-    // the feet anchor, the pixel the game will y-sort by
+    // the feet as drawn, the pixel the game will y-sort by
+    const [ax, ay] = this.assetOrigin(a)
     g.fillStyle = '#8f93f5'
-    g.fillRect(Math.round(a.x * z) - 1, Math.round(a.y * z) - 1, 3, 3)
+    g.fillRect(Math.round(ax * z) - 1, Math.round(ay * z) - 1, 3, 3)
   }
 
   /* The box round everything picked, in painting pixels. Built from the drawn
@@ -3387,12 +3841,16 @@ export class Editor {
    * The walkable wash uses the same standsAt the preview and the game run, so
    * the highlighted pixels are exactly the ones a leg can end on. */
   private drawLifeBounds(g: CanvasRenderingContext2D, z: number) {
-    const picked = this.selAssets().filter((a) => a.life && a.life.bounds)
+    // the box a sequence fences with is the LIVE state's, so what is drawn is
+    // the fence actually in force this second rather than the first state's
+    const picked = this.selAssets()
+      .map((a) => this.liveLife(a))
+      .filter((l): l is Life => !!l && !!l.bounds)
     if (!picked.length) return
     g.save()
-    for (const a of picked) {
-      const b = a.life!.bounds!
-      if (a.life!.walkOnly) {
+    for (const l of picked) {
+      const b = l.bounds!
+      if (l.walkOnly) {
         /* only where it can stand, at one dot per pixel. Stepped by whole map
          * pixels so the wash lines up with the mask rather than blurring across
          * it, and skipped entirely when zoomed out far enough that it would
@@ -3406,7 +3864,7 @@ export class Editor {
         g.fillStyle = 'rgba(143,147,245,0.10)'
         g.fillRect(b.x * z, b.y * z, b.w * z, b.h * z)
       }
-      g.strokeStyle = a.life!.walkOnly ? 'rgba(120,220,170,0.75)' : 'rgba(143,147,245,0.75)'
+      g.strokeStyle = l.walkOnly ? 'rgba(120,220,170,0.75)' : 'rgba(143,147,245,0.75)'
       g.lineWidth = 1
       g.setLineDash([3, 3])
       g.strokeRect(b.x * z + 0.5, b.y * z + 0.5, b.w * z - 1, b.h * z - 1)
