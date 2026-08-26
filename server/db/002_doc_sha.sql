@@ -1,0 +1,11 @@
+-- What the row-half of the document hashed to when it was last written.
+--
+-- The editor autosaves every 4 seconds and almost every save changes either a
+-- placement or the mask, never both. Without something to compare against, each
+-- of those rewrites a jsonb column of a hundred nested objects for no reason.
+--
+-- It has to be a stored hash rather than md5(assets::text) computed in the
+-- query, because jsonb renormalises key order and whitespace on the way in, so
+-- postgres's text form of the column never equals the JSON.stringify the server
+-- was holding.
+alter table maps add column doc_sha text;
