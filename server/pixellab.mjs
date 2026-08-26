@@ -105,28 +105,40 @@ export async function pixflux({ description, w = 96, h = 96, seed }) {
 // schema prices it at 20-40 generations a call while entering a review state
 // at any size under 171). This one bills like a single generation.
 //
-// Two modes, one function. BASIC, with no background: a bare object on
-// transparent, which is how the good ones were made. CONTEXT, with a crop of
-// the map as background_image plus an oval inpainting mask: the same object
-// drawn in that crop's palette and light. Read from the v2 openapi document,
-// not probed: description is the only required field, sides are 32..400,
-// the area cap is 400x400 basic and 192x192 with inpainting, and
-// background_image is required whenever inpainting is asked for.
-//
-// It answers with a job; the documented poll is GET /v2/map-objects/{object_id},
-// 423 Locked while running, download_url on 200. The download url auto-expires
-// after 8 hours, so the png is fetched the moment it exists.
-export async function mapObject({ description, w, h, view = 'low top-down', background, fraction = 0.3, seed }) {
+/* WHAT THIS ENDPOINT TAKES, read off the live v2 openapi 2026-08-25, and what
+ * of it is deliberately not sent.
+ *
+ * NOT SENT: background_image and color_image. The schema describes them as
+ * style matching and a forced palette, and on paper they are the answer to the
+ * one thing words cannot fix, which is the generator's own idea of what colour
+ * a noun is. They were measured twice, twenty-two generations, and they are
+ * not. Handed a picture of somewhere, this endpoint CONTINUES that picture
+ * instead of drawing the subject into it: with an oval mask it returns the
+ * mask full of blurred map, and without one, at the exact canvas it demands, it
+ * returns the crop's own content restyled. A bookshelf came back as roof tiles.
+ * It is a tool for editing a map in place. The map belongs to the router, which
+ * can look at it and reason; it does not belong to the generator, which can
+ * only copy it. Do not rewire this without proving a subject survives first.
+ *
+ * ALSO NOT SENT: outline, shading, detail, text_guidance_scale. Real channels
+ * with real enums, and every object in this library that Ash has called good
+ * was made on their defaults. Worth trying one at a time. Not worth three at
+ * once under a route that works.
+ *
+ * It answers with a job; the documented poll is GET /v2/map-objects/{object_id},
+ * 423 Locked while running, download_url on 200. The download url auto-expires
+ * after 8 hours, so the png is fetched the moment it exists. */
+export async function mapObject({ description, w, h, view = 'low top-down', seed }) {
+  /* Both sides even, because the endpoint refuses an odd one and says so only
+   * after the router has spent thirteen seconds choosing it. Measured: a 150x95
+   * canvas came back 422 "must both be divisible by 2", and a caller that only
+   * learns this from a 422 loses the ask. Rounding down keeps it inside every
+   * cap it has already passed. */
+  const even = (n) => Math.max(32, Math.floor(Number(n) / 2) * 2)
   const req = {
     description,
-    image_size: { width: w, height: h },
+    image_size: { width: even(w), height: even(h) },
     view,
-  }
-  // no background means no inpainting: the endpoint rejects a mask without one,
-  // and a bare object is the point of the basic mode
-  if (background) {
-    req.background_image = { type: 'base64', base64: background }
-    req.inpainting = { type: 'oval', fraction }
   }
   if (seed != null) req.seed = seed
   const out = await call('POST', '/v2/map-objects', req)
@@ -146,10 +158,86 @@ export async function mapObject({ description, w, h, view = 'low top-down', back
     if (j.status === 'completed' && j.download_url) {
       const png = await fetch(j.download_url)
       if (!png.ok) throw new Error('cutout download failed ' + png.status)
-      return Buffer.from(await png.arrayBuffer()).toString('base64')
+      /* the object id comes back too, and dropping it was the reason a thing
+       * could never be given a second state. Every state endpoint keys off the
+       * id of what it is editing, and once these bytes are on disk there is no
+       * way back to it: the account holds 769 objects and matching one by its
+       * prompt is the fragile guesswork characterFor already has to do. */
+      return { b64: Buffer.from(await png.arrayBuffer()).toString('base64'), objectId: out.object_id }
     }
   }
   throw new Error('generation timed out')
+}
+
+/* ---- STATES: the same thing wearing a different face ---------------------
+ *
+ * A troll that turns into a boulder does not need a boulder. It needs ITSELF,
+ * curled up, and those are not the same picture: one is drawn from scratch in
+ * its own palette at its own size, the other is an edit of the drawing that is
+ * already there. Generating the boulder separately is how you get a 32px grey
+ * rock standing in for a 64px mossy troll, and how a library fills with orphan
+ * rows called boulder-2 that mean nothing on their own.
+ *
+ * Pixellab models this natively and MAPVIS has never touched it. Every object
+ * on the account already carries state_name "base" and a group_id; the shelf
+ * was there and empty. Two endpoints, one per kind, and the kind is the same
+ * object/character split this file already turns on:
+ *
+ *   POST /v2/objects/{id}/states   -> edits the image, new object, same group
+ *   POST /v2/create-character-state -> edits ALL 4 or 8 rotations consistently,
+ *                                      new character, same group
+ *
+ * Both answer a NEW id plus a background job, so the art is collected off the
+ * new id the same way the original was.
+ *
+ * The character one carries use_color_palette_from_reference, which is the
+ * whole point in one flag: the edited rotations snap to the source's existing
+ * palette, so a state cannot drift off the thing it is a state OF. It defaults
+ * to on here for the same reason it is not offered in the ui. */
+export async function objectState({ objectId, edit, name, seed }) {
+  const req = { edit_description: String(edit).slice(0, 1000) }
+  if (name) req.state_name = String(name).slice(0, 100)
+  if (seed != null) req.seed = seed
+  const out = await call('POST', `/v2/objects/${encodeURIComponent(objectId)}/states`, req)
+  const id = out.object_id
+  if (!id) throw new Error('the state was queued without an id to collect it from')
+  // an edit is quicker than a build, but it is the same queue behind it
+  for (let waited = 0; waited < 300000; waited += 5000) {
+    await new Promise((r) => setTimeout(r, 5000))
+    let d
+    try {
+      d = await objectDetail(id)
+    } catch {
+      continue // a row that is not queryable yet is not a failure yet
+    }
+    if (String(d.status || '').toLowerCase() === 'failed') throw new Error('the state failed to draw')
+    const url = (d.storage_urls && d.storage_urls.unknown) || ''
+    if (url) return { b64: (await fetchPNG(url)).toString('base64'), objectId: id, usage: out.usage || null }
+  }
+  throw new Error('the state timed out')
+}
+
+export async function characterState({ characterId, edit, name, seed, size }) {
+  const req = {
+    character_id: characterId,
+    edit_description: String(edit).slice(0, 1000),
+    no_background: true,
+    // the reason to prefer this endpoint over drawing a second thing
+    use_color_palette_from_reference: true,
+  }
+  if (name) req.state_name = String(name).slice(0, 100)
+  if (seed != null) req.seed = seed
+  // only for an edit that genuinely needs more room, wings or a raised weapon.
+  // Absent, the state keeps the source's canvas, which is what keeps a swap
+  // from jumping size mid-round.
+  if (size && size.w && size.h) req.override_frame_size = { width: size.w, height: size.h }
+  const out = await call('POST', '/v2/create-character-state', req)
+  const id = out.character_id
+  if (!id) throw new Error('the state was queued without an id to collect it from')
+  /* what it actually cost, carried back rather than assumed. The schema does
+   * not price this endpoint anywhere and the docs do not either, so the only
+   * honest source is the usage the call itself answers with. */
+  return { characterId: id, usage: out.usage || null, detail: await awaitCharacter(id) }
 }
 
 /* CHARACTERS, which is what pixellab calls anything built on a skeleton.

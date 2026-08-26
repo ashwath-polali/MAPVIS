@@ -295,7 +295,20 @@ async function route(req, res, p, url) {
     const mapFile = path.join(dir, 'map.png')
     fs.writeFileSync(mapFile, Buffer.from(mapB64, 'base64'))
     let boxFile = ''
-    const box = b.box && Number(b.box.w) > 0 ? { w: Math.round(b.box.w), h: Math.round(b.box.h) } : null
+    // x and y ride along now. The box used to be only a size the model read
+    // scale off; it is also the patch of painting the cohesion crop is taken
+    // from. A client sending w and h alone still works, it just does not pin
+    // the spot and the router picks one.
+    const box =
+      b.box && Number(b.box.w) > 0
+        ? {
+            w: Math.round(b.box.w),
+            h: Math.round(b.box.h),
+            ...(Number.isFinite(Number(b.box.x)) && Number.isFinite(Number(b.box.y))
+              ? { x: Math.round(b.box.x), y: Math.round(b.box.y) }
+              : {}),
+          }
+        : null
     const boxB64 = stripDataURL(String(b.boxImage || ''))
     if (box && boxB64) {
       boxFile = path.join(dir, 'box.png')
@@ -408,14 +421,34 @@ async function route(req, res, p, url) {
      * client simply ignores them and every state draws the picture it had. */
     const fold = (s) => String(s == null ? '' : s).replace(/\s+/g, ' ').trim().toLowerCase()
     const sent = new Set((Array.isArray(b.names) ? b.names : []).map(fold).filter(Boolean))
-    const onDisk = libraryItems(id)
-      .map((it) => String(it.name || '').trim())
-      .filter(Boolean)
+    /* THE FACES THIS THING HAS, and not the whole library.
+     *
+     * Ash's two objections to the old shape, 2026-08-25, and they were the same
+     * objection twice: a boulder drawn separately does not match the troll, and
+     * a library with three boulders in it gives the planner a choice nobody can
+     * make for it. Both are gone if the pictures a thing can wear belong TO the
+     * thing. A face is generated as an edit of the row that owns it and stored
+     * under it, so "which boulder" is not a question that can be asked: there
+     * is only this troll's second face.
+     *
+     * The library stays reachable for a row with no faces of its own, which is
+     * every row made before today and every one imported off the account. That
+     * is the old behaviour, kept because it is the only thing those rows have,
+     * and it is what the fallback below is for. */
+    const owner = cleanName(b.owner || '')
+    const mine = owner ? (libraryItems(id).find((x) => x.name === owner) || {}).states || [] : []
+    const onDisk = mine.length
+      ? mine.map((f) => String(f.name || '').trim()).filter(Boolean)
+      : libraryItems(id)
+          .map((it) => String(it.name || '').trim())
+          .filter(Boolean)
     /* Bounded by characters, because the prompt is made of characters. See
      * NAMES_CHARS. What is left over is counted here and named in the note
      * below, so a library too big to offer whole says so instead of dropping
      * whatever happened to be last in the directory. */
-    const pool = sent.size ? onDisk.filter((n) => sent.has(fold(n))) : onDisk
+    // a face is not in the client's library list and never will be, so the
+    // client's list only ever narrows the LIBRARY fallback
+    const pool = mine.length ? onDisk : sent.size ? onDisk.filter((n) => sent.has(fold(n))) : onDisk
     const names = []
     let namesLen = 0
     for (const n of pool) {
@@ -941,16 +974,40 @@ async function route(req, res, p, url) {
       const t = b.thing
         ? { thing: String(b.thing).slice(0, PROMPT_MAX), motion: '', w: clampPx(b.tw), h: clampPx(b.th) }
         : await translateAsk(prompt, 'static', '', id, job)
-      const w = clampPx(b.w || t.w)
-      const h = clampPx(b.h || t.h)
-      // The boxed area rides along as background when there is one. This is
-      // pixellab's own cohesion tool and it was sitting on a side route nobody
-      // reached: bare-canvas generation turns small props to mush and has no way
-      // to know what light or palette they are joining. The client sends it
-      // already inside the endpoint's 32..192 per side.
-      const bg = stripDataURL(String(b.background || ''))
-      const bgSize = bg ? pngSizeBuf(Buffer.from(bg, 'base64')) : null
-      const useBg = !!(bgSize && bgSize.w >= 32 && bgSize.h >= 32 && bgSize.w * bgSize.h <= 192 * 192)
+      /* THE CANVAS, SETTLED HERE AND NOWHERE ELSE, because the crop below has
+       * to be the same two numbers to the pixel and the endpoint refuses the
+       * pair when they disagree. Both sides even: 150x95 came back
+       * "must both be divisible by 2" after the router had spent thirteen
+       * seconds choosing it. Rounding down keeps it inside every cap it just
+       * passed, and pixellab.mjs evens again on the way out, which is a
+       * no-op from here and a fence for any other caller. */
+      const even = (n) => Math.max(32, Math.floor(clampPx(n) / 2) * 2)
+      const w = even(b.w || t.w)
+      const h = even(b.h || t.h)
+      /* THE COHESION CROP IS DEAD, and it cost twenty-two generations to be
+       * sure, so the finding is written where the next person will look.
+       *
+       * The idea was sound and the endpoint really does take a picture of the
+       * map: background_image for style matching, color_image for a forced
+       * palette. Both were tried, twice, in the two modes the schema allows.
+       *
+       *   With an oval inpainting mask: ten generations came back as CIRCLES of
+       *   blurred map material with no object in them at all.
+       *   Without one, at the exact canvas the endpoint demands: three came
+       *   back as the crop's own content restyled. A puddle returned jetty
+       *   planks, a bookshelf returned roof tiles, a tree returned foliage and
+       *   a roof corner.
+       *
+       * The pattern is the same both times and it is not a wiring bug the
+       * second time: handed a picture of somewhere, this endpoint continues
+       * that picture instead of drawing the subject into it. It is a tool for
+       * editing a map in place, and MAPVIS does not edit maps in place, it
+       * makes library sprites. So the map goes to the ROUTER, which can see and
+       * reason, and never to the generator, which can only copy.
+       *
+       * Do not rebuild this. If it is ever revisited the thing to prove first
+       * is that a subject survives at all, on one generation, before anything
+       * is wired to it. */
       // the last free moment. Past this line the png is bought whatever happens
       // next, so everything below still writes it to disk.
       halt()
@@ -967,26 +1024,33 @@ async function route(req, res, p, url) {
        *
        * The view is read back out of the prompt that is about to be sent, so
        * the parameter and the words are the same decision by construction and
-       * not by anybody remembering to pass a field. See viewFor. */
-      const b64 = await raceStop(
-          gate,
-          pixellab.mapObject({
-            description: t.thing,
-            w: useBg ? bgSize.w : w,
-            h: useBg ? bgSize.h : h,
-            view: viewFor(t.thing),
-            ...(useBg
-              ? {
-                  background: bg,
-                  // the sprite's intended footprint as a share of the crop, held
-                  // so the surrounding art always frames it
-                  fraction: Math.max(0.15, Math.min(0.8, (w * h) / (bgSize.w * bgSize.h))),
-                }
-              : {}),
+       * not by anybody remembering to pass a field. See viewFor.
+       *
+       * THE CANVAS IS THE OBJECT'S OWN, always. It used to become the crop's
+       * size whenever a background rode along, which was a consequence of the
+       * inpainting mode: that mode paints a hole in a picture, so the picture's
+       * size was the answer's size. Style matching does not work that way. The
+       * crop is reference and the object is drawn at the size the router chose
+       * against the things already on the map, which is the only size that was
+       * ever measured against anything. */
+      const drawn = await raceStop(
+        gate,
+        pixellab.mapObject({
+          description: t.thing,
+          w,
+          h,
+          view: viewFor(t.thing),
           seed: seedOf(b),
         }),
       )
-      const item = saveStatic(id, b64, b.name ? cleanName(b.name) : 'gen-' + slugName(prompt), prompt, t.thing)
+      const item = saveStatic(
+        id,
+        drawn.b64,
+        b.name ? cleanName(b.name) : 'gen-' + slugName(prompt),
+        prompt,
+        t.thing,
+        drawn.objectId,
+      )
       return send(res, 200, { item })
     } catch (e) {
       const m = String((e && e.message) || e)
@@ -1027,7 +1091,7 @@ async function route(req, res, p, url) {
       // held inside 0.15..0.8 so surrounding art always frames the object
       const fraction = Math.max(0.15, Math.min(0.8, (t.w * t.h) / (cs.w * cs.h)))
       halt()
-      const b64 = await raceStop(
+      const drawn = await raceStop(
         gate,
         pixellab.mapObject({
           description: t.thing,
@@ -1040,6 +1104,7 @@ async function route(req, res, p, url) {
           seed: seedOf(b),
         }),
       )
+      const b64 = drawn.b64
       // animated-with-context: the style-matched cutout becomes the FIRST FRAME
       // and the animation endpoint drives it with the motion words. The frames
       // land as a folder, the library's animated shape. The animate endpoint
@@ -1053,7 +1118,8 @@ async function route(req, res, p, url) {
         const frames = await stillOnStop(gate, () =>
           pixellab.animate({ base64: b64, action: motion, frameCount: 8, seed: seedOf(b) }),
         )
-        if (!frames) return send(res, 200, { item: saveStatic(id, b64, wantName, prompt, t.thing), note: STOPPED_STILL })
+        if (!frames)
+          return send(res, 200, { item: saveStatic(id, b64, wantName, prompt, t.thing, drawn.objectId), note: STOPPED_STILL })
         const adir = libDirOf(id)
         let aname = wantName
         for (let i = 2; fs.existsSync(path.join(adir, aname)); i++) aname = `${wantName}-${i}`
@@ -1070,7 +1136,7 @@ async function route(req, res, p, url) {
           item: { name: aname, kind: 'animated', frames: rel, fps: 6, w: fsize.w, h: fsize.h },
         })
       }
-      return send(res, 200, { item: saveStatic(id, b64, wantName, prompt, t.thing) })
+      return send(res, 200, { item: saveStatic(id, b64, wantName, prompt, t.thing, drawn.objectId) })
     } catch (e) {
       const m = String((e && e.message) || e)
       return send(res, m === 'stopped' ? 499 : 502, { error: m.slice(0, 300) })
@@ -1087,6 +1153,99 @@ async function route(req, res, p, url) {
   // 8 frames stay inside pixellab's one-generation pixel budget, so the pair is
   // two generations. The frames land as work/<id>/library/<name>/0..n.png, the
   // folder shape the library lists as one animated item.
+  /* ---- ANOTHER FACE FOR SOMETHING THAT ALREADY EXISTS -------------------
+   *
+   * A troll that turns into a boulder does not need a boulder. It needs
+   * ITSELF, curled up. Those are not the same picture and the difference is
+   * the whole feature: a boulder drawn from scratch is its own palette, its own
+   * canvas and its own silhouette, so the swap mid-round reads as one sprite
+   * being replaced by another rather than one thing changing. Ash named both
+   * halves of it, 2026-08-25: "what if the boulder and troll dont match", and
+   * "what if there are multiple boulders".
+   *
+   * Both go away here, and neither needs a rule to keep them away. The state is
+   * an EDIT of the art that is already on the account, so it cannot drift off
+   * the thing it is a state of; and it is stored under the row that owns it, so
+   * there is no flat namespace to be ambiguous in. There is no "which boulder".
+   * There is only this troll's second face.
+   *
+   * The character route edits all 4 or 8 rotations in one job, which is what
+   * keeps a walker from snapping round to face south the moment it transforms,
+   * and it snaps the result to the source's own palette because pixellab has a
+   * flag for exactly that.
+   *
+   * ONE generation, and the cost line says so before it is pressed. */
+  if (p === '/api/asset-state' && req.method === 'POST') {
+    const b = await body(req)
+    const id = safeId(b.id)
+    const owner = cleanName(b.name || '')
+    const ask = String(b.ask || '').trim()
+    if (!owner) return send(res, 400, { error: 'no item' })
+    if (!ask) return send(res, 400, { error: 'say what it turns into' })
+    const it = readLibItem(id, owner)
+    if (!it) return send(res, 404, { error: 'that is not in this library' })
+    /* Two places have ever recorded where art came from and both are read, in
+     * the order of how sure they are. origin.json is written at generation time
+     * and names the row exactly. dirs.json's characterId was pinned by the
+     * motion lane and is just as good when it is there. Neither present means
+     * this row was imported or hand-made, and the honest answer is that it
+     * cannot be edited rather than a guess at which of 769 rows it might be. */
+    const o = readOrigin(id)[owner] || {}
+    const characterId = o.characterId || (it.meta && it.meta.characterId) || ''
+    const objectId = o.objectId || ''
+    if (!characterId && !objectId)
+      return send(res, 400, {
+        error: 'nothing on record says what drew this, so it cannot be edited into another state',
+      })
+    const job = String(b.job || '').slice(0, 64)
+    const { gate, halt, done } = gateFor(job)
+    try {
+      halt() // the last free moment
+      const dir = stateDirOf(id, owner)
+      fs.mkdirSync(dir, { recursive: true })
+      // a face is named for what it becomes, so the planner can say the word
+      const base = cleanName(b.state || slugName(ask))
+      let face = base
+      for (let i = 2; fs.existsSync(path.join(dir, face)) || fs.existsSync(path.join(dir, face + '.png')); i++)
+        face = `${base}-${i}`
+      let usage = null
+      if (characterId) {
+        const made = await raceStop(gate, pixellab.characterState({ characterId, edit: ask, name: face, seed: seedOf(b) }))
+        usage = made.usage
+        const byDir = characterDirs(made.detail, '*')
+        const keys = Object.keys(byDir).filter((k) => byDir[k] && byDir[k].length)
+        if (keys.length < 4) throw new Error('the state came back without its headings')
+        const dirs = {}
+        for (const k of keys) {
+          const urls = byDir[k]
+          const rel = []
+          fs.mkdirSync(path.join(dir, face, k), { recursive: true })
+          for (let i = 0; i < urls.length; i++) {
+            fs.writeFileSync(path.join(dir, face, k, i + '.png'), await pixellab.fetchPNG(urls[i]))
+            rel.push(`/work/${id}/states/${encodeURIComponent(owner)}/${encodeURIComponent(face)}/${encodeURIComponent(k)}/${i}.png`)
+          }
+          dirs[k] = rel
+        }
+        fs.writeFileSync(path.join(dir, face, 'dirs.json'), JSON.stringify({ dirs, fps: 8, characterId: made.characterId }, null, 2))
+      } else {
+        const made = await raceStop(gate, pixellab.objectState({ objectId, edit: ask, name: face, seed: seedOf(b) }))
+        usage = made.usage
+        fs.writeFileSync(path.join(dir, face + '.png'), Buffer.from(made.b64, 'base64'))
+        // the state's OWN id, so a face can itself be edited again
+        noteOrigin(id, owner, { faces: { ...(o.faces || {}), [face]: made.objectId } })
+      }
+      noteAsk(id, `${owner} > ${face}`, ask, ask, 'state')
+      // the price, said out loud, because nothing documents what a state edit
+      // costs and the button above it has to stop guessing
+      return send(res, 200, { item: libraryItems(id).find((x) => x.name === owner) || null, face, usage })
+    } catch (e) {
+      const m = String((e && e.message) || e)
+      return send(res, m === 'stopped' ? 499 : 502, { error: m.slice(0, 300) })
+    } finally {
+      done()
+    }
+  }
+
   if (p === '/api/asset-anim' && req.method === 'POST') {
     const b = await body(req)
     const id = safeId(b.id)
@@ -1110,7 +1269,7 @@ async function route(req, res, p, url) {
       const aw = Math.min(128, clampPx(t.w))
       const ah = Math.min(128, clampPx(t.h))
       halt()
-      const b64 = await raceStop(
+      const drawn = await raceStop(
         gate,
         pixellab.mapObject({
           description: t.thing,
@@ -1121,10 +1280,12 @@ async function route(req, res, p, url) {
           seed,
         }),
       )
+      const b64 = drawn.b64
       // the base is bought. A stop between the two halves saves the second
       // generation, and the first one still lands, as a still object.
       const frames = await stillOnStop(gate, () => pixellab.animate({ base64: b64, action: motion, frameCount: 8, seed }))
-      if (!frames) return send(res, 200, { item: saveStatic(id, b64, wantName, prompt, t.thing), note: STOPPED_STILL })
+      if (!frames)
+          return send(res, 200, { item: saveStatic(id, b64, wantName, prompt, t.thing, drawn.objectId), note: STOPPED_STILL })
       const dir = libDirOf(id)
       let name = wantName
       for (let i = 2; fs.existsSync(path.join(dir, name)); i++) name = `${wantName}-${i}`
@@ -1338,7 +1499,9 @@ async function route(req, res, p, url) {
     const id = safeId(b.id)
     const frames = Array.isArray(b.frames) ? b.frames : []
     if (!frames.length) return send(res, 400, { error: 'no frames' })
-    if (frames.length > 64) return send(res, 400, { error: 'too many frames' })
+    // 8 headings of 8 frames is 64, exactly the old cap, so a walking sprite
+    // sat on the edge of being refused outright
+    if (frames.length > 256) return send(res, 400, { error: 'too many frames' })
     const dir = libDirOf(id)
     fs.mkdirSync(dir, { recursive: true })
     const base = cleanName(b.name || 'effect')
@@ -1539,12 +1702,76 @@ async function route(req, res, p, url) {
   // suffix names what the client did to those pixels and defaults to crop, so
   // the palette lock lands as <name>-matched down this same path. Nothing here
   // generates either way: it only writes bytes the client already holds.
+  /* PUT THE OLD PIXELS BACK, from the copy every in-place edit already keeps.
+   *
+   * Crop, ctrl+P, trim and palette-match all rewrite the art under its own name
+   * and copy the previous bytes to work/<id>/.prev first. Nothing could read
+   * that folder, so the copies were a comfort and not a way back, and z only
+   * ever undid the PLACEMENT half of a crop. That is worse than no undo:
+   * placements moved back to where they belonged around art that was still
+   * cropped, so nineteen trees looked like they had slid down the map. Ash hit
+   * exactly that on 2026-08-25.
+   *
+   * Newest first, because .prev numbers copies upward as they pile up and the
+   * one worth wanting is the one written a moment ago. */
+  if (p === '/api/asset-revert' && req.method === 'POST') {
+    const b = await body(req)
+    const id = safeId(b.id)
+    const name = cleanName(b.name || '')
+    if (!name) return send(res, 400, { error: 'no name' })
+    const prev = path.join(WORK, id, '.prev')
+    if (!fs.existsSync(prev)) return send(res, 404, { error: 'nothing was kept for this map' })
+    // <name>.png and <name> for the first copy, <name>-2.png upward after it
+    const cands = fs
+      .readdirSync(prev, { withFileTypes: true })
+      .map((e) => e.name)
+      .filter((n) => n === name || n === name + '.png' || new RegExp('^' + name + '-\d+(\.png)?$').test(n))
+    if (!cands.length) return send(res, 404, { error: 'no earlier copy of that one' })
+    const rank = (n) => {
+      const m = n.match(/-(\d+)(\.png)?$/)
+      return m ? Number(m[1]) : 1
+    }
+    cands.sort((a, c) => rank(c) - rank(a))
+    const from = path.join(prev, cands[0])
+    const dir = libDirOf(id)
+    try {
+      if (fs.statSync(from).isDirectory()) {
+        const to = path.join(dir, name)
+        // the current art goes to .prev too, so reverting is itself reversible
+        keepPrevDir(id, to, name)
+        fs.rmSync(to, { recursive: true, force: true })
+        fs.mkdirSync(to, { recursive: true })
+        for (const f of fs.readdirSync(from)) {
+          const sp = path.join(from, f)
+          if (fs.statSync(sp).isFile()) fs.copyFileSync(sp, path.join(to, f))
+        }
+        // a folder that came back is not a file: drop a stale flat png beside it
+        const flat = path.join(dir, name + '.png')
+        if (fs.existsSync(flat)) fs.rmSync(flat)
+      } else {
+        const to = path.join(dir, name + '.png')
+        if (fs.existsSync(to)) keepPrevFile(id, to, name + '.png')
+        const asDir = path.join(dir, name)
+        if (fs.existsSync(asDir)) fs.rmSync(asDir, { recursive: true, force: true })
+        fs.copyFileSync(from, to)
+      }
+      fs.rmSync(from, { recursive: true, force: true })
+    } catch (e) {
+      return send(res, 500, { error: String((e && e.message) || e).slice(0, 200) })
+    }
+    const item = libraryItems(id).find((x) => x.name === name)
+    if (!item) return send(res, 500, { error: 'it came back unreadable' })
+    return send(res, 200, { item })
+  }
+
   if (p === '/api/asset-crop' && req.method === 'POST') {
     const b = await body(req)
     const id = safeId(b.id)
     const frames = Array.isArray(b.frames) ? b.frames : []
     if (!frames.length) return send(res, 400, { error: 'no pixels' })
-    if (frames.length > 64) return send(res, 400, { error: 'too many frames' })
+    // 8 headings of 8 frames is 64, exactly the old cap, so a walking sprite
+    // sat on the edge of being refused outright
+    if (frames.length > 256) return send(res, 400, { error: 'too many frames' })
     const src = String(b.name || '').trim()
     if (!src) return send(res, 400, { error: 'no name' })
     const dir = libDirOf(id)
@@ -1575,23 +1802,63 @@ async function route(req, res, p, url) {
     /* a set of VIEWS goes back under its own names, not as 0.png, 1.png.
      * Without this an edit on eight-sided art wrote frame files beside the
      * views it was supposed to replace and the item ended up as neither. */
+    /* A SET OF VIEWS GOES BACK IN THE SHAPE IT ARRIVED IN, frame counts and all.
+     *
+     * dirKeys runs parallel to frames, one entry per picture, so a heading that
+     * owns eight of them appears eight times. This used to assume one picture
+     * per heading and wrote `<heading>.png`, which on a walking sprite replaced
+     * a whole walk cycle with its first frame. Measured on the hub 2026-08-25:
+     * dock-porter went from east-0..east-7 to a single east.png and stopped
+     * walking, and fps and characterId went with it, because this rebuilt the
+     * metadata from nothing instead of carrying it.
+     *
+     * Naming follows what the readers already expect: one frame keeps
+     * `<heading>.png` and several become `<heading>-0.png` upward, which is what
+     * writeRotations and saveFrames produce and what libraryItems reads.
+     *
+     * The old files are removed first. A set going from eight frames to one
+     * would otherwise leave seven orphans behind that the next reader might
+     * pick up. */
     const dirKeys = Array.isArray(b.dirKeys) ? b.dirKeys.map((k) => cleanName(String(k))) : null
     if (dirKeys && dirKeys.length === frames.length) {
       const fdir = path.join(dir, name)
-      fs.mkdirSync(fdir, { recursive: true })
-      const dirs = {}
-      for (let i = 0; i < frames.length; i++) {
-        fs.writeFileSync(path.join(fdir, dirKeys[i] + '.png'), Buffer.from(stripDataURL(String(frames[i])), 'base64'))
-        dirs[dirKeys[i]] = [`/work/${id}/library/${name}/${dirKeys[i]}.png`]
+      // what the set already knew about itself, kept rather than rebuilt: the
+      // rate it plays at and the character it was drawn from, which is what a
+      // second face is made from later
+      let was = {}
+      try {
+        was = JSON.parse(fs.readFileSync(path.join(fdir, 'dirs.json'), 'utf8')) || {}
+      } catch {
+        /* a set with no metadata to carry, which is every imported one */
       }
-      fs.writeFileSync(path.join(fdir, 'dirs.json'), JSON.stringify({ dirs }, null, 2))
-      const size = pngSize(path.join(fdir, dirKeys[0] + '.png'))
+      if (fs.existsSync(fdir)) for (const f of fs.readdirSync(fdir)) if (/\.png$/i.test(f)) fs.unlinkSync(path.join(fdir, f))
+      fs.mkdirSync(fdir, { recursive: true })
+      const byKey = new Map()
+      for (let i = 0; i < frames.length; i++) {
+        if (!byKey.has(dirKeys[i])) byKey.set(dirKeys[i], [])
+        byKey.get(dirKeys[i]).push(frames[i])
+      }
+      const dirs = {}
+      for (const [k, list] of byKey) {
+        dirs[k] = list.map((f, i) => {
+          const file = list.length > 1 ? `${k}-${i}.png` : `${k}.png`
+          fs.writeFileSync(path.join(fdir, file), Buffer.from(stripDataURL(String(f)), 'base64'))
+          return `/work/${id}/library/${name}/${file}`
+        })
+      }
+      const meta = { dirs }
+      if (Number(was.fps) > 0) meta.fps = Math.round(Number(was.fps))
+      if (was.characterId) meta.characterId = was.characterId
+      fs.writeFileSync(path.join(fdir, 'dirs.json'), JSON.stringify(meta, null, 2))
+      const first = dirs[dirKeys[0]][0]
+      const size = pngSize(path.join(fdir, String(first).split('/').pop()))
       return send(res, 200, {
         item: {
           name,
           kind: 'static',
           dirs,
-          src: dirs.south ? dirs.south[0] : dirs[dirKeys[0]][0],
+          ...(meta.fps ? { fps: meta.fps } : {}),
+          src: dirs.south ? dirs.south[0] : first,
           w: size.w,
           h: size.h,
         },
@@ -1966,6 +2233,67 @@ function pngSizeBuf(b) {
 
 // this map's own assets: every png in work/<id>/library is a static item,
 // every folder of 0.png..n.png is an animated one
+/* THE FACES A ROW HAS BEEN GIVEN, read back off disk.
+ *
+ * A state is stored the same three ways a library row is (a png, a folder of
+ * frames, a folder of headings) because a state of a walking character is
+ * itself eight headings and has to stay that way, or the troll faces south the
+ * moment it becomes a boulder. The shape is read off what is actually there
+ * rather than off a flag, which is the same rule libraryItems follows below. */
+function statesOf(id, owner) {
+  const dir = stateDirOf(id, owner)
+  if (!fs.existsSync(dir)) return []
+  const base = `/work/${id}/states/${encodeURIComponent(cleanName(owner))}`
+  const out = []
+  for (const ent of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+    if (ent.isDirectory()) {
+      const dj = path.join(dir, ent.name, 'dirs.json')
+      if (fs.existsSync(dj)) {
+        try {
+          const meta = JSON.parse(fs.readFileSync(dj, 'utf8'))
+          const dirs = meta && meta.dirs && typeof meta.dirs === 'object' ? meta.dirs : null
+          const first = dirs ? dirs.south || Object.values(dirs)[0] : null
+          if (first && first[0]) {
+            /* A face keeps its frames one folder deeper than the library does
+             * (face/heading/0.png against the library's flat face/heading-0.png)
+             * because a character state comes back as whole headings and nesting
+             * them is what keeps a heading's frames in order without encoding
+             * the order into the filename. So the size is read off the url's own
+             * tail rather than off its last segment: taking only the last
+             * segment looked for 0.png beside the folder that holds it, and the
+             * row came back 0x0, which the editor draws as nothing. */
+            const tail = String(first[0]).split('/states/')[1] || ''
+            // drop the owner segment: `dir` already points at that folder
+            const rel = tail.split('/').slice(1).map((x) => decodeURIComponent(x))
+            const { w, h } = rel.length ? pngSize(path.join(dir, ...rel)) : { w: 0, h: 0 }
+            out.push({
+              name: ent.name,
+              dirs,
+              fps: Number(meta.fps) > 0 ? Math.round(Number(meta.fps)) : 8,
+              src: first[0],
+              w,
+              h,
+            })
+            continue
+          }
+        } catch {
+          /* unreadable: fall through and read it as frames */
+        }
+      }
+      const frames = []
+      for (let i = 0; fs.existsSync(path.join(dir, ent.name, i + '.png')); i++)
+        frames.push(`${base}/${ent.name}/${i}.png`)
+      if (!frames.length) continue
+      const { w, h } = pngSize(path.join(dir, ent.name, '0.png'))
+      out.push({ name: ent.name, frames, fps: 6, w, h })
+    } else if (/\.png$/i.test(ent.name)) {
+      const { w, h } = pngSize(path.join(dir, ent.name))
+      out.push({ name: ent.name.replace(/\.png$/i, ''), src: `${base}/${ent.name}`, w, h })
+    }
+  }
+  return out
+}
+
 function libraryItems(id) {
   const dir = libDirOf(id)
   if (!fs.existsSync(dir)) return []
@@ -1988,7 +2316,12 @@ function libraryItems(id) {
             // a walking character has frames inside each heading, so it needs a
             // rate the same way an animated item does
             const fps = Number(meta.fps) > 0 ? Math.round(Number(meta.fps)) : 8
-            items.push({ name: ent.name, kind: 'static', dirs, fps, src: first[0], w, h })
+            // a walker's character id was pinned into dirs.json by the motion
+            // lane long before origin.json existed, and it is the same handle
+            // a second face is made from, so it counts as an origin too
+            const row = { name: ent.name, kind: 'static', dirs, fps, src: first[0], w, h }
+            if (meta.characterId) row.canState = true
+            items.push(row)
             continue
           }
         } catch {
@@ -2018,6 +2351,17 @@ function libraryItems(id) {
       const { w, h } = pngSize(path.join(dir, ent.name))
       items.push({ name: ent.name.replace(/\.png$/i, ''), kind: 'static', src: `${base}/${ent.name}`, w, h })
     }
+  }
+  /* Faces and origin hang off the row they belong to, so the client never has
+   * to ask a second time and a state never appears as a row of its own. `from`
+   * is what the second-face button turns on: without an id there is nothing to
+   * edit, and the button says so instead of failing at spend time. */
+  const origin = readOrigin(id)
+  for (const it of items) {
+    const o = origin[it.name]
+    const st = statesOf(id, it.name)
+    if (st.length) it.states = st
+    if (o && (o.objectId || o.characterId)) it.canState = true
   }
   return items
 }
@@ -2929,7 +3273,7 @@ async function stillOnStop(gate, start) {
  * once because three paths land here: the still answer of both object routes,
  * and the base of an animated one whose motion half never happened. */
 
-function saveStatic(id, b64, wantName, ask, prompt) {
+function saveStatic(id, b64, wantName, ask, prompt, objectId) {
   const dir = libDirOf(id)
   fs.mkdirSync(dir, { recursive: true })
   const base = cleanName(wantName)
@@ -2939,8 +3283,62 @@ function saveStatic(id, b64, wantName, ask, prompt) {
   const size = pngSize(path.join(dir, file))
   const name = file.replace(/\.png$/i, '')
   noteAsk(id, name, ask, prompt)
+  // where these pixels came from, so this thing can be given another face
+  // later without anybody guessing which of 769 account rows drew it
+  if (objectId) noteOrigin(id, name, { objectId })
   return { name, kind: 'static', src: `/work/${id}/library/${file}`, w: size.w, h: size.h }
 }
+
+/* ---- ORIGIN: what a library row was drawn from --------------------------
+ *
+ * One file per map, work/<id>/origin.json, mapping a library name to the
+ * pixellab id that drew it and to the extra faces it has since been given.
+ *
+ * A separate file rather than a field on the art, because the library holds
+ * three shapes — a flat png, a folder of frames, a folder of headings — and
+ * only the last has anywhere to put metadata today (dirs.json). One file all
+ * three can use beats three conventions.
+ *
+ * Why it has to exist: every state endpoint keys off the id of the thing being
+ * edited, and until today that id was dropped the moment the bytes hit disk.
+ * Recovering it afterwards is the guesswork characterFor already does — match
+ * on the prompt, then rank by age, across 769 rows — and it is wrong often
+ * enough that three of this hub's people were reported deleted while their art
+ * sat on disk beside the id that drew it.
+ *
+ * A row with no entry keeps working exactly as it does now: an imported
+ * account object, a hand-edited png, everything made before today. No origin,
+ * no second face offered, nothing broken. */
+const originPath = (id) => path.join(WORK, id, 'origin.json')
+
+function readOrigin(id) {
+  try {
+    const j = JSON.parse(fs.readFileSync(originPath(id), 'utf8'))
+    return j && typeof j === 'object' && !Array.isArray(j) ? j : {}
+  } catch {
+    return {}
+  }
+}
+
+function noteOrigin(id, name, patch) {
+  try {
+    const all = readOrigin(id)
+    all[name] = { ...(all[name] || {}), ...patch }
+    fs.mkdirSync(path.dirname(originPath(id)), { recursive: true })
+    fs.writeFileSync(originPath(id), JSON.stringify(all, null, 2))
+    return all[name]
+  } catch {
+    /* a lost origin costs the second-face button on one row, never a spend */
+    return null
+  }
+}
+
+/* Where a state's art lives: work/<id>/states/<owner>/, OUTSIDE the library
+ * folder on purpose. A face is not a thing, it belongs to the thing, and one
+ * stray listing would undo the whole reason for the change — a library that
+ * fills with boulder, boulder-2, sleeping-dragon, rows that mean nothing on
+ * their own and that the sparkle's planner would then have to choose between. */
+const stateDirOf = (id, owner) => path.join(WORK, id, 'states', cleanName(owner))
 
 /* ---- the two fields that used to be four dropdowns ----------------------
  *
@@ -3525,6 +3923,18 @@ function objectPrompt({ subject, style, view }) {
   return `${sub ? sub + '. ' : ''}${tail}, ${alone}.`.slice(0, PROMPT_MAX)
 }
 
+/* A box answered by the router, made safe to index a png with. Anything that
+ * does not read as four finite numbers with real area comes back null, which
+ * every caller treats as "no crop" and falls through to the bare canvas. A
+ * missing patch has to cost the old behaviour and never a crash. */
+function cleanBox(v) {
+  if (!v || typeof v !== 'object') return null
+  const n = (k) => Math.round(Number(v[k]))
+  const x = n('x'), y = n('y'), w = n('w'), h = n('h')
+  if (![x, y, w, h].every(Number.isFinite) || w < 8 || h < 8) return null
+  return { x: Math.max(0, x), y: Math.max(0, y), w, h }
+}
+
 function housePrompt({ subject, detail, palette, clause, view }) {
   const bits = [
     // the fallback path is not reachable from the ui: App.tsx always sends
@@ -3640,30 +4050,80 @@ async function planMake({ ask, what, kind, id, mapFile, boxFile, box, previous, 
         `never going to be one, because the next person will ask for something neither of us ` +
         `has thought of.`,
       ``,
-      `Two measurements settle it and both can be made on anything in the world. Turn the thing ` +
-        `slowly on the spot and watch its outline, and ask whether its TOP is a different ` +
-        `surface from its sides.`,
-      `- its top IS a different surface from its sides, a roof, a deck, a lid, an open mouth, a ` +
-        `face you would look down into: low top-down. The raked corner is the only view that ` +
-        `shows a top and a side at once and that is the whole reason to spend it. A house, a ` +
-        `boat, a crate, a well.`,
-      `- no top worth seeing, and it stands up taller than its own footprint is wide: side. Its ` +
-        `upright outline is the whole of what it is, turning it shows you nothing new, and from ` +
-        `straight above it collapses into a blob. A palm, a mast, a web strung between two ` +
-        `posts. The palm belt on this map is drawn exactly this way.`,
-      `- no top worth seeing, and it lies in the ground: high top-down. Its shape IS its ` +
-        `footprint and raking it only smears it. A puddle, a coil of rope, a set of prints.`,
-      `- when its parts answer differently the TOP wins: if any real part of it has a top ` +
-        `surface you would look down into, take low top-down. The lighthouse on this map stands ` +
-        `taller against its footprint than any palm and is still drawn as a solid.`,
+      /* THE PAINTING DECIDES, AND THE OBJECT ONLY CHOOSES WITHIN IT.
+       *
+       * This used to be two measurements on the object and nothing else, and it
+       * produced a bookshelf drawn flat-on to stand in a town painted in strict
+       * 2:1 isometric. The measurements were not wrong: a bookshelf really does
+       * have no top worth seeing and really does stand taller than its footprint,
+       * which is the rule that says side. What was wrong is that the rule was
+       * asked in a vacuum. On THIS map a bookshelf is a solid box, and every
+       * solid box in that town is drawn raked. On a map painted flat the same
+       * bookshelf should be flat.
+       *
+       * Ash's own words, 2026-08-25: not every map is in the same view, and the
+       * area is where the angle is understood relative to the whole map. So the
+       * order is fixed here. Read what the painting does with things of this
+       * FAMILY in this area, then use the object's shape to pick which family it
+       * is in. A map is allowed to be drawn any way at all and this still holds;
+       * nothing below names a projection this island happens to use. */
+      `Look at the area first and the object second, in that order, because the painting is what ` +
+        `is being joined and the object only picks which part of it to agree with. Different ` +
+        `maps are painted at different angles and some are painted at more than one. Nothing ` +
+        `here assumes the angle this map happens to use.`,
       ``,
-      `Then, in the look you have already had at the map, find something of this same SHAPE ` +
-        `already painted in it and say in the note what you found and how it is drawn. If there ` +
-        `is nothing of that shape in there, say "nothing like it in the map" and leave it. Never ` +
+      /* THE BOX TEST, and it exists because "no top worth seeing" is not the
+       * same question as "has no volume" and the router kept answering the
+       * second when it had been asked the first. A bookshelf has no top worth
+       * seeing. A bookshelf is also a box, and every box in that town is drawn
+       * raked, so it came back flat-on standing in an isometric street.
+       *
+       * Crating it separates the two and it can be run on anything anybody ever
+       * asks for. A bookshelf packs solid. A tree is mostly air between its
+       * branches. Nothing about this names a projection or a kind of map. */
+      `Every painting draws things in three families and you can see them in the area this thing ` +
+        `will stand in. Sort it by CRATING IT: imagine boxing the thing in cardboard, and ask ` +
+        `how much of that box the thing actually fills.`,
+      `- SOLID: the box comes out mostly full. It has real volume and faces you could lay a hand ` +
+        `flat on. Houses, crates, carts, wells, boats, chests, furniture, machines, barrels. A ` +
+        `bookshelf is a solid, it is a box full of books, whatever its top looks like.`,
+      `- SILHOUETTE: the box comes out mostly air and what is in it is an outline rather than a ` +
+        `body. Trees, masts, banners, webs, rigging, fences, reeds. Turning one shows you ` +
+        `nothing you did not already have, and from overhead it collapses to a blob.`,
+      `- FLAT: it lies in the ground and has almost no height, so its shape IS its footprint. ` +
+        `Puddles, coiled rope, worn paths, spills, prints.`,
+      ``,
+      `Height does not decide this and neither does whether the top is interesting. A tall ` +
+        `narrow solid is still a solid. Say the crating answer out loud in the note before you ` +
+        `name the family, so a wrong one is visible.`,
+      ``,
+      `So: decide which family the thing is in, then find something of that same family already ` +
+        `painted in that area and take the camera the painting gave it.`,
+      `- the map's SOLIDS are raked so you see a top and a side at once: low top-down.`,
+      `- the map's SOLIDS are drawn straight on with no top face showing: side.`,
+      `- the map's SOLIDS are seen from directly overhead: high top-down.`,
+      `- a SILHOUETTE takes whatever that painting gives its trees and masts, which is very ` +
+        `often flat-on even where its solids are raked. The two families disagreeing inside one ` +
+        `painting is normal and is not a mistake to correct.`,
+      `- a FLAT takes high top-down unless the painting plainly rakes its ground markings too.`,
+      `- when the thing's own parts disagree, the SOLID part wins: anything with a real top face ` +
+        `you would look down into is a solid, whatever else is attached to it.`,
+      ``,
+      `Say in the note which family you put it in, what you found already painted in that area ` +
+        `of that same family, and how that thing is drawn. If the area holds nothing of that ` +
+        `family, widen to the whole map and say so. If the map holds nothing of it anywhere, say ` +
+        `"nothing of that family in the map" and fall back to the object's own shape. Never ` +
         `report seeing something you did not see: a guess about the painting is worse here than ` +
-        `no look at all. What you find goes in the note and does not overrule the two ` +
-        `measurements above.`,
+        `no look at all.`,
       ``,
+      /* The endpoint also takes outline, shading and detail as enums, and this
+       * tool has never sent any of them. They were wired and then taken back
+       * out the same hour: every object in this library that he has called good
+       * was made on the endpoint's own defaults, and three unproven enums went
+       * out in the same batch as a change that failed, so nothing could be
+       * attributed to them. They are real channels and worth trying one at a
+       * time against the defaults. They are not worth changing three at once
+       * underneath a route that already works. */
       `THE STYLE FIELD. No projection and no camera in it, and none in the subject either. Not ` +
         `"isometric", not "top-down", not "seen from above", not "three quarter", not "side ` +
         `view". The projection is written in by code from the view you chose, in the one ` +
@@ -3694,6 +4154,37 @@ async function planMake({ ask, what, kind, id, mapFile, boxFile, box, previous, 
       `Stay SMALL. The ones he kept are 32 to 96 a side and mostly under 72. A bigger canvas ` +
         `does not buy detail, it buys a pixel finer than the map's own, which is what makes a ` +
         `thing read as pasted on top of the painting rather than painted into it.`,
+      ``,
+      /* WHERE ON THE MAP THIS THING BELONGS, and why it is worth a field.
+       *
+       * The generator has a prior for every common noun and on the ones it holds
+       * hardest the words lose. Measured 2026-08-25: a prompt naming "dusty
+       * olive and deep moss green ... muted saturation" returned a cartoon
+       * acid-green tree four times out of four, and a puddle prompt returned a
+       * bleached sand ring nobody asked for. No wording tested has moved either.
+       *
+       * The endpoint has a second mode that does not argue with the prior, it
+       * overrules it: hand /v2/map-objects a crop of the actual painting as
+       * background_image and it paints the object INTO that crop's light,
+       * palette and value range. That mode has been wired since the box gesture
+       * existed and only ever fired when somebody drew a box, which is a gesture
+       * the tool tells them to skip. So the ordinary ask has always landed on a
+       * bare canvas with nothing but adjectives holding the line.
+       *
+       * This field is what turns it on for everything. The model is already
+       * looking at the whole painting to write the prompt, so naming the patch
+       * costs nothing and no new gesture appears in front of the user. A drawn
+       * box still wins when there is one: it is the same answer, given by hand. */
+      `WHERE IT BELONGS. Also point at the patch of the painting this thing will live in, as a ` +
+        `box in map pixels with 0,0 at the top left. It is not where the user will place it and ` +
+        `you are not choosing a spot for them. It is the piece of the painting whose LIGHT, ` +
+        `surface and depth of shadow this object should have been painted under, so a boat wants ` +
+        `water and a jetty, a market crate wants the town floor, a torch wants somewhere already ` +
+        `lit. If a box was drawn, use it. If nothing on this map is right, take the nearest ` +
+        `ground the thing could stand on and say so in the note.`,
+      `Keep the box roughly two to three times the sprite you asked for and never past the edge ` +
+        `of the map. It is read at 1:1, so a box far larger than the sprite hands over scenery ` +
+        `instead of a surface.`,
     )
     if (kind === 'animated')
       lines.push(
@@ -3702,6 +4193,44 @@ async function planMake({ ask, what, kind, id, mapFile, boxFile, box, previous, 
           `animator is handed the finished sprite and those words.`,
       )
   }
+  /* ONE ASK FOR THE WHOLE CREATURE, and it is the difference between this being
+   * usable by a ninth grader and not.
+   *
+   * "a troll that curls into a boulder, rolls around, then gets up and walks"
+   * is one sentence describing three separate jobs: a body, a second face, and
+   * a round. Made the long way that is three boxes in three places, and the
+   * order between them matters and is not written anywhere, so the first two
+   * people to try it will describe the round before the boulder exists and be
+   * told, after the fact, that something was missing.
+   *
+   * The model is already reading the whole sentence to write the prompt. Asking
+   * it to split out the faces and the round costs nothing extra and moves the
+   * ordering problem to the side that knows the rule. Ash, 2026-08-25: "make
+   * sure this entire system is easy to do, not a bunch of clicks over different
+   * fields."
+   *
+   * Both fields are allowed to be empty and usually are. A plain ask for a
+   * fisherman is a body and nothing else. */
+  if (sprite)
+    lines.push(
+      ``,
+      `SPLIT THE ASK, if it is asking for more than a body.`,
+      `Someone describing a creature often describes what it DOES in the same breath, and what it ` +
+        `does can need pictures that do not exist yet. Answer those separately so the tool can ` +
+        `make them in the right order.`,
+      `- "faces": the other pictures this thing needs in order to do what was asked. Each one is a ` +
+        `short name and an EDIT of the body you are describing, written as the change and not as a ` +
+        `new subject. "curled tightly into a mossy grey boulder", never "a mossy grey boulder". It ` +
+        `is drawn by editing the sprite itself, so anything written as a fresh subject throws away ` +
+        `the reason it matches. Most asks need NONE and empty is the right answer. Never more than ` +
+        `three: each one is a generation.`,
+      `- "does": the whole round in plain words, the way somebody would say it out loud, naming ` +
+        `the faces you just listed. Empty unless the ask really describes something happening over ` +
+        `time. A thing that just stands there or just wanders does not need it.`,
+      `A change of picture is not the same as a change of pose. A troll becoming a boulder is a ` +
+        `face. A troll pausing, looking around, or walking slower is not, and asking for one wastes ` +
+        `a generation on a picture the round will barely use.`,
+    )
   if (previous)
     lines.push(
       ``,
@@ -3715,7 +4244,25 @@ async function planMake({ ask, what, kind, id, mapFile, boxFile, box, previous, 
    * the plan card prints it. */
   lines.push(
     ``,
-    sprite
+    /* THE STILL/MOVING TOGGLE IS ALSO A PRICE, so it gets the same treatment as
+     * the mode: the router notices and says so, and never switches.
+     *
+     * Somebody typing "a troll that curls into a boulder and rolls around" has
+     * described walking twice and may still have the toggle on still, because
+     * the toggle was set before the sentence was. Left alone that returns a
+     * troll with no walk cycle and nothing said about it, and the round then
+     * slides a standing sprite around the map. It is exactly the kind of thing
+     * the person should not have to know, and exactly the kind of thing that
+     * cannot be silently corrected: still is one generation and moving is nine. */
+    sprite && kind !== 'animated'
+      ? `crossing: EMPTY unless one of two things is true. (a) This ask would clearly be better as ` +
+        `a flat prop: a thing with no body that never turns to face anything is a prop, and a prop ` +
+        `is one generation instead of nine. (b) The ask plainly describes the thing MOVING under ` +
+        `its own power, walking, running, lumbering, prowling, and "still" is selected, so it will ` +
+        `come back with no walk cycle. Say which in one short lower-case line, starting with the ` +
+        `word "moving" for case (b), and leave the rest of the answer exactly as it is. Never ` +
+        `switch either one yourself: both change the price on a button somebody is about to press.`
+      : sprite
       ? `crossing: EMPTY unless this ask would clearly be better as a flat prop. A thing with no ` +
         `body that never turns to face anything is a prop, and a prop is one generation instead ` +
         `of nine. Say so in one short lower-case line and leave the rest of the answer as a sprite.`
@@ -3755,9 +4302,27 @@ async function planMake({ ask, what, kind, id, mapFile, boxFile, box, previous, 
   // the decision, carried on the plan so the ui can print it. It is not how the
   // camera reaches the generator: see viewFor.
   if (!sprite) plan.view = view
+  // the patch of painting this thing joins. A box the user drew by hand wins,
+  // because it is the same answer given with more certainty behind it.
+  if (!sprite) plan.where = box && box.x != null ? { ...box } : cleanBox(o.where)
   // both halves go to the walk gate: the ask names the thing, the prompt is
   // where a hovering, winged or legless one gets described at length
   if (sprite) plan.sprite = spriteRoute(o.sprite, kind, plan.motion, `${ask} ${plan.prompt}`)
+  /* The extra pictures and the round, carried so ONE press can do all of it in
+   * the order that works. Held to three because each is a generation and the
+   * cost line has to be true. An edit with no words in it is dropped rather
+   * than sent: a blank edit_description is a 422 charged after the queue. */
+  if (sprite) {
+    const faces = []
+    for (const f of Array.isArray(o.faces) ? o.faces.slice(0, 3) : []) {
+      const name = cleanName(f && f.name)
+      const edit = clean(f && f.edit, 300)
+      if (name && edit) faces.push({ name, edit })
+    }
+    if (faces.length) plan.faces = faces
+    const does = clean(o.does, 400)
+    if (does) plan.does = does
+  }
   return plan
 }
 
@@ -3765,12 +4330,15 @@ const OBJECT_ANSWER =
   `{"kind":"object","view":"one of ${OBJECT_VIEWS.join(' | ')}",` +
   `"subject":"the thing and its own materials, 30 to 70 words, no projection wording",` +
   `"style":"chunky pixels, ... , muted saturation, and no projection wording",` +
-  `"w":96,"h":128,"motion":"movement words only, or empty","crossing":"",` +
+  `"w":96,"h":128,"where":{"x":0,"y":0,"w":0,"h":0},` +
+  `"motion":"movement words only, or empty","crossing":"",` +
   `"note":"one short line, lower case: the camera you chose and why, and what you sized it against"}`
 
 const SPRITE_ANSWER =
   `{"kind":"sprite","prompt":"the full character description, 30 to 70 words","w":48,"h":48,` +
   `"motion":"","note":"one short lower-case line on what you decided","crossing":"",` +
+  `"faces":[{"name":"boulder","edit":"curled tightly into a mossy grey boulder"}],` +
+  `"does":"the whole round in plain words, or empty",` +
   `"sprite":{"skeleton":"mannequin","view":"low top-down","size":48,` +
   `"anim":{"how":"action","action":"...","frames":8},"why":"one short lower-case line"}}`
 

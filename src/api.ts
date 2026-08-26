@@ -79,9 +79,35 @@ export const savedScene = (id: string) => jget<SavedScene>('/api/scene/' + encod
 
 // one library entry: a single png, or a folder of frames played in order.
 // The library is per map: only what was generated for this scene id.
+/* A FACE this row has been given: the same thing edited into another state,
+ * not a second thing that happens to look like one.
+ *
+ * It has the library's own three shapes because a state of a walking character
+ * IS eight headings and has to stay that way, or a troll snaps round to face
+ * south the instant it becomes a boulder. It is deliberately NOT a LibItem: a
+ * face never appears in the library list, which is the whole reason the change
+ * exists. A library that fills with boulder, boulder-2, sleeping-dragon is a
+ * library of rows that mean nothing on their own. */
+export interface AssetState {
+  name: string
+  src?: string
+  frames?: string[]
+  dirs?: Record<string, string[]>
+  fps?: number
+  w: number
+  h: number
+}
+
 export interface LibItem {
   name: string
   kind: 'static' | 'animated'
+  /* the faces it can wear, each one an edit of this row's own art */
+  states?: AssetState[]
+  /* whether another face can be made at all. False for anything imported off
+   * the account or edited by hand: there is no pixellab id on record for it,
+   * and every state endpoint keys off that id. Saying so on the button beats
+   * finding out at spend time. */
+  canState?: boolean
   // an animated item that carries effect.json: the tuning panel can reopen it
   effect?: boolean
   src?: string
@@ -95,6 +121,27 @@ export interface LibItem {
   h: number
 }
 export const library = (id: string) => jget<{ items: LibItem[] }>('/api/library/' + encodeURIComponent(id))
+
+/* Put an item's previous pixels back, out of the copy every in-place edit
+ * already keeps. Free. It exists because z only ever undid the placement half
+ * of a crop, which left art cropped and everything standing on it moved back,
+ * and that reads as the whole map having shifted. */
+export const assetRevert = (id: string, name: string) =>
+  jpost<{ item: LibItem }>('/api/asset-revert', { id, name })
+
+/* ONE generation: this thing, edited into another face.
+ *
+ * Not a new library row and not a second drawing. The endpoint behind it edits
+ * the art already on the account, which is what makes the face match the thing
+ * it belongs to, and for a character it edits all 4 or 8 rotations in one job
+ * so the swap keeps its heading. The answer is the OWNER row, refreshed, with
+ * the new face on it. */
+export const assetState = (
+  id: string,
+  name: string,
+  ask: string,
+  o?: { state?: string; seed?: number; job?: string },
+) => jpost<{ item: LibItem | null; face: string }>('/api/asset-state', { id, name, ask, ...o })
 
 // ---- what the account already owns --------------------------------------
 
@@ -181,8 +228,12 @@ export const assetGen = (
     thing?: string
     tw?: number
     th?: number
-    // the boxed area of the painting, already inside 32..192 per side. When it
-    // rides along pixellab draws INTO that art instead of onto a bare canvas.
+    /* A crop of the painting, once sent so pixellab would draw into this map's
+     * art. Nothing sends it. Measured 2026-08-25 over twenty-two generations in
+     * both modes the schema allows: handed a picture, that endpoint continues
+     * the picture instead of drawing the subject into it. Kept on the type
+     * because the route still accepts one and a caller with a real reason may
+     * turn up; see mapObject in server/pixellab.mjs before believing in it. */
     background?: string
     // a generation already asked for is already paid for, so what a stop buys
     // is the one NOT yet asked for. The server checks the job before it sends.
@@ -331,6 +382,26 @@ export interface MakePlan {
   // switches on its own, because a switch changes the price.
   crossing?: string
   sprite?: SpriteRoute
+  /* WHERE ON THE MAP this thing belongs: the patch of painting whose light and
+   * surface it should have been painted under. Not where it will be placed.
+   *
+   * It rides to the generator as pixellab's background_image, which is the one
+   * lever measured to beat the generator's own idea of what a noun looks like.
+   * The router names it because it is already looking at the whole painting to
+   * write the prompt, so nothing new is asked of the person typing. */
+  where?: { x: number; y: number; w: number; h: number } | null
+  /* THE REST OF ONE SENTENCE, split by the router so one press can do all of it.
+   *
+   * Somebody describing a creature usually describes what it does in the same
+   * breath, and what it does can need pictures that do not exist yet. Made the
+   * long way that is three boxes in three places with an ordering rule between
+   * them that is written on none of them: the faces have to exist before a round
+   * can name one. Splitting it here moves that rule to the side that knows it.
+   *
+   * Both are usually absent. A plain ask for a fisherman is a body and nothing
+   * else, which is most asks. */
+  faces?: { name: string; edit: string }[]
+  does?: string
   /* HOW MANY DIFFERENT THINGS the ask is asking for. A stone well is one. "a
    * few crates" is three, and one png with three crates welded into it is the
    * wrong answer to it: the generator draws every noun it is given, so a plural
@@ -394,6 +465,11 @@ export const lifePlan = (
     // every library item this map has, by name. The server picks from these
     // and never names anything else.
     names?: string[]
+    /* the LIBRARY ROW this placement is drawn from. When that row has faces of
+     * its own the server offers those instead of the library, so a sequence
+     * picks between the pictures THIS thing can wear rather than between every
+     * picture on the map. That is what makes "which boulder" not a question. */
+    owner?: string
     job?: string
   },
 ) => jpost<{ life: unknown; note: string; looks?: string[] }>('/api/life-plan', { id, ask, ...o })
