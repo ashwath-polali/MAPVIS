@@ -12,6 +12,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { CSSProperties, DragEvent, ReactNode } from 'react'
 import { Editor, isCutTool, loadImage, groupFor, type EditorStatus, type Tool } from './core/editor'
 import { PAL, mkCanvas, nameOf, assetLabel, type AssetLook, type PlacedAsset } from './core/mask'
+import { Help } from './ui/Help'
 import { computeRegions } from './core/regions'
 import { debase } from './core/debase'
 import { bitify, bitFactor } from './core/bitify'
@@ -79,6 +80,12 @@ interface Cand {
 interface Toast {
   id: number
   text: string
+  /* One thing the line can offer to do about itself. It exists for the edits
+   * that rewrite pixels, because z cannot take those back and finding that out
+   * afterwards is how nineteen trees ended up cropped with no way home. The
+   * offer sits on the line that announced the change, which is the one moment
+   * somebody is definitely looking at it. */
+  act?: { label: string; run: () => void }
 }
 
 // one row of the compare panel: a library item and its frames exactly as they
@@ -183,6 +190,20 @@ const folderOf = (it: api.LibItem): string => {
  * the same order: a set of views carries a src as well, pointing at whichever
  * heading came first, so views have to be taken before the src branch claims it
  * and loses the other seven. */
+/* A face, in the shape the renderer draws. Same three shapes as a library row
+ * and for the same reason: a state of a walking character is eight headings,
+ * and losing them mid-round turns a troll south the moment it becomes a rock. */
+const lookOfState = (f: api.AssetState): AssetLook => {
+  const L: AssetLook = f.frames && f.frames.length
+    ? { kind: 'animated', frames: f.frames.slice(), fps: f.fps || 6 }
+    : { kind: 'static', src: f.src }
+  if (f.dirs && Object.keys(f.dirs).length) {
+    L.dirs = { ...f.dirs }
+    if (f.fps && f.fps > 0) L.fps = f.fps
+  }
+  return L
+}
+
 const lookOfItem = (it: api.LibItem): AssetLook => {
   const L: AssetLook =
     it.kind === 'animated'
@@ -215,13 +236,39 @@ const lookOfItem = (it: api.LibItem): AssetLook => {
  * here instead, so all three shapes go down one road.
  *
  * keys is null for the first two shapes and the view names for the third. */
+/* EVERY PICTURE AN ITEM IS MADE OF, and the word every is the whole of this.
+ *
+ * It used to answer the FIRST frame of each heading and nothing else. On a
+ * standing view set that is right, because a heading is one picture. On a
+ * walking one a heading is eight, so every in-place edit read 8 pictures out of
+ * 64, wrote 8 back, and the item stopped being a walk cycle. Crop, ctrl+P and
+ * trim the base all went through here, so all three did it.
+ *
+ * Seen on the hub 2026-08-25: cropping dock-porter left `dirs.json` pointing at
+ * one `east.png` per heading where there had been `east-0.png` through
+ * `east-7.png`, and took `fps` and `characterId` with it. The sprite kept its
+ * name and quietly stopped walking.
+ *
+ * keys runs parallel to urls, one entry per picture, repeating a heading once
+ * per frame it owns. That is what lets the writer put the set back together in
+ * the shape it found it. */
 function partsOf(it: { kind: string; src?: string; frames?: string[]; dirs?: Record<string, string[]> }): {
   urls: string[]
   keys: string[] | null
 } {
   if (it.dirs && Object.keys(it.dirs).length) {
-    const keys = Object.keys(it.dirs).filter((k) => it.dirs && it.dirs[k] && it.dirs[k][0])
-    return { urls: keys.map((k) => (it.dirs as Record<string, string[]>)[k][0]), keys }
+    const urls: string[] = []
+    const keys: string[] = []
+    for (const k of Object.keys(it.dirs)) {
+      const list = it.dirs[k]
+      if (!list || !list.length) continue
+      for (const u of list) {
+        if (!u) continue
+        urls.push(u)
+        keys.push(k)
+      }
+    }
+    return { urls, keys }
   }
   return { urls: (it.kind === 'animated' ? it.frames || [] : [it.src || '']).filter(Boolean), keys: null }
 }
@@ -546,7 +593,16 @@ export default function App() {
    * described: the sparkle opens a box, the words go in, then the map is asked
    * where it is allowed to roam. Esc at the boundary step is a real answer, not
    * a cancel: no fence means the movement is judged from the map instead. */
+  // the help panel, opened on the step you are standing in so the first
+  // thing you read is about what is in front of you
+  const [helpOn, setHelpOn] = useState(false)
   const [lifeOpen, setLifeOpen] = useState(false)
+  /* the second-face box. Separate from the sparkle's because they are separate
+   * jobs and doing them in one box was the shape that could not work: a face is
+   * a GENERATION and a round is free, so they cannot share a send button. */
+  const [faceOpen, setFaceOpen] = useState(false)
+  const [faceAsk, setFaceAsk] = useState('')
+  const [faceBusy, setFaceBusy] = useState(false)
   const [lifeAsk, setLifeAsk] = useState('')
   const [lifeBusy, setLifeBusy] = useState(false)
   const [lifeNote, setLifeNote] = useState('')
@@ -575,6 +631,34 @@ export default function App() {
   // steps so a batch ends after the generation already in flight
   const jobRef = useRef('')
   const stopRef = useRef(false)
+  /* A ROUND WAITING FOR SOMETHING TO PUT IT ON.
+   *
+   * One ask can describe a creature and what it does, and the drawing finishes
+   * long before anything is placed. The round cannot be applied to nothing, so
+   * it waits here until the first placement of that item lands and is handed
+   * over then. That is why nobody ever types the sentence twice.
+   *
+   * It is a ref and not state on purpose: it is read once inside a callback at
+   * the moment of placing, and putting it in state would re-run the placing
+   * effect every time it changed. */
+  const pendingLife = useRef<{ name: string; ask: string } | null>(null)
+  /* THE PIXEL EDITS z HAS TO UNDO, and how it knows which z.
+   *
+   * Crop, ctrl+P, trim and palette match rewrite files on disk. The document
+   * knows nothing about that, so undo restored anchors around art that was
+   * still edited. Each edit is filed here with the undo depth it sat at, and
+   * the hook below only reverts when z arrives back at that exact depth: a crop
+   * followed by three moves takes four presses to reach, the way everything
+   * else in the tool already behaves. */
+  const pixelUndo = useRef<{ name: string; at: number }[]>([])
+  /* WHETHER A PIXEL EDIT CHANGES EVERY COPY OR JUST THE ONE PICKED.
+   *
+   * These edits rewrite one library row and every placement of it draws from
+   * that row, so the tool has always changed all of them at once. That is
+   * genuinely useful when nineteen trees came off one generation and want the
+   * same trim, and genuinely surprising when you selected one tree. It is off,
+   * because the surprising answer should never be the default one. */
+  const [editAll, setEditAll] = useState(false)
   /* The first take of a multi-take run that LANDED, held up for a yes.
    *
    * A moving sprite is nine generations, so four of them is thirty-six and
@@ -675,10 +759,11 @@ export default function App() {
   const stepRef = useRef<StepId>('load')
   stepRef.current = step
 
-  const push = useCallback((text: string) => {
+  const push = useCallback((text: string, act?: { label: string; run: () => void }) => {
     const id = ++toastId.current
-    setToasts((prev) => [...prev.slice(-3), { id, text }])
-    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 4200)
+    setToasts((prev) => [...prev.slice(-3), { id, text, act }])
+    // a line offering to undo something has to outlive a glance at the map
+    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), act ? 12000 : 4200)
   }, [])
 
   // entering a step sets the view that shows that step's work, so nothing
@@ -1162,6 +1247,43 @@ export default function App() {
             // standing, because the body was bought before the motion was ever
             // asked for.
             if (r.note) push(`${r.item.name} · ${r.note}`)
+            /* THE REST OF THE ASK, in the order that works.
+             *
+             * "a troll that curls into a boulder and rolls around" is one
+             * sentence and three jobs: a body, a second face, and a round. The
+             * router already split them, and doing them here means nobody has
+             * to learn that the faces have to exist before the round can name
+             * one. That ordering rule is real and it is not written on any
+             * button, so it belongs on this side of the screen.
+             *
+             * A face that fails does not take the body down with it. The body
+             * is bought and on disk, the failure is said out loud, and the
+             * round still runs against whatever faces did land. */
+            let owner = r.item
+            for (const f of plan.faces || []) {
+              if (e.sceneId !== sid || stopRef.current) break
+              e.setBusy(`drawing "${f.name}"`)
+              try {
+                const fr = await api.assetState(sid, owner.name, f.edit, { state: f.name, job })
+                if (fr.item) {
+                  owner = fr.item
+                  setLib((prev) => [...(prev || []).filter((x) => x.name !== fr.item!.name), fr.item!])
+                }
+                push(`${owner.name} can now be "${fr.face}"`)
+              } catch (err) {
+                const m = String(err instanceof Error ? err.message : err)
+                push(m.includes('stopped') ? 'stopped before the faces' : `"${f.name}" did not draw · ` + m.slice(0, 90))
+              }
+            }
+            /* and the round, which is free and therefore always worth trying.
+             * It is held on the plan rather than applied here: nothing has been
+             * placed on the map yet, so there is no placement to give it to.
+             * The moment one is put down it gets this, and the person never
+             * types the sentence twice. */
+            if (plan.does) {
+              pendingLife.current = { name: owner.name, ask: plan.does }
+              push(`put it down and it will ${plan.does.slice(0, 60)}${plan.does.length > 60 ? '…' : ''}`)
+            }
           } catch (err) {
             const m = String(err instanceof Error ? err.message : err)
             push(
@@ -1332,7 +1454,7 @@ export default function App() {
         setBust((q) => ({ ...q, [r.item.name]: Date.now() }))
         e.refreshPlacementsOf(r.item)
         void placeId
-        push(`base off · ${note}`)
+        saidEdit(r.item.name, `base off · ${note}`, e.doc.assets.filter((q) => assetLabel(q) === r.item.name).length)
         return true
       } catch (err) {
         push('could not trim it · ' + String(err instanceof Error ? err.message : err).slice(0, 80))
@@ -1488,10 +1610,46 @@ export default function App() {
   /* the words, then the fence, then the answer. The placement is pinned by id
    * up front: drawing the box clears the selection, so anything reading it
    * live would lose its subject halfway through. */
-  const runLife = useCallback(
-    async (placeId: string) => {
+  /* ONE generation: this thing, edited into another face.
+   *
+   * It is deliberately not the sparkle's job. The sparkle is free and describes
+   * a round; this spends and draws a picture. Sharing a box would have put a
+   * cost behind a button that has never had one.
+   *
+   * The order matters and the ui does not have to explain it, because the face
+   * has to exist before a round can name it. Make the faces, then describe what
+   * it does. */
+  const runFace = useCallback(
+    async (name: string) => {
       const e = edRef.current
-      const ask = lifeAsk.trim()
+      if (!e || faceBusy || !faceAsk.trim()) return
+      const job = newJob('face')
+      jobRef.current = job
+      setFaceBusy(true)
+      e.setBusy('drawing another face')
+      try {
+        const r = await api.assetState(e.sceneId, name, faceAsk.trim(), { job })
+        if (r.item) setLib((prev) => [...(prev || []).filter((x) => x.name !== r.item!.name), r.item!])
+        setFaceAsk('')
+        setFaceOpen(false)
+        push(`${name} can now be "${r.face}" · say so in the sparkle to use it`)
+      } catch (err) {
+        const m = String(err instanceof Error ? err.message : err)
+        push(m.includes('stopped') ? 'stopped' : 'could not draw that · ' + m.slice(0, 90))
+      } finally {
+        setFaceBusy(false)
+        e.setBusy('')
+      }
+    },
+    [faceAsk, faceBusy, push],
+  )
+
+  const runLife = useCallback(
+    /* said is for the round that came out of the make ask and is waiting for
+     * something to land on. Everything else reads the box, as it always has. */
+    async (placeId: string, said?: string) => {
+      const e = edRef.current
+      const ask = (said || lifeAsk).trim()
       if (!e || !ask || lifeBusy) return
       const a = e.doc.assets.find((q) => q.id === placeId)
       if (!a) return
@@ -1533,14 +1691,26 @@ export default function App() {
             // The server picks out of this list and nothing else, so a sequence
             // cannot ask for a boulder this map has never had.
             names: (lib || []).map((x) => x.name),
+            // the row this placement is drawn from. If it has faces of its own
+            // the server offers those instead of the whole library.
+            owner: item ? item.name : undefined,
             job,
           })
           if (stopRef.current) return
-          const life = cleanLife(r.life)
+          /* The fence goes IN, not on afterwards.
+           *
+           * These three were stamped onto the finished object, which meant
+           * cleanLife had already built every state inside it believing there
+           * was no floor, and a round then walked straight off the path. Passed
+           * in, the states are built knowing. lifeAt carries a guard for the
+           * same thing so bundles already on disk still fence; this is the
+           * source of it. */
+          const life = cleanLife({
+            ...(r.life as Record<string, unknown>),
+            ...(bounds ? { bounds, walkPct } : {}),
+            ...(walkOnly ? { walkOnly: true } : {}),
+          })
           if (!life) throw new Error('that did not come back as movement')
-          if (bounds) life.bounds = bounds
-          if (walkOnly) life.walkOnly = true
-          if (bounds) life.walkPct = walkPct
           /* The pictures a sequence switches between, resolved from names to
            * the pixels they stand for.
            *
@@ -1555,12 +1725,21 @@ export default function App() {
           const looks: AssetLook[] = []
           const artAt = [0]
           for (const nm of named.slice(1)) {
-            const row = (lib || []).find((x) => x.name === nm)
-            if (!row) {
+            /* THIS THING'S OWN FACES FIRST, and the library only after.
+             *
+             * A face belongs to the row that owns it, so it is the only place
+             * a name can mean exactly one picture. The library is the fallback
+             * for a row with no faces — everything imported off the account,
+             * everything made before faces existed — and it is where the old
+             * ambiguity lived: three boulders on a map and no way to know which
+             * one was meant. Looking here first is what retires that. */
+            const face = (item?.states || []).find((f) => f.name === nm)
+            const row = face ? null : (lib || []).find((x) => x.name === nm)
+            if (!face && !row) {
               artAt.push(0)
               continue
             }
-            looks.push(lookOfItem(row))
+            looks.push(face ? lookOfState(face) : lookOfItem(row!))
             // looks[0] is art 1, so the length after the push IS the index
             artAt.push(looks.length)
           }
@@ -1597,6 +1776,26 @@ export default function App() {
     },
     [lifeAsk, lifeBusy, lib, push],
   )
+
+  /* HAND THE WAITING ROUND TO THE FIRST THING PLACED.
+   *
+   * The drawing finishes long before anything is on the map, so a round that
+   * came out of the same sentence has nothing to be applied to yet. It waits in
+   * pendingLife and lands here, once, on the first placement of that item that
+   * does not already move. Then it is cleared, so putting a second one down
+   * does not silently re-run a free call nobody asked for.
+   *
+   * Watching the placement list rather than hooking the click keeps this out of
+   * editor.ts, which does not otherwise know that asks exist. */
+  useEffect(() => {
+    const want = pendingLife.current
+    if (!want || lifeBusy) return
+    const hit = (st?.assets ?? []).find((a) => assetLabel(a) === want.name && !a.life)
+    if (!hit) return
+    pendingLife.current = null
+    void runLife(hit.id, want.ask)
+  }, [st?.assets, lifeBusy, runLife])
+
 
   /* Two presses, on a thing that is already in the library.
    *
@@ -2464,8 +2663,11 @@ export default function App() {
                   tw: t.w,
                   th: t.h,
                   // the boxed art rides along, so pixellab draws into this
-                  // map's light instead of onto a bare canvas
-                  ...(bg ? { background: bg } : {}),
+                  // map's light instead of onto a bare canvas. With no box the
+                  // patch the router chose goes instead and the server crops
+                  // it, so the ordinary ask gets the same treatment as the
+                  // careful one without anybody drawing anything.
+                  ...(bg ? { background: bg } : t.where ? { where: t.where } : {}),
                 })
           if (e.sceneId !== sid) break
           setLib((prev) => [...(prev || []).filter((x) => x.name !== r.item.name), r.item])
@@ -2912,6 +3114,43 @@ export default function App() {
   // drawImage each and needs no image library on the node side. The result goes
   // to the server as a NEW item called <name>-crop — the original png is never
   // touched, so a bad crop costs nothing but a click on the original.
+  /* WHAT AN IN-PLACE PIXEL EDIT SAYS AFTERWARDS, and it is the same line for
+   * all of them because they carry the same surprise.
+   *
+   * These edits replace the art under its own name, so EVERY placement of that
+   * item changes at once. That is the point of them, and it is not what
+   * somebody who selected one tree expects. It also cannot be taken back with
+   * z, which only knows about the document: undoing a crop moved every tree
+   * back to where it belonged around art that was still cropped, and the whole
+   * map looked like it had slid. So the count is said out loud and the way home
+   * rides on the same line. */
+  const saidEdit = useCallback(
+    (name: string, what: string, n: number) => {
+      const e = edRef.current
+      push(`${what}${n > 1 ? ` · all ${n} of them on the map` : ''}`, {
+        label: 'put it back',
+        run: () => {
+          const ed = edRef.current
+          if (!ed) return
+          void (async () => {
+            try {
+              const r = await api.assetRevert(ed.sceneId, name)
+              setLib((prev) => [...(prev || []).filter((x) => x.name !== r.item.name), r.item])
+              ed.bustAssets(folderOf(r.item))
+              setBust((q) => ({ ...q, [r.item.name]: Date.now() }))
+              ed.refreshPlacementsOf(r.item)
+              push(`${name} is back the way it was`)
+            } catch (err) {
+              push('could not put it back · ' + String(err instanceof Error ? err.message : err).slice(0, 90))
+            }
+          })()
+        },
+      })
+      void e
+    },
+    [push],
+  )
+
   const applyCrop = useCallback(
     async (id: string, r: { x: number; y: number; w: number; h: number }) => {
       const e = edRef.current
@@ -2939,26 +3178,51 @@ export default function App() {
         // land so the kept pixels do not jump. Measured BEFORE the write, since
         // the anchor is worked out against the size the png still has.
         const mine = e.doc.assets.filter((q) => assetLabel(q) === name).map((q) => q.id)
-        const anchors = new Map<string, { x: number; y: number } | null>()
-        for (const pid of mine) anchors.set(pid, pid === id ? at : e.cropAnchor(pid, r))
+        /* JUST THIS ONE, unless the toggle says otherwise.
+         *
+         * Cropping rewrites a library row and every placement reads that row,
+         * so in place has always meant all of them. Selecting one tree and
+         * cropping nineteen is not what anybody means, so a crop of one asks
+         * the server to keep a copy under a new name and points only the picked
+         * placement at it. The others are not touched and their row is not
+         * rewritten, so there is nothing to put back either.
+         *
+         * With one placement the two are the same thing, and in place is the
+         * one that leaves the library tidy. */
+        const alone = !editAll && mine.length > 1
         const res = await api.assetCrop(e.sceneId, name, r, {
           kind: a.kind,
           frames,
           fps: a.fps || 6,
           dirKeys: parts.keys,
+          ...(alone ? { keepCopy: true, suffix: 'crop' } : {}),
         })
         setLib((prev) => [...(prev || []).filter((x) => x.name !== res.item.name), res.item])
         e.bustAssets(folderOf(res.item))
         setBust((q) => ({ ...q, [res.item.name]: Date.now() }))
-        e.refreshPlacementsOf(res.item)
-        for (const [pid, an] of anchors) if (an) e.editAsset(pid, { x: an.x, y: an.y })
-        push(`cropped to ${r.w}×${r.h}${mine.length > 1 ? ` · ${mine.length} on the map` : ''}`)
+        if (alone) {
+          // a row of its own, so only the one that was picked moves to it
+          e.repointAsset(id, res.item, at || undefined)
+          push(`cropped to ${r.w}×${r.h} · just this one, as "${res.item.name}"`)
+        } else {
+          const anchors = new Map<string, { x: number; y: number } | null>()
+          for (const pid of mine) anchors.set(pid, pid === id ? at : e.cropAnchor(pid, r))
+          e.refreshPlacementsOf(res.item)
+          // ONE undo step for every copy. Per-placement edits put one entry on
+          // the stack each, so z used to move a single tree back and leave the
+          // other eighteen where the crop had put them.
+          e.moveAll(anchors)
+          // filed against the undo depth it now sits at, so z knows which press
+          // is the one that should put the pixels back
+          pixelUndo.current.push({ name, at: e.doc.histLen() })
+          saidEdit(name, `cropped to ${r.w}×${r.h}`, mine.length)
+        }
       } catch (err) {
         push('crop failed · ' + String(err instanceof Error ? err.message : err).slice(0, 120))
       }
       e.setBusy('')
     },
-    [push],
+    [push, saidEdit, editAll],
   )
 
   const doCrop = useCallback(() => {
@@ -2984,6 +3248,43 @@ export default function App() {
     const e = edRef.current
     if (e) e.cropReq = doCrop
   }, [doCrop])
+
+  /* z PUTS THE PIXELS BACK TOO.
+   *
+   * The editor asks first and says how deep its undo stack is. An edit only
+   * answers when z has arrived back at the depth it was filed at, so a crop
+   * followed by three moves needs four presses to reach and the three moves
+   * come off first, exactly as they would without any of this.
+   *
+   * The revert is a round trip and the document undo is not, so they do not
+   * finish together. That is fine and is why the anchors come back regardless:
+   * the placements land in the right places immediately and the art catches up
+   * a moment later, rather than the two disagreeing forever, which is the bug
+   * this replaces. */
+  useEffect(() => {
+    const e = edRef.current
+    if (!e) return
+    e.beforeUndo = (depth: number) => {
+      const top = pixelUndo.current[pixelUndo.current.length - 1]
+      if (!top || top.at !== depth) return
+      pixelUndo.current.pop()
+      void (async () => {
+        try {
+          const r = await api.assetRevert(e.sceneId, top.name)
+          setLib((prev) => [...(prev || []).filter((x) => x.name !== r.item.name), r.item])
+          e.bustAssets(folderOf(r.item))
+          setBust((q) => ({ ...q, [r.item.name]: Date.now() }))
+          e.refreshPlacementsOf(r.item)
+          push(`${top.name} is back the way it was`)
+        } catch (err) {
+          push('z could not put the pixels back · ' + String(err instanceof Error ? err.message : err).slice(0, 80))
+        }
+      })()
+    }
+    return () => {
+      e.beforeUndo = null
+    }
+  }, [push])
 
   // ctrl+p and ctrl+t reach the pixel work the same way
   useEffect(() => {
@@ -3558,6 +3859,7 @@ export default function App() {
    * one answer applied to all of it. */
   const lifeBoxFor = (id: string) => (
     <div className="lifebox">
+      <div className="boxwhat">say what it does · free</div>
       <input
         autoFocus
         value={lifeAsk}
@@ -3614,7 +3916,12 @@ export default function App() {
     : genType === 'animated'
       ? CHAR_DIRS
       : 0
-  const perTake = makeWhat === 'sprite' ? 1 + spriteDirs : genType === 'animated' ? 2 : 1
+  /* Every face the router split out of the ask is one more generation, and the
+   * button has to say so BEFORE it is pressed. The whole point of doing the
+   * body, the faces and the round off one press is that nobody has to count
+   * them, which only holds if the number they see is the number they buy. */
+  const spriteFaces = makeWhat === 'sprite' ? (genPlan?.faces || []).length : 0
+  const perTake = makeWhat === 'sprite' ? 1 + spriteDirs + spriteFaces : genType === 'animated' ? 2 : 1
   const genCost = genCount * perTake
   // the big preview's zoom: the largest whole multiple that still fits the
   // panel, so a tall plume and a wide splash both land inside the column
@@ -3623,6 +3930,9 @@ export default function App() {
   // the library item a placement was made from, matched by name: that is what
   // the library calls a static png (basename) and an animated folder alike
   const selItem = selA ? (lib || []).find((it) => it.name === assetLabel(selA)) : undefined
+  // how many placements draw from the same library row, which is how many a
+  // pixel edit would change
+  const sameCount = selA ? assets.filter((q) => assetLabel(q) === assetLabel(selA)).length : 0
   const selIsFx = !!(selItem && selItem.kind === 'animated' && selItem.effect)
   /* Animating is about the LIBRARY ROW, never about one copy on the map: it
    * rewrites the art in place under its own name, so every placement of it
@@ -3826,23 +4136,104 @@ export default function App() {
           <img src={thumbOf(selA)} alt="" />
         </span>
         <span className="insp-name">{assetLabel(selA)}</span>
-        {/* the sparkle: one small round button on the selected thing, which
-            opens into a box you type into. It is the only new control this
-            feature adds, and it only exists while something is picked. */}
+        <span className={'badge' + (selA.kind === 'animated' ? ' anim' : '')}>
+          {selA.kind === 'animated' ? 'anim' : 'static'}
+        </span>
+        {/* THE TWO THINGS YOU CAN DO TO A PLACED THING, and they say which is
+            which in words. They were a sparkle and a wand, two round buttons of
+            the same size side by side, and the first question anyone asked on
+            seeing them was what the difference was. One is behaviour and free,
+            the other draws a picture and spends, and no pair of icons carries
+            that. */}
+        <span className="insp-acts">
         <button
-          className={'lifedot' + (lifeOpen ? ' on' : '') + (selA.life ? ' has' : '')}
-          data-tip={selA.life ? 'change how it moves' : 'give it a way of moving'}
+          className={'actpill' + (lifeOpen ? ' on' : '') + (selA.life ? ' has' : '')}
+          data-tip={selA.life ? 'change how it moves · free' : 'give it a way of moving · free'}
+          /* Opening one closes the other. They are two different jobs on the
+           * same thing and never both at once, but the panel let both boxes
+           * stand open, stacked, each with its own greyed example and its own
+           * send button. Ash's first read of that was "do i have to type it
+           * into both", which is the only thing it could have looked like. */
           onClick={() => {
             setLifeOpen((v) => !v)
+            setFaceOpen(false)
             setLifeNote('')
           }}
         >
           <Icon name="sparkle" />
+          moves
         </button>
-        <span className={'badge' + (selA.kind === 'animated' ? ' anim' : '')}>
-          {selA.kind === 'animated' ? 'anim' : 'static'}
+        {/* ANOTHER FACE. One generation, and the only way a thing gets a second
+            picture that actually matches it: the endpoint edits the art already
+            on the account rather than drawing something new, and for a
+            character it edits every heading in one job.
+
+            It is off for a row with nothing on record about what drew it —
+            imported off the account, hand-edited, made before origin.json — and
+            it says which rather than failing at spend time. */}
+        {selItem && (
+          <button
+            className={'actpill spends' + (faceOpen ? ' on' : '') + (selItem.states?.length ? ' has' : '')}
+            data-tip={
+              selItem.canState
+                ? selItem.states?.length
+                  ? `already wears ${selItem.states.map((f) => f.name).join(', ')} · another costs 1`
+                  : 'draw it curled up, broken open, asleep, on fire · 1 generation'
+                : 'nothing on record says what drew this, so it cannot be edited'
+            }
+            disabled={!selItem.canState}
+            onClick={() => {
+              setFaceOpen((v) => !v)
+              setLifeOpen(false)
+            }}
+          >
+            <Icon name="wand" />
+            becomes
+            <span className="pill-cost">1</span>
+          </button>
+        )}
         </span>
       </div>
+      {faceOpen && selItem && (
+        <div className="lifebox">
+          {/* one line saying what this box does, because a bare input with a
+              greyed example in it reads as a field to fill rather than an
+              action to take */}
+          <div className="boxwhat">
+            {selItem.states?.length
+              ? `it already wears ${selItem.states.map((f) => f.name).join(', ')} · add another picture`
+              : 'draw another picture of this thing, so it has something to change into'}
+          </div>
+          <input
+            autoFocus
+            value={faceAsk}
+            placeholder="e.g. curled into a mossy boulder"
+            onChange={(ev) => setFaceAsk(ev.target.value)}
+            onKeyDown={(ev) => {
+              if (ev.key === 'Enter' && faceAsk.trim() && !faceBusy) void runFace(selItem.name)
+              if (ev.key === 'Escape') {
+                setFaceOpen(false)
+                ev.currentTarget.blur()
+              }
+            }}
+            spellCheck={false}
+          />
+          <div className="liferow">
+            <button
+              className="abtn tiny"
+              onClick={() => void runFace(selItem.name)}
+              disabled={!faceAsk.trim() || faceBusy}
+            >
+              {faceBusy ? 'drawing…' : '1 generation'}
+            </button>
+            {faceBusy && (
+              <button className="abtn tiny" onClick={doStop}>
+                stop
+              </button>
+            )}
+          </div>
+        </div>
+      )}
       {lifeOpen && lifeBoxFor(selA.id)}
       {selA.life && !lifeOpen && (
         <div className="lifeline">
@@ -3981,6 +4372,20 @@ export default function App() {
           delete
         </button>
       </div>
+      {/* WHO A PIXEL EDIT LANDS ON, said before it happens rather than after.
+          These edits rewrite one library row and every placement draws from it,
+          so the tool used to change all of them and never mentioned it. Off by
+          default: selecting one tree and cropping nineteen is not what anybody
+          means. It only appears when there is more than one, because with a
+          single copy the two answers are the same thing. */}
+      {selItem && sameCount > 1 && (
+        <label className="editall" data-tip="these edits rewrite the picture every copy shares">
+          <input type="checkbox" checked={editAll} onChange={(ev) => setEditAll(ev.target.checked)} />
+          <span>
+            {editAll ? `changes all ${sameCount} copies` : 'changes just this one'}
+          </span>
+        </label>
+      )}
       {selItem && selA && selBit >= 1.25 && grainRow}
       {faceRow}
       {animBox}
@@ -4586,9 +4991,14 @@ export default function App() {
               : makeWhat === 'fill'
                 ? 'anything to steer it, or leave empty'
                 : makeWhat === 'sprite'
-                  ? // deliberately not a person and not an animal. Whatever is
-                    // typed here is what the router has to find a rig for.
-                    'e.g. a hooded figure with a lantern'
+                  ? /* Deliberately not a person and not an animal: whatever is
+                       typed here is what the router has to find a rig for.
+                       It also names what it TURNS INTO, because one ask can
+                       carry the body, the pictures it changes between and the
+                       whole round, and this hint is the only place anybody
+                       finds that out. A troll fits the box; a fisherman with a
+                       lantern does not say the second half is allowed. */
+                    'e.g. a troll that curls into a boulder and rolls'
                   : /* one thing or several, in the same box. This hint is the
                        only place anybody finds out that a plural ask is allowed,
                        and like the effect one it has to fit the box rather than
@@ -4775,6 +5185,18 @@ export default function App() {
           {spriteRoute.why && <div className="plannote">{spriteRoute.why}</div>}
         </>
       )}
+      {/* WHAT ELSE IT HEARD IN THE ASK, shown before anything is bought.
+           One sentence can carry a body, the pictures it changes between and a
+           whole round, and without this the only sign the second half was
+           understood is a bigger number on the button. Each face is a
+           generation, so each one is named. */}
+      {!!genPlan.faces?.length && (
+        <div className="planmeta">
+          also draws {genPlan.faces.map((f) => f.name).join(', ')} · {genPlan.faces.length} more
+          {genPlan.faces.length > 1 ? ' generations' : ' generation'}
+        </div>
+      )}
+      {genPlan.does && <div className="plannote">then: {genPlan.does}</div>}
       {genPlan.crossing && <div className="planmeta">{genPlan.crossing}</div>}
       <div className="planmeta">
         {/* w and h are the PROP path's size and only the prop path sends them.
@@ -5215,11 +5637,15 @@ export default function App() {
             </button>
           ))}
         </nav>
+        <button className="helpbtn" data-tip="what this tool can do" onClick={() => setHelpOn(true)}>
+          ?
+        </button>
         <span className="meta">
           {st?.busy && <span className="busy">{st.busy}</span>}
           {has ? `${st?.sceneId} · ${st?.w}×${st?.h}` : 'no painting'}
         </span>
       </header>
+      {helpOn && <Help start={step} onClose={() => setHelpOn(false)} />}
 
       <main>
         <aside className="panel" key={step}>
@@ -5240,7 +5666,11 @@ export default function App() {
             <div className="walkbadge placebadge">click where it goes · esc cancels</div>
           )}
           {!st?.walking && step === 'assets' && st?.cropping && (
-            <div className="walkbadge placebadge">drag the part to keep · enter takes it · esc cancels</div>
+            <div className="walkbadge placebadge">
+              {st.cropKind === 'area'
+                ? 'drag a box round the area · enter takes it · esc skips'
+                : 'drag the edges to take it in · enter crops · esc cancels'}
+            </div>
           )}
           {!st?.walking && step === 'test' && doorPick && (
             <div className="walkbadge placebadge">click where the door stands · esc cancels</div>
@@ -5249,6 +5679,17 @@ export default function App() {
             {toasts.map((t) => (
               <div key={t.id} className="toast">
                 {t.text}
+                {t.act && (
+                  <button
+                    className="toast-act"
+                    onClick={() => {
+                      setToasts((prev) => prev.filter((q) => q.id !== t.id))
+                      t.act?.run()
+                    }}
+                  >
+                    {t.act.label}
+                  </button>
+                )}
               </div>
             ))}
           </div>
