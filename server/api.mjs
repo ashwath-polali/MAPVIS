@@ -31,6 +31,7 @@
  *   GET  /work/<path>          serves what is in work/
  */
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawn } from 'node:child_process'
@@ -69,7 +70,22 @@ import {
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(HERE, '..')
-const WORK = path.join(ROOT, 'work')
+
+/* WHERE SCRATCH GOES.
+ *
+ * work/ is the staging area where the collision loops, the .stage swap and
+ * .prev still run, all of it already tested and none of it worth rewriting.
+ * The store is what survives; this is where bytes sit for the length of a
+ * request.
+ *
+ * On a serverless host the whole filesystem is read-only except /tmp, so a
+ * generation writing to ROOT/work would throw before it ever reached the push
+ * that makes it durable. Pointing scratch at the writable place is the entire
+ * accommodation hosting needs, and it works because nothing is expected to
+ * still be there next time. */
+const WORK =
+  process.env.MAPVIS_WORK ||
+  (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME ? path.join(os.tmpdir(), 'mapvis-work') : path.join(ROOT, 'work'))
 const PUBLIB = path.join(ROOT, 'public', 'library')
 
 const PYTHON =
@@ -1371,8 +1387,7 @@ async function route(req, res, p, url) {
       if (!frames)
           return send(res, 200, { item: await saveStatic(id, b64, wantName, prompt, t.thing, drawn.objectId), note: STOPPED_STILL })
       const dir = libDirOf(id)
-      let name = wantName
-      for (let i = 2; fs.existsSync(path.join(dir, name)); i++) name = `${wantName}-${i}`
+      const name = await freeLibraryName(id, wantName)
       const fdir = path.join(dir, name)
       fs.mkdirSync(fdir, { recursive: true })
       const rel = []
@@ -3747,12 +3762,37 @@ async function stillOnStop(gate, start) {
  * once because three paths land here: the still answer of both object routes,
  * and the base of an animated one whose motion half never happened. */
 
+/* A NAME NOTHING ELSE IN THIS MAP IS USING, asked of both places.
+ *
+ * The suffix walk used to probe the folder alone, which is right when the
+ * folder is the library. It is not any more: on a host, scratch is /tmp and
+ * starts empty on every request, so every generation would pick the base name
+ * and quietly overwrite the item already in the store under it.
+ *
+ * So disk answers for what is mid-request and the database answers for what
+ * exists at all, and a name has to be free in both. */
+async function freeLibraryName(id, base) {
+  const dir = libDirOf(id)
+  const onDisk = (n) => fs.existsSync(path.join(dir, n + '.png')) || fs.existsSync(path.join(dir, n))
+  const known = new Set()
+  if (platformOn()) {
+    try {
+      for (const it of await libraryOf(id)) known.add(it.name)
+    } catch {
+      /* the database being unreachable is not a reason to refuse to draw */
+    }
+  }
+  if (!onDisk(base) && !known.has(base)) return base
+  for (let i = 2; ; i++) {
+    const n = `${base}-${i}`
+    if (!onDisk(n) && !known.has(n)) return n
+  }
+}
+
 async function saveStatic(id, b64, wantName, ask, prompt, objectId) {
   const dir = libDirOf(id)
   fs.mkdirSync(dir, { recursive: true })
-  const base = cleanName(wantName)
-  let file = base + '.png'
-  for (let i = 2; fs.existsSync(path.join(dir, file)); i++) file = `${base}-${i}.png`
+  const file = (await freeLibraryName(id, cleanName(wantName))) + '.png'
   fs.writeFileSync(path.join(dir, file), Buffer.from(b64, 'base64'))
   const size = pngSize(path.join(dir, file))
   const name = file.replace(/\.png$/i, '')
