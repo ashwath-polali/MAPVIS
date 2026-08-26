@@ -199,8 +199,18 @@ to be the same requirement.
 
 - [x] **0. The remote.** `github.com/ashwath-polali/MAPVIS-next`, private. 42 commits, 2,293 files,
       including `work/hub/doc.json` and the export bundle that had never been committed.
-- [ ] **1. Storage.** Schema, R2, the planes codec, the migration. **Gate: rename `work/` on the
-      laptop, reload the hub, and the tool works.** Nothing short of that counts.
+- [x] **1. Storage.** **Gate passed 2026-08-26.** `node server/db/gate.mjs hub` turns the disk
+      fallback off and the api still answers with the document, 94 placements, the door, the 71-item
+      library, real png bytes and the painting, all out of Neon and B2. The hub is 1.17 MB in object
+      storage, so 10 GB holds roughly 8,500 maps.
+
+      Four commands exist now and are the ones to reach for: `doctor.mjs` says whether anything is
+      unwired, `migrate.mjs` applies schema, `import-work.mjs <slug>` moves a folder in,
+      `verify-map.mjs <slug>` proves a round trip is lossless, `gate.mjs <slug>` proves the map does
+      not need this laptop.
+
+      Still on disk and still to move: the export writer, every generation path that writes a png,
+      states, and `.prev`. Those are writes; this gate was about reads and the document.
 - [ ] **2. Anchors.** Editor naming UI, `to_anchor`, placement binding, the listing endpoint, export
       writing both shapes.
 - [ ] **3. Accounts.** Auth, sessions, ownership, providers, key vault, ledger, a functional my-maps

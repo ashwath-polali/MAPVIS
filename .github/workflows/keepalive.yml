@@ -1,0 +1,63 @@
+# Keeps both free tiers awake, and tells us the moment either one breaks.
+#
+# Neon does not pause the way Supabase does: its compute scales to zero after 5
+# minutes and wakes itself on the next query with no human involved. Backblaze
+# says 10 GB is permanent, but its help pages also say an inactive account "may
+# be deleted entirely" without ever defining inactive. Undocumented is worse
+# than a documented limit, so this removes the question instead of trusting it.
+#
+# It runs the doctor, which is the same command run by hand, so this is
+# monitoring that happens to keep things warm rather than a script that only
+# exists for cron. A failure emails the repo owner.
+
+name: keepalive
+
+on:
+  schedule:
+    # 09:14 UTC every third day. Not on the hour, because everyone schedules on
+    # the hour and github delays crowded minutes.
+    - cron: '14 9 */3 * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - run: npm ci --omit=dev --ignore-scripts
+
+      - name: doctor
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          DATABASE_POOLED_URL: ${{ secrets.DATABASE_POOLED_URL }}
+          S3_ENDPOINT: ${{ secrets.S3_ENDPOINT }}
+          S3_REGION: ${{ secrets.S3_REGION }}
+          S3_BUCKET: ${{ secrets.S3_BUCKET }}
+          S3_ACCESS_KEY_ID: ${{ secrets.S3_ACCESS_KEY_ID }}
+          S3_SECRET_ACCESS_KEY: ${{ secrets.S3_SECRET_ACCESS_KEY }}
+          KEY_VAULT_SECRET: ${{ secrets.KEY_VAULT_SECRET }}
+        run: node server/db/doctor.mjs
+
+      # Github disables a scheduled workflow after 60 days with no commits to
+      # the repository, which would quietly switch off the very thing keeping
+      # the databases awake. A dated line committed once a month is enough
+      # activity to prevent that, and it is also a log of every check that ran.
+      - name: heartbeat
+        run: |
+          STAMP=$(date -u +'%Y-%m-%d %H:%M UTC')
+          MONTH=$(date -u +'%Y-%m')
+          if ! grep -q "^$MONTH" .github/heartbeat.txt 2>/dev/null; then
+            echo "$STAMP  neon and b2 both answered" >> .github/heartbeat.txt
+            git config user.name  'mapvis keepalive'
+            git config user.email 'keepalive@users.noreply.github.com'
+            git add .github/heartbeat.txt
+            git commit -m "keepalive: both stores answered on $STAMP"
+            git push
+          else
+            echo "already stamped for $MONTH, no commit needed"
+          fi

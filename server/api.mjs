@@ -36,6 +36,7 @@ import { fileURLToPath } from 'node:url'
 import { spawn } from 'node:child_process'
 import * as pixellab from './pixellab.mjs'
 import { decodePNG, encodePNG, sheetPNG } from './sheet.mjs'
+import { platformOn, diskAllowed, saveDocument, loadDocument, libraryOf, serveFromStore } from './store/platform.mjs'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(HERE, '..')
@@ -175,6 +176,17 @@ async function route(req, res, p, url) {
   // disk untouched but is no longer listed anywhere.
   if (p.startsWith('/api/library/')) {
     const id = safeId(decodeURIComponent(p.slice('/api/library/'.length)))
+    // one select against library_items, where the disk version walked the
+    // folder and opened a file descriptor per item to read a png header
+    if (platformOn()) {
+      try {
+        const items = await libraryOf(id)
+        if (items.length) return send(res, 200, { items })
+      } catch (e) {
+        console.error('[library] platform list failed, trying disk:', e.message)
+      }
+      if (!diskAllowed()) return send(res, 200, { items: [] })
+    }
     return send(res, 200, { items: libraryItems(id) })
   }
 
@@ -2172,6 +2184,22 @@ async function route(req, res, p, url) {
     const b = await body(req)
     if (typeof b.doc !== 'string' || !b.doc) return send(res, 400, { error: 'no doc' })
     const id = safeId(b.id)
+    // The platform splits it: the three mask planes become a png in object
+    // storage, the placements become a row, and each half is skipped when its
+    // own content did not change. At one autosave every four seconds that
+    // skipping is the difference between a free database living and dying.
+    if (platformOn()) {
+      try {
+        const r = await saveDocument(id, b.doc)
+        return send(res, 200, { bytes: b.doc.length, wrote: r.wrote })
+      } catch (e) {
+        // never lose an author's work to a database being unreachable: fall
+        // through and put it on disk, and say so
+        console.error('[doc] platform save failed, writing to disk:', e.message)
+      }
+      if (!diskAllowed()) return send(res, 503, { error: 'platform save failed and disk is off' })
+    }
+    if (!diskAllowed()) return send(res, 503, { error: 'disk is off' })
     const dir = path.join(WORK, id)
     fs.mkdirSync(dir, { recursive: true })
     // written beside and renamed, because a write killed halfway through leaves
@@ -2179,11 +2207,20 @@ async function route(req, res, p, url) {
     const tmp = path.join(dir, 'doc.json.tmp')
     fs.writeFileSync(tmp, b.doc)
     fs.renameSync(tmp, path.join(dir, 'doc.json'))
-    return send(res, 200, { bytes: b.doc.length })
+    return send(res, 200, { bytes: b.doc.length, wrote: ['disk'] })
   }
 
   if (p.startsWith('/api/doc/') && req.method === 'GET') {
     const id = safeId(decodeURIComponent(p.slice('/api/doc/'.length)))
+    if (platformOn()) {
+      try {
+        const doc = await loadDocument(id)
+        if (doc) return send(res, 200, { doc })
+      } catch (e) {
+        console.error('[doc] platform load failed, trying disk:', e.message)
+      }
+      if (!diskAllowed()) return send(res, 200, { doc: '' })
+    }
     const f = path.join(WORK, id, 'doc.json')
     if (!f.startsWith(WORK) || !fs.existsSync(f)) return send(res, 200, { doc: '' })
     return send(res, 200, { doc: fs.readFileSync(f, 'utf8') })
@@ -2192,7 +2229,19 @@ async function route(req, res, p, url) {
   return notFound(res)
 }
 
-function serveWork(res, rel) {
+// /work/<slug>/... is still the url space the editor asks for and still the url
+// space saved inside every placement. Where the bytes come from moved; the
+// address did not, which is the whole reason 17,000 lines of client did not
+// have to change.
+async function serveWork(res, rel) {
+  if (platformOn()) {
+    try {
+      if (await serveFromStore(res, rel)) return
+    } catch (e) {
+      console.error('[work] store read failed, trying disk:', e.message)
+    }
+    if (!diskAllowed()) return notFound(res)
+  }
   const f = path.join(WORK, rel.split('/').map(decodeURIComponent).join(path.sep))
   if (!f.startsWith(WORK) || !fs.existsSync(f) || fs.statSync(f).isDirectory()) return notFound(res)
   res.setHeader('Content-Type', MIME[path.extname(f).toLowerCase()] || 'application/octet-stream')
