@@ -46,6 +46,9 @@ import {
   pushItem,
   dropItem,
 } from './store/platform.mjs'
+import { publishBundle, publishedMap, publishHistory } from './store/publish.mjs'
+import { store } from './store/blobs.mjs'
+import { one, many } from './db/pool.mjs'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(HERE, '..')
@@ -68,6 +71,7 @@ export function api(req, res, next) {
 
 async function route(req, res, p, url) {
   if (p.startsWith('/work/')) return serveWork(res, p.slice('/work/'.length))
+  if (p.startsWith('/api/v1/')) return readApi(req, res, p, url)
   if (p === '/api/balance') return send(res, 200, await pixellab.balance())
 
   if (p === '/api/generate' && req.method === 'POST') {
@@ -2163,7 +2167,38 @@ async function route(req, res, p, url) {
     const copied = writes.size
     fs.writeFileSync(path.join(dir, 'assets.json'), JSON.stringify({ assets: outAssets }, null, 2))
     files.push(copied ? `assets.json (+${copied} png${copied > 1 ? 's' : ''})` : 'assets.json')
-    return send(res, 200, { dir, files })
+
+    // The same bytes, written once more as an immutable version in object
+    // storage. That is the publish: the game reads a version rather than a
+    // folder somebody copied by hand, re-exporting cannot break a class that is
+    // mid-session, and map.json picks up anchors[] from the database on the way
+    // through. work/<id>/ stays exactly as it was, because it is still what a
+    // reopened scene reads.
+    let published = null
+    if (platformOn()) {
+      try {
+        const png = (name) => {
+          const f = path.join(dir, name)
+          return fs.existsSync(f) ? fs.readFileSync(f) : null
+        }
+        published = await publishBundle(id, {
+          mapJson: b.map,
+          assetsJson: { assets: outAssets },
+          images: {
+            'scene.png': png('scene.png'),
+            'levels.png': png('levels.png'),
+            'occluders.png': png('occluders.png'),
+            'cut.png': png('cut.png'),
+          },
+          files: writes,
+        })
+        files.push(`published v${published.version} (${published.anchors} anchor${published.anchors === 1 ? '' : 's'})`)
+      } catch (e) {
+        console.error('[export] published to disk but not to the platform:', e.message)
+        files.push('NOT published · ' + String(e.message).slice(0, 80))
+      }
+    }
+    return send(res, 200, { dir, files, published })
   }
 
   if (p === '/api/save' && req.method === 'POST') {
@@ -2254,6 +2289,119 @@ async function route(req, res, p, url) {
   }
 
   return notFound(res)
+}
+
+/* ---- /api/v1, the read side ---------------------------------------------
+ *
+ * The only part of MAPVIS anything outside MAPVIS is allowed to call: the game
+ * fetching a published map, and eventually a member's python asking what a map
+ * is called and what is in it.
+ *
+ * Versioned in the path from the first line, because the whole point of the
+ * anchors contract is that code written against it keeps working. Read-only,
+ * so nothing here can damage a map. Everything is served by slug, never by the
+ * internal uuid, since a slug is what an author typed and what a door's `to`
+ * field already carries.
+ *
+ * Deliberately NOT here: anything that mutates. Publishing happens in the
+ * editor, and a grape that could rewrite a map is a grape that can break every
+ * other island.
+ */
+async function readApi(req, res, p, url) {
+  if (req.method !== 'GET') return send(res, 405, { error: 'read only' })
+  // maps / <slug> / <sub> / <version> / <rel...>
+  const parts = p
+    .slice('/api/v1/'.length)
+    .split('/')
+    .map((s) => (s ? decodeURIComponent(s) : s))
+  const [kind, slugRaw, sub] = parts
+
+  // every map anyone could ask for, which is the registry the game has never
+  // had. Doors name a target by slug and nothing has ever been able to answer
+  // whether that target exists.
+  if (kind === 'maps' && !slugRaw) {
+    const rows = await many(
+      `select m.slug, m.title, m.w, m.h, m.updated_at,
+              (select max(version) from publishes p where p.map_id = m.id) as version,
+              (select count(*)::int from anchors a where a.map_id = m.id)  as anchors
+       from maps m order by m.updated_at desc`,
+    )
+    return send(res, 200, { maps: rows.filter((r) => r.version) })
+  }
+
+  if (kind !== 'maps' || !slugRaw) return send(res, 404, { error: 'no such endpoint' })
+  const slug = safeId(slugRaw)
+
+  /* The listing that makes a member's python fail at author time instead of
+   * silently doing nothing at runtime. Small enough to fetch on every keystroke
+   * in an editor, because it carries names and never geometry-heavy data. */
+  if (sub === 'anchors') {
+    const m = await one('select id from maps where slug = $1', [slug])
+    if (!m) return send(res, 404, { error: `no map ${slug}` })
+    const rows = await many(
+      `select name, kind, to_slug, to_anchor, label, meta from anchors where map_id = $1 order by kind, name`,
+      [m.id],
+    )
+    return send(res, 200, {
+      slug,
+      anchors: rows.map((a) => ({
+        name: a.name,
+        kind: a.kind,
+        ...(a.to_slug ? { to: a.to_slug } : {}),
+        ...(a.to_anchor ? { toAnchor: a.to_anchor } : {}),
+        ...(a.label ? { label: a.label } : {}),
+        // a name derived from an old door's label rather than typed by a human.
+        // Code written against one of these is code written against a guess.
+        ...(a.meta?.derived ? { derived: true } : {}),
+      })),
+    })
+  }
+
+  if (sub === 'versions') return send(res, 200, { slug, versions: await publishHistory(slug) })
+
+  if (!sub) {
+    const v = url.searchParams.get('v')
+    const pub = await publishedMap(slug, v)
+    if (!pub) return send(res, 404, { error: `${slug} has never been published` })
+    const buf = await store().get(pub.blob_prefix + 'map.json')
+    const map = JSON.parse(buf.toString('utf8'))
+    // absolute urls, so the game can point at a hosted MAPVIS without knowing
+    // how any of this is laid out
+    const base = `/api/v1/maps/${slug}/file/${pub.version}/`
+    return send(res, 200, {
+      slug,
+      version: pub.version,
+      publishedAt: pub.published_at,
+      map,
+      files: Object.fromEntries(Object.entries(pub.manifest).map(([k, v]) => [k, { ...v, url: base + k }])),
+    })
+  }
+
+  // the bytes themselves. A version prefix never changes, so this is the one
+  // thing in MAPVIS that is safe to cache forever, and caching it forever is
+  // what keeps a class of thirty chromebooks off the free tier's read budget.
+  if (sub === 'file') {
+    const version = Number(parts[3])
+    if (!Number.isFinite(version)) return notFound(res)
+    const pub = await publishedMap(slug, version)
+    if (!pub) return notFound(res)
+    const rel = parts.slice(4).join('/')
+    // only what the manifest lists, so this can never be talked into reading a
+    // key outside the version it was asked for
+    if (!rel || !pub.manifest[rel]) return notFound(res)
+    let buf
+    try {
+      buf = await store().get(pub.blob_prefix + rel)
+    } catch {
+      return notFound(res)
+    }
+    res.setHeader('Content-Type', rel.endsWith('.json') ? 'application/json' : 'image/png')
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+    res.setHeader('Access-Control-Allow-Origin', '*')
+    return res.end(buf)
+  }
+
+  return send(res, 404, { error: 'no such endpoint' })
 }
 
 // /work/<slug>/... is still the url space the editor asks for and still the url
