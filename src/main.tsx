@@ -12,6 +12,7 @@
 import { createRoot } from 'react-dom/client'
 import Shell from './site/Shell'
 import './site/site.css'
+import './site/arrive.css'
 import './site/landing.css'
 import './site/pages.css'
 import './app.css'
