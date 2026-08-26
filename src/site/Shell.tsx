@@ -8,13 +8,13 @@
 import { Component, Suspense, lazy, useEffect, type ReactNode } from 'react'
 import { useRoute, match, useScrollReset } from './router'
 import { useScrollProgress, installGrain } from './motion'
+import { useSession } from './session'
 import Landing from './Landing'
 
 const Editor = lazy(() => import('../App'))
 const Enter = lazy(() => import('./Enter'))
-const Maps = lazy(() => import('./Maps'))
+const Home = lazy(() => import('./Home'))
 const MapPage = lazy(() => import('./MapPage'))
-const Atlas = lazy(() => import('./Atlas'))
 const Account = lazy(() => import('./Account'))
 
 /* Ink spreading into paper. Every wait in this app is this, never a spinner,
@@ -60,6 +60,7 @@ class Boundary extends Component<{ children: ReactNode; what: string }, { err: E
 
 export default function Shell() {
   const route = useRoute()
+  const session = useSession()
   useScrollProgress()
   useScrollReset(route.path)
 
@@ -84,12 +85,16 @@ export default function Shell() {
 
   const mapMatch = match('/maps/:slug', route.path)
 
+  /* ONE ADDRESS, TWO DIFFERENT SCREENS.
+   *
+   * Signed out, / is the landing: a place, a camera, and a reason to make an
+   * account. Signed in, / is your work. Nobody who already has maps should ever
+   * be shown an advertisement for the thing they are already using, and nobody
+   * should have to know a second url to get to their own stuff. */
   let page: React.ReactNode = null
-  if (route.path === '/') page = <Landing />
+  if (route.path === '/') page = session.loading ? <Ink /> : session.user ? <Home /> : <Landing />
   else if (route.path === '/enter') page = <Enter />
-  else if (route.path === '/maps') page = <Maps />
   else if (mapMatch) page = <MapPage slug={mapMatch.slug} />
-  else if (route.path === '/atlas') page = <Atlas />
   else if (route.path === '/account') page = <Account />
   else page = <Lost path={route.path} />
 

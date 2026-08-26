@@ -1,181 +1,363 @@
-/* The arrival screen. One window, one place, almost no type.
+/* Two screens, and they are deliberately not the same kind of thing.
  *
- * There is no page here to style. The island fills the viewport and the few
- * words that exist sit inside it, so the only work this file does is keep them
- * legible over moving art and get out of the way.
+ * The landing is a place: one painting, a camera, six words at a time.
+ * Home is an interface: a grid, dark, where the only colour on screen comes out
+ * of the maps themselves.
  */
 
-/* RELATIVE, NOT FIXED, and the reason is worth writing down.
- *
- * The page transition puts a transform on the wrapper around every route, and a
- * transformed ancestor turns position:fixed into position:absolute against
- * itself. The wrapper's only child was this, which was fixed, so it contributed
- * no height, so the wrapper was zero tall, so the canvas was zero tall and the
- * screen was blank. Filling the viewport by asking for the viewport's height is
- * the same result with nothing to trip over. */
-.arrive {
+/* ============================ the landing ============================== */
+
+.land {
   position: relative;
   height: 100svh;
   overflow: hidden;
-  background: #05070a;
+  background: #06080b;
 }
-
-.living,
-.arrive-dark {
+.tour-view,
+.land-unpainted {
   position: absolute;
   inset: 0;
 }
-.living-canvas {
+.tour-canvas {
   display: block;
   image-rendering: pixelated;
 }
-/* the island fades up as its first pieces land, so the screen is never a
-   flash of empty black followed by a bang */
-.living {
+.tour-view {
   opacity: 0;
-  transition: opacity 1400ms cubic-bezier(0.16, 1, 0.3, 1);
+  transition: opacity 1200ms cubic-bezier(0.16, 1, 0.3, 1);
 }
-.living.awake {
+.tour-view.ready {
   opacity: 1;
 }
+.land-unpainted {
+  display: grid;
+  place-items: center;
+  color: #2b3440;
+  font: 400 11px/1 var(--font-mono);
+  letter-spacing: 0.1em;
+}
 
-/* a dark vignette so type has somewhere to live no matter what the painting
-   does underneath it */
-.arrive::after {
+/* the edges go dark so words always have somewhere to sit, whatever the
+   painting is doing underneath them */
+.land::after {
   content: '';
   position: absolute;
   inset: 0;
   pointer-events: none;
   background:
-    linear-gradient(180deg, rgba(5, 7, 10, 0.75), transparent 22%),
-    linear-gradient(0deg, rgba(5, 7, 10, 0.8), transparent 26%);
+    radial-gradient(120% 80% at 50% 50%, transparent 34%, rgba(6, 8, 11, 0.82) 100%),
+    linear-gradient(180deg, rgba(6, 8, 11, 0.55), transparent 18%, transparent 74%, rgba(6, 8, 11, 0.72));
 }
 
-.arrive-ui {
+.land-ui {
   position: absolute;
   inset: 0;
   z-index: 2;
   display: grid;
   grid-template-rows: auto 1fr auto;
-  padding: 26px clamp(20px, 4vw, 46px) 24px;
+  padding: 24px clamp(20px, 4vw, 44px) 26px;
   pointer-events: none;
 }
-.arrive-ui a,
-.arrive-ui button {
+.land-ui button,
+.land-ui a {
   pointer-events: auto;
 }
+.land-ui header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.land-mark {
+  font: 700 12px var(--font-label);
+  letter-spacing: 0.4em;
+  color: #fff;
+}
+.land-in {
+  font: 500 12px var(--font-label);
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.6);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  transition: color 200ms ease;
+}
+.land-in:hover {
+  color: #fff;
+}
 
-.arrive-top {
+/* the line of text. Left or right of centre depending on where the camera is
+   looking, so it never covers the thing it is pointing at. */
+.land-say {
+  display: grid;
+  align-items: center;
+  padding: 0 clamp(0px, 4vw, 60px);
+}
+.land-say.left {
+  justify-items: start;
+}
+.land-say.right {
+  justify-items: end;
+  text-align: right;
+}
+.land-say p {
+  max-width: 15ch;
+  margin: 0;
+  font: 400 clamp(1.5rem, 3.4vw, 2.9rem) / 1.15 var(--font-label);
+  letter-spacing: -0.015em;
+  color: #fff;
+  text-shadow: 0 2px 30px rgba(0, 0, 0, 0.85);
+  animation: say-in 700ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes say-in {
+  from {
+    opacity: 0;
+    filter: blur(6px);
+  }
+  to {
+    opacity: 1;
+    filter: none;
+  }
+}
+
+.land-ui footer {
+  display: grid;
+  justify-items: center;
+  gap: 20px;
+}
+/* one button on the whole screen, and it is the only filled thing on it */
+.land-go {
+  padding: 14px 40px;
+  font: 700 12px var(--font-label);
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: #06080b;
+  background: #fff;
+  border: 0;
+  cursor: pointer;
+  transition:
+    transform 220ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 220ms ease;
+}
+.land-go:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 40px -12px rgba(255, 255, 255, 0.5);
+}
+.land-dots {
+  display: flex;
+  gap: 8px;
+}
+.land-dots button {
+  width: 20px;
+  height: 2px;
+  padding: 0;
+  border: 0;
+  background: rgba(255, 255, 255, 0.25);
+  cursor: pointer;
+  transition: background 240ms ease;
+}
+.land-dots button.on {
+  background: #fff;
+}
+
+@media (max-width: 700px) {
+  .land-say p {
+    max-width: 12ch;
+    font-size: 1.5rem;
+  }
+  .land-say {
+    justify-items: start !important;
+    text-align: left !important;
+  }
+}
+
+/* ============================== home =================================== */
+
+.home {
+  min-height: 100svh;
+  background: #0a0c0f;
+  color: #e6e9ee;
+  font-family: var(--font-label);
+}
+.home-bar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 20px;
+  padding: 18px clamp(18px, 3vw, 40px);
+  background: linear-gradient(180deg, #0a0c0f 70%, transparent);
 }
-.brand {
-  font-family: var(--font-label);
-  font-size: 13px;
-  font-weight: 700;
-  letter-spacing: 0.34em;
-  color: #fff;
+.home-mark {
+  font: 700 11px var(--font-label);
+  letter-spacing: 0.4em;
+  color: #6f7885;
 }
-.arrive-top nav {
+.home-bar-r {
   display: flex;
-  gap: 22px;
+  align-items: center;
+  gap: 6px;
 }
-.arrive-top nav a {
-  font-family: var(--font-label);
-  font-size: 12px;
-  letter-spacing: 0.06em;
-  color: rgba(255, 255, 255, 0.62);
-  text-decoration: none;
-  transition: color 200ms ease;
+.home-find {
+  width: 150px;
+  padding: 7px 10px;
+  font: 400 13px var(--font-label);
+  color: #e6e9ee;
+  background: #12161b;
+  border: 1px solid #1d232b;
+  outline: none;
+  transition: border-color 200ms ease;
 }
-.arrive-top nav a:hover {
-  color: #fff;
+.home-find:focus {
+  border-color: #39434f;
+}
+.home-icon {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  color: #6f7885;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  transition: color 180ms ease;
+}
+.home-icon:hover {
+  color: #e6e9ee;
 }
 
-/* The one control is NOT centred. Dead centre is where the painting puts its
-   subject, so a button there lands on top of whatever the island was built
-   around. Bottom left keeps it findable and keeps the place readable. */
-.arrive-mid {
+.home-body {
+  padding: 8px clamp(18px, 3vw, 40px) 60px;
+}
+.home-wait {
+  height: 40vh;
+}
+.grid {
   display: grid;
-  align-items: end;
-  justify-items: start;
-  padding-bottom: 34px;
+  grid-template-columns: repeat(auto-fill, minmax(268px, 1fr));
+  gap: clamp(16px, 1.6vw, 24px);
 }
-/* one control on the whole screen. It has to be findable over moving art and
-   it must not look like a web button, so it is a thin outlined block that
-   fills from the middle out. */
-.enterbtn {
+
+.card {
+  display: flex;
+  flex-direction: column;
+  background: #10141a;
+  border: 1px solid #1a2027;
+  transition:
+    border-color 200ms ease,
+    transform 260ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.card:hover {
+  border-color: #2c3742;
+  transform: translateY(-3px);
+}
+.card-art {
   position: relative;
-  padding: 15px 42px;
-  font-family: var(--font-label);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.3em;
-  text-transform: uppercase;
-  color: #fff;
-  text-decoration: none;
-  border: 1px solid rgba(255, 255, 255, 0.55);
+  display: block;
+  aspect-ratio: 16 / 10;
   overflow: hidden;
-  transition: color 260ms ease;
-  backdrop-filter: blur(2px);
+  background: #06080b;
 }
-.enterbtn::before {
-  content: '';
+/* the painting is the only bright thing on the page, and it is never blurred */
+.card-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  image-rendering: pixelated;
+  display: block;
+  transition: transform 700ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.card:hover .card-art img {
+  transform: scale(1.05);
+}
+.card-none {
   position: absolute;
   inset: 0;
-  background: #fff;
-  transform: scaleY(0);
-  transition: transform 320ms cubic-bezier(0.22, 0.61, 0.24, 1);
-  z-index: -1;
+  display: grid;
+  place-items: center;
+  color: #39434f;
+  font: 400 10px var(--font-mono);
+  letter-spacing: 0.1em;
 }
-.enterbtn:hover {
-  color: #05070a;
+.card-say {
+  padding: 13px 14px 12px;
+  display: grid;
+  gap: 9px;
 }
-.enterbtn:hover::before {
-  transform: scaleY(1);
-}
-
-.arrive-foot {
+.card-top {
   display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 20px;
-}
-.here {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.04em;
-  color: rgba(255, 255, 255, 0.5);
-  display: flex;
-  gap: 12px;
   align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
 }
-.here em {
-  font-style: normal;
-  color: rgba(255, 255, 255, 0.28);
+.card-top h2 {
+  margin: 0;
+  font: 500 15px var(--font-label);
+  letter-spacing: -0.01em;
+  color: #e6e9ee;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
-.dots {
+.card-when {
+  flex: none;
+  font: 400 10px var(--font-mono);
+  color: #5b6470;
+}
+.card-nums {
   display: flex;
-  gap: 7px;
+  flex-wrap: wrap;
+  gap: 10px;
+  font: 400 10px var(--font-mono);
+  color: #5b6470;
 }
-.dots button {
-  width: 5px;
-  height: 5px;
-  padding: 0;
-  border: 0;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.28);
-  cursor: pointer;
-  transition: background 220ms ease;
+.card-nums .lit {
+  color: #7fb3a3;
 }
-.dots button.on {
-  background: #fff;
+.card-do {
+  display: flex;
+  gap: 14px;
+  padding-top: 3px;
+}
+.card-do a {
+  font: 500 12px var(--font-label);
+  color: #8d97a4;
+  text-decoration: none;
+  transition: color 180ms ease;
+}
+.card-do a:hover {
+  color: #fff;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .living {
-    transition: none;
-  }
+/* new map is a card too, so the grid never has a special first row that breaks
+   at the wrong width */
+.card.new {
+  align-items: flex-start;
+  justify-content: center;
+  gap: 4px;
+  padding: 34px 18px;
+  aspect-ratio: auto;
+  background: none;
+  border-style: dashed;
+  border-color: #232b34;
+  cursor: pointer;
+  text-align: left;
+  min-height: 220px;
+}
+.card.new:hover {
+  border-color: #3a4652;
+}
+.new-plus {
+  font: 300 30px var(--font-label);
+  line-height: 1;
+  color: #4a5563;
+}
+.new-say {
+  font: 500 15px var(--font-label);
+  color: #e6e9ee;
+}
+.new-sub {
+  font: 400 12px var(--font-label);
+  color: #5b6470;
 }

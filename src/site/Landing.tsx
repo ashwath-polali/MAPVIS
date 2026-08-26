@@ -1,103 +1,108 @@
-/* THE LANDING PAGE IS AN ISLAND THAT IS ALIVE.
+/* The landing page. Signed out only.
  *
- * One screen. No scroll story, no eyebrow-headline-lede, no alternating
- * sections, no closing call to action. You arrive and there is a place, moving,
- * filling the window, and a very small amount of type sitting in it.
+ * One painted place, a camera that walks you across it, and a line of text at
+ * each stop saying what happens there. Nothing scrolls.
  *
- * The island is real. It is whatever map was published most recently, drawn
- * from object storage and animated by the same life data the game runs, which
- * means this page is never a mock-up and gets better every time somebody
- * publishes something. A site for a map tool should be made of maps.
+ * ON THE WORDS: they are steps, not slogans. Lower case, imperative, one clause
+ * each, no metaphor, no pair of balanced fragments, no "X is not Y, it is Z".
+ * That construction and that rhythm are the tell, and no amount of rewriting
+ * fixes copy whose SHAPE is wrong. A tool describes itself by saying what you
+ * do with it.
  */
-import { useEffect, useState } from 'react'
-import { Link } from './router'
-import { LivingMap } from './LivingMap'
-import { useSession } from './session'
+import { useCallback, useEffect, useState } from 'react'
+import { go } from './router'
+import { useTour, type Stop } from './Tour'
 
-type Entry = { slug: string; title: string; version: number; anchors: number; w: number; h: number }
+type Entry = { slug: string; version: number; w: number; h: number }
+
+/* The tour, authored here for now. Once a site scene exists these come off its
+ * own anchors, so the walkthrough is arranged in MAPVIS by moving marks around
+ * on the painting rather than by editing numbers in a file. */
+const SCRIPT: Array<Omit<Stop, 'x' | 'y'> & { at: [number, number] }> = [
+  { at: [0.5, 0.5], z: 1, say: 'this whole place was one painting', side: 'left' },
+  { at: [0.3, 0.62], z: 2.4, say: 'you cut the water off it by hand', side: 'right' },
+  { at: [0.52, 0.44], z: 2.2, say: 'then mark the ground people can stand on', side: 'left' },
+  { at: [0.68, 0.58], z: 2.6, say: 'put things on it that move on their own', side: 'left' },
+  { at: [0.46, 0.36], z: 2.8, say: 'name the door, so somebody can write code that finds it', side: 'right' },
+  { at: [0.5, 0.5], z: 1.15, say: 'press export. it is in the game.', side: 'left' },
+]
 
 export default function Landing() {
-  const { user } = useSession()
-  const [maps, setMaps] = useState<Entry[] | null>(null)
+  const [scene, setScene] = useState<Entry | null | 'none'>(null)
   const [i, setI] = useState(0)
+  const onStop = useCallback((n: number) => setI(n), [])
 
-  /* SCENES MADE FOR THIS SITE, AND NOTHING ELSE.
-   *
-   * A slug beginning site- is a painting made in MAPVIS for MAPVIS: a
-   * cartographer's tower, an archipelago, a harbour. Game content is never
-   * shown here. The hub island is Thor's, it belongs to the Adventure Game, and
-   * dressing a shop window in it is borrowing something that is not the shop's.
-   *
-   * The consequence is that this page is built with the tool it is advertising.
-   * Ash paints a scene, places things that move on it, publishes it, and the
-   * site renders it through the same engine a map goes through. */
   useEffect(() => {
     fetch('/api/v1/maps')
       .then((r) => r.json())
-      .then((j) => setMaps((j.maps || []).filter((m: Entry) => m.slug.startsWith('site-'))))
-      .catch(() => setMaps([]))
+      .then((j) => {
+        const site = (j.maps || []).filter((m: Entry & { slug: string }) => m.slug.startsWith('site-'))
+        setScene(site.length ? site[0] : 'none')
+      })
+      .catch(() => setScene('none'))
   }, [])
 
-  // if more than one map is published the window drifts between them, slowly,
-  // the way a shelf of them would be flicked through
-  useEffect(() => {
-    if (!maps || maps.length < 2) return
-    const t = setInterval(() => setI((n) => (n + 1) % maps.length), 14000)
-    return () => clearInterval(t)
-  }, [maps])
+  const w = scene && scene !== 'none' ? scene.w : 1
+  const h = scene && scene !== 'none' ? scene.h : 1
+  const stops: Stop[] = SCRIPT.map((s) => ({ ...s, x: s.at[0] * w, y: s.at[1] * h }))
 
-  const show = maps && maps.length ? maps[i % maps.length] : null
+  const tour = useTour({
+    slug: scene && scene !== 'none' ? scene.slug : '',
+    version: scene && scene !== 'none' ? scene.version : 0,
+    stops,
+    onStop,
+  })
+
+  const line = SCRIPT[i] || SCRIPT[0]
 
   return (
-    <main className="arrive">
-      {show ? (
-        <LivingMap key={show.slug} slug={show.slug} version={show.version} fill="cover" />
-      ) : (
-        <div className="arrive-dark" />
-      )}
+    <main className="land">
+      {scene && scene !== 'none' ? tour.view : <Unpainted />}
 
-      {/* the type sits IN the place, not on a page above it */}
-      <div className="arrive-ui">
-        <div className="arrive-top">
-          <span className="brand">MAPVIS</span>
-          <nav>
-            <Link to="/atlas">atlas</Link>
-            {user ? <Link to="/maps">my maps</Link> : null}
-            <Link to={user ? '/account' : '/enter'}>{user ? 'account' : 'sign in'}</Link>
-          </nav>
+      <div className="land-ui">
+        <header>
+          <span className="land-mark">MAPVIS</span>
+          <button className="land-in" onClick={() => go('/enter')}>
+            sign in
+          </button>
+        </header>
+
+        {/* the line sits beside the thing it is about, and swaps by fading
+            through rather than sliding, so nothing on screen is ever moving in
+            two directions at once */}
+        <div className={'land-say ' + (line.side || 'left')}>
+          <p key={i}>{line.say}</p>
         </div>
 
-        <div className="arrive-mid">
-          <Link to={user ? '/maps' : '/enter?new=1'} className="enterbtn">
+        <footer>
+          <button className="land-go" onClick={() => go('/enter?new=1')}>
             make one
-          </Link>
-        </div>
-
-        <div className="arrive-foot">
-          {show ? (
-            <span className="here">
-              {show.title || show.slug}
-              <em>
-                {show.w}&times;{show.h}
-              </em>
-            </span>
-          ) : (
-            <span className="here">nothing published yet</span>
-          )}
-          {maps && maps.length > 1 ? (
-            <span className="dots">
-              {maps.map((m, k) => (
-                <button
-                  key={m.slug}
-                  className={k === i ? 'on' : ''}
-                  onClick={() => setI(k)}
-                  aria-label={m.slug}
-                />
-              ))}
-            </span>
-          ) : null}
-        </div>
+          </button>
+          <nav className="land-dots" aria-label="jump">
+            {SCRIPT.map((s, k) => (
+              <button
+                key={k}
+                className={k === i ? 'on' : ''}
+                onClick={() => {
+                  setI(k)
+                  tour.goTo(k)
+                }}
+                aria-label={s.say}
+              />
+            ))}
+          </nav>
+        </footer>
       </div>
     </main>
+  )
+}
+
+/* No site scene has been painted yet. Say so plainly rather than shipping a
+ * placeholder that pretends to be art. */
+function Unpainted() {
+  return (
+    <div className="land-unpainted">
+      <span>no scene painted yet</span>
+    </div>
   )
 }
