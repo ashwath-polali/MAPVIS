@@ -1,0 +1,191 @@
+# MAPVIS as a platform
+
+The build document for turning MAPVIS from a tool that runs on one laptop into something anyone can
+sign into. Started 2026-08-26. The *why* lives in `AdventureGame/docs/MAPVIS-PLATFORM.md`; this file
+is the *how*, and it is where decisions get recorded as they are made.
+
+Read `AdventureGame/docs/VINE-AND-GRAPE.md` before touching anchors. Section 2.5 of the plan document
+is a contract handed here by the game side, not a suggestion.
+
+---
+
+## The stack, and why every piece of it is free
+
+| | free tier, verified 2026-08-26 | what lives there | headroom |
+|---|---|---|---|
+| Neon Postgres | 0.5 GB/project, 100 CU-hr/mo, 5 GB egress, autosuspend at 5 min | map documents, anchors, accounts, jobs, ledger | ~1,500 maps |
+| Cloudflare R2 | 10 GB, 1M writes, 10M reads/mo, **egress free** | every PNG, published bundles | ~1,600 maps with libraries |
+| Vercel Hobby | 300 s function max, 100 GB transfer, 1M invocations | the app and the API | past any school scale |
+
+Neon's half-gigabyte is enough because the big things are not in it. See the storage split below.
+
+**Two standing rules that keep this free and keep it portable.**
+
+1. **No Vercel-only primitive.** No Vercel KV, no Vercel Postgres, no Vercel Blob. Plain Node handlers
+   against Neon and R2. The host then becomes a deploy config rather than a rewrite, which matters
+   because Vercel Hobby forbids commercial use and MAPVIS may one day be sold. That day it is $20/mo
+   or a different host, and either is a Tuesday afternoon.
+2. **Published bundles are immutable and cached.** A full hub load is around 200 files. R2's 10M
+   monthly reads would notice that; Cloudflare's CDN in front of an immutable version-scoped path does
+   not, because the second fetch never reaches R2.
+
+---
+
+## The storage split
+
+Three stores, and naming the split is the point. This is `MAPVIS-PLATFORM.md` §2.6 resolved.
+
+**Documents go to Neon.** Map metadata, the placements, the anchors, accounts, jobs, the usage ledger.
+`server/db/schema.sql` is the whole of it.
+
+**Bytes go to R2.** Every PNG.
+
+```
+maps/<mapId>/planes.png                              lvl, occ and cut as r, g, b
+maps/<mapId>/{scene,levels,occluders,cut}.png
+maps/<mapId>/library/<name>.png                      a still
+maps/<mapId>/library/<name>/<i>.png                  frames
+maps/<mapId>/states/<item>/<face>/<heading>/<i>.png
+publish/<slug>/v<N>/...                              immutable, cdn-cached
+```
+
+**Study logs stay on the Neon the game already uses.** Different project, different concern, not this
+repo's problem. Listed so nobody merges it in.
+
+### Why not Mongo
+
+The only argument for it was that a map document is deeply nested. Once the mask planes move out to
+R2, the nested part is the placements array and JSONB holds that fine. Everything that actually needs
+querying is relational: a user owning maps, an anchor unique within a map, a publish version, a key
+vault, a spend ledger. Mongo makes those worse. A second database vendor is a second connection, a
+second backup story and a second thing to keep alive, for no gain. Decided 2026-08-26.
+
+### The 1 MB that was hiding in every autosave
+
+`mask.ts` `serialize()` packed three byte planes into one base64 field, which is 1,056,768 characters
+for the 688x640 hub and made `doc.json` 1.89 MB. Those planes are an image. The same three already
+exist as PNGs in the export at 17 KB, 11 KB and 17 KB, so packed into one three-channel `planes.png`
+they are roughly 40 KB. Every autosave used to ship a megabyte and now ships forty kilobytes.
+
+### The library stopped being a directory walk
+
+`libraryItems()` inferred each item's shape by probing the filesystem: is there a `dirs.json`, then is
+there a `0.png`, then is there an `effect.json`, and `pngSize()` opened a file descriptor per item to
+read 24 bytes of IHDR. On the hub that is 71 probes per listing, which against object storage would be
+71 network round trips. `library_items` writes the shape down instead, and the listing is one select.
+
+### Four hidden directories that do not migrate
+
+`.ask/`, `.style/` and `.propose/` exist only because the `claude` CLI needs a **file path** to hand
+its `Read` tool. When a planner takes an image in a request body, all three are dead code. `.stage/`
+is a local atomic-swap trick that object storage makes redundant, since a PUT is already atomic and
+the swap becomes a transaction on the library row.
+
+`.prev/` is the exception and it is a real feature, not scratch: an in-place edit rewrites the item and
+`z` puts the pixels back. It becomes `library_versions`, capped at 8 the way `PREV_MAX` capped it.
+
+---
+
+## The anchor contract
+
+The seam between MAPVIS, the game and the Python API, and the one thing here that cannot be
+improvised, because getting it wrong means migrating every map that already exists.
+
+`MapEvent` already exists at `src/core/mask.ts:133` and the game already honours it at
+`PmapScene.tsx:392`. Three things are missing and each has a specific cost.
+
+**`label` is doing two jobs.** It is the only string on an event today, so it is both what the player
+reads on the door prompt and the only thing code could address. Renaming a door for the player would
+silently break a member's Python. `name` and `label` are separate columns.
+
+**There is no `to_anchor`.** A door reloads the target map and drops the player at that map's single
+global `spawn`. The Panther's Maw is three rooms with two-way doors, so Hall→Chart and Alcove→Chart
+would land on the same tile. That is a bug already waiting in content nobody has built yet, and it is
+one column to prevent versus a migration to fix.
+
+**Nothing binds an anchor to a placement.** If `coach_post` is where an NPC stands and the author drags
+the NPC, the anchor should follow. `placement_id` does that, and it is what "a name survives editing"
+has to mean in practice.
+
+**A slug is globally unique.** Not per owner. This is forced rather than chosen: a door writes
+`to: "panther-maw"` as a bare string with no owner in it, so two people cannot both own `hub`.
+
+Export writes **both** `anchors[]` and the existing `events[]` derived from the doors, so no bundle
+that works today stops working and the game migrates on its own clock.
+
+---
+
+## The key model
+
+Each account carries two provider settings, each one of `key`, `relay` or `none`.
+
+The club account ships `relay/relay`: no keys stored, wired to a linked machine that runs the `claude`
+CLI and SAM locally. Its settings page says "wired to a linked machine" rather than showing an error.
+Switching either provider to `key` and pasting one severs the machine link for that service. That is
+the graduation path and it is a dropdown, not a migration.
+
+Everyone else is `key` or `none`, and `none` degrades rather than breaking:
+
+| feature | no PixelLab | no Claude |
+|---|---|---|
+| cut, levels, walk test, placing, export, publish | works | works |
+| `translate` (your words into a prompt) | dead | **falls through: raw text goes straight to PixelLab** |
+| `asset-plan` (endpoint, size, camera, prompt) | dead | falls through to defaults plus raw text |
+| `style-card` (reads the painting) | works | denied, or fill the card by hand |
+| `effect-plan`, `fx-review`, `obj-review` | dead | denied, you choose yourself |
+| every `asset-gen`, `character-gen`, `anim`, `state` | **dead** | works |
+| SAM propose | n/a | relay only, else draw it by hand |
+
+The fall-through path does not exist today. Every generation goes ask → Claude → prompt → PixelLab with
+no bypass, so this is new code at four call sites rather than a config flag.
+
+Keys are `aes-256-gcm` ciphertext in `users.claude_key_enc` / `pixellab_key_enc`, never selected into a
+response, never sent to a browser.
+
+---
+
+## Jobs, and why they come before hosting
+
+Four endpoints block the request while they wait: `translate`, `style-card`, `asset-plan`,
+`effect-plan`. `api.mjs:5648` spawns the `claude` CLI and holds the socket for up to five minutes.
+That is fragile on any host at any price. A dropped connection loses work that already cost money, and
+there is no progress, no resume and no clean stop.
+
+MAPVIS **already** uses the right pattern for PixelLab generation: POST creates a job, returns an id,
+the client polls. The planners never got it. Finishing that pattern is what the `jobs` table is for,
+and it also replaces the `LIVE` and `WAITING` maps that sit in module scope at `api.mjs:5546` and
+break the moment there is more than one server process.
+
+Once nothing needs a long-lived request, nothing needs a long-lived server, and free serverless stops
+being a compromise. The "do it correctly" requirement and the "absolutely free" requirement turn out
+to be the same requirement.
+
+---
+
+## Phases
+
+- [x] **0. The remote.** `github.com/ashwath-polali/MAPVIS-next`, private. 42 commits, 2,293 files,
+      including `work/hub/doc.json` and the export bundle that had never been committed.
+- [ ] **1. Storage.** Schema, R2, the planes codec, the migration. **Gate: rename `work/` on the
+      laptop, reload the hub, and the tool works.** Nothing short of that counts.
+- [ ] **2. Anchors.** Editor naming UI, `to_anchor`, placement binding, the listing endpoint, export
+      writing both shapes.
+- [ ] **3. Accounts.** Auth, sessions, ownership, providers, key vault, ledger, a functional my-maps
+      list that is not yet designed.
+- [ ] **4. Jobs and degraded routing.** Every long call becomes a row. The four fall-through paths.
+      The relay daemon.
+- [ ] **5. Deploy.** Vercel plus Neon plus R2 on a domain.
+- [ ] **6. UI.** Ash steers this one. Held to the MAPVIS UI law: not a default-looking React page.
+- [ ] **7. The read API and publish.** Versioned registry, anchor listing, immutable publish, and the
+      game reading from the platform instead of `public/maps-painted/`.
+
+---
+
+## Open
+
+- Where a published bundle is served from once the game reads the platform: R2 behind a custom domain
+  is the shape, the domain is not bought.
+- What a shared club account does when it runs out mid-map. The ledger exists; the policy does not.
+- How twenty maps version against an engine that keeps changing. The Python API faces the identical
+  question and the answer should probably be the same one. Immutable publishes are half of it.
+- Whether a map published into the game needs review before students see it.
