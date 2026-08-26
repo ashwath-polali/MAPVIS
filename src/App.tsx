@@ -11,7 +11,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { CSSProperties, DragEvent, ReactNode } from 'react'
 import { Editor, isCutTool, loadImage, groupFor, type EditorStatus, type Tool } from './core/editor'
-import { PAL, mkCanvas, nameOf, assetLabel, type AssetLook, type PlacedAsset } from './core/mask'
+import { PAL, mkCanvas, nameOf, assetLabel, ANCHOR_KINDS, type AnchorKind, type AssetLook, type PlacedAsset } from './core/mask'
+
+/* What each kind is FOR, in the words an author would use. Shown on the kind
+ * buttons and under the form, because "post" and "trigger" mean nothing until
+ * somebody says what the engine does with them. */
+const ANCHOR_WHAT: Record<AnchorKind, string> = {
+  point: 'a spot to walk to · guide_to("name")',
+  region: 'an area to be inside · fires when the player is in it',
+  door: 'walk into it, press E, and the next map loads',
+  post: 'where somebody stands · bind it to a placement and it follows them',
+  spawn: 'where the player begins, or arrives from a door',
+  trigger: 'a spot that fires once when it is reached',
+}
 import { Help } from './ui/Help'
 import { computeRegions } from './core/regions'
 import { debase } from './core/debase'
@@ -680,6 +692,11 @@ export default function App() {
   const [doorPick, setDoorPick] = useState(false)
   const [doorEdit, setDoorEdit] = useState(0)
   const [doorNew, setDoorNew] = useState(false)
+  /* Renaming is held while it is being typed rather than applied per keystroke,
+   * because a name is checked for uniqueness and legality and half a word is
+   * neither. nameSaid carries back what the editor did with it. */
+  const [nameDraft, setNameDraft] = useState<string | null>(null)
+  const [nameSaid, setNameSaid] = useState<{ id: number; why: string } | null>(null)
   // the effect box: the ask, the armed map click, the plan the click produced
   // and the params a human is tuning. fxFrames is the render, redone locally on
   // every slider move. Nothing here has touched the disk yet.
@@ -3702,7 +3719,7 @@ export default function App() {
     </>
   )
 
-  // the doors: the map's events, all door-typed for now
+  // the map's anchors. Every named place, not only the doors.
   const doors = st?.events ?? []
   const editingDoor = doors.find((v) => v.id === doorEdit)
 
@@ -3749,25 +3766,93 @@ export default function App() {
       />
       {editingDoor && (
         <div className="doorform">
-          <input
-            value={editingDoor.label}
-            placeholder="name, e.g. Panther's Maw"
-            onChange={(e) => ed?.updateEvent(editingDoor.id, { label: e.target.value })}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === 'Escape') e.currentTarget.blur()
-            }}
-            spellCheck={false}
-            autoFocus
-          />
-          <input
-            value={editingDoor.to}
-            placeholder="target map id"
-            onChange={(e) => ed?.updateEvent(editingDoor.id, { to: e.target.value })}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === 'Escape') e.currentTarget.blur()
-            }}
-            spellCheck={false}
-          />
+          {/* THE NAME IS THE IDENTITY, and it is first for that reason. It is
+              the string a member writes in python. The label below is only what
+              a player reads, and keeping them apart is the whole point: renaming
+              a door for the player must not break somebody's island. */}
+          <label className="anchfield">
+            <span>name · what code calls it</span>
+            <input
+              className={'anchname' + (nameSaid?.id === editingDoor.id ? ' bad' : '')}
+              value={nameDraft ?? editingDoor.name}
+              placeholder="maw_entrance"
+              onChange={(e) => setNameDraft(e.target.value)}
+              onBlur={() => {
+                if (nameDraft === null) return
+                const r = ed?.renameAnchor(editingDoor.id, nameDraft)
+                setNameSaid(r?.why ? { id: editingDoor.id, why: r.why } : null)
+                setNameDraft(null)
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === 'Escape') e.currentTarget.blur()
+              }}
+              spellCheck={false}
+              autoFocus
+            />
+          </label>
+          {nameSaid?.id === editingDoor.id && <div className="anchwarn">{nameSaid.why}</div>}
+          {editingDoor.meta?.derived === true && (
+            <div className="anchwarn">guessed from the label · rename it so python has something real</div>
+          )}
+
+          <div className="anchkinds">
+            {ANCHOR_KINDS.map((k) => (
+              <button
+                key={k}
+                className={'kbtn' + (editingDoor.kind === k ? ' on' : '')}
+                onClick={() => ed?.updateEvent(editingDoor.id, { kind: k })}
+                data-tip={ANCHOR_WHAT[k]}
+              >
+                {k}
+              </button>
+            ))}
+          </div>
+
+          <label className="anchfield">
+            <span>label · what a player reads</span>
+            <input
+              value={editingDoor.label}
+              placeholder="Panther's Maw"
+              onChange={(e) => ed?.updateEvent(editingDoor.id, { label: e.target.value })}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === 'Escape') e.currentTarget.blur()
+              }}
+              spellCheck={false}
+            />
+          </label>
+
+          {editingDoor.kind === 'door' && (
+            <>
+              <label className="anchfield">
+                <span>leads to · map</span>
+                <input
+                  value={editingDoor.to}
+                  placeholder="maw-hall"
+                  onChange={(e) => ed?.updateEvent(editingDoor.id, { to: e.target.value })}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === 'Escape') e.currentTarget.blur()
+                  }}
+                  spellCheck={false}
+                />
+              </label>
+              {/* WITHOUT THIS every door into a map drops the player on that
+                  map's single global spawn, so three connected rooms all land
+                  you on the same tile whichever way you came in. */}
+              <label className="anchfield">
+                <span>arrive at · anchor over there</span>
+                <input
+                  value={editingDoor.toAnchor ?? ''}
+                  placeholder="from_hub · blank means that map's spawn"
+                  onChange={(e) => ed?.updateEvent(editingDoor.id, { toAnchor: e.target.value })}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === 'Escape') e.currentTarget.blur()
+                  }}
+                  spellCheck={false}
+                />
+              </label>
+            </>
+          )}
+
           <div className="doorrad">
             <span>radius</span>
             <button className="mbtn" onClick={() => ed?.updateEvent(editingDoor.id, { r: editingDoor.r - 2 })}>
@@ -3778,7 +3863,7 @@ export default function App() {
               +
             </button>
           </div>
-          <div className="doorhint">walk into it, press E in the game</div>
+          <div className="doorhint">{ANCHOR_WHAT[editingDoor.kind]}</div>
           <div className="dooracts">
             <button
               className="abtn"
@@ -3816,8 +3901,19 @@ export default function App() {
               }}
             >
               <span className="ev-glyph">⏻</span>
+              {/* the NAME leads, because that is what a member types. The label
+                  and the target trail behind it in dimmer text. */}
               <span className="ev-name">
-                {ev.label || 'door'} → {ev.to || '?'}
+                <b className={ev.meta?.derived === true ? 'guessed' : undefined}>{ev.name}</b>
+                {ev.kind === 'door' ? (
+                  <i>
+                    {' → '}
+                    {ev.to || '?'}
+                    {ev.toAnchor ? ` · ${ev.toAnchor}` : ''}
+                  </i>
+                ) : (
+                  <i> · {ev.kind}</i>
+                )}
               </span>
               <button
                 className={'arow-x' + (armed === 'door:' + ev.id ? ' armed' : '')}

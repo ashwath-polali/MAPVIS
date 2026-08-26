@@ -129,29 +129,97 @@ export const assetLabel = (a: PlacedAsset): string => {
  * against. The first type is a door — label is its human name, to the bundle
  * id it leads to. type stays an open string so a later kind (dialogue, a
  * trigger) rides the same list without a format change; a reader skips types
- * it does not know. */
-export interface MapEvent {
+ * it does not know.
+ *
+ * SINCE ANCHORS: the above described a door and nothing else could be
+ * addressed by name. `guide_to("maw_entrance")` has to resolve to something and
+ * this tool is the only place that name can be created, so an event grew into
+ * an anchor.
+ *
+ * name and label are separate, and that is the most important line here.
+ * `label` is what a player reads on the door prompt. `name` is what code
+ * addresses. One string doing both means renaming a door for the player
+ * silently breaks a member's island. */
+export type AnchorKind = 'point' | 'region' | 'door' | 'post' | 'spawn' | 'trigger'
+
+export const ANCHOR_KINDS: AnchorKind[] = ['point', 'region', 'door', 'post', 'spawn', 'trigger']
+
+export interface MapAnchor {
   id: number
-  type: string
+  /* author-typed, unique in this map, shaped like a python identifier so a typo
+   * is caught where it is written instead of failing silently at runtime */
+  name: string
+  kind: AnchorKind
   x: number
   y: number
   r: number
-  label: string
+  /* region only */
+  rect?: [number, number, number, number]
+  /* door only: the map this leads to */
   to: string
+  /* door only: WHICH anchor in that map you arrive at. Without it every door
+   * into a map drops the player on its single global spawn, so three connected
+   * rooms all land you on the same tile no matter which way you came in. */
+  toAnchor?: string
+  /* when set, this anchor follows that placement instead of holding still, so
+   * dragging an npc takes its post with it and the name survives the edit */
+  placement?: string
+  /* post only: the heading whatever stands here faces */
+  facing?: string
+  /* what a player reads. NOT the identity. */
+  label: string
+  /* author key/values a grape can read */
+  meta?: Record<string, unknown>
 }
 
-// an event from an older save: absent numbers fill in sane, absent strings
-// empty. Mutates and returns the same object, like migrateAsset.
-export function migrateEvent(e: MapEvent): MapEvent {
+/* Kept so nothing that still says MapEvent has to change. */
+export type MapEvent = MapAnchor
+
+/* A name that is legal to type in python. Also used to derive a starting point
+ * for a door that only ever had a label, which is every door made before
+ * anchors existed. */
+export function anchorName(s: string): string {
+  const n = String(s || '')
+    .toLowerCase()
+    .replace(/['’]/g, '')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    .replace(/^([0-9])/, 'a$1')
+    .slice(0, 48)
+  return n || 'anchor'
+}
+
+export const isAnchorName = (s: string) => /^[a-z][a-z0-9_]{0,47}$/.test(String(s))
+
+/* An anchor from an older save: absent numbers fill in sane, absent strings
+ * empty. Anything saved before anchors existed is a door with no name, so one
+ * is derived from its label and marked derived — code written against a
+ * derived name is code written against a guess, and the editor says so. */
+export function migrateEvent(e: MapAnchor & { type?: string }): MapAnchor {
   e.id = Number(e.id) > 0 ? Math.round(Number(e.id)) : 1
-  e.type = typeof e.type === 'string' && e.type ? e.type : 'door'
+  const legacy = typeof e.type === 'string' ? e.type : ''
+  e.kind = (ANCHOR_KINDS as string[]).includes(e.kind)
+    ? e.kind
+    : legacy === 'door' || !legacy
+      ? 'door'
+      : 'point'
   e.x = isFinite(Number(e.x)) ? Math.round(Number(e.x)) : 0
   e.y = isFinite(Number(e.y)) ? Math.round(Number(e.y)) : 0
   e.r = Number(e.r) > 0 ? Math.round(Number(e.r)) : 14
   e.label = typeof e.label === 'string' ? e.label : ''
   e.to = typeof e.to === 'string' ? e.to : ''
+  if (typeof e.toAnchor !== 'string' || !e.toAnchor) delete e.toAnchor
+  if (typeof e.placement !== 'string' || !e.placement) delete e.placement
+  if (typeof e.facing !== 'string' || !e.facing) delete e.facing
+  if (!isAnchorName(e.name)) {
+    e.name = anchorName(e.label || `${e.kind}_${e.id}`)
+    e.meta = { ...(e.meta || {}), derived: true }
+  }
+  delete (e as { type?: string }).type
   return e
 }
+
+export const migrateAnchor = migrateEvent
 
 export interface StairRegion {
   value: number

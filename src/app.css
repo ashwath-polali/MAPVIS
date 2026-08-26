@@ -3003,3 +3003,75 @@ footer [data-tip]:hover::after {
 .editall:hover {
   color: var(--ink, #e8e8ee);
 }
+
+/* ---- anchors: named places, the seam with the game and with python -------
+   The name is the identity and the label is only what a player reads, so the
+   form has to make that difference obvious rather than hiding two strings in
+   two identical boxes. */
+.anchfield {
+  display: grid;
+  gap: 3px;
+}
+.anchfield > span {
+  color: var(--dim);
+  font-size: 10.5px;
+  letter-spacing: 0.02em;
+}
+.anchfield input {
+  padding: 6px 9px;
+  font-size: 12px;
+}
+/* a name is code, so it is set in the mono face the rest of the tool uses for
+   anything a machine reads */
+.doorform .anchname {
+  font-family: var(--font-mono);
+  color: var(--acc);
+}
+.doorform .anchname.bad {
+  border-color: var(--warn, #d08a4a);
+}
+.anchwarn {
+  color: var(--warn, #d08a4a);
+  font-size: 10.5px;
+  line-height: 1.35;
+}
+.anchkinds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+.anchkinds .kbtn {
+  position: relative;
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--edge);
+  background: var(--panel);
+  color: var(--dim);
+  font-size: 10.5px;
+  transition: all 160ms ease;
+}
+.anchkinds .kbtn:hover {
+  border-color: var(--acc);
+  color: var(--ink);
+}
+.anchkinds .kbtn.on {
+  border-color: var(--acc);
+  background: color-mix(in srgb, var(--acc) 16%, var(--panel));
+  color: var(--ink);
+}
+.evrow .ev-name b {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  color: var(--ink);
+}
+/* a name nobody chose, derived from an old door's label. Underlined rather
+   than coloured red: it is not broken, it just has not been confirmed. */
+.evrow .ev-name b.guessed {
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+  color: var(--warn, #d08a4a);
+}
+.evrow .ev-name i {
+  font-style: normal;
+  color: var(--dim);
+}

@@ -262,6 +262,14 @@ to be the same requirement.
 
 ---
 
+## Known and deliberately parked
+
+**Export fidelity.** Some things in the hub do not come out of export looking the way they look in
+MAPVIS. Ash has a list from another session and is holding it until the platform work is done, which
+is the right call: it is an art-correctness problem, not a storage one, and nothing here depends on
+it. Publish makes it cheaper rather than more urgent, because a version is immutable, so the fix
+simply produces the next version and anything pinned to the old one is untouched.
+
 ## Open
 
 - Where a published bundle is served from once the game reads the platform: R2 behind a custom domain

@@ -55,12 +55,18 @@ norm(original.assets) === norm(roundTripped.assets)
   ? ok(`${original.assets.length} placements identical`)
   : no(`placements differ (${original.assets.length} in, ${roundTripped.assets?.length} out)`)
 
-// doors survive the trip through the anchors table in the shape the game reads
-const doorsIn = (original.events || []).filter((e) => e.type === 'door')
-const doorsOut = (roundTripped.events || []).filter((e) => e.type === 'door')
+// anchors survive the trip through the table. A document written before anchors
+// existed says type:'door'; one written since says kind, and both have to come
+// back as the same set of named places.
+const isDoor = (e) => e.kind === 'door' || e.type === 'door'
+const doorsIn = (original.events || []).filter(isDoor)
+const doorsOut = (roundTripped.events || []).filter(isDoor)
 doorsIn.length === doorsOut.length
-  ? ok(`${doorsIn.length} door(s): ${doorsOut.map((d) => `${d.label || '?'} -> ${d.to}`).join(', ') || 'none'}`)
+  ? ok(`${doorsIn.length} door(s): ${doorsOut.map((d) => `${d.name} -> ${d.to || '?'}`).join(', ') || 'none'}`)
   : no(`doors ${doorsIn.length} in, ${doorsOut.length} out`)
+doorsOut.every((d) => /^[a-z][a-z0-9_]*$/.test(d.name || ''))
+  ? ok('every anchor came back with a name code can address')
+  : no(`an anchor came back unnamed: ${JSON.stringify(doorsOut.map((d) => d.name))}`)
 
 // the whole point: saving the same thing twice must write nothing the second time
 const again = await putDoc(map.id, JSON.stringify(original))

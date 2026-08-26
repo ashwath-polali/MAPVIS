@@ -214,64 +214,97 @@ export async function getDoc(mapId) {
 // flagged derived:true. The editor shows those as needing confirmation rather
 // than pretending the author chose them, because a name a member writes python
 // against must be one a human actually picked.
-export async function syncEventsToAnchors(mapId, events) {
+/* The document is where an anchor is authored, because that is what rides undo,
+ * autosave and the browser copy. The table is the mirror the api queries, so
+ * python can ask what a map is called without downloading the map.
+ *
+ * Mirror means mirror: everything in the document is upserted by name, and any
+ * row the document no longer has is deleted. Anything else and a renamed or
+ * removed anchor lingers in the api forever. */
+export async function syncEventsToAnchors(mapId, anchors) {
   const { anchorName } = await import('./crypto.mjs')
   return tx(async (c) => {
-    const existing = (await c.query('select id, name, meta from anchors where map_id = $1', [mapId])).rows
-    const byLegacy = new Map(existing.filter((a) => a.meta?.legacyEventId != null).map((a) => [a.meta.legacyEventId, a]))
-    const taken = new Set(existing.map((a) => a.name))
-    let n = 0
+    const seen = new Set()
+    let touched = 0
 
-    for (const e of events) {
-      if (!e || !Number.isFinite(Number(e.x))) continue
-      const hit = byLegacy.get(Number(e.id))
-      if (hit) {
-        await c.query(
-          `update anchors set x=$2, y=$3, r=$4, to_slug=$5, label=$6 where id=$1
-           and (x,y,r,coalesce(to_slug,''),label) is distinct from ($2,$3,$4,coalesce($5,''),$6)`,
-          [hit.id, Math.round(e.x), Math.round(e.y), Math.round(e.r) || 14, e.to || null, e.label || ''],
-        )
-        continue
-      }
-      let name = anchorName(e.label || `${e.type || 'door'}_${e.id}`)
-      for (let i = 2; taken.has(name); i++) name = `${anchorName(e.label || 'door')}_${i}`.slice(0, 48)
-      taken.add(name)
-      await c.query(
-        `insert into anchors (map_id, name, kind, x, y, r, to_slug, label, meta)
-         values ($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb)`,
+    for (const a of anchors) {
+      if (!a || !Number.isFinite(Number(a.x))) continue
+      // a document written before anchors existed has a label and no name, so
+      // one is derived here and flagged, exactly as the editor would
+      const derived = !/^[a-z][a-z0-9_]{0,47}$/.test(String(a.name || ''))
+      const name = derived ? anchorName(a.label || `${a.kind || a.type || 'door'}_${a.id}`) : a.name
+      if (seen.has(name)) continue
+      seen.add(name)
+
+      const meta = { ...(a.meta || {}) }
+      if (derived) meta.derived = true
+      if (a.id != null) meta.docId = Number(a.id)
+
+      const r = await c.query(
+        `insert into anchors (map_id, name, kind, x, y, r, rect, to_slug, to_anchor, placement_id, facing, label, meta)
+         values ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10,$11,$12,$13::jsonb)
+         on conflict (map_id, name) do update set
+           kind=excluded.kind, x=excluded.x, y=excluded.y, r=excluded.r, rect=excluded.rect,
+           to_slug=excluded.to_slug, to_anchor=excluded.to_anchor, placement_id=excluded.placement_id,
+           facing=excluded.facing, label=excluded.label, meta=excluded.meta
+         where (anchors.kind, anchors.x, anchors.y, anchors.r, anchors.rect,
+                anchors.to_slug, anchors.to_anchor, anchors.placement_id,
+                anchors.facing, anchors.label, anchors.meta)
+           is distinct from
+               (excluded.kind, excluded.x, excluded.y, excluded.r, excluded.rect,
+                excluded.to_slug, excluded.to_anchor, excluded.placement_id,
+                excluded.facing, excluded.label, excluded.meta)
+         returning id`,
         [
           mapId,
           name,
-          e.type === 'door' ? 'door' : 'point',
-          Math.round(e.x),
-          Math.round(e.y),
-          Math.round(e.r) || 14,
-          e.to || null,
-          e.label || '',
-          JSON.stringify({ legacyEventId: Number(e.id), derived: true }),
+          ['point', 'region', 'door', 'post', 'spawn', 'trigger'].includes(a.kind) ? a.kind : 'door',
+          Math.round(a.x),
+          Math.round(a.y),
+          Math.round(a.r) || 14,
+          a.rect ? JSON.stringify(a.rect) : null,
+          a.to || null,
+          a.toAnchor || null,
+          a.placement || null,
+          a.facing || null,
+          a.label || '',
+          JSON.stringify(meta),
         ],
       )
-      n++
+      if (r.rowCount) touched++
     }
-    return n
+
+    const gone = await c.query(
+      seen.size
+        ? `delete from anchors where map_id = $1 and name <> all($2::text[]) returning name`
+        : `delete from anchors where map_id = $1 returning name`,
+      seen.size ? [mapId, [...seen]] : [mapId],
+    )
+    return touched + gone.rowCount
   })
 }
 
-// Doors go back out in the shape the game already reads, so no bundle that
-// works today stops working.
+/* Back out in the document's own shape. Every kind comes back, not only doors,
+ * because the editor holds the whole list. */
 export async function eventsFromAnchors(mapId) {
   const rows = await many(
-    `select name, kind, x, y, r, to_slug, to_anchor, label, meta
-     from anchors where map_id = $1 and kind = 'door' order by created_at`,
+    `select name, kind, x, y, r, rect, to_slug, to_anchor, placement_id, facing, label, meta
+     from anchors where map_id = $1 order by created_at`,
     [mapId],
   )
   return rows.map((a, i) => ({
-    id: a.meta?.legacyEventId ?? i + 1,
-    type: 'door',
+    id: a.meta?.docId ?? i + 1,
+    name: a.name,
+    kind: a.kind,
     x: a.x,
     y: a.y,
     r: a.r,
-    label: a.label || a.name,
+    ...(a.rect ? { rect: a.rect } : {}),
     to: a.to_slug || '',
+    ...(a.to_anchor ? { toAnchor: a.to_anchor } : {}),
+    ...(a.placement_id ? { placement: a.placement_id } : {}),
+    ...(a.facing ? { facing: a.facing } : {}),
+    label: a.label || '',
+    ...(a.meta && Object.keys(a.meta).length ? { meta: a.meta } : {}),
   }))
 }

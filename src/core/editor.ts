@@ -5,7 +5,25 @@
  * so a brush stroke never runs a render pass.
  */
 import { cleanLife, lifeAt, liveState, separate, type Life, type LifeAt, type LifeBounds } from './life'
-import { MaskDoc, PAL, colOf, nameOf, mkCanvas, bresenham, assetLabel, lookOf, migrateEvent, type Pt, type PlacedAsset, type MapEvent, type AssetLook } from './mask'
+import {
+  MaskDoc,
+  PAL,
+  colOf,
+  nameOf,
+  mkCanvas,
+  bresenham,
+  assetLabel,
+  lookOf,
+  migrateAnchor,
+  anchorName,
+  isAnchorName,
+  type Pt,
+  type PlacedAsset,
+  type MapEvent,
+  type MapAnchor,
+  type AnchorKind,
+  type AssetLook,
+} from './mask'
 import { Walker, canStand, checkReach, defaultCfg, type WalkCfg, type ReachResult } from './walk'
 import { savedScene, saveDoc, loadDoc, type LibItem } from '../api'
 
@@ -3125,29 +3143,137 @@ export class Editor {
     this.eventsVisible = on
     this.dirty = true
   }
-  addDoor(x: number, y: number): number {
+  /* A name nobody in this map has used. The suffix walk matches the one the
+   * library uses for a filename, so two anchors named the same way read the way
+   * two assets named the same way already do. */
+  freeAnchorName(want: string, exceptId = 0): string {
+    const base = anchorName(want)
+    const taken = new Set(this.doc.events.filter((e) => e.id !== exceptId).map((e) => e.name))
+    if (!taken.has(base)) return base
+    for (let i = 2; ; i++) if (!taken.has(`${base}_${i}`)) return `${base}_${i}`
+  }
+
+  addAnchor(kind: AnchorKind, x: number, y: number): number {
     this.doc.snap()
-    const e = migrateEvent({ id: this.doc.eventNext++, type: 'door', x, y, r: 14, label: '', to: '' })
+    const id = this.doc.eventNext++
+    const e = migrateAnchor({
+      id,
+      name: this.freeAnchorName(`${kind}_${id}`),
+      kind,
+      x,
+      y,
+      r: kind === 'door' ? 14 : 12,
+      label: '',
+      to: '',
+    })
     this.doc.events.push(e)
     this.touched()
-    this.say(`door at ${e.x}, ${e.y} · name it, aim it`)
+    this.say(`${kind} at ${e.x}, ${e.y} · give it a name code can use`)
     return e.id
   }
-  updateEvent(id: number, patch: Partial<Pick<MapEvent, 'label' | 'to' | 'r'>>) {
+
+  addDoor(x: number, y: number): number {
+    return this.addAnchor('door', x, y)
+  }
+
+  /* Renaming is the one edit that can break something outside this tool, so it
+   * is the one edit that refuses. An empty or illegal name is rejected rather
+   * than silently corrected, because a name quietly changed under an author is
+   * worse than a name they have to fix. A collision gets suffixed, the way the
+   * library does. */
+  renameAnchor(id: number, want: string): { ok: boolean; name?: string; why?: string } {
+    const e = this.doc.events.find((q) => q.id === id)
+    if (!e) return { ok: false, why: 'gone' }
+    const trimmed = String(want || '').trim()
+    if (!trimmed) return { ok: false, why: 'a name is required · code addresses this' }
+    const clean = anchorName(trimmed)
+    if (!isAnchorName(clean)) return { ok: false, why: 'letters, digits and underscores, starting with a letter' }
+    const free = this.freeAnchorName(clean, id)
+    e.name = free
+    // an author has now chosen it, so it is no longer a guess derived from a label
+    if (e.meta?.derived) {
+      const { derived: _drop, ...rest } = e.meta
+      e.meta = Object.keys(rest).length ? rest : undefined
+    }
+    this.touched()
+    return { ok: true, name: free, why: free !== clean ? `taken · saved as ${free}` : undefined }
+  }
+
+  updateEvent(
+    id: number,
+    patch: Partial<Pick<MapAnchor, 'label' | 'to' | 'r' | 'toAnchor' | 'kind' | 'facing' | 'placement'>>,
+  ) {
     const e = this.doc.events.find((q) => q.id === id)
     if (!e) return
     if (patch.label !== undefined) e.label = patch.label
     if (patch.to !== undefined) e.to = patch.to
     if (patch.r !== undefined) e.r = Math.max(4, Math.min(64, Math.round(patch.r)))
+    if (patch.kind !== undefined) e.kind = patch.kind
+    if (patch.toAnchor !== undefined) {
+      if (patch.toAnchor) e.toAnchor = patch.toAnchor
+      else delete e.toAnchor
+    }
+    if (patch.facing !== undefined) {
+      if (patch.facing) e.facing = patch.facing
+      else delete e.facing
+    }
+    if (patch.placement !== undefined) {
+      if (patch.placement) e.placement = patch.placement
+      else delete e.placement
+    }
     this.touched()
   }
+  updateAnchor = this.updateEvent.bind(this)
+
+  /* Bind an anchor to a placement so it moves with it. This is what "a name
+   * survives editing" has to mean in practice: coach_post is where the coach
+   * stands, and dragging the coach should take the post along rather than
+   * leaving a name pointing at bare ground. */
+  bindAnchor(id: number, placementId: string | null) {
+    const e = this.doc.events.find((q) => q.id === id)
+    if (!e) return
+    this.doc.snap()
+    if (placementId) {
+      const a = this.doc.assets.find((q) => q.id === placementId)
+      if (!a) return
+      e.placement = placementId
+      e.x = Math.round(a.x)
+      e.y = Math.round(a.y)
+      this.say(`${e.name} follows that placement now`)
+    } else {
+      delete e.placement
+      this.say(`${e.name} holds still`)
+    }
+    this.touched()
+  }
+
+  /* Every bound anchor pulled back onto the feet of the thing it follows. Cheap
+   * enough to run on any placement move, and it is what keeps the binding
+   * honest rather than decorative. */
+  syncBoundAnchors() {
+    let moved = 0
+    for (const e of this.doc.events) {
+      if (!e.placement) continue
+      const a = this.doc.assets.find((q) => q.id === e.placement)
+      if (!a) continue
+      const x = Math.round(a.x)
+      const y = Math.round(a.y)
+      if (e.x !== x || e.y !== y) {
+        e.x = x
+        e.y = y
+        moved++
+      }
+    }
+    return moved
+  }
+
   deleteEvent(id: number) {
     const i = this.doc.events.findIndex((q) => q.id === id)
     if (i < 0) return
     this.doc.snap()
     const [e] = this.doc.events.splice(i, 1)
     this.touched()
-    this.say(`removed ${e.label || 'door'} · z undoes`)
+    this.say(`removed ${e.name || e.label || 'anchor'} · z undoes`)
   }
   clearMask() {
     this.doc.clear()
@@ -3271,7 +3397,25 @@ export class Editor {
         occluders: this.doc.occs.map((o) => ({ id: o.id, baseline: o.baseline })),
         // the events contract: a spot plus an action. A reader that does not
         // know a type skips it; a bundle without the field means none.
-        events: this.doc.events.map((e) => ({ id: e.id, type: e.type, x: e.x, y: e.y, r: e.r, label: e.label, to: e.to })),
+        // BOTH shapes ship. anchors[] is the contract the api and python read;
+        // events[] is what the game reads today and stays door-only in the
+        // exact shape it already parses, so nothing that works stops working.
+        anchors: this.doc.events.map((e) => ({
+          name: e.name,
+          kind: e.kind,
+          x: e.x,
+          y: e.y,
+          r: e.r,
+          ...(e.rect ? { rect: e.rect } : {}),
+          ...(e.to ? { to: e.to } : {}),
+          ...(e.toAnchor ? { toAnchor: e.toAnchor } : {}),
+          ...(e.facing ? { facing: e.facing } : {}),
+          ...(e.label ? { label: e.label } : {}),
+          ...(e.meta && Object.keys(e.meta).length ? { meta: e.meta } : {}),
+        })),
+        events: this.doc.events
+          .filter((e) => e.kind === 'door')
+          .map((e) => ({ id: e.id, type: 'door', x: e.x, y: e.y, r: e.r, label: e.label || e.name, to: e.to })),
       },
     }
   }
@@ -3537,9 +3681,16 @@ export class Editor {
         if (s.occluders && s.map && s.map.occluders && s.map.occluders.length)
           this.doc.importOccluders(await loadImage(s.occluders), s.map.occluders)
         if (s.map && s.map.spawn) this.doc.spawn = s.map.spawn
-        // the exported events come back too, so a reopened map keeps its doors
-        if (s.map && Array.isArray(s.map.events)) {
-          this.doc.events = s.map.events.map((e) => migrateEvent({ ...e } as MapEvent))
+        /* The exported names come back too, so a reopened map keeps them.
+         * anchors[] first because it is the richer shape and carries the
+         * author-typed name; a bundle exported before anchors existed only has
+         * events[], and those migrate into doors with a derived name. */
+        const exported = (s.map as { anchors?: unknown[]; events?: unknown[] } | undefined) || {}
+        const list = Array.isArray(exported.anchors) ? exported.anchors : exported.events
+        if (Array.isArray(list) && list.length) {
+          this.doc.events = list.map((e, i) =>
+            migrateAnchor({ id: i + 1, ...(e as object) } as MapAnchor & { type?: string }),
+          )
           this.doc.eventNext = this.doc.events.reduce((m, e) => Math.max(m, e.id), 0) + 1
         }
         got = true
