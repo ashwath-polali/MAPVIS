@@ -1,0 +1,775 @@
+/* The signed-in pages: the desk, the shelf, one map, the atlas, the account. */
+
+/* every page arrives the way a sheet is laid down, not by fading in */
+.page-in {
+  animation: lay 620ms var(--ease-paper) both;
+}
+@keyframes lay {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.995);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .page-in {
+    animation: none;
+  }
+}
+
+/* ---- waiting: ink into paper, never a spinner ---------------------------- */
+
+.inkwait {
+  display: grid;
+  place-items: center;
+  gap: 18px;
+  min-height: 46vh;
+  padding: 60px 0;
+}
+.inkblot {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: radial-gradient(circle, var(--gold) 0%, var(--gold-deep) 45%, transparent 70%);
+  animation: bleed 1.9s var(--ease-paper) infinite;
+}
+@keyframes bleed {
+  0% {
+    transform: scale(0.3);
+    opacity: 0.15;
+  }
+  55% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  100% {
+    transform: scale(1.35);
+    opacity: 0;
+  }
+}
+
+/* ---- the desk: sign in and sign up --------------------------------------- */
+
+.enter {
+  position: relative;
+  min-height: 100svh;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: var(--vellum);
+  /* real paper is not one colour */
+  background-image:
+    radial-gradient(120% 90% at 20% 10%, #f2e7cf 0%, transparent 55%),
+    radial-gradient(100% 80% at 85% 90%, #cbb894 0%, transparent 60%);
+}
+.lamp {
+  position: absolute;
+  inset: -30%;
+  pointer-events: none;
+  background: radial-gradient(38% 34% at 50% 40%, rgba(255, 236, 190, 0.65), transparent 70%);
+  mix-blend-mode: multiply;
+  opacity: 0.55;
+}
+.enter-back {
+  position: absolute;
+  top: 26px;
+  left: clamp(20px, 5vw, 56px);
+  z-index: 3;
+  color: var(--dim-on-paper);
+  font-size: 13px;
+  text-decoration: none;
+}
+.enter-desk {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: 1.05fr 0.95fr;
+  align-items: center;
+  gap: clamp(30px, 6vw, 80px);
+  width: min(1060px, 100% - 10vw);
+  padding: 60px 0;
+}
+@media (max-width: 900px) {
+  .enter-desk {
+    grid-template-columns: 1fr;
+  }
+  .desk-art {
+    display: none;
+  }
+}
+.desk-art {
+  aspect-ratio: 4 / 5;
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--iron) 22%, transparent);
+  background: color-mix(in srgb, var(--vellum-2) 60%, transparent);
+  box-shadow: 0 30px 70px -40px rgba(40, 30, 12, 0.7);
+  rotate: -1.2deg;
+}
+.desk-art .realm-await {
+  color: var(--iron-soft);
+  border-color: color-mix(in srgb, var(--iron) 26%, transparent);
+}
+.enter-sheet {
+  max-width: 42ch;
+}
+.sheet-head .d3 {
+  margin: 10px 0 12px;
+}
+.sheet-form {
+  display: grid;
+  gap: 26px;
+  margin: 34px 0 22px;
+}
+
+/* a field is a label over a LINE, not a box. A box is a form control; a line is
+   somewhere to write. */
+.wfield {
+  display: grid;
+  gap: 6px;
+}
+.wfield input {
+  font: 400 16px var(--font-label);
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, currentColor 28%, transparent);
+  padding: 8px 2px;
+  outline: none;
+  transition: border-color var(--t) var(--ease-paper);
+}
+.wfield input:focus {
+  border-color: var(--gold-deep);
+}
+.paper .wfield input:focus {
+  border-color: var(--iron);
+}
+.wfield-hint {
+  font-size: 12px;
+  color: var(--dim);
+}
+.wax {
+  color: var(--wax);
+  font-size: 13px;
+  margin: 0;
+}
+.sheet-foot {
+  padding-top: 18px;
+  border-top: 1px solid color-mix(in srgb, var(--iron) 14%, transparent);
+}
+.asbtn {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.paper .plate {
+  --plate-ink: var(--iron);
+  border-color: color-mix(in srgb, var(--iron) 40%, transparent);
+}
+.paper .plate::before {
+  background: var(--iron);
+}
+.paper .plate:hover {
+  color: var(--vellum);
+}
+
+/* ---- the shelf: my maps --------------------------------------------------- */
+
+.shelf-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 30px;
+  flex-wrap: wrap;
+  padding-bottom: 26px;
+}
+.shelf-head .d2 {
+  margin-top: 12px;
+}
+.plates {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: clamp(26px, 3.4vw, 48px);
+  padding-top: 44px;
+}
+.mplate-art {
+  display: block;
+}
+.mplate-frame {
+  aspect-ratio: 16 / 11;
+  transition:
+    transform var(--t) var(--ease-paper),
+    box-shadow var(--t) var(--ease-paper);
+}
+.mplate-frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  image-rendering: pixelated;
+  display: block;
+}
+.mplate-art:hover .mplate-frame {
+  transform: translateY(-5px);
+  box-shadow: 0 40px 90px -40px #000;
+  border-color: var(--gold);
+}
+.mplate-unpub {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+.mplate-say {
+  padding-top: 16px;
+}
+.mplate-say .d3 {
+  margin: 0;
+}
+.mplate-say .d3 a {
+  color: inherit;
+  text-decoration: none;
+}
+.mplate-slug {
+  color: var(--dim);
+  font-size: 10.5px;
+  margin-top: 4px;
+}
+.facts {
+  display: flex;
+  gap: 22px;
+  flex-wrap: wrap;
+  margin: 16px 0 14px;
+}
+.fact dt {
+  font-size: 9px;
+}
+.fact dd {
+  margin: 3px 0 0;
+  font-size: 14px;
+  color: var(--ink);
+}
+.fact.gold dd {
+  color: var(--gold-lit);
+}
+.mplate-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: var(--rule);
+  font-size: 12px;
+}
+.dimmed {
+  color: var(--dim);
+  font-size: 12px;
+}
+
+/* a status pip: a small filled mark, not a coloured pill */
+.pip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: var(--font-label);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.pip::before {
+  content: '';
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+}
+.pip.live {
+  color: var(--verdigris);
+}
+.pip.live::before {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--verdigris) 22%, transparent);
+}
+.pip.idle {
+  color: var(--dim);
+}
+
+.empty {
+  display: grid;
+  grid-template-columns: 0.8fr 1fr;
+  gap: clamp(28px, 5vw, 64px);
+  align-items: center;
+  padding: 60px 0;
+}
+@media (max-width: 800px) {
+  .empty {
+    grid-template-columns: 1fr;
+  }
+}
+.empty-art {
+  aspect-ratio: 4 / 3;
+  display: grid;
+  place-items: center;
+  border: 1px dashed color-mix(in srgb, var(--gold) 22%, transparent);
+}
+.empty .d3 {
+  margin: 0 0 12px;
+}
+.empty .plate {
+  margin-top: 22px;
+}
+
+/* ---- one map -------------------------------------------------------------- */
+
+.map-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 26px;
+  flex-wrap: wrap;
+  padding-bottom: 24px;
+}
+.map-head .d2 {
+  margin: 12px 0 8px;
+}
+.map-meta {
+  color: var(--dim);
+  font-size: 10.5px;
+}
+.map-acts {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* the walk stage */
+.walk {
+  margin: 40px 0 20px;
+}
+.walk-stage {
+  position: relative;
+  /* 16/9 is a video shape and a map is not a video. Islands come out near
+     square, so a wide letterbox wasted the sides and clipped the bottom. */
+  aspect-ratio: 16 / 10;
+  max-height: 76svh;
+  display: grid;
+  place-items: center;
+  background: var(--void);
+  border: 1px solid color-mix(in srgb, var(--gold) 26%, transparent);
+  clip-path: polygon(16px 0, 100% 0, 100% calc(100% - 16px), calc(100% - 16px) 100%, 0 100%, 0 16px);
+  outline: none;
+  overflow: hidden;
+}
+.walk-stage:focus-visible {
+  border-color: var(--gold);
+}
+.walk-canvas {
+  image-rendering: pixelated;
+  max-width: 100%;
+  max-height: 100%;
+}
+.walk-start {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  background: none;
+  border: 0;
+  color: var(--ink);
+  cursor: pointer;
+  padding: 30px;
+}
+.walk-tri {
+  width: 0;
+  height: 0;
+  border-left: 22px solid var(--gold);
+  border-top: 14px solid transparent;
+  border-bottom: 14px solid transparent;
+  transition: transform var(--t) var(--ease-paper);
+}
+.walk-start:hover .walk-tri {
+  transform: scale(1.18);
+}
+.walk-load {
+  color: var(--dim);
+}
+.walk-bar {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding-top: 12px;
+  font-size: 10.5px;
+  color: var(--dim);
+}
+.walk-near.on {
+  color: var(--gold-lit);
+}
+
+.map-cols {
+  display: grid;
+  grid-template-columns: 0.85fr 1.15fr;
+  gap: clamp(26px, 4vw, 56px);
+  padding: 50px 0;
+}
+@media (max-width: 900px) {
+  .map-cols {
+    grid-template-columns: 1fr;
+  }
+}
+.anchlist {
+  list-style: none;
+  margin: 20px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 2px;
+}
+.anchlist li {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--gold) 10%, transparent);
+}
+.anchname {
+  color: var(--gold-lit);
+  font-size: 12px;
+}
+.anchname.guessed {
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+.anchkind {
+  font-size: 9px;
+}
+.anchto {
+  color: var(--dim);
+  font-size: 10.5px;
+  margin-left: auto;
+}
+.anchwarn2 {
+  color: var(--wax);
+  font-size: 9px;
+}
+
+.codebox-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.codelet.big {
+  font-size: 12px;
+  padding: 26px 28px;
+  line-height: 1.9;
+}
+.codebox-note {
+  margin-top: 16px;
+  font-size: 0.95rem;
+}
+
+/* the filmstrip */
+.strip {
+  padding: 40px 0 10px;
+  border-top: var(--rule);
+}
+.strip-rail {
+  display: flex;
+  gap: 14px;
+  overflow-x: auto;
+  padding: 22px 0 16px;
+  scroll-snap-type: x mandatory;
+}
+.strip-cell {
+  position: relative;
+  flex: none;
+  width: 170px;
+  display: grid;
+  gap: 8px;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  scroll-snap-align: start;
+  opacity: 0.55;
+  transition: opacity var(--t) var(--ease-paper);
+}
+.strip-cell:hover,
+.strip-cell.on {
+  opacity: 1;
+}
+.strip-cell img {
+  width: 100%;
+  aspect-ratio: 16 / 11;
+  object-fit: cover;
+  image-rendering: pixelated;
+  border: 1px solid color-mix(in srgb, var(--gold) 20%, transparent);
+  display: block;
+}
+.strip-cell.on img {
+  border-color: var(--gold);
+}
+.strip-cell .mono {
+  font-size: 10px;
+  color: var(--dim);
+}
+.strip-cell .pip {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  font-size: 8px;
+}
+
+/* ---- the atlas ------------------------------------------------------------ */
+
+.atlas-head {
+  max-width: 62ch;
+  padding-bottom: 30px;
+}
+.atlas-title {
+  font-size: clamp(2.4rem, 6vw, 5rem);
+  margin: 16px 0 20px;
+}
+.wall {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: clamp(24px, 3vw, 44px);
+  padding-top: 50px;
+  align-items: start;
+}
+.hung {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
+.hung-frame {
+  aspect-ratio: 4 / 3;
+}
+.hung-frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  image-rendering: pixelated;
+  display: block;
+  transition: transform 900ms var(--ease-out);
+}
+.hung:hover .hung-frame img {
+  transform: scale(1.04);
+}
+.hung-veil {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(0deg, color-mix(in srgb, var(--void) 70%, transparent), transparent 45%);
+  opacity: 0.9;
+  transition: opacity var(--t) var(--ease-paper);
+}
+.hung:hover .hung-veil {
+  opacity: 0.4;
+}
+.hung-say {
+  padding-top: 14px;
+}
+.hung-say .d3 {
+  margin: 0;
+}
+.hung-meta {
+  color: var(--dim);
+  font-size: 10px;
+  margin-top: 5px;
+}
+
+/* ---- the account ---------------------------------------------------------- */
+
+.acct header .d2 {
+  margin: 12px 0 6px;
+}
+.routing {
+  padding: 40px 0;
+}
+.rtable {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 20px;
+}
+.rtable td {
+  padding: 13px 14px 13px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--gold) 10%, transparent);
+  vertical-align: middle;
+  font-size: 14px;
+}
+.rtable td:first-child {
+  width: 26px;
+}
+.rtable tr.off td:nth-child(2) {
+  color: var(--dim);
+}
+.rtable .aside {
+  font-size: 0.9rem;
+}
+.rtable .gold {
+  color: var(--gold-lit);
+}
+
+.acct-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: clamp(26px, 4vw, 56px);
+  padding: 30px 0 50px;
+}
+@media (max-width: 860px) {
+  .acct-cols {
+    grid-template-columns: 1fr;
+  }
+}
+.prov {
+  padding: 26px 0 0;
+  border-top: var(--rule);
+}
+.prov-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+.prov-head .d3 {
+  margin: 0;
+}
+.prov-modes {
+  display: flex;
+  gap: 6px;
+  margin: 20px 0 16px;
+  flex-wrap: wrap;
+}
+.kbtn2 {
+  padding: 8px 14px;
+  font-family: var(--font-label);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: var(--dim);
+  background: none;
+  border: 1px solid color-mix(in srgb, var(--ink) 16%, transparent);
+  cursor: pointer;
+  transition: all var(--t-fast) var(--ease-paper);
+}
+.kbtn2:hover:not(:disabled) {
+  color: var(--ink);
+  border-color: var(--gold);
+}
+.kbtn2.on {
+  color: var(--void);
+  background: var(--gold);
+  border-color: var(--gold);
+}
+.kbtn2:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.prov-held {
+  margin: 0 0 16px;
+  font-size: 0.9rem;
+}
+.prov .wfield {
+  margin-bottom: 14px;
+}
+
+.relays,
+.ledger {
+  padding: 40px 0;
+  border-top: var(--rule);
+}
+.relaylist {
+  list-style: none;
+  padding: 0;
+  margin: 22px 0;
+  display: grid;
+  gap: 2px;
+}
+.relaylist li {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 12px 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--gold) 10%, transparent);
+  font-size: 13px;
+}
+.relaylist .dimmed {
+  margin-left: auto;
+}
+.minted {
+  margin: 22px 0;
+  padding: 20px 22px;
+  border-left: 2px solid var(--gold);
+  background: color-mix(in srgb, var(--void) 60%, #000);
+}
+.minted code {
+  display: block;
+  margin: 10px 0;
+  word-break: break-all;
+  color: var(--gold-lit);
+  font-size: 11px;
+}
+.ledger-total {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding-top: 16px;
+  font-size: 13px;
+  color: var(--dim);
+}
+.gold {
+  color: var(--gold-lit);
+}
+
+/* ---- not on the chart ------------------------------------------------------ */
+
+.lost {
+  min-height: 74svh;
+  display: grid;
+  align-content: center;
+  gap: 18px;
+  justify-items: start;
+}
+.lost .d1,
+.lost .d2 {
+  margin: 6px 0;
+}
+.lost .plate {
+  margin-top: 14px;
+}
+
+/* the walk canvas lives in its own patch of dom, so it must fill the stage
+   without react ever laying anything out inside it */
+.walk-mount {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  /* it covers the whole stage, so while it is empty it would swallow the click
+     on the start button sitting behind it. The canvas inside takes events back. */
+  pointer-events: none;
+}
+.walk-mount > canvas {
+  pointer-events: auto;
+}
+
+/* a panel that failed, saying so, instead of a blank page */
+.broke {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+  padding: 40px clamp(20px, 5vw, 56px);
+  color: var(--ink-on-sea);
+  background: var(--void);
+  min-height: 40vh;
+  align-content: center;
+}
+.broke .aside {
+  color: var(--wax);
+}

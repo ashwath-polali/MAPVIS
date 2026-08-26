@@ -1,0 +1,398 @@
+/* MAPVIS, the platform.
+ *
+ * THE IDEA: the site is not a page with maps on it. It is a chart you travel
+ * across. Scrolling is exploration, the nav is a compass, loading is ink
+ * spreading into paper, and every surface is either the night sea you are
+ * sailing or the vellum you are drawing on. A tool for making maps should feel
+ * like one, and nothing about that reads as a template.
+ *
+ * WHAT IT REFUSES, on purpose, because these are the tells:
+ *   no centred hero over a purple gradient
+ *   no three feature cards in a row
+ *   no glassmorphic floating panels
+ *   no Inter, no Poppins, no Montserrat
+ *   no "Get Started"
+ *   nothing perfectly symmetrical
+ *
+ * Art comes from PixelLab. This file draws no pictures; it holds the surface,
+ * the type, the light and the motion, and gets out of the way.
+ */
+
+/* ---- type -----------------------------------------------------------------
+ * Fraunces is an old-style serif with a WONK axis and real optical sizing, so a
+ * headline can be genuinely strange at 90px and stay readable at 14. It is the
+ * engraved title on a chart.
+ *
+ * Archivo Narrow is the label face for the same reason cartographers used
+ * condensed type: names have to fit between a coastline and a mountain.
+ *
+ * Martian Mono is the technical voice. It is what a coordinate, an anchor name
+ * and a line of a member's python are set in, and it is deliberately odd enough
+ * that code never reads as body text.
+ */
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght,SOFT,WONK@0,9..144,300..900,0..100,0..1;1,9..144,300..900,0..100,0..1&family=Archivo+Narrow:ital,wght@0,400..700;1,400..700&family=Martian+Mono:wght@300..700&display=swap');
+
+:root {
+  /* ---- the sea, the paper, and the light --------------------------------
+   * Two worlds. You are either out on the water at dusk, or at the desk with
+   * a lamp on. Every page is one or the other and never a blend, which is what
+   * keeps the whole thing from turning into grey product design.
+   */
+  --void: #070b11; /* deepest night water */
+  --depth: #0c1420; /* the sea */
+  --shoal: #14202e; /* shallows, raised surfaces */
+  --mist: #1d2c3c; /* edges out on the water */
+
+  --vellum: #e6d9be; /* aged paper */
+  --vellum-2: #d8c8a6; /* paper in shadow */
+  --iron: #1a1611; /* iron gall ink */
+  --iron-soft: #4a4136; /* ink, thinned */
+
+  /* Gold is the accent everywhere, and it is chosen the same way the editor
+     chose its iris: it is a hue a MAP never contains. Painted islands are
+     green, sand, stone and water; a gold line always means the tool talking. */
+  --gold: #d4a53c;
+  --gold-lit: #f0c869;
+  --gold-deep: #8a6a1f;
+  --gold-soft: #d4a53c22;
+
+  --verdigris: #4f9b84; /* aged copper: a thing that is alive or working */
+  --wax: #b04a2f; /* sealing wax: a warning, a refusal */
+
+  --ink-on-sea: #d8e3ee;
+  --dim-on-sea: #7d8ea1;
+  --ink-on-paper: var(--iron);
+  --dim-on-paper: #6b5f4e;
+
+  --font-display: 'Fraunces', 'Iowan Old Style', Georgia, serif;
+  --font-label: 'Archivo Narrow', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'Martian Mono', ui-monospace, Consolas, monospace;
+
+  /* Motion. Nothing bounces. A chart moves the way a heavy sheet of paper
+     moves: it resists, then settles, and it never overshoots. */
+  --ease-paper: cubic-bezier(0.22, 0.61, 0.24, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --t-fast: 180ms;
+  --t: 340ms;
+  --t-slow: 900ms;
+
+  --rule: 1px solid color-mix(in srgb, var(--gold) 22%, transparent);
+  --rule-paper: 1px solid color-mix(in srgb, var(--iron) 18%, transparent);
+}
+
+/* ---- the page ------------------------------------------------------------ */
+
+.site {
+  --ink: var(--ink-on-sea);
+  --dim: var(--dim-on-sea);
+  min-height: 100%;
+  background: var(--void);
+  color: var(--ink);
+  font: 400 16px/1.6 var(--font-label);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* The hero chart is rotated and hangs off the right edge on purpose, which is
+   what stops the composition sitting in a neat box. overflow-x on .site does
+   nothing about it, because the BODY is the scroll container, so the clip has
+   to go there. `clip` rather than `hidden` so position:fixed children, which is
+   the compass, are not turned into a new containing block. */
+body[data-view='site'] {
+  overflow-x: clip;
+}
+
+/* a surface at the desk rather than out at sea. Auth and the code view use it,
+   and the switch is total: paper takes ink-coloured text, its own rules, its
+   own shadows. */
+.paper {
+  --ink: var(--ink-on-paper);
+  --dim: var(--dim-on-paper);
+  background: var(--vellum);
+  color: var(--ink);
+}
+
+/* THE GRAIN. One tiny tiling noise, at very low opacity, over everything.
+   It is the single cheapest thing that stops a dark screen looking like a
+   CSS gradient, because real paper and real water are never flat. */
+.grain::after {
+  content: '';
+  position: fixed;
+  inset: -50%;
+  pointer-events: none;
+  z-index: 9999;
+  opacity: 0.16;
+  background-image: var(--grain-url);
+  background-size: 180px 180px;
+  mix-blend-mode: overlay;
+  animation: grain-drift 8s steps(6) infinite;
+}
+@keyframes grain-drift {
+  0% { transform: translate(0, 0); }
+  16% { transform: translate(-2%, 1%); }
+  33% { transform: translate(1%, -2%); }
+  50% { transform: translate(-1%, -1%); }
+  66% { transform: translate(2%, 1%); }
+  83% { transform: translate(-2%, 2%); }
+  100% { transform: translate(0, 0); }
+}
+
+/* ---- type scale ---------------------------------------------------------- */
+
+.d1,
+.d2,
+.d3 {
+  font-family: var(--font-display);
+  font-weight: 400;
+  line-height: 0.95;
+  letter-spacing: -0.02em;
+  margin: 0;
+  /* the WONK axis is what makes this face look drawn rather than set */
+  font-variation-settings: 'SOFT' 20, 'WONK' 1;
+}
+.d1 {
+  font-size: clamp(3rem, 9vw, 7.5rem);
+  font-variation-settings: 'SOFT' 30, 'WONK' 1, 'opsz' 144;
+}
+.d2 {
+  font-size: clamp(2rem, 4.5vw, 3.6rem);
+}
+.d3 {
+  font-size: clamp(1.35rem, 2.2vw, 1.9rem);
+}
+
+/* A LABEL, the way a chart labels a bay: small, spaced, and never shouting.
+   Used for every eyebrow, every section marker, every field name. */
+.label {
+  font-family: var(--font-label);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--dim);
+}
+.mono {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: -0.02em;
+}
+.lede {
+  font-size: clamp(1.05rem, 1.5vw, 1.3rem);
+  line-height: 1.5;
+  color: var(--dim);
+  max-width: 46ch;
+}
+
+/* an italic serif aside, the way a cartouche carries a note in the corner */
+.aside {
+  font-family: var(--font-display);
+  font-style: italic;
+  font-size: 1.05rem;
+  color: var(--dim);
+  font-variation-settings: 'SOFT' 40, 'WONK' 1;
+}
+
+/* ---- the rule and the mark ----------------------------------------------- */
+
+/* a hairline that fades at both ends, the way an engraved border does */
+.hair {
+  height: 1px;
+  border: 0;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--gold) 40%, transparent) 18%, color-mix(in srgb, var(--gold) 40%, transparent) 82%, transparent);
+}
+
+/* the survey tick every section is pinned to. Not a bullet, a benchmark. */
+.tick {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+.tick::before {
+  content: '';
+  width: 22px;
+  height: 1px;
+  background: var(--gold);
+  flex: none;
+}
+
+/* ---- links and buttons ---------------------------------------------------
+ * No pills. A button here is an engraved plate or a line of type with a rule
+ * under it that draws itself on hover.
+ */
+
+.plate {
+  --plate-ink: var(--gold-lit);
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 13px 26px;
+  font-family: var(--font-label);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--plate-ink);
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--gold) 45%, transparent);
+  cursor: pointer;
+  overflow: hidden;
+  transition: color var(--t-fast) var(--ease-paper), border-color var(--t-fast) var(--ease-paper);
+  /* the corners are notched, like a brass plate screwed to a case */
+  clip-path: polygon(7px 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%, 0 7px);
+}
+/* gold floods in from the left rather than the whole thing changing colour */
+.plate::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--gold);
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform var(--t) var(--ease-paper);
+  z-index: -1;
+}
+.plate:hover {
+  color: var(--void);
+  border-color: var(--gold);
+}
+.plate:hover::before {
+  transform: scaleX(1);
+}
+.plate:active {
+  transform: translateY(1px);
+}
+.plate.quiet {
+  border-color: color-mix(in srgb, var(--ink) 22%, transparent);
+  --plate-ink: var(--ink);
+}
+.plate.quiet:hover {
+  color: var(--void);
+}
+
+/* a text link that draws its own rule, left to right */
+.ul {
+  position: relative;
+  color: inherit;
+  text-decoration: none;
+  padding-bottom: 2px;
+}
+.ul::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 1px;
+  background: currentColor;
+  transform: scaleX(0);
+  transform-origin: right;
+  transition: transform var(--t) var(--ease-paper);
+}
+.ul:hover::after {
+  transform: scaleX(1);
+  transform-origin: left;
+}
+
+/* ---- motion primitives ---------------------------------------------------
+ * Scroll-driven, no library. The whole site's reactivity is these three rules
+ * plus pointer parallax, which is a few lines of javascript that only writes
+ * custom properties and never touches layout.
+ */
+
+/* Something that resolves as it comes into view, the way land does out of fog.
+ *
+ * TWO SELECTORS, and the second one is the whole point: the observer watches
+ * the SECTION, not every line inside it, because a hundred observers on one
+ * page is a hundred callbacks per scroll. So a .rise lifts either when it is
+ * itself seen, or when any ancestor has been. Writing only the first is how
+ * every line of copy on the landing page rendered at opacity 0. */
+.rise {
+  opacity: 0;
+  transform: translateY(28px);
+  transition:
+    opacity var(--t-slow) var(--ease-out),
+    transform var(--t-slow) var(--ease-out);
+}
+.rise.seen,
+.seen .rise {
+  opacity: 1;
+  transform: none;
+}
+/* stagger by declaring an index rather than writing a rule per child */
+.rise[style*='--i'] {
+  transition-delay: calc(var(--i) * 90ms);
+}
+
+/* a line that draws itself across as its section arrives */
+.draw {
+  transform: scaleX(0);
+  transform-origin: left;
+  transition: transform 1.2s var(--ease-paper);
+}
+.draw.seen,
+.seen .draw {
+  transform: scaleX(1);
+}
+
+/* pointer parallax: --px and --py are written by usePointer and are -1..1 */
+.par {
+  transform: translate3d(calc(var(--px, 0) * var(--par, 12px)), calc(var(--py, 0) * var(--par, 12px)), 0);
+  transition: transform 900ms var(--ease-out);
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rise,
+  .draw,
+  .par {
+    transition: none;
+    transform: none;
+    opacity: 1;
+  }
+  .grain::after {
+    animation: none;
+  }
+}
+
+/* ---- the cursor ----------------------------------------------------------
+ * A survey reticle rather than an arrow, drawn as an svg data url so it costs
+ * no request. It is the first thing anybody notices and the cheapest signal
+ * that this was made by somebody rather than assembled.
+ */
+.site,
+.site button,
+.site a {
+  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28'%3E%3Cg fill='none' stroke='%23d4a53c' stroke-width='1.25'%3E%3Ccircle cx='14' cy='14' r='6.5'/%3E%3Cpath d='M14 1v6M14 21v6M1 14h6M21 14h6'/%3E%3C/g%3E%3Ccircle cx='14' cy='14' r='1.1' fill='%23f0c869'/%3E%3C/svg%3E")
+      14 14,
+    crosshair;
+}
+
+/* ---- shared layout ------------------------------------------------------- */
+
+.wrap {
+  width: min(1240px, 100% - 10vw);
+  margin-inline: auto;
+}
+/* Asymmetric on purpose. A centred column with everything stacked in it is the
+   single loudest tell, so content sits on a 12 column field and is placed. */
+.field {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 24px;
+}
+@media (max-width: 860px) {
+  .field {
+    grid-template-columns: 1fr;
+  }
+  .field > * {
+    grid-column: 1 !important;
+  }
+}
+
+/* Air between sections, but not a hallway. 170px top and bottom put 340px of
+   nothing between two legs whose art is already tall, which reads as a page
+   that has run out of things to say rather than as breathing room. */
+.sec {
+  position: relative;
+  padding: clamp(64px, 8vh, 110px) 0;
+}

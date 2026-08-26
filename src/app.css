@@ -39,18 +39,32 @@
 * {
   box-sizing: border-box;
 }
-html,
-body,
-#root {
-  height: 100%;
-}
 body {
   margin: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* THE TOOL OWNS THE WINDOW. THE SITE DOES NOT.
+ *
+ * These were bare html/body rules, which was right when this file was the only
+ * stylesheet and the editor was the only screen. A landing page and a dashboard
+ * now share the document, and a locked 100% height with hidden overflow makes a
+ * page that cannot scroll.
+ *
+ * Shell writes data-view onto the body, so the tool keeps exactly the surface it
+ * always had and nothing else inherits it. */
+body[data-view='editor'] {
+  height: 100%;
   background: var(--bg);
   color: var(--ink);
   font: 13px/1.5 var(--font-ui);
   overflow: hidden;
-  -webkit-font-smoothing: antialiased;
+}
+body[data-view='editor'] > #root {
+  height: 100%;
+}
+html:has(body[data-view='editor']) {
+  height: 100%;
 }
 button {
   font: inherit;
