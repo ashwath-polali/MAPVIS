@@ -110,8 +110,29 @@ await putDoc(map.id, JSON.stringify(original))
     const back = await store().get(keys.libStill(map.id, name))
     Buffer.compare(back, png) === 0 ? ok('its bytes round-tripped through object storage') : no('its bytes came back different')
 
+    // an in-place edit keeps the old pixels, and putting them back must work on
+    // a machine that never saw the edit, which is the whole reason .prev alone
+    // was not enough
+    const { snapshotVersion, restoreVersion, versionsOf } = await import('../store/platform.mjs')
+    const snap = await snapshotVersion(slug, name)
+    snap ? ok(`kept version ${snap.seq} of it (${snap.files} file)`) : no('nothing was kept')
+
+    // overwrite it the way an edit does, with different pixels
+    const edited = encodePNG(4, 3, Buffer.alloc(4 * 3 * 4, 40))
+    fs.writeFileSync(file, edited)
+    await pushItem(slug, name, path.join(WORK, slug))
+    const now = await store().get(keys.libStill(map.id, name))
+    Buffer.compare(now, edited) === 0 ? ok('the edit landed over it') : no('the edit did not land')
+
+    const undone = await restoreVersion(slug, name)
+    const after = await store().get(keys.libStill(map.id, name))
+    undone && Buffer.compare(after, png) === 0
+      ? ok('undo put the original pixels back, out of the store rather than off this disk')
+      : no('undo did not restore the original bytes')
+
     await dropItem(slug, name)
     ;(await libraryOf(slug)).some((i) => i.name === name) ? no('a deleted asset still lists') : ok('deleting it removed it from both stores')
+    ;(await versionsOf(slug, name)).length === 0 ? ok('and took its kept versions with it') : no('kept versions outlived the item')
   } finally {
     fs.rmSync(file, { force: true })
   }

@@ -6,7 +6,7 @@
 // of object storage now. Keeping the old shape is what lets the whole backend
 // move without touching 17,000 lines of client, and it is why the placement
 // urls already sitting inside every saved document keep resolving.
-import { one, many } from '../db/pool.mjs'
+import { q, one, many } from '../db/pool.mjs'
 import { store, keys } from './blobs.mjs'
 import { getDoc, putDoc, getMapBySlug, createMap, ensureUser } from './maps.mjs'
 import { env } from '../db/env.mjs'
@@ -88,8 +88,9 @@ export async function libraryOf(slug) {
   const rows = await many(
     `select l.*,
             coalesce(
-              (select jsonb_agg(jsonb_build_object('face', s.face, 'dirs', s.dirs, 'frames', s.frame_count)
-                                order by s.face)
+              (select jsonb_agg(jsonb_build_object(
+                        'name', s.face, 'dirs', s.dirs, 'fps', s.fps,
+                        'src', s.src, 'w', s.w, 'h', s.h) order by s.face)
                from library_states s where s.item_id = l.id), '[]'::jsonb) as states
      from library_items l where l.map_id = $1 order by l.name`,
     [id],
@@ -107,8 +108,10 @@ export async function libraryOf(slug) {
         Object.entries(r.dirs).map(([h, list]) => [h, list.map((k) => '/work/' + k.replace(`maps/${id}/`, `${slug}/`))]),
       )
     }
+    // the same shape statesOf() returned off disk, because App.tsx picks a face
+    // by name and draws it at the size it reports
     const st = Array.isArray(r.states) ? r.states : []
-    if (st.length) it.states = st.map((s) => s.face)
+    if (st.length) it.states = st
     if (r.origin && (r.origin.objectId || r.origin.characterId)) it.canState = true
     return it
   })
@@ -275,7 +278,103 @@ export async function pushItem(slug, name, workDir) {
     origin: originOf(fs, path, workDir, name) || (meta?.characterId ? { characterId: meta.characterId } : null),
     prefix: keys.libPrefix(id, name),
   })
-  return { name, frames: n, dirs: Object.keys(dirs).length }
+  const faces = await pushStates(slug, name, workDir)
+  return { name, frames: n, dirs: Object.keys(dirs).length, faces }
+}
+
+/* The same thing wearing another face: a troll's boulder, a character's every
+ * heading. A face lives one folder deeper than the library does, because a
+ * character state comes back as whole headings and nesting keeps a heading's
+ * frames in order without encoding the order into the filename.
+ *
+ * The client reads a face's size and fps to draw it, so those become columns
+ * rather than something re-derived by opening a png per face on every listing. */
+export async function pushStates(slug, item, workDir) {
+  if (!platformOn()) return 0
+  const fs = await import('node:fs')
+  const path = await import('node:path')
+  const id = await mapIdFor(slug, { create: true })
+  const row = await one('select id from library_items where map_id = $1 and name = $2', [id, item])
+  if (!row) return 0
+
+  const dir = path.join(workDir, 'states', item)
+  const seen = []
+  const s = store()
+  const size = (f) => {
+    const fd = fs.openSync(f, 'r')
+    const b = Buffer.alloc(24)
+    fs.readSync(fd, b, 0, 24, 0)
+    fs.closeSync(fd)
+    return { w: b.readUInt32BE(16), h: b.readUInt32BE(20) }
+  }
+
+  if (fs.existsSync(dir)) {
+    for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (!ent.isDirectory()) continue
+      const face = ent.name
+      const faceDir = path.join(dir, face)
+      const meta = readJson(fs, path.join(faceDir, 'dirs.json'))
+      const base = `/work/${slug}/states/${encodeURIComponent(item)}/${encodeURIComponent(face)}`
+      const dirs = {}
+      let frames = 0
+      let w = 0
+      let h = 0
+      let src = null
+
+      // headings, each with its own frames
+      for (const sub of fs.readdirSync(faceDir, { withFileTypes: true })) {
+        if (!sub.isDirectory()) continue
+        const heading = sub.name
+        dirs[heading] = []
+        for (let i = 0; fs.existsSync(path.join(faceDir, heading, i + '.png')); i++) {
+          const f = path.join(faceDir, heading, i + '.png')
+          if (!w) ({ w, h } = size(f))
+          await s.put(keys.state(id, item, face, heading, i), fs.readFileSync(f), 'image/png')
+          dirs[heading].push(`${base}/${encodeURIComponent(heading)}/${i}.png`)
+          frames++
+        }
+        if (!dirs[heading].length) delete dirs[heading]
+      }
+      // or a flat run of frames when the face has no headings
+      for (let i = 0; fs.existsSync(path.join(faceDir, i + '.png')); i++) {
+        const f = path.join(faceDir, i + '.png')
+        if (!w) ({ w, h } = size(f))
+        await s.put(`maps/${id}/states/${item}/${face}/${i}.png`, fs.readFileSync(f), 'image/png')
+        frames++
+      }
+      if (!frames) continue
+      src = Object.keys(dirs).length ? (dirs.south || Object.values(dirs)[0])[0] : `${base}/0.png`
+
+      await q(
+        `insert into library_states (item_id, face, dirs, frame_count, blob_prefix, fps, w, h, src)
+         values ($1,$2,$3::jsonb,$4,$5,$6,$7,$8,$9)
+         on conflict (item_id, face) do update set
+           dirs=excluded.dirs, frame_count=excluded.frame_count, fps=excluded.fps,
+           w=excluded.w, h=excluded.h, src=excluded.src`,
+        [
+          row.id,
+          face,
+          Object.keys(dirs).length ? JSON.stringify(dirs) : null,
+          frames,
+          keys.statePrefix(id, item, face),
+          Number(meta?.fps) > 0 ? Math.round(Number(meta.fps)) : Object.keys(dirs).length ? 8 : 6,
+          w,
+          h,
+          src,
+        ],
+      )
+      seen.push(face)
+    }
+  }
+
+  // a face removed on disk must leave the table too
+  await q(
+    seen.length
+      ? 'delete from library_states where item_id = $1 and face <> all($2::text[])'
+      : 'delete from library_states where item_id = $1',
+    seen.length ? [row.id, seen] : [row.id],
+  )
+  return seen.length
 }
 
 const readJson = (fs, f) => {
@@ -287,6 +386,92 @@ const readJson = (fs, f) => {
 }
 
 const originOf = (fs, path, workDir, name) => readJson(fs, path.join(workDir, 'origin.json'))?.[name] || null
+
+/* ---- versions: what .prev holds, kept where the laptop is not --------------
+ *
+ * An in-place edit rewrites the item and z puts the pixels back. On disk that
+ * is the .prev folder, capped at 8 so an edit cannot roll its own original
+ * away. None of that survives the laptop, and an undo that only works on one
+ * machine is not an undo.
+ *
+ * Snapshotting copies inside the bucket rather than downloading and re-uploading
+ * the bytes, so keeping a version costs one server-side copy per file and no
+ * transfer at all. Called at the moment before an item is overwritten, when what
+ * is in the store still IS the previous version. */
+const PREV_MAX = 8
+
+export async function snapshotVersion(slug, name) {
+  if (!platformOn()) return null
+  const id = await mapIdFor(slug)
+  if (!id) return null
+  const item = await one('select id from library_items where map_id = $1 and name = $2', [id, name])
+  if (!item) return null
+
+  const s = store()
+  const live = [...(await s.list(keys.libPrefix(id, name))), ...(await s.list(keys.libStill(id, name)))]
+  if (!live.length) return null
+
+  const last = await one('select coalesce(max(seq), 0) v from library_versions where item_id = $1', [item.id])
+  const seq = Number(last.v) + 1
+  const prefix = keys.version(id, name, seq)
+  for (const o of live) await s.copy(o.key, prefix + o.key.split(`/library/`)[1])
+
+  const row = await one(
+    `insert into library_versions (item_id, seq, blob_prefix, meta)
+     values ($1,$2,$3,$4::jsonb) returning id`,
+    [item.id, seq, prefix, JSON.stringify({ files: live.length })],
+  )
+
+  // the same rollover PREV_MAX gave the folder: oldest goes first, so an edit
+  // can never roll its own original away
+  const old = await many(
+    'select id, blob_prefix from library_versions where item_id = $1 order by seq desc offset $2',
+    [item.id, PREV_MAX],
+  )
+  for (const o of old) {
+    await s.delPrefix(o.blob_prefix)
+    await q('delete from library_versions where id = $1', [o.id])
+  }
+  return { seq, files: live.length, id: row.id }
+}
+
+// How far back this item can be put. The editor asks so the undo affordance can
+// say something true instead of guessing.
+export const versionsOf = async (slug, name) => {
+  if (!platformOn()) return []
+  const id = await mapIdFor(slug)
+  if (!id) return []
+  return many(
+    `select v.seq, v.meta, v.created_at from library_versions v
+     join library_items l on l.id = v.item_id
+     where l.map_id = $1 and l.name = $2 order by v.seq desc`,
+    [id, name],
+  )
+}
+
+/* Put the newest kept version back, for a machine whose .prev folder holds
+ * nothing because the edit happened somewhere else. */
+export async function restoreVersion(slug, name) {
+  if (!platformOn()) return null
+  const id = await mapIdFor(slug)
+  if (!id) return null
+  const v = await one(
+    `select v.* from library_versions v join library_items l on l.id = v.item_id
+     where l.map_id = $1 and l.name = $2 order by v.seq desc limit 1`,
+    [id, name],
+  )
+  if (!v) return null
+  const s = store()
+  // the copy being replaced becomes a version too, so a restore is reversible
+  await snapshotVersion(slug, name)
+  await s.delPrefix(keys.libPrefix(id, name))
+  await s.del(keys.libStill(id, name)).catch(() => {})
+  const held = await s.list(v.blob_prefix)
+  for (const o of held) await s.copy(o.key, `maps/${id}/library/${o.key.slice(v.blob_prefix.length)}`)
+  await q('delete from library_versions where id = $1', [v.id])
+  await s.delPrefix(v.blob_prefix)
+  return { seq: v.seq, files: held.length }
+}
 
 // A deleted item has to leave both stores, or it comes back on the next listing.
 export async function dropItem(slug, name) {

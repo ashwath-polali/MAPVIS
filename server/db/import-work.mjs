@@ -234,9 +234,22 @@ async function putItem(mapId, name, kind, o) {
   )
 }
 
+// ---- the faces each library item wears -------------------------------------
+
+// Done after the whole library, because a face hangs off a library_items row
+// and that row has to exist first.
+let faces = 0
+if (!DRY && fs.existsSync(path.join(dir, 'states'))) {
+  const { pushStates } = await import('../store/platform.mjs')
+  for (const ent of fs.readdirSync(path.join(dir, 'states'), { withFileTypes: true })) {
+    if (!ent.isDirectory()) continue
+    faces += await pushStates(id, ent.name, dir)
+  }
+}
+
 // ---- what happened ---------------------------------------------------------
 
-console.log(`  library: ${items} items, ${frames} frames`)
+console.log(`  library: ${items} items, ${frames} frames, ${faces} face(s)`)
 console.log(`  uploaded ${objects} objects, ${(bytes / 1024 / 1024).toFixed(2)} MB`)
 
 if (!DRY) {

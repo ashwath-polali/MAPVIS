@@ -45,6 +45,8 @@ import {
   serveFromStore,
   pushItem,
   dropItem,
+  snapshotVersion,
+  restoreVersion,
 } from './store/platform.mjs'
 import { publishBundle, publishedMap, publishHistory } from './store/publish.mjs'
 import { store } from './store/blobs.mjs'
@@ -1264,9 +1266,15 @@ async function route(req, res, p, url) {
         noteOrigin(id, owner, { faces: { ...(o.faces || {}), [face]: made.objectId } })
       }
       noteAsk(id, `${owner} > ${face}`, ask, ask, 'state')
+      // the new face goes to the store before the response admits it exists,
+      // the same rule every other library write follows
+      await pushLibrary(id, owner)
+      const item = platformOn()
+        ? (await libraryOf(id)).find((x) => x.name === owner)
+        : libraryItems(id).find((x) => x.name === owner)
       // the price, said out loud, because nothing documents what a state edit
       // costs and the button above it has to stop guessing
-      return send(res, 200, { item: libraryItems(id).find((x) => x.name === owner) || null, face, usage })
+      return send(res, 200, { item: item || null, face, usage })
     } catch (e) {
       const m = String((e && e.message) || e)
       return send(res, m === 'stopped' ? 499 : 502, { error: m.slice(0, 300) })
@@ -1749,7 +1757,15 @@ async function route(req, res, p, url) {
     const name = cleanName(b.name || '')
     if (!name) return send(res, 400, { error: 'no name' })
     const prev = path.join(WORK, id, '.prev')
-    if (!fs.existsSync(prev)) return send(res, 404, { error: 'nothing was kept for this map' })
+    // this machine may never have seen the edit. The store keeps the same eight
+    // versions, so an undo is not something only one laptop can do.
+    if (!fs.existsSync(prev) || !fs.readdirSync(prev).length) {
+      const back = await restoreVersion(id, name).catch(() => null)
+      if (!back) return send(res, 404, { error: 'nothing was kept for this one' })
+      const restored = (await libraryOf(id)).find((x) => x.name === name)
+      if (!restored) return send(res, 500, { error: 'it came back unreadable' })
+      return send(res, 200, { item: restored, from: `version ${back.seq}` })
+    }
     // <name>.png and <name> for the first copy, <name>-2.png upward after it
     const cands = fs
       .readdirSync(prev, { withFileTypes: true })
@@ -1788,7 +1804,12 @@ async function route(req, res, p, url) {
     } catch (e) {
       return send(res, 500, { error: String((e && e.message) || e).slice(0, 200) })
     }
-    const item = libraryItems(id).find((x) => x.name === name)
+    // reverting rewrites the art, so the store has to be told or the library
+    // would keep serving the version that was just undone
+    await pushLibrary(id, name)
+    const item = platformOn()
+      ? (await libraryOf(id)).find((x) => x.name === name)
+      : libraryItems(id).find((x) => x.name === name)
     if (!item) return send(res, 500, { error: 'it came back unreadable' })
     return send(res, 200, { item })
   }
@@ -3384,6 +3405,16 @@ function keepPrevFile(id, from, as) {
   } catch {
     /* a backup that cannot be written is not a reason to block the edit */
   }
+  keepVersion(id, as.replace(/\.png$/i, ''))
+}
+
+/* The same keep, in the store, so an undo works on a machine that never saw the
+ * edit. Not awaited: the disk copy above is what this request depends on, and
+ * blocking a generation on a bucket copy would make every edit slower for a
+ * safety net that is allowed to be a moment behind. */
+function keepVersion(id, name) {
+  if (!platformOn()) return
+  snapshotVersion(id, name).catch((e) => console.error(`[versions] could not keep ${id}/${name}:`, e.message))
 }
 
 // the folder half of the same law, for a heading set or an animation's frames
@@ -3399,6 +3430,7 @@ function keepPrevDir(id, from, as) {
   } catch {
     /* a backup that cannot be written is not a reason to block the edit */
   }
+  keepVersion(id, as)
 }
 
 /* The old bytes out, the new bytes in, ONE library row either way.
