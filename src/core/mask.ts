@@ -249,6 +249,16 @@ export class MaskDoc {
     })
     if (this.hist.length > 60) this.hist.shift()
   }
+  /* HOW DEEP THE UNDO STACK IS, so something outside the document can pin an
+   * edit of its own to a point in it.
+   *
+   * The pixel edits (crop, ctrl+P, trim, palette match) rewrite files on disk,
+   * which this document knows nothing about and cannot restore. The panel keeps
+   * its own list of those and has to know WHICH z is the one that should undo
+   * them, or a crop followed by three moves would be undone by the first z. */
+  histLen() {
+    return this.hist.length
+  }
   undo() {
     const h = this.hist.pop()
     if (!h) return false

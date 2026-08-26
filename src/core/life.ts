@@ -433,26 +433,103 @@ export function separate(
   stands?: (x: number, y: number) => boolean,
 ): { dx: number; dy: number }[] {
   const out = pts.map(() => ({ dx: 0, dy: 0 }))
-  for (let i = 0; i < pts.length; i++) {
-    for (let j = i + 1; j < pts.length; j++) {
-      const a = pts[i]
-      const b = pts[j]
-      const dx = b.x - a.x
-      const dy = (b.y - a.y) / (yScale || 1)
-      const want = a.r + b.r
-      const d2 = dx * dx + dy * dy
-      if (d2 >= want * want) continue
-      const d = Math.sqrt(d2)
-      // dead centre on each other: shove along x by index so the answer is the
-      // same every time rather than depending on which arrived first
-      const ux = d > 0.001 ? dx / d : i < j ? -1 : 1
-      const uy = d > 0.001 ? dy / d : 0
-      const push = ((want - d) / 2) * strength
-      out[i].dx -= ux * push
-      out[i].dy -= uy * push * (yScale || 1)
-      out[j].dx += ux * push
-      out[j].dy += uy * push * (yScale || 1)
+  /* RELAXATION, not one shot, and this is what stopped the shoves reading as
+   * spasms.
+   *
+   * Every pair used to be measured against the ORIGINAL positions and every
+   * answer added up, so a figure caught between three others was handed the sum
+   * of three separate full-depth corrections, none of which knew about the
+   * others. Measured on nine figures walking a 40px path, 30000 frames: the
+   * worst single-frame shift was 21.39px on bodies 11px across, which is not a
+   * shove, it is a teleport, and 125 frames moved somebody more than 4px.
+   *
+   * Passing over the pairs several times and re-measuring each time fixes that
+   * by construction: the second pass sees the gap the first one already opened,
+   * so nobody is corrected twice for the same overlap. The total is then bounded
+   * by the real geometry instead of by how many neighbours happen to be close.
+   *
+   * Two passes at half strength, swept rather than picked. Same nine figures,
+   * 30000 frames, against the single full-strength pass that shipped:
+   *
+   *   passes   >4px shifts   worst shift   deepest overlap
+   *   1 (old)          171       31.93px           15.69px
+   *   2                 97       25.80px           12.45px
+   *   4                195       33.95px            9.10px
+   *   8                379       40.07px           17.78px
+   *
+   * Two is better than one on all three. Four buys less overlap and pays for it
+   * in exactly the thing being complained about, and eight is worse at both.
+   *
+   * This is an improvement and NOT a fix, and the number that says so is the
+   * 25.80px worst shift, which is still more than a body width. See the note
+   * under it. */
+  const PASSES = 2
+  const step = strength * 0.5
+  /* WHAT IS STILL WRONG HERE, so nobody spends another session tuning numbers.
+   *
+   * Traced frame by frame: a walker crosses straight THROUGH a stander, because
+   * nothing in the floor knows the stander is there. lifeAt's leg search samples
+   * every 2px and refuses a leg over ground it cannot stand on, and a person
+   * standing on that ground is not part of that test. So the walker gets 87%
+   * inside, and only then does this pass try to eject it. Ejecting something
+   * from the middle of something else is violent whatever the numbers are, and
+   * the direction flips as it passes the centre: measured -8.46px one frame and
+   * +11.20px the next while the walker's own position moved a third of a pixel.
+   *
+   * Three shapes of fix were measured and all three made it worse or nothing:
+   * blending the direction toward a fixed per-pair angle, anchoring it to where
+   * the two figures belong (32.61px worst, worse than doing nothing), and more
+   * relaxation passes.
+   *
+   * The fix is not in here. Standing figures belong in the FLOOR, so the leg
+   * search routes around them and penetration never happens, and this pass goes
+   * back to being the rare small correction it was designed as. That is a change
+   * to what canStand means and it has not been made. */
+  for (let pass = 0; pass < PASSES; pass++) {
+    let moved = false
+    for (let i = 0; i < pts.length; i++) {
+      for (let j = i + 1; j < pts.length; j++) {
+        const a = pts[i]
+        const b = pts[j]
+        // where they are now, this pass, including what earlier passes did
+        const dx = b.x + out[j].dx - (a.x + out[i].dx)
+        const dy = (b.y + out[j].dy - (a.y + out[i].dy)) / (yScale || 1)
+        const want = a.r + b.r
+        const d2 = dx * dx + dy * dy
+        if (d2 >= want * want) continue
+        const d = Math.sqrt(d2)
+        /* THE DIRECTION HAS TO BE STEADY WHERE THE PUSH IS STRONGEST, and it
+         * was the exact opposite, which is where the spasm came from.
+         *
+         * The shove is (want - d) / 2, so it is biggest when two bodies are
+         * nearly on the same spot. That is also where dx / d is worthless: a
+         * tenth of a pixel of drift swings the direction right round, and the
+         * biggest push in the pass swings with it. Measured on nine figures on
+         * a 40px path: 20.07px of movement in a single frame on bodies 11px
+         * across, while the same figures with no push at all never moved more
+         * than 1.75px. It was never the pile-up and never the floor guard;
+         * both were measured with the same harness and neither changed it.
+         *
+         * So near the middle the geometry is faded out and a direction that
+         * cannot swing is faded in. The fallback is fixed for a given pair, so
+         * a pass that lands deep inside pushes the same way this frame and the
+         * next, and the blend keeps it continuous instead of switching over.
+         * The angle is arbitrary and only has to be stable and to differ
+         * between pairs, so neighbours do not all shove along one axis. */
+        // dead centre on each other: shove along x by index so the answer is the
+        // same every time rather than depending on which arrived first
+        const ux = d > 0.001 ? dx / d : i < j ? -1 : 1
+        const uy = d > 0.001 ? dy / d : 0
+        const push = ((want - d) / 2) * step
+        out[i].dx -= ux * push
+        out[i].dy -= uy * push * (yScale || 1)
+        out[j].dx += ux * push
+        out[j].dy += uy * push * (yScale || 1)
+        moved = true
+      }
     }
+    // nothing left overlapping: the remaining passes have nothing to do
+    if (!moved) break
   }
   if (stands)
     for (let i = 0; i < pts.length; i++) {
@@ -680,9 +757,52 @@ export function lifeAt(
     for (let j = 0; j < st.length; j++) {
       const raw = st[j].move
       if (!raw) continue
-      // the fence, turned from a place into a reach, so this state's answer is a
-      // displacement and the round can add it up. See the note on `share`.
-      const m = share(raw, home, movers)
+      /* THE FLOOR REACHES THE STATES HERE, and it has to be done at read time
+       * rather than trusted to construction.
+       *
+       * A state's move only takes the floor as a second fence when it carries
+       * walkOnly of its own, and cleanLife copies the parent's down into them.
+       * But the editor learns walkOnly from the box the person drew, which is
+       * AFTER the plan has already been cleaned, so it stamps the flag on the
+       * finished object and every state inside it keeps the false it was built
+       * with. Measured 2026-08-25 on the troll's own four-state round over a
+       * 40px path: 20.4% of 36000 frames off the floor and 20.2px out at worst,
+       * against 0.2% and 1.2px for the identical walk with no round. Nothing
+       * without a round was ever affected, which is why nineteen hub people
+       * behaved and the first thing with a sequence did not.
+       *
+       * Fixing only the caller would leave every doc.json already written on
+       * disk carrying stateless states, so the parent's flag is applied here
+       * too. A state that asks for the floor itself still gets it. */
+      /* THE PLACEMENT'S OWN FENCE, BOTH HALVES OF IT, applied here rather than
+       * trusted to whoever built the round.
+       *
+       * cleanLife hands a state the parent's box and the parent's floor flag,
+       * and it reads both off `out` at the moment it runs. The editor learns
+       * both from the box the person drew, which is AFTER the plan has already
+       * been cleaned, so it stamped them on the finished object and every state
+       * inside kept the null and the false it was built with. One line,
+       * `mv.bounds = out.bounds ? ... : null`, and both halves went missing
+       * together.
+       *
+       * Measured on the troll actually placed on the hub, its saved life against
+       * the map's own mask: 16.5% of 36000 frames off the walkable ground and
+       * 16px from anything standable, with a box that is 47.9% standable and
+       * walkOnly true at the top. Fixing the caller alone cannot help it,
+       * because that life is already on disk with `bounds: null` in every state,
+       * and so is every other round anybody has already made.
+       *
+       * A state that carries its own is left alone: cleanLife refuses to let one
+       * name a box, so anything that has one got it from a parent already. */
+      const eff =
+        (life.bounds && !raw.bounds) || (life.walkOnly && !raw.walkOnly)
+          ? {
+              ...raw,
+              ...(life.bounds && !raw.bounds ? { bounds: { ...life.bounds } } : {}),
+              ...(life.walkOnly && !raw.walkOnly ? { walkOnly: true } : {}),
+            }
+          : raw
+      const m = share(eff, home, movers)
       // seconds this state has been live: a whole run for every round behind us,
       // plus this round's share, which is all of it for one already finished,
       // part of it for the live one and none of it for one still to come
@@ -718,6 +838,51 @@ export function lifeAt(
     if (box) {
       dx = clamp(home.x + dx, box.x, box.x + box.w) - home.x
       dy = clamp(home.y + dy, box.y, box.y + box.h) - home.y
+    }
+    /* THE FLOOR, ON THE SUM, and nothing above this line could do it.
+     *
+     * Every state is worked out as a displacement from HOME and the states are
+     * added up, so each one can be fenced only around home, never around where
+     * the round has actually carried the thing. `near` scales that test by the
+     * number of movers to keep the sum inside the room, which is sound for a
+     * rectangle and cannot be sound for a walkable mask: ground is an arbitrary
+     * shape, so a point tested three times as far from home is a different
+     * point, not a smaller version of the same one. Measured on the troll
+     * actually standing on the hub, its own saved life against the map's own
+     * mask: 16.5% of 36000 frames off the walkable ground, 16px from anything
+     * standable. Taking the scaling out makes it 51.1%, so the proxy is helping
+     * and is still not a fence.
+     *
+     * So the sum is tested where the sum lands. Home is standable by
+     * construction, the thing was put there, and the offset shrinks toward it
+     * until the feet are back on ground. Direction is kept and only distance
+     * gives way, so it reads as coming up short of somewhere rather than being
+     * dragged sideways.
+     *
+     * Sixteen steps is a sixteenth of the offset, well under a pixel at these
+     * ranges, and it is a fixed loop so the editor and the game land on the
+     * same answer for the same second.
+     *
+     * WHAT IT COSTS, measured on the same troll and the same mask: off-mask
+     * frames 5936 of 36000 to 0, and in exchange 4 frames of 36000 move more
+     * than 4px in one tick, worst 11.78px, where before the worst was 1.75px.
+     * That is the fence biting when the line back to home crosses a hole in the
+     * ground, so the pull-back skips to the near side of it. Once every two and
+     * a half minutes against being 16px inside a market stall, which is the
+     * trade taken. Anything better than this wants the walk itself to know
+     * where the round has carried it, and that is a bigger change than a
+     * fence. */
+    if (life.walkOnly && canStand && (dx || dy) && !canStand(home.x + dx, home.y + dy)) {
+      let lo = 0
+      for (let s = 15; s >= 1; s--) {
+        const k = s / 16
+        if (canStand(home.x + dx * k, home.y + dy * k)) {
+          lo = k
+          break
+        }
+      }
+      dx *= lo
+      dy *= lo
     }
     const f = st[k].fade || 0
     /* the opening of the very first round has nothing to dissolve out of. The
