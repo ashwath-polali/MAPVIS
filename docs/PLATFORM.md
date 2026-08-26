@@ -235,8 +235,30 @@ to be the same requirement.
       The relay daemon.
 - [ ] **5. Deploy.** Vercel plus Neon plus R2 on a domain.
 - [ ] **6. UI.** Ash steers this one. Held to the MAPVIS UI law: not a default-looking React page.
-- [ ] **7. The read API and publish.** Versioned registry, anchor listing, immutable publish, and the
-      game reading from the platform instead of `public/maps-painted/`.
+- [x] **7a. Publish and the read API.** **Landed 2026-08-26, early, because export was already
+      being moved off disk and the two are the same act.**
+
+      Pressing export now also writes an immutable version to `publish/<slug>/v<N>/` and records it.
+      Nothing ever rewrites a version, so re-exporting cannot break a class mid-session, a game build
+      can pin a version it was tested against, and every byte ships `immutable` so a cdn serves the
+      second fetch and the free read budget is never touched twice for the same file. `map.json`
+      picks up `anchors[]` from the database on the way through and keeps `events[]` beside it.
+
+      `/api/v1` is the only surface anything outside MAPVIS may call, versioned in the path from the
+      first line, read-only, addressed by slug:
+
+      | | |
+      |---|---|
+      | `GET /api/v1/maps` | the registry the game has never had. A door names a target by slug and nothing could answer whether it exists |
+      | `GET /api/v1/maps/:slug/anchors` | names only, small enough to fetch on every keystroke. This is what gives python autocomplete and an author-time error instead of a silent no-op |
+      | `GET /api/v1/maps/:slug` | the manifest: map.json plus every file with its size, hash and url |
+      | `GET /api/v1/maps/:slug/versions` | every published version |
+      | `GET /api/v1/maps/:slug/file/:v/*` | the bytes, cached forever, cors open |
+
+      `verify-api.mjs` checks what works and what must be refused: climbing out of a version, a
+      version that does not exist, an empty filename, a map nobody published, and any write at all.
+
+      Still to come here: the game reading `/api/v1` instead of `public/maps-painted/`.
 
 ---
 
