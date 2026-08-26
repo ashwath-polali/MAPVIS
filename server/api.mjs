@@ -36,7 +36,16 @@ import { fileURLToPath } from 'node:url'
 import { spawn } from 'node:child_process'
 import * as pixellab from './pixellab.mjs'
 import { decodePNG, encodePNG, sheetPNG } from './sheet.mjs'
-import { platformOn, diskAllowed, saveDocument, loadDocument, libraryOf, serveFromStore } from './store/platform.mjs'
+import {
+  platformOn,
+  diskAllowed,
+  saveDocument,
+  loadDocument,
+  libraryOf,
+  serveFromStore,
+  pushItem,
+  dropItem,
+} from './store/platform.mjs'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(HERE, '..')
@@ -780,6 +789,9 @@ async function route(req, res, p, url) {
       item.w = box.w
       item.h = box.h
     }
+    // trimSet rewrites every frame in place, so the store is only told about
+    // this set once the pixels have stopped changing
+    await pushLibrary(id, item.name)
     return send(res, 200, { item })
   }
 
@@ -945,6 +957,7 @@ async function route(req, res, p, url) {
         item.h = box.h
       }
       noteAsk(id, item.name, description, description, 'character')
+      await pushLibrary(id, item.name)
       return send(res, 200, { item, note })
     } catch (e) {
       // a folder with three headings in it lists in the library looking like a
@@ -1055,7 +1068,7 @@ async function route(req, res, p, url) {
           seed: seedOf(b),
         }),
       )
-      const item = saveStatic(
+      const item = await saveStatic(
         id,
         drawn.b64,
         b.name ? cleanName(b.name) : 'gen-' + slugName(prompt),
@@ -1131,7 +1144,7 @@ async function route(req, res, p, url) {
           pixellab.animate({ base64: b64, action: motion, frameCount: 8, seed: seedOf(b) }),
         )
         if (!frames)
-          return send(res, 200, { item: saveStatic(id, b64, wantName, prompt, t.thing, drawn.objectId), note: STOPPED_STILL })
+          return send(res, 200, { item: await saveStatic(id, b64, wantName, prompt, t.thing, drawn.objectId), note: STOPPED_STILL })
         const adir = libDirOf(id)
         let aname = wantName
         for (let i = 2; fs.existsSync(path.join(adir, aname)); i++) aname = `${wantName}-${i}`
@@ -1148,7 +1161,7 @@ async function route(req, res, p, url) {
           item: { name: aname, kind: 'animated', frames: rel, fps: 6, w: fsize.w, h: fsize.h },
         })
       }
-      return send(res, 200, { item: saveStatic(id, b64, wantName, prompt, t.thing, drawn.objectId) })
+      return send(res, 200, { item: await saveStatic(id, b64, wantName, prompt, t.thing, drawn.objectId) })
     } catch (e) {
       const m = String((e && e.message) || e)
       return send(res, m === 'stopped' ? 499 : 502, { error: m.slice(0, 300) })
@@ -1297,7 +1310,7 @@ async function route(req, res, p, url) {
       // generation, and the first one still lands, as a still object.
       const frames = await stillOnStop(gate, () => pixellab.animate({ base64: b64, action: motion, frameCount: 8, seed }))
       if (!frames)
-          return send(res, 200, { item: saveStatic(id, b64, wantName, prompt, t.thing, drawn.objectId), note: STOPPED_STILL })
+          return send(res, 200, { item: await saveStatic(id, b64, wantName, prompt, t.thing, drawn.objectId), note: STOPPED_STILL })
       const dir = libDirOf(id)
       let name = wantName
       for (let i = 2; fs.existsSync(path.join(dir, name)); i++) name = `${wantName}-${i}`
@@ -1408,7 +1421,7 @@ async function route(req, res, p, url) {
          * character it came from and the motion can never be replaced or
          * recovered again. Never write undefined over one that was there. */
         const keepId = plan.characterId || (it.meta && it.meta.characterId) || ''
-        swapFolder(id, name, st.stage, { dirs: st.dirs, fps: st.fps, characterId: keepId })
+        await swapFolder(id, name, st.stage, { dirs: st.dirs, fps: st.fps, characterId: keepId })
         noteAsk(id, name, ask, plan.motion, 'motion')
         return send(res, 200, {
           item: {
@@ -1444,7 +1457,7 @@ async function route(req, res, p, url) {
        * a crash in between leaves the original standing, which is the safe way
        * round. */
       if (it.shape === 'still') keepPrevFile(id, it.file, name + '.png')
-      swapFolder(id, name, st.stage, null)
+      await swapFolder(id, name, st.stage, null)
       if (it.shape === 'still') fs.rmSync(it.file, { force: true })
       // an item that carried a written recipe does not carry it any more.
       // Leaving effect.json beside pixellab's frames would reopen a recipe that
@@ -1913,14 +1926,20 @@ async function route(req, res, p, url) {
     const inside = (f) => f.startsWith(dir + path.sep)
     const png = path.resolve(dir, name + '.png')
     const fdir = path.resolve(dir, name)
+    // a delete has to land in both places or the item reappears on the next
+    // listing, which now comes from the database rather than the folder
     if (inside(png) && fs.existsSync(png) && fs.statSync(png).isFile()) {
       fs.unlinkSync(png)
+      await dropItem(id, name)
       return send(res, 200, { removed: 'static' })
     }
     if (inside(fdir) && fs.existsSync(fdir) && fs.statSync(fdir).isDirectory()) {
       fs.rmSync(fdir, { recursive: true, force: true })
+      await dropItem(id, name)
       return send(res, 200, { removed: 'animated' })
     }
+    // it may be gone from disk but still known to the platform
+    await dropItem(id, name)
     return send(res, 404, { error: 'not in the library' })
   }
 
@@ -3241,7 +3260,7 @@ function keepPrevDir(id, from, as) {
  * not use are deleted: a shorter motion would otherwise leave the tail of a
  * longer one behind, and a set trimmed through asset-crop's heading branch
  * would leave flat <heading>.png files beside the indexed ones. */
-function swapFolder(id, name, stage, meta) {
+async function swapFolder(id, name, stage, meta) {
   const folder = path.join(libDirOf(id), name)
   /* This used to rmSync the .prev folder before refilling it, which is the
    * rollover in its most direct form: re-animating a figure twice deleted the
@@ -3260,6 +3279,7 @@ function swapFolder(id, name, stage, meta) {
   }
   for (const f of fs.readdirSync(folder)) if (!keep.has(f) && /\.png$/i.test(f)) fs.unlinkSync(path.join(folder, f))
   fs.rmSync(stage, { recursive: true, force: true })
+  await pushLibrary(id, name)
 }
 
 // what he typed, on this map, newest first
@@ -3330,7 +3350,7 @@ async function stillOnStop(gate, start) {
  * once because three paths land here: the still answer of both object routes,
  * and the base of an animated one whose motion half never happened. */
 
-function saveStatic(id, b64, wantName, ask, prompt, objectId) {
+async function saveStatic(id, b64, wantName, ask, prompt, objectId) {
   const dir = libDirOf(id)
   fs.mkdirSync(dir, { recursive: true })
   const base = cleanName(wantName)
@@ -3343,7 +3363,24 @@ function saveStatic(id, b64, wantName, ask, prompt, objectId) {
   // where these pixels came from, so this thing can be given another face
   // later without anybody guessing which of 769 account rows drew it
   if (objectId) noteOrigin(id, name, { objectId })
+  // disk was the scratch pad; the store is the copy that survives this machine.
+  // Awaited rather than fired off, so the response never claims a thing exists
+  // before its bytes are durable.
+  await pushLibrary(id, name)
   return { name, kind: 'static', src: `/work/${id}/library/${file}`, w: size.w, h: size.h }
+}
+
+// Every library write ends at one of four functions. This is what each of them
+// calls when it is done, and it is why generation still appears in a listing
+// that now comes from the database rather than from a directory walk.
+async function pushLibrary(id, name) {
+  try {
+    await pushItem(id, name, path.join(WORK, safeId(id)))
+  } catch (e) {
+    // the bytes are on disk and import-work.mjs reconciles a whole map, so a
+    // failure here is recoverable rather than lost work
+    console.error(`[library] could not push ${id}/${name} to the store:`, e.message)
+  }
 }
 
 /* ---- ORIGIN: what a library row was drawn from --------------------------

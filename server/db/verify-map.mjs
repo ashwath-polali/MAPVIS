@@ -77,6 +77,40 @@ moved.wrote.some((w) => w.startsWith('doc')) && !moved.wrote.some((w) => w.start
 original.spawn = [original.spawn[0] - 1, original.spawn[1]]
 await putDoc(map.id, JSON.stringify(original))
 
+// ---- a generated asset has to survive the trip too -------------------------
+
+// The listing comes from the database now, so anything generation writes to
+// disk and does not push would simply vanish from the library. This walks the
+// same path a generation does: bytes land in work/<slug>/library, the choke
+// point pushes them, and the item has to come back out of the store.
+{
+  const { pushItem, libraryOf, dropItem } = await import('../store/platform.mjs')
+  const { store, keys } = await import('../store/blobs.mjs')
+  const { encodePNG } = await import('../sheet.mjs')
+  const name = 'zz-verify-probe'
+  const lib = path.join(WORK, slug, 'library')
+  const file = path.join(lib, `${name}.png`)
+  const png = encodePNG(4, 3, Buffer.alloc(4 * 3 * 4, 200))
+  try {
+    fs.mkdirSync(lib, { recursive: true })
+    fs.writeFileSync(file, png)
+    await pushItem(slug, name, path.join(WORK, slug))
+
+    const listed = (await libraryOf(slug)).find((i) => i.name === name)
+    listed && listed.w === 4 && listed.h === 3
+      ? ok(`a written asset lists from the database at ${listed.w}x${listed.h}`)
+      : no(`a written asset did not list back: ${JSON.stringify(listed)}`)
+
+    const back = await store().get(keys.libStill(map.id, name))
+    Buffer.compare(back, png) === 0 ? ok('its bytes round-tripped through object storage') : no('its bytes came back different')
+
+    await dropItem(slug, name)
+    ;(await libraryOf(slug)).some((i) => i.name === name) ? no('a deleted asset still lists') : ok('deleting it removed it from both stores')
+  } finally {
+    fs.rmSync(file, { force: true })
+  }
+}
+
 console.log(bad ? `\n${bad} problem(s).` : '\nlossless, and an idle autosave costs nothing.')
 await closeDb()
 process.exit(bad ? 1 : 0)
