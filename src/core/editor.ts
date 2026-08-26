@@ -265,6 +265,7 @@ export interface EditorStatus {
   events: MapEvent[]
   // the crop gesture: on while a rectangle is being dragged over a placement
   cropping: boolean
+  cropKind: '' | 'crop' | 'area'
   // what the clipboard holds, so paste can say what it will drop
   clip: string
 }
@@ -417,6 +418,19 @@ export class Editor {
     a: Pt | null
     b: Pt | null
     dragging: boolean
+    /* WHICH PART OF THE BOX THE POINTER TOOK, and this is what makes a crop a
+     * crop rather than a second selection.
+     *
+     * '' is the old behaviour and is what an AREA still does: press on empty
+     * ground and drag a fresh rectangle out of nothing. A sprite crop never
+     * does that. It opens with the box already round the whole picture, and
+     * every drag afterwards is one edge or one corner of THAT box moving, which
+     * is how a slide editor crops and is the thing everybody already knows.
+     * 'move' slides the whole window over the picture without resizing it. */
+    grip: '' | 'move' | 'n' | 's' | 'e' | 'w' | 'nw' | 'ne' | 'se' | 'sw'
+    // where the box and the pointer were when the grip was taken, so a drag is
+    // measured as a delta rather than snapping the edge to the cursor
+    from: { x0: number; y0: number; x1: number; y1: number; px: number; py: number } | null
     cb: (r: { x: number; y: number; w: number; h: number } | null) => void
   } | null = null
   // the panel hands this over so a double click on a placement can open the
@@ -610,6 +624,10 @@ export class Editor {
       proposedGroups: [...this.proposedGroups],
       events: this.doc.events,
       cropping: !!this.cropSt,
+      // which of the two it is, so the hint on screen can say the right thing.
+      // They are one state and two gestures: a crop takes an existing box in,
+      // an area is dragged out of nothing.
+      cropKind: this.cropSt ? (this.cropSt.id ? 'crop' : 'area') : '',
       lifePlay: this.lifePlay,
       clip: clipboard.length ? (clipboard.length > 1 ? `${clipboard.length} items` : assetLabel(clipboard[0])) : '',
     }
@@ -839,7 +857,34 @@ export class Editor {
     this.cursor = [x, y]
     if (this.assetMode) {
       if (this.cropSt) {
-        if (this.cropSt.dragging) this.cropSt.b = this.cropPt(e)
+        const c = this.cropSt
+        if (c.dragging) {
+          const p = this.cropPt(e)
+          if (!c.grip || !c.from) c.b = p
+          else this.cropDrag(c, p)
+        } else if (c.id && c.a && c.b) {
+          /* the pointer says what a press would do before it is pressed, which
+           * is most of what makes handles feel like handles rather than like
+           * eight squares somebody drew */
+          const p = this.cropPt(e)
+          const gx0 = Math.min(c.a[0], c.b[0])
+          const gy0 = Math.min(c.a[1], c.b[1])
+          const gx1 = Math.max(c.a[0], c.b[0])
+          const gy1 = Math.max(c.a[1], c.b[1])
+          const gp = this.cropGrip(p[0], p[1], gx0, gy0, gx1, gy1)
+          const CUR: Record<string, string> = {
+            nw: 'nwse-resize',
+            se: 'nwse-resize',
+            ne: 'nesw-resize',
+            sw: 'nesw-resize',
+            n: 'ns-resize',
+            s: 'ns-resize',
+            e: 'ew-resize',
+            w: 'ew-resize',
+            move: 'move',
+          }
+          if (this.canvas) this.canvas.style.cursor = CUR[gp] || 'default'
+        }
         this.lastPx = [x, y]
         this.dirty = true
         this.emit()
@@ -984,6 +1029,8 @@ export class Editor {
     if (this.cropSt) {
       // the box stays on screen after the drag: enter takes it, esc drops it
       this.cropSt.dragging = false
+      this.cropSt.grip = ''
+      this.cropSt.from = null
       this.dirty = true
       this.emit()
       return
@@ -1421,9 +1468,29 @@ export class Editor {
         return
       }
       const p = this.cropPt(e)
-      this.cropSt.a = p
-      this.cropSt.b = p
-      this.cropSt.dragging = true
+      const c = this.cropSt
+      /* An AREA is drawn from nothing, so a press starts a new rectangle. A
+       * CROP already has one round the whole picture, so a press takes hold of
+       * part of it instead. Two gestures, and only one of them ever asks you to
+       * draw a box. */
+      if (!c.id || !c.a || !c.b) {
+        c.a = p
+        c.b = p
+        c.dragging = true
+        c.grip = ''
+        c.from = null
+      } else {
+        const x0 = Math.min(c.a[0], c.b[0])
+        const y0 = Math.min(c.a[1], c.b[1])
+        const x1 = Math.max(c.a[0], c.b[0])
+        const y1 = Math.max(c.a[1], c.b[1])
+        c.grip = this.cropGrip(p[0], p[1], x0, y0, x1, y1)
+        c.from = { x0, y0, x1, y1, px: p[0], py: p[1] }
+        c.dragging = true
+        // normalised, so every drag below works from a known corner order
+        c.a = [x0, y0]
+        c.b = [x1, y1]
+      }
       this.capture(e)
       this.dirty = true
       return
@@ -2281,6 +2348,33 @@ export class Editor {
   }
   // point a placement at another library item, keeping it selected. The caller
   // owns where it lands: a crop passes the anchor that keeps the pixels still.
+  /* MOVE A SET OF PLACEMENTS AS ONE UNDO STEP.
+   *
+   * A crop that changes every copy has to re-anchor every copy, and doing that
+   * through editAsset snapshotted once per placement. Nineteen trees meant
+   * nineteen entries on the undo stack, so z put ONE tree back and left the
+   * other eighteen sitting where the crop had moved them. Measured on the hub
+   * 2026-08-25: 18 of 19 still displaced after a single press.
+   *
+   * One snapshot, taken before anything moves, and the moves applied straight
+   * to the placements after it. That is the same shape as addPlacements and as
+   * the multi-select align, which have always been one press to take back. */
+  moveAll(at: Map<string, { x: number; y: number } | null>): number {
+    const hits = [...at].filter(([id, p]) => p && this.doc.assets.some((q) => q.id === id))
+    if (!hits.length) return 0
+    this.doc.snap()
+    let n = 0
+    for (const [id, p] of hits) {
+      const a = this.doc.assets.find((q) => q.id === id)
+      if (!a || !p) continue
+      // through moveTo, so a roaming box travels with the thing it belongs to
+      this.moveTo(a, clamp(Math.round(p.x), 0, this.doc.W - 1), clamp(Math.round(p.y), 0, this.doc.H - 1))
+      n++
+    }
+    this.touched()
+    return n
+  }
+
   repointAsset(id: string, item: LibItem, at?: { x: number; y: number }): boolean {
     const a = this.doc.assets.find((q) => q.id === id)
     if (!a) return false
@@ -2561,6 +2655,85 @@ export class Editor {
   // written here: the caller trims the pixels and decides what to do with them.
   // a crop corner, held inside the painting so the dimmed chrome and the rect
   // never run off the canvas when the pointer does
+  /* WHICH GRIP A PRESS LANDED ON, in painting pixels.
+   *
+   * The reach is worked out from the zoom so it is a constant number of screen
+   * pixels whatever the map is scaled to: a handle you cannot hit at 1x is the
+   * whole gesture failing on the small sprites this is mostly used on. Inside
+   * the box and away from every edge means take the whole window and slide it,
+   * which is how you re-frame without changing what you kept. */
+  private cropGrip(
+    px: number,
+    py: number,
+    x0: number,
+    y0: number,
+    x1: number,
+    y1: number,
+  ): '' | 'move' | 'n' | 's' | 'e' | 'w' | 'nw' | 'ne' | 'se' | 'sw' {
+    const near = Math.max(2, 7 / Math.max(this.z, 0.0001))
+    const L = Math.abs(px - x0) <= near
+    const R = Math.abs(px - x1) <= near
+    const T = Math.abs(py - y0) <= near
+    const B = Math.abs(py - y1) <= near
+    const inX = px >= x0 - near && px <= x1 + near
+    const inY = py >= y0 - near && py <= y1 + near
+    if (T && L) return 'nw'
+    if (T && R) return 'ne'
+    if (B && R) return 'se'
+    if (B && L) return 'sw'
+    if (T && inX) return 'n'
+    if (B && inX) return 's'
+    if (L && inY) return 'w'
+    if (R && inY) return 'e'
+    if (px > x0 && px < x1 && py > y0 && py < y1) return 'move'
+    // outside it entirely: nothing moves, rather than the box jumping to meet
+    // a press that was probably meant for something else
+    return ''
+  }
+
+  /* ONE EDGE, OR THE WHOLE WINDOW, MOVED BY HOW FAR THE POINTER HAS COME.
+   *
+   * Measured as a delta from where the grip was taken rather than by snapping
+   * the edge to the cursor, so grabbing an edge slightly off centre does not
+   * jump it under your hand.
+   *
+   * Two fences. It cannot pass the opposite edge, because a box turned inside
+   * out is not a crop, and it stays over the picture, because keeping pixels
+   * that are not there is nothing. Sliding is clamped as a whole so the window
+   * keeps its size and stops at the edge instead of shrinking against it. */
+  private cropDrag(c: NonNullable<Editor['cropSt']>, p: Pt) {
+    const f = c.from
+    if (!f) return
+    const a = this.doc.assets.find((q) => q.id === c.id)
+    if (!a) return
+    const c4 = this.assetCorners(a)
+    const bx0 = Math.min(...c4.map((q) => q[0]))
+    const by0 = Math.min(...c4.map((q) => q[1]))
+    const bx1 = Math.max(...c4.map((q) => q[0]))
+    const by1 = Math.max(...c4.map((q) => q[1]))
+    const dx = p[0] - f.px
+    const dy = p[1] - f.py
+    // a pixel of the picture, in painting pixels, as the smallest box worth
+    // keeping. Below this a crop returns nothing anybody can see.
+    const min = Math.max(1, (bx1 - bx0) / Math.max(1, this.assetNat(a).w))
+    let { x0, y0, x1, y1 } = f
+    if (c.grip === 'move') {
+      const w = x1 - x0
+      const h = y1 - y0
+      x0 = clamp(x0 + dx, bx0, bx1 - w)
+      y0 = clamp(y0 + dy, by0, by1 - h)
+      x1 = x0 + w
+      y1 = y0 + h
+    } else {
+      if (c.grip.includes('w')) x0 = clamp(x0 + dx, bx0, x1 - min)
+      if (c.grip.includes('e')) x1 = clamp(x1 + dx, x0 + min, bx1)
+      if (c.grip.includes('n')) y0 = clamp(y0 + dy, by0, y1 - min)
+      if (c.grip.includes('s')) y1 = clamp(y1 + dy, y0 + min, by1)
+    }
+    c.a = [x0, y0]
+    c.b = [x1, y1]
+  }
+
   private cropPt(e: PointerEvent): Pt {
     const [x, y] = this.toNativeF(e)
     return [clamp(x, 0, this.doc.W), clamp(y, 0, this.doc.H)]
@@ -2574,7 +2747,7 @@ export class Editor {
    * carries on without it. */
   markArea(cb: (r: { x: number; y: number; w: number; h: number } | null) => void): boolean {
     this.selAsset = ''
-    this.cropSt = { id: '', a: null, b: null, dragging: false, cb }
+    this.cropSt = { id: '', a: null, b: null, dragging: false, grip: '', from: null, cb }
     this.placing = null
     this.dragAsset = null
     this.cancelPick()
@@ -2585,13 +2758,43 @@ export class Editor {
     this.say('drag a box round where it goes · enter takes it · esc skips')
     return true
   }
+  /* CROP, AND IT IS ITS OWN GESTURE.
+   *
+   * It used to be the area gesture wearing a different label: the box vanished
+   * and you were asked to drag a new one out of nothing, over a sprite that was
+   * often a dozen pixels across. Ash on trying it: "when i double click, it asks
+   * me to select the area, that is completely wrong."
+   *
+   * It opens round the whole picture instead, and you take it in by dragging the
+   * box's own edges, which is what every slide editor does and is the reason
+   * nobody has to be told how. The handles look like resize handles and are not:
+   * the picture underneath never changes size, the window over it does.
+   *
+   * Marking an AREA is left exactly as it was. That one really is "draw a
+   * rectangle on the map somewhere", there is nothing to open around, and the
+   * two gestures stop being confusable the moment only one of them starts
+   * empty. */
   startCrop(cb: (r: { x: number; y: number; w: number; h: number } | null) => void): boolean {
     const a = this.doc.assets.find((q) => q.id === this.selAsset)
     if (!a) {
       this.say('click an asset first')
       return false
     }
-    this.cropSt = { id: a.id, a: null, b: null, dragging: false, cb }
+    // the whole picture, in painting pixels, as the box to start from. Its own
+    // corners rather than the drawn bounding box, so a turned or flipped
+    // placement opens square on its art instead of on the box around it.
+    const c4 = this.assetCorners(a)
+    const xs = c4.map((q) => q[0])
+    const ys = c4.map((q) => q[1])
+    this.cropSt = {
+      id: a.id,
+      a: [Math.min(...xs), Math.min(...ys)],
+      b: [Math.max(...xs), Math.max(...ys)],
+      dragging: false,
+      grip: '',
+      from: null,
+      cb,
+    }
     this.placing = null
     this.dragAsset = null
     // an armed generate or effect click would eat the drag before it started
@@ -2603,12 +2806,13 @@ export class Editor {
     if (act && typeof act.blur === 'function') act.blur()
     this.dirty = true
     this.emit()
-    this.say('drag the part to keep · enter takes it · esc cancels')
+    this.say('drag the edges to take it in · enter crops · esc cancels')
     return true
   }
   cancelCrop() {
     const c = this.cropSt
     if (!c) return
+    if (this.canvas) this.canvas.style.cursor = ''
     this.cropSt = null
     this.dirty = true
     this.emit()
@@ -2640,7 +2844,7 @@ export class Editor {
     }
     const a = this.doc.assets.find((q) => q.id === c.id)
     if (!a || !c.a || !c.b) {
-      this.say('drag a rectangle over it first')
+      this.say('drag the edges in first')
       return
     }
     const { w, h } = this.assetNat(a)
@@ -2673,9 +2877,23 @@ export class Editor {
     const rw = ix1 - ix0
     const rh = iy1 - iy0
     if (rw < 1 || rh < 1) {
-      this.say('that rectangle misses the sprite')
+      this.say('that leaves nothing of it')
       return
     }
+    /* The box opens round the whole picture now, so pressing enter without
+     * touching it asks to crop a thing to its own size: every placement
+     * re-anchored, the png rewritten, and not one pixel different. It says so
+     * and closes instead. */
+    if (ix0 === 0 && iy0 === 0 && rw === w && rh === h) {
+      this.canvas && (this.canvas.style.cursor = '')
+      this.cropSt = null
+      this.dirty = true
+      this.emit()
+      this.say('nothing taken off, so nothing to crop')
+      c.cb(null)
+      return
+    }
+    if (this.canvas) this.canvas.style.cursor = ''
     this.cropSt = null
     this.dirty = true
     this.emit()
@@ -3109,7 +3327,21 @@ export class Editor {
   }
   // undo, size-aware: a growth press snapshots the pre-grow document, so one
   // z re-lays the painting from the base art at the restored size and offset
+  /* THE PANEL'S CHANCE TO UNDO WHAT THE DOCUMENT CANNOT.
+   *
+   * A crop is two changes: pixels on disk and anchors in the document. z only
+   * ever knew about the second, so undoing one put every placement back around
+   * art that was still cropped and the map read as though it had slid. Ash lost
+   * nineteen trees to exactly that on 2026-08-25.
+   *
+   * The hook is asked first and told how deep the stack is, so it can tell its
+   * own edit apart from three moves that happened after it. It answers nothing;
+   * the document undo runs either way, because the anchors always have to come
+   * back whether or not there were pixels to restore with them. */
+  beforeUndo: ((histLen: number) => void) | null = null
+
   private undoDoc(): boolean {
+    if (this.beforeUndo) this.beforeUndo(this.doc.histLen())
     const ow = this.doc.W
     const oh = this.doc.H
     const oox = this.doc.ox
@@ -3987,23 +4219,52 @@ export class Editor {
       const y = Math.min(c.a[1], c.b[1]) * z
       const w = Math.abs(c.b[0] - c.a[0]) * z
       const h = Math.abs(c.b[1] - c.a[1]) * z
-      g.fillStyle = '#05060899'
+      /* A CROP DOES NOT LOOK LIKE A SELECTION, on purpose. Selection is the
+       * accent iris everywhere else in this tool, so a crop borrowing it is a
+       * second meaning on one colour and the only way to tell them apart is to
+       * remember which mode you are in. Black frame, eight handles, and what is
+       * about to be thrown away goes grey. */
+      const crop = !!c.id
+      g.fillStyle = crop ? '#0a0b0dcc' : '#05060899'
       g.fillRect(0, 0, this.doc.W * z, y)
       g.fillRect(0, y + h, this.doc.W * z, this.doc.H * z - y - h)
       g.fillRect(0, y, x, h)
       g.fillRect(x + w, y, this.doc.W * z - x - w, h)
-      g.strokeStyle = '#8f93f5'
-      g.lineWidth = 1.5
+      g.strokeStyle = crop ? '#0b0c0e' : '#8f93f5'
+      g.lineWidth = crop ? 2 : 1.5
       g.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1)
-      for (const [hx, hy] of [
-        [x, y],
-        [x + w, y],
-        [x + w, y + h],
-        [x, y + h],
-      ]) {
-        g.fillStyle = '#16181b'
+      if (crop) {
+        // a hairline inside the black, so the frame stays readable against the
+        // dark art this map is mostly made of
+        g.strokeStyle = '#e8e8eeaa'
+        g.lineWidth = 1
+        g.strokeRect(x + 2.5, y + 2.5, w - 5, h - 5)
+      }
+      /* Eight, not four. Four corners can only take a box in diagonally, and
+       * trimming one edge is most of what cropping actually is. */
+      const grips: [number, number][] = crop
+        ? [
+            [x, y],
+            [x + w / 2, y],
+            [x + w, y],
+            [x + w, y + h / 2],
+            [x + w, y + h],
+            [x + w / 2, y + h],
+            [x, y + h],
+            [x, y + h / 2],
+          ]
+        : [
+            [x, y],
+            [x + w, y],
+            [x + w, y + h],
+            [x, y + h],
+          ]
+      for (const [hx, hy] of grips) {
+        g.fillStyle = crop ? '#0b0c0e' : '#16181b'
+        g.strokeStyle = crop ? '#e8e8ee' : '#8f93f5'
+        g.lineWidth = 1
         g.fillRect(hx - 3, hy - 3, 6, 6)
-        g.strokeRect(hx - 3, hy - 3, 6, 6)
+        g.strokeRect(hx - 2.5, hy - 2.5, 5, 5)
       }
     }
     g.restore()
