@@ -12,7 +12,8 @@
 -- every long call has to become a row before anything can be hosted, and the
 -- laptop relay claims its work out of it.
 
-create extension if not exists pgcrypto;
+-- No extensions. gen_random_uuid() has been core postgres since 13 and the
+-- api-key ciphertext is made in node with aes-256-gcm, not in the database.
 
 -- ---------------------------------------------------------------- identity --
 
