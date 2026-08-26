@@ -60,12 +60,35 @@ querying is relational: a user owning maps, an anchor unique within a map, a pub
 vault, a spend ledger. Mongo makes those worse. A second database vendor is a second connection, a
 second backup story and a second thing to keep alive, for no gain. Decided 2026-08-26.
 
-### The 1 MB that was hiding in every autosave
+### The planes, measured, and the real reason they move
 
-`mask.ts` `serialize()` packed three byte planes into one base64 field, which is 1,056,768 characters
-for the 688x640 hub and made `doc.json` 1.89 MB. Those planes are an image. The same three already
-exist as PNGs in the export at 17 KB, 11 KB and 17 KB, so packed into one three-channel `planes.png`
-they are roughly 40 KB. Every autosave used to ship a megabyte and now ships forty kilobytes.
+`mask.ts` `serialize()` packs three byte planes into one base64 field. Measured on the hub with
+`server/db/measure-planes.mjs`, which round-trips the result before believing it:
+
+```
+map hub  688x640  440,320 px
+  doc.json today             1850.1 KB   (gz      17.2 KB)
+    of which base64 m        1720.0 KB
+    of which everything       130.1 KB   (gz       8.2 KB)
+  planes.png                    9.5 KB
+  ratio                   13.3x smaller
+  round-trip mismatches   0  (lossless)
+```
+
+1,720 KB of base64 becomes a 9.5 KB PNG, lossless. But note the `gz` column: gzipped, the whole
+document is already 17.2 KB, so **on the wire this saves almost nothing**, and Postgres would TOAST the
+base64 down to something similar. Size was never the real argument and any plan resting on it was
+resting on nothing.
+
+**The real argument is write amplification.** `editor.ts:3707` autosaves every 4 seconds while the map
+is dirty, and `saveLocal()` ships the entire serialized document every time. That is up to 900 saves
+an hour, each one rewriting a 1.85 MB row. Against Neon's 0.5 GB free tier, where storage includes
+recent history, an hour of editing writes 1.6 GB. The free tier would not survive one session.
+
+So Phase 1 is not a storage swap. It needs **dirty-part saves**: planes go to R2 only when the cut or
+the levels changed, the placements jsonb is written only when a placement changed, and an unchanged
+part is not written at all. Retrofitting that later means retrofitting it into every call site that
+mutates the document, so it belongs here.
 
 ### The library stopped being a directory walk
 
