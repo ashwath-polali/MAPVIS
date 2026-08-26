@@ -1,0 +1,4735 @@
+{
+  "assets": [
+    {
+      "id": "a55",
+      "group": "props",
+      "frames": [
+        "assets/spray-base/0.png",
+        "assets/spray-base/1.png",
+        "assets/spray-base/2.png",
+        "assets/spray-base/3.png",
+        "assets/spray-base/4.png",
+        "assets/spray-base/5.png",
+        "assets/spray-base/6.png",
+        "assets/spray-base/7.png",
+        "assets/spray-base/8.png",
+        "assets/spray-base/9.png",
+        "assets/spray-base/10.png",
+        "assets/spray-base/11.png",
+        "assets/spray-base/12.png",
+        "assets/spray-base/13.png",
+        "assets/spray-base/14.png",
+        "assets/spray-base/15.png"
+      ],
+      "fps": 6,
+      "x": 223,
+      "y": 361,
+      "scale": 0.594,
+      "scaleX": 0.594,
+      "scaleY": 0.832,
+      "rot": 0.2908,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a56",
+      "group": "props",
+      "frames": [
+        "assets/spray-base/0.png",
+        "assets/spray-base/1.png",
+        "assets/spray-base/2.png",
+        "assets/spray-base/3.png",
+        "assets/spray-base/4.png",
+        "assets/spray-base/5.png",
+        "assets/spray-base/6.png",
+        "assets/spray-base/7.png",
+        "assets/spray-base/8.png",
+        "assets/spray-base/9.png",
+        "assets/spray-base/10.png",
+        "assets/spray-base/11.png",
+        "assets/spray-base/12.png",
+        "assets/spray-base/13.png",
+        "assets/spray-base/14.png",
+        "assets/spray-base/15.png"
+      ],
+      "fps": 6,
+      "x": 463,
+      "y": 348,
+      "scale": 0.472,
+      "scaleX": 0.472,
+      "scaleY": 0.469,
+      "rot": -0.5189,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a57",
+      "group": "effects",
+      "frames": [
+        "assets/panther-falls/0.png",
+        "assets/panther-falls/1.png",
+        "assets/panther-falls/2.png",
+        "assets/panther-falls/3.png",
+        "assets/panther-falls/4.png",
+        "assets/panther-falls/5.png",
+        "assets/panther-falls/6.png",
+        "assets/panther-falls/7.png",
+        "assets/panther-falls/8.png",
+        "assets/panther-falls/9.png",
+        "assets/panther-falls/10.png",
+        "assets/panther-falls/11.png"
+      ],
+      "fps": 7,
+      "x": 227,
+      "y": 304,
+      "scale": 0.626,
+      "scaleX": 0.626,
+      "scaleY": 1.376,
+      "rot": 0,
+      "flipX": false,
+      "flipY": true
+    },
+    {
+      "id": "a59",
+      "group": "effects",
+      "frames": [
+        "assets/panther-falls/0.png",
+        "assets/panther-falls/1.png",
+        "assets/panther-falls/2.png",
+        "assets/panther-falls/3.png",
+        "assets/panther-falls/4.png",
+        "assets/panther-falls/5.png",
+        "assets/panther-falls/6.png",
+        "assets/panther-falls/7.png",
+        "assets/panther-falls/8.png",
+        "assets/panther-falls/9.png",
+        "assets/panther-falls/10.png",
+        "assets/panther-falls/11.png"
+      ],
+      "fps": 7,
+      "x": 463,
+      "y": 304,
+      "scale": 0.626,
+      "scaleX": 0.626,
+      "scaleY": 1.023,
+      "rot": 0,
+      "flipX": false,
+      "flipY": true
+    },
+    {
+      "id": "a61",
+      "group": "props",
+      "frames": [
+        "assets/spray-mouth/0.png",
+        "assets/spray-mouth/1.png",
+        "assets/spray-mouth/2.png",
+        "assets/spray-mouth/3.png",
+        "assets/spray-mouth/4.png",
+        "assets/spray-mouth/5.png",
+        "assets/spray-mouth/6.png",
+        "assets/spray-mouth/7.png",
+        "assets/spray-mouth/8.png",
+        "assets/spray-mouth/9.png",
+        "assets/spray-mouth/10.png",
+        "assets/spray-mouth/11.png",
+        "assets/spray-mouth/12.png",
+        "assets/spray-mouth/13.png",
+        "assets/spray-mouth/14.png",
+        "assets/spray-mouth/15.png"
+      ],
+      "fps": 6,
+      "x": 239,
+      "y": 353,
+      "scale": 0.4,
+      "scaleX": 0.4,
+      "scaleY": 0.4,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a66",
+      "group": "effects",
+      "frames": [
+        "assets/volcano-smoke/0.png",
+        "assets/volcano-smoke/1.png",
+        "assets/volcano-smoke/2.png",
+        "assets/volcano-smoke/3.png",
+        "assets/volcano-smoke/4.png",
+        "assets/volcano-smoke/5.png",
+        "assets/volcano-smoke/6.png",
+        "assets/volcano-smoke/7.png",
+        "assets/volcano-smoke/8.png",
+        "assets/volcano-smoke/9.png",
+        "assets/volcano-smoke/10.png",
+        "assets/volcano-smoke/11.png",
+        "assets/volcano-smoke/12.png",
+        "assets/volcano-smoke/13.png",
+        "assets/volcano-smoke/14.png",
+        "assets/volcano-smoke/15.png"
+      ],
+      "fps": 3,
+      "x": 344,
+      "y": 222,
+      "scale": 1.2,
+      "scaleX": 1.2,
+      "scaleY": 1,
+      "rot": -0.0889,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a103",
+      "group": "trees",
+      "frames": [
+        "assets/palm-island-trees-animated-2-bit2/0.png",
+        "assets/palm-island-trees-animated-2-bit2/1.png",
+        "assets/palm-island-trees-animated-2-bit2/2.png",
+        "assets/palm-island-trees-animated-2-bit2/3.png",
+        "assets/palm-island-trees-animated-2-bit2/4.png",
+        "assets/palm-island-trees-animated-2-bit2/5.png",
+        "assets/palm-island-trees-animated-2-bit2/6.png",
+        "assets/palm-island-trees-animated-2-bit2/7.png",
+        "assets/palm-island-trees-animated-2-bit2/8.png"
+      ],
+      "fps": 6,
+      "x": 49,
+      "y": 456,
+      "scale": 0.5,
+      "scaleX": 0.5,
+      "scaleY": 0.5,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a109",
+      "group": "trees",
+      "frames": [
+        "assets/palm-island-trees-animated-1-trimmed-bit2/0.png",
+        "assets/palm-island-trees-animated-1-trimmed-bit2/1.png",
+        "assets/palm-island-trees-animated-1-trimmed-bit2/2.png",
+        "assets/palm-island-trees-animated-1-trimmed-bit2/3.png",
+        "assets/palm-island-trees-animated-1-trimmed-bit2/4.png",
+        "assets/palm-island-trees-animated-1-trimmed-bit2/5.png",
+        "assets/palm-island-trees-animated-1-trimmed-bit2/6.png",
+        "assets/palm-island-trees-animated-1-trimmed-bit2/7.png",
+        "assets/palm-island-trees-animated-1-trimmed-bit2/8.png"
+      ],
+      "fps": 6,
+      "x": 39,
+      "y": 448,
+      "scale": 0.5,
+      "scaleX": 0.5,
+      "scaleY": 0.5,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a111",
+      "group": "trees",
+      "frames": [
+        "assets/palm-island-trees-animated-3-trimmed-bit2/0.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/1.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/2.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/3.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/4.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/5.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/6.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/7.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/8.png"
+      ],
+      "fps": 6,
+      "x": 84,
+      "y": 379,
+      "scale": 0.458,
+      "scaleX": 0.458,
+      "scaleY": 0.458,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a112",
+      "group": "effects",
+      "frames": [
+        "assets/nether-gate-veil/0.png",
+        "assets/nether-gate-veil/1.png",
+        "assets/nether-gate-veil/2.png",
+        "assets/nether-gate-veil/3.png",
+        "assets/nether-gate-veil/4.png",
+        "assets/nether-gate-veil/5.png",
+        "assets/nether-gate-veil/6.png",
+        "assets/nether-gate-veil/7.png",
+        "assets/nether-gate-veil/8.png",
+        "assets/nether-gate-veil/9.png",
+        "assets/nether-gate-veil/10.png",
+        "assets/nether-gate-veil/11.png",
+        "assets/nether-gate-veil/12.png",
+        "assets/nether-gate-veil/13.png",
+        "assets/nether-gate-veil/14.png",
+        "assets/nether-gate-veil/15.png"
+      ],
+      "fps": 4,
+      "x": 343,
+      "y": 383,
+      "scale": 1,
+      "scaleX": 1,
+      "scaleY": 1,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a114",
+      "group": "trees",
+      "frames": [
+        "assets/palm-island-trees-animated-3-trimmed-bit2/0.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/1.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/2.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/3.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/4.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/5.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/6.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/7.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/8.png"
+      ],
+      "fps": 6,
+      "x": 93,
+      "y": 377,
+      "scale": 0.366,
+      "scaleX": 0.366,
+      "scaleY": 0.366,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a119",
+      "group": "trees",
+      "frames": [
+        "assets/palm-island-trees-animated-3-trimmed-bit2/0.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/1.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/2.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/3.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/4.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/5.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/6.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/7.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/8.png"
+      ],
+      "fps": 6,
+      "x": 104,
+      "y": 368,
+      "scale": 0.366,
+      "scaleX": 0.366,
+      "scaleY": 0.366,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a153",
+      "group": "trees",
+      "frames": [
+        "assets/palm-island-trees-animated-3-trimmed-bit2/0.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/1.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/2.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/3.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/4.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/5.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/6.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/7.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/8.png"
+      ],
+      "fps": 6,
+      "x": 115,
+      "y": 372,
+      "scale": 0.366,
+      "scaleX": 0.366,
+      "scaleY": 0.366,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a156",
+      "group": "trees",
+      "frames": [
+        "assets/palm-island-trees-animated-3-trimmed-bit2/0.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/1.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/2.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/3.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/4.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/5.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/6.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/7.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/8.png"
+      ],
+      "fps": 6,
+      "x": 75,
+      "y": 379,
+      "scale": 0.366,
+      "scaleX": 0.366,
+      "scaleY": 0.366,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a158",
+      "group": "trees",
+      "frames": [
+        "assets/palm-island-trees-animated-3-trimmed-bit2/0.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/1.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/2.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/3.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/4.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/5.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/6.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/7.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/8.png"
+      ],
+      "fps": 6,
+      "x": 92,
+      "y": 387,
+      "scale": 0.366,
+      "scaleX": 0.366,
+      "scaleY": 0.366,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a162",
+      "group": "trees",
+      "frames": [
+        "assets/palm-island-trees-animated-3-trimmed-bit2/0.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/1.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/2.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/3.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/4.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/5.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/6.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/7.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/8.png"
+      ],
+      "fps": 6,
+      "x": 76,
+      "y": 386,
+      "scale": 0.366,
+      "scaleX": 0.366,
+      "scaleY": 0.366,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a164",
+      "group": "trees",
+      "frames": [
+        "assets/palm-island-trees-animated-3-trimmed-bit2/0.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/1.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/2.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/3.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/4.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/5.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/6.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/7.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/8.png"
+      ],
+      "fps": 6,
+      "x": 82,
+      "y": 395,
+      "scale": 0.366,
+      "scaleX": 0.366,
+      "scaleY": 0.366,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a167",
+      "group": "trees",
+      "frames": [
+        "assets/palm-island-trees-animated-3-trimmed-bit2/0.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/1.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/2.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/3.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/4.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/5.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/6.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/7.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/8.png"
+      ],
+      "fps": 6,
+      "x": 111,
+      "y": 380,
+      "scale": 0.363,
+      "scaleX": 0.363,
+      "scaleY": 0.363,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a168",
+      "group": "trees",
+      "frames": [
+        "assets/palm-island-trees-animated-3-trimmed-bit2/0.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/1.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/2.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/3.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/4.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/5.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/6.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/7.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/8.png"
+      ],
+      "fps": 6,
+      "x": 103,
+      "y": 389,
+      "scale": 0.366,
+      "scaleX": 0.366,
+      "scaleY": 0.366,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a169",
+      "group": "trees",
+      "frames": [
+        "assets/palm-island-trees-animated-3-trimmed-bit2/0.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/1.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/2.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/3.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/4.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/5.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/6.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/7.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/8.png"
+      ],
+      "fps": 6,
+      "x": 109,
+      "y": 361,
+      "scale": 0.458,
+      "scaleX": 0.458,
+      "scaleY": 0.458,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a171",
+      "group": "trees",
+      "frames": [
+        "assets/palm-island-trees-animated-3-trimmed-bit2/0.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/1.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/2.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/3.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/4.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/5.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/6.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/7.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/8.png"
+      ],
+      "fps": 6,
+      "x": 118,
+      "y": 359,
+      "scale": 0.366,
+      "scaleX": 0.366,
+      "scaleY": 0.366,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a172",
+      "group": "trees",
+      "frames": [
+        "assets/palm-island-trees-animated-3-trimmed-bit2/0.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/1.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/2.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/3.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/4.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/5.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/6.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/7.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/8.png"
+      ],
+      "fps": 6,
+      "x": 130,
+      "y": 359,
+      "scale": 0.366,
+      "scaleX": 0.366,
+      "scaleY": 0.366,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a173",
+      "group": "trees",
+      "frames": [
+        "assets/palm-island-trees-animated-3-trimmed-bit2/0.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/1.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/2.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/3.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/4.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/5.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/6.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/7.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/8.png"
+      ],
+      "fps": 6,
+      "x": 130,
+      "y": 359,
+      "scale": 0.366,
+      "scaleX": 0.366,
+      "scaleY": 0.366,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a179",
+      "group": "trees",
+      "frames": [
+        "assets/palm-island-trees-animated-3-trimmed-bit2/0.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/1.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/2.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/3.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/4.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/5.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/6.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/7.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/8.png"
+      ],
+      "fps": 6,
+      "x": 100,
+      "y": 361,
+      "scale": 0.366,
+      "scaleX": 0.366,
+      "scaleY": 0.366,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a183",
+      "group": "trees",
+      "frames": [
+        "assets/palm-island-trees-animated-3-trimmed-bit2/0.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/1.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/2.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/3.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/4.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/5.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/6.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/7.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/8.png"
+      ],
+      "fps": 6,
+      "x": 104,
+      "y": 376,
+      "scale": 0.366,
+      "scaleX": 0.366,
+      "scaleY": 0.366,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a184",
+      "group": "trees",
+      "frames": [
+        "assets/palm-island-trees-animated-3-trimmed-bit2/0.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/1.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/2.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/3.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/4.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/5.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/6.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/7.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/8.png"
+      ],
+      "fps": 6,
+      "x": 128,
+      "y": 372,
+      "scale": 0.366,
+      "scaleX": 0.366,
+      "scaleY": 0.366,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a185",
+      "group": "trees",
+      "frames": [
+        "assets/palm-island-trees-animated-3-trimmed-bit2/0.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/1.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/2.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/3.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/4.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/5.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/6.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/7.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/8.png"
+      ],
+      "fps": 6,
+      "x": 138,
+      "y": 364,
+      "scale": 0.366,
+      "scaleX": 0.366,
+      "scaleY": 0.366,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a186",
+      "group": "trees",
+      "frames": [
+        "assets/palm-island-trees-animated-3-trimmed-bit2/0.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/1.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/2.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/3.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/4.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/5.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/6.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/7.png",
+        "assets/palm-island-trees-animated-3-trimmed-bit2/8.png"
+      ],
+      "fps": 6,
+      "x": 123,
+      "y": 366,
+      "scale": 0.366,
+      "scaleX": 0.366,
+      "scaleY": 0.366,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a269",
+      "group": "trees",
+      "frames": [
+        "assets/gen-island-palm-tree-beautifl/0.png",
+        "assets/gen-island-palm-tree-beautifl/1.png",
+        "assets/gen-island-palm-tree-beautifl/2.png",
+        "assets/gen-island-palm-tree-beautifl/3.png",
+        "assets/gen-island-palm-tree-beautifl/4.png",
+        "assets/gen-island-palm-tree-beautifl/5.png",
+        "assets/gen-island-palm-tree-beautifl/6.png",
+        "assets/gen-island-palm-tree-beautifl/7.png",
+        "assets/gen-island-palm-tree-beautifl/8.png"
+      ],
+      "fps": 6,
+      "x": 165,
+      "y": 434,
+      "scale": 0.496,
+      "scaleX": 0.496,
+      "scaleY": 0.496,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a270",
+      "group": "trees",
+      "frames": [
+        "assets/gen-island-palm-tree-beautifl/0.png",
+        "assets/gen-island-palm-tree-beautifl/1.png",
+        "assets/gen-island-palm-tree-beautifl/2.png",
+        "assets/gen-island-palm-tree-beautifl/3.png",
+        "assets/gen-island-palm-tree-beautifl/4.png",
+        "assets/gen-island-palm-tree-beautifl/5.png",
+        "assets/gen-island-palm-tree-beautifl/6.png",
+        "assets/gen-island-palm-tree-beautifl/7.png",
+        "assets/gen-island-palm-tree-beautifl/8.png"
+      ],
+      "fps": 6,
+      "x": 157,
+      "y": 427,
+      "scale": 0.496,
+      "scaleX": 0.496,
+      "scaleY": 0.496,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a271",
+      "group": "trees",
+      "frames": [
+        "assets/gen-island-palm-tree-beautifl/0.png",
+        "assets/gen-island-palm-tree-beautifl/1.png",
+        "assets/gen-island-palm-tree-beautifl/2.png",
+        "assets/gen-island-palm-tree-beautifl/3.png",
+        "assets/gen-island-palm-tree-beautifl/4.png",
+        "assets/gen-island-palm-tree-beautifl/5.png",
+        "assets/gen-island-palm-tree-beautifl/6.png",
+        "assets/gen-island-palm-tree-beautifl/7.png",
+        "assets/gen-island-palm-tree-beautifl/8.png"
+      ],
+      "fps": 6,
+      "x": 174,
+      "y": 437,
+      "scale": 0.496,
+      "scaleX": 0.496,
+      "scaleY": 0.496,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a275",
+      "group": "props",
+      "src": "assets/gen-old-hand-cart.png",
+      "x": 92,
+      "y": 444,
+      "scale": 0.312,
+      "scaleX": 0.312,
+      "scaleY": 0.312,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a276",
+      "group": "props",
+      "src": "assets/gen-tipped-over-barrel.png",
+      "x": 100,
+      "y": 446,
+      "scale": 0.217,
+      "scaleX": 0.217,
+      "scaleY": 0.217,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a277",
+      "group": "props",
+      "src": "assets/gen-wrecked-wooden-rowboat.png",
+      "x": 110,
+      "y": 471,
+      "scale": 0.351,
+      "scaleX": 0.351,
+      "scaleY": 0.351,
+      "rot": 0.0587,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a278",
+      "group": "props",
+      "src": "assets/gen-bleached-driftwood-log.png",
+      "x": 138,
+      "y": 483,
+      "scale": 0.354,
+      "scaleX": 0.354,
+      "scaleY": 0.354,
+      "rot": 0.2757,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a279",
+      "group": "props",
+      "src": "assets/gen-tipped-over-barrel.png",
+      "x": 104,
+      "y": 445,
+      "scale": 0.217,
+      "scaleX": 0.217,
+      "scaleY": 0.217,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a283",
+      "group": "props",
+      "frames": [
+        "assets/gen-walking-crab/0.png",
+        "assets/gen-walking-crab/1.png",
+        "assets/gen-walking-crab/2.png",
+        "assets/gen-walking-crab/3.png",
+        "assets/gen-walking-crab/4.png",
+        "assets/gen-walking-crab/5.png",
+        "assets/gen-walking-crab/6.png",
+        "assets/gen-walking-crab/7.png",
+        "assets/gen-walking-crab/8.png"
+      ],
+      "fps": 6,
+      "x": 91,
+      "y": 465,
+      "scale": 0.085,
+      "scaleX": 0.085,
+      "scaleY": 0.085,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false,
+      "life": {
+        "kind": "wander",
+        "bounds": {
+          "x": 78,
+          "y": 443,
+          "w": 46,
+          "h": 23
+        },
+        "seed": 7,
+        "range": 24,
+        "speedMin": 11,
+        "speedMax": 22,
+        "pauseMin": 1.8,
+        "pauseMax": 5.5,
+        "stepMin": 0.25,
+        "stepMax": 0.8,
+        "bob": 1,
+        "bobRate": 4.5,
+        "faceMotion": true
+      }
+    },
+    {
+      "id": "a287",
+      "group": "props",
+      "frames": [
+        "assets/gen-walking-crab/0.png",
+        "assets/gen-walking-crab/1.png",
+        "assets/gen-walking-crab/2.png",
+        "assets/gen-walking-crab/3.png",
+        "assets/gen-walking-crab/4.png",
+        "assets/gen-walking-crab/5.png",
+        "assets/gen-walking-crab/6.png",
+        "assets/gen-walking-crab/7.png",
+        "assets/gen-walking-crab/8.png"
+      ],
+      "fps": 6,
+      "x": 99,
+      "y": 461,
+      "scale": 0.085,
+      "scaleX": 0.085,
+      "scaleY": 0.085,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false,
+      "life": {
+        "kind": "wander",
+        "bounds": {
+          "x": 78,
+          "y": 443,
+          "w": 46,
+          "h": 23
+        },
+        "seed": 762991642,
+        "range": 24,
+        "speedMin": 11,
+        "speedMax": 22,
+        "pauseMin": 1.8,
+        "pauseMax": 5.5,
+        "stepMin": 0.25,
+        "stepMax": 0.8,
+        "bob": 1,
+        "bobRate": 4.5,
+        "faceMotion": true,
+        "phase": 16.466230508105895
+      }
+    },
+    {
+      "id": "a294",
+      "group": "people",
+      "dirs": {
+        "south": [
+          "assets/gate-guard/south-0.png"
+        ],
+        "west": [
+          "assets/gate-guard/west-0.png"
+        ],
+        "east": [
+          "assets/gate-guard/east-0.png"
+        ],
+        "north": [
+          "assets/gate-guard/north-0.png"
+        ],
+        "south-east": [
+          "assets/gate-guard/south-east-0.png"
+        ],
+        "north-east": [
+          "assets/gate-guard/north-east-0.png"
+        ],
+        "north-west": [
+          "assets/gate-guard/north-west-0.png"
+        ],
+        "south-west": [
+          "assets/gate-guard/south-west-0.png"
+        ]
+      },
+      "src": "assets/gate-guard/south-0.png",
+      "fps": 8,
+      "x": 653,
+      "y": 482,
+      "scale": 0.447,
+      "scaleX": 0.447,
+      "scaleY": 0.447,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a301",
+      "group": "props",
+      "dirs": {
+        "south": [
+          "assets/fishmonger/south-0.png",
+          "assets/fishmonger/south-1.png",
+          "assets/fishmonger/south-2.png",
+          "assets/fishmonger/south-3.png",
+          "assets/fishmonger/south-4.png",
+          "assets/fishmonger/south-5.png",
+          "assets/fishmonger/south-6.png",
+          "assets/fishmonger/south-7.png"
+        ],
+        "south-east": [
+          "assets/fishmonger/south-east-0.png",
+          "assets/fishmonger/south-east-1.png",
+          "assets/fishmonger/south-east-2.png",
+          "assets/fishmonger/south-east-3.png",
+          "assets/fishmonger/south-east-4.png",
+          "assets/fishmonger/south-east-5.png",
+          "assets/fishmonger/south-east-6.png",
+          "assets/fishmonger/south-east-7.png"
+        ],
+        "south-west": [
+          "assets/fishmonger/south-west-0.png",
+          "assets/fishmonger/south-west-1.png",
+          "assets/fishmonger/south-west-2.png",
+          "assets/fishmonger/south-west-3.png",
+          "assets/fishmonger/south-west-4.png",
+          "assets/fishmonger/south-west-5.png",
+          "assets/fishmonger/south-west-6.png",
+          "assets/fishmonger/south-west-7.png"
+        ],
+        "west": [
+          "assets/fishmonger/west-0.png"
+        ],
+        "east": [
+          "assets/fishmonger/east-0.png"
+        ],
+        "north": [
+          "assets/fishmonger/north-0.png"
+        ],
+        "north-east": [
+          "assets/fishmonger/north-east-0.png"
+        ],
+        "north-west": [
+          "assets/fishmonger/north-west-0.png"
+        ]
+      },
+      "src": "assets/fishmonger/south-0.png",
+      "fps": 8,
+      "x": 253,
+      "y": 440,
+      "scale": 0.4,
+      "scaleX": 0.4,
+      "scaleY": 0.4,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a302",
+      "group": "props",
+      "dirs": {
+        "south-east": [
+          "assets/fruit-seller/south-east-0.png",
+          "assets/fruit-seller/south-east-1.png",
+          "assets/fruit-seller/south-east-2.png",
+          "assets/fruit-seller/south-east-3.png",
+          "assets/fruit-seller/south-east-4.png",
+          "assets/fruit-seller/south-east-5.png",
+          "assets/fruit-seller/south-east-6.png",
+          "assets/fruit-seller/south-east-7.png"
+        ],
+        "south-west": [
+          "assets/fruit-seller/south-west-0.png",
+          "assets/fruit-seller/south-west-1.png",
+          "assets/fruit-seller/south-west-2.png",
+          "assets/fruit-seller/south-west-3.png",
+          "assets/fruit-seller/south-west-4.png",
+          "assets/fruit-seller/south-west-5.png",
+          "assets/fruit-seller/south-west-6.png",
+          "assets/fruit-seller/south-west-7.png"
+        ],
+        "south": [
+          "assets/fruit-seller/south-0.png",
+          "assets/fruit-seller/south-1.png",
+          "assets/fruit-seller/south-2.png",
+          "assets/fruit-seller/south-3.png",
+          "assets/fruit-seller/south-4.png",
+          "assets/fruit-seller/south-5.png",
+          "assets/fruit-seller/south-6.png",
+          "assets/fruit-seller/south-7.png"
+        ],
+        "west": [
+          "assets/fruit-seller/west-0.png"
+        ],
+        "east": [
+          "assets/fruit-seller/east-0.png"
+        ],
+        "north": [
+          "assets/fruit-seller/north-0.png"
+        ],
+        "north-east": [
+          "assets/fruit-seller/north-east-0.png"
+        ],
+        "north-west": [
+          "assets/fruit-seller/north-west-0.png"
+        ]
+      },
+      "src": "assets/fruit-seller/south-0.png",
+      "fps": 8,
+      "x": 254,
+      "y": 505,
+      "scale": 0.4,
+      "scaleX": 0.4,
+      "scaleY": 0.4,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a303",
+      "group": "people",
+      "dirs": {
+        "north-west": [
+          "assets/market-woman/north-west-0.png",
+          "assets/market-woman/north-west-1.png",
+          "assets/market-woman/north-west-2.png",
+          "assets/market-woman/north-west-3.png",
+          "assets/market-woman/north-west-4.png",
+          "assets/market-woman/north-west-5.png",
+          "assets/market-woman/north-west-6.png",
+          "assets/market-woman/north-west-7.png"
+        ],
+        "south-east": [
+          "assets/market-woman/south-east-0.png",
+          "assets/market-woman/south-east-1.png",
+          "assets/market-woman/south-east-2.png",
+          "assets/market-woman/south-east-3.png",
+          "assets/market-woman/south-east-4.png",
+          "assets/market-woman/south-east-5.png",
+          "assets/market-woman/south-east-6.png",
+          "assets/market-woman/south-east-7.png"
+        ],
+        "west": [
+          "assets/market-woman/west-0.png",
+          "assets/market-woman/west-1.png",
+          "assets/market-woman/west-2.png",
+          "assets/market-woman/west-3.png",
+          "assets/market-woman/west-4.png",
+          "assets/market-woman/west-5.png",
+          "assets/market-woman/west-6.png",
+          "assets/market-woman/west-7.png"
+        ],
+        "east": [
+          "assets/market-woman/east-0.png",
+          "assets/market-woman/east-1.png",
+          "assets/market-woman/east-2.png",
+          "assets/market-woman/east-3.png",
+          "assets/market-woman/east-4.png",
+          "assets/market-woman/east-5.png",
+          "assets/market-woman/east-6.png",
+          "assets/market-woman/east-7.png"
+        ],
+        "south": [
+          "assets/market-woman/south-0.png",
+          "assets/market-woman/south-1.png",
+          "assets/market-woman/south-2.png",
+          "assets/market-woman/south-3.png",
+          "assets/market-woman/south-4.png",
+          "assets/market-woman/south-5.png",
+          "assets/market-woman/south-6.png",
+          "assets/market-woman/south-7.png"
+        ],
+        "north": [
+          "assets/market-woman/north-0.png",
+          "assets/market-woman/north-1.png",
+          "assets/market-woman/north-2.png",
+          "assets/market-woman/north-3.png",
+          "assets/market-woman/north-4.png",
+          "assets/market-woman/north-5.png",
+          "assets/market-woman/north-6.png",
+          "assets/market-woman/north-7.png"
+        ],
+        "south-west": [
+          "assets/market-woman/south-west-0.png",
+          "assets/market-woman/south-west-1.png",
+          "assets/market-woman/south-west-2.png",
+          "assets/market-woman/south-west-3.png",
+          "assets/market-woman/south-west-4.png",
+          "assets/market-woman/south-west-5.png",
+          "assets/market-woman/south-west-6.png",
+          "assets/market-woman/south-west-7.png"
+        ],
+        "north-east": [
+          "assets/market-woman/north-east-0.png",
+          "assets/market-woman/north-east-1.png",
+          "assets/market-woman/north-east-2.png",
+          "assets/market-woman/north-east-3.png",
+          "assets/market-woman/north-east-4.png",
+          "assets/market-woman/north-east-5.png",
+          "assets/market-woman/north-east-6.png",
+          "assets/market-woman/north-east-7.png"
+        ]
+      },
+      "src": "assets/market-woman/south-0.png",
+      "fps": 8,
+      "x": 318,
+      "y": 517,
+      "scale": 0.362,
+      "scaleX": 0.362,
+      "scaleY": 0.362,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false,
+      "life": {
+        "kind": "wander",
+        "bounds": {
+          "x": 260,
+          "y": 473,
+          "w": 170,
+          "h": 70
+        },
+        "seed": 7,
+        "range": 34,
+        "speedMin": 9,
+        "speedMax": 15,
+        "pauseMin": 2.4,
+        "pauseMax": 7,
+        "stepMin": 0.25,
+        "stepMax": 0.8,
+        "bob": 1,
+        "bobRate": 2.4,
+        "faceMotion": true,
+        "walkOnly": true,
+        "walkPct": 0.5105042016806722
+      }
+    },
+    {
+      "id": "a304",
+      "group": "props",
+      "dirs": {
+        "south-east": [
+          "assets/knight-watch/south-east-0.png",
+          "assets/knight-watch/south-east-1.png",
+          "assets/knight-watch/south-east-2.png",
+          "assets/knight-watch/south-east-3.png",
+          "assets/knight-watch/south-east-4.png",
+          "assets/knight-watch/south-east-5.png",
+          "assets/knight-watch/south-east-6.png",
+          "assets/knight-watch/south-east-7.png"
+        ],
+        "south": [
+          "assets/knight-watch/south-0.png",
+          "assets/knight-watch/south-1.png",
+          "assets/knight-watch/south-2.png",
+          "assets/knight-watch/south-3.png",
+          "assets/knight-watch/south-4.png",
+          "assets/knight-watch/south-5.png",
+          "assets/knight-watch/south-6.png",
+          "assets/knight-watch/south-7.png"
+        ],
+        "south-west": [
+          "assets/knight-watch/south-west-0.png",
+          "assets/knight-watch/south-west-1.png",
+          "assets/knight-watch/south-west-2.png",
+          "assets/knight-watch/south-west-3.png",
+          "assets/knight-watch/south-west-4.png",
+          "assets/knight-watch/south-west-5.png",
+          "assets/knight-watch/south-west-6.png",
+          "assets/knight-watch/south-west-7.png"
+        ],
+        "west": [
+          "assets/knight-watch/west-0.png"
+        ],
+        "east": [
+          "assets/knight-watch/east-0.png"
+        ],
+        "north": [
+          "assets/knight-watch/north-0.png"
+        ],
+        "north-east": [
+          "assets/knight-watch/north-east-0.png"
+        ],
+        "north-west": [
+          "assets/knight-watch/north-west-0.png"
+        ]
+      },
+      "src": "assets/knight-watch/south-0.png",
+      "fps": 8,
+      "x": 364,
+      "y": 394,
+      "scale": 0.469,
+      "scaleX": 0.469,
+      "scaleY": 0.5,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a305",
+      "group": "props",
+      "dirs": {
+        "south": [
+          "assets/knight-gate/south-0.png",
+          "assets/knight-gate/south-1.png",
+          "assets/knight-gate/south-2.png",
+          "assets/knight-gate/south-3.png",
+          "assets/knight-gate/south-4.png",
+          "assets/knight-gate/south-5.png",
+          "assets/knight-gate/south-6.png",
+          "assets/knight-gate/south-7.png"
+        ],
+        "south-west": [
+          "assets/knight-gate/south-west-0.png",
+          "assets/knight-gate/south-west-1.png",
+          "assets/knight-gate/south-west-2.png",
+          "assets/knight-gate/south-west-3.png",
+          "assets/knight-gate/south-west-4.png",
+          "assets/knight-gate/south-west-5.png",
+          "assets/knight-gate/south-west-6.png",
+          "assets/knight-gate/south-west-7.png"
+        ],
+        "south-east": [
+          "assets/knight-gate/south-east-0.png",
+          "assets/knight-gate/south-east-1.png",
+          "assets/knight-gate/south-east-2.png",
+          "assets/knight-gate/south-east-3.png",
+          "assets/knight-gate/south-east-4.png",
+          "assets/knight-gate/south-east-5.png",
+          "assets/knight-gate/south-east-6.png",
+          "assets/knight-gate/south-east-7.png"
+        ],
+        "west": [
+          "assets/knight-gate/west-0.png"
+        ],
+        "east": [
+          "assets/knight-gate/east-0.png"
+        ],
+        "north": [
+          "assets/knight-gate/north-0.png"
+        ],
+        "north-east": [
+          "assets/knight-gate/north-east-0.png"
+        ],
+        "north-west": [
+          "assets/knight-gate/north-west-0.png"
+        ]
+      },
+      "src": "assets/knight-gate/south-0.png",
+      "fps": 8,
+      "x": 230,
+      "y": 472,
+      "scale": 0.454,
+      "scaleX": 0.454,
+      "scaleY": 0.454,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a306",
+      "group": "props",
+      "dirs": {
+        "south": [
+          "assets/net-mender/south-0.png",
+          "assets/net-mender/south-1.png",
+          "assets/net-mender/south-2.png",
+          "assets/net-mender/south-3.png",
+          "assets/net-mender/south-4.png",
+          "assets/net-mender/south-5.png",
+          "assets/net-mender/south-6.png",
+          "assets/net-mender/south-7.png"
+        ],
+        "south-east": [
+          "assets/net-mender/south-east-0.png",
+          "assets/net-mender/south-east-1.png",
+          "assets/net-mender/south-east-2.png",
+          "assets/net-mender/south-east-3.png",
+          "assets/net-mender/south-east-4.png",
+          "assets/net-mender/south-east-5.png",
+          "assets/net-mender/south-east-6.png",
+          "assets/net-mender/south-east-7.png"
+        ],
+        "south-west": [
+          "assets/net-mender/south-west-0.png",
+          "assets/net-mender/south-west-1.png",
+          "assets/net-mender/south-west-2.png",
+          "assets/net-mender/south-west-3.png",
+          "assets/net-mender/south-west-4.png",
+          "assets/net-mender/south-west-5.png",
+          "assets/net-mender/south-west-6.png",
+          "assets/net-mender/south-west-7.png"
+        ],
+        "west": [
+          "assets/net-mender/west-0.png"
+        ],
+        "east": [
+          "assets/net-mender/east-0.png"
+        ],
+        "north": [
+          "assets/net-mender/north-0.png"
+        ],
+        "north-east": [
+          "assets/net-mender/north-east-0.png"
+        ],
+        "north-west": [
+          "assets/net-mender/north-west-0.png"
+        ]
+      },
+      "src": "assets/net-mender/south-0.png",
+      "fps": 8,
+      "x": 206,
+      "y": 379,
+      "scale": 0.37,
+      "scaleX": 0.37,
+      "scaleY": 0.37,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a307",
+      "group": "people",
+      "dirs": {
+        "south": [
+          "assets/old-fisherman/south-0.png",
+          "assets/old-fisherman/south-1.png",
+          "assets/old-fisherman/south-2.png",
+          "assets/old-fisherman/south-3.png",
+          "assets/old-fisherman/south-4.png",
+          "assets/old-fisherman/south-5.png",
+          "assets/old-fisherman/south-6.png",
+          "assets/old-fisherman/south-7.png",
+          "assets/old-fisherman/south-8.png",
+          "assets/old-fisherman/south-9.png",
+          "assets/old-fisherman/south-10.png",
+          "assets/old-fisherman/south-11.png"
+        ],
+        "south-west": [
+          "assets/old-fisherman/south-west-0.png",
+          "assets/old-fisherman/south-west-1.png",
+          "assets/old-fisherman/south-west-2.png",
+          "assets/old-fisherman/south-west-3.png",
+          "assets/old-fisherman/south-west-4.png",
+          "assets/old-fisherman/south-west-5.png",
+          "assets/old-fisherman/south-west-6.png",
+          "assets/old-fisherman/south-west-7.png",
+          "assets/old-fisherman/south-west-8.png",
+          "assets/old-fisherman/south-west-9.png",
+          "assets/old-fisherman/south-west-10.png",
+          "assets/old-fisherman/south-west-11.png"
+        ],
+        "south-east": [
+          "assets/old-fisherman/south-east-0.png",
+          "assets/old-fisherman/south-east-1.png",
+          "assets/old-fisherman/south-east-2.png",
+          "assets/old-fisherman/south-east-3.png",
+          "assets/old-fisherman/south-east-4.png",
+          "assets/old-fisherman/south-east-5.png",
+          "assets/old-fisherman/south-east-6.png",
+          "assets/old-fisherman/south-east-7.png",
+          "assets/old-fisherman/south-east-8.png",
+          "assets/old-fisherman/south-east-9.png",
+          "assets/old-fisherman/south-east-10.png",
+          "assets/old-fisherman/south-east-11.png"
+        ],
+        "west": [
+          "assets/old-fisherman/west-0.png"
+        ],
+        "east": [
+          "assets/old-fisherman/east-0.png"
+        ],
+        "north": [
+          "assets/old-fisherman/north-0.png"
+        ],
+        "north-east": [
+          "assets/old-fisherman/north-east-0.png"
+        ],
+        "north-west": [
+          "assets/old-fisherman/north-west-0.png"
+        ]
+      },
+      "src": "assets/old-fisherman/south-0.png",
+      "fps": 8,
+      "x": 15,
+      "y": 444,
+      "scale": 0.229,
+      "scaleX": 0.229,
+      "scaleY": 0.229,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a308",
+      "group": "people",
+      "dirs": {
+        "south": [
+          "assets/old-fisherman/south-0.png",
+          "assets/old-fisherman/south-1.png",
+          "assets/old-fisherman/south-2.png",
+          "assets/old-fisherman/south-3.png",
+          "assets/old-fisherman/south-4.png",
+          "assets/old-fisherman/south-5.png",
+          "assets/old-fisherman/south-6.png",
+          "assets/old-fisherman/south-7.png",
+          "assets/old-fisherman/south-8.png",
+          "assets/old-fisherman/south-9.png",
+          "assets/old-fisherman/south-10.png",
+          "assets/old-fisherman/south-11.png"
+        ],
+        "south-west": [
+          "assets/old-fisherman/south-west-0.png",
+          "assets/old-fisherman/south-west-1.png",
+          "assets/old-fisherman/south-west-2.png",
+          "assets/old-fisherman/south-west-3.png",
+          "assets/old-fisherman/south-west-4.png",
+          "assets/old-fisherman/south-west-5.png",
+          "assets/old-fisherman/south-west-6.png",
+          "assets/old-fisherman/south-west-7.png",
+          "assets/old-fisherman/south-west-8.png",
+          "assets/old-fisherman/south-west-9.png",
+          "assets/old-fisherman/south-west-10.png",
+          "assets/old-fisherman/south-west-11.png"
+        ],
+        "south-east": [
+          "assets/old-fisherman/south-east-0.png",
+          "assets/old-fisherman/south-east-1.png",
+          "assets/old-fisherman/south-east-2.png",
+          "assets/old-fisherman/south-east-3.png",
+          "assets/old-fisherman/south-east-4.png",
+          "assets/old-fisherman/south-east-5.png",
+          "assets/old-fisherman/south-east-6.png",
+          "assets/old-fisherman/south-east-7.png",
+          "assets/old-fisherman/south-east-8.png",
+          "assets/old-fisherman/south-east-9.png",
+          "assets/old-fisherman/south-east-10.png",
+          "assets/old-fisherman/south-east-11.png"
+        ],
+        "west": [
+          "assets/old-fisherman/west-0.png"
+        ],
+        "east": [
+          "assets/old-fisherman/east-0.png"
+        ],
+        "north": [
+          "assets/old-fisherman/north-0.png"
+        ],
+        "north-east": [
+          "assets/old-fisherman/north-east-0.png"
+        ],
+        "north-west": [
+          "assets/old-fisherman/north-west-0.png"
+        ]
+      },
+      "src": "assets/old-fisherman/south-0.png",
+      "fps": 8,
+      "x": 527,
+      "y": 490,
+      "scale": 0.4,
+      "scaleX": 0.4,
+      "scaleY": 0.4,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a310",
+      "group": "people",
+      "dirs": {
+        "south": [
+          "assets/woman-blue-wrap/south-0.png"
+        ],
+        "west": [
+          "assets/woman-blue-wrap/west-0.png"
+        ],
+        "east": [
+          "assets/woman-blue-wrap/east-0.png"
+        ],
+        "north": [
+          "assets/woman-blue-wrap/north-0.png"
+        ],
+        "south-east": [
+          "assets/woman-blue-wrap/south-east-0.png"
+        ],
+        "north-east": [
+          "assets/woman-blue-wrap/north-east-0.png"
+        ],
+        "north-west": [
+          "assets/woman-blue-wrap/north-west-0.png"
+        ],
+        "south-west": [
+          "assets/woman-blue-wrap/south-west-0.png"
+        ]
+      },
+      "src": "assets/woman-blue-wrap/south-0.png",
+      "fps": 8,
+      "x": 523,
+      "y": 388,
+      "scale": 0.4,
+      "scaleX": 0.4,
+      "scaleY": 0.4,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a311",
+      "group": "props",
+      "dirs": {
+        "west": [
+          "assets/water-carrier/west-0.png",
+          "assets/water-carrier/west-1.png",
+          "assets/water-carrier/west-2.png",
+          "assets/water-carrier/west-3.png",
+          "assets/water-carrier/west-4.png",
+          "assets/water-carrier/west-5.png",
+          "assets/water-carrier/west-6.png",
+          "assets/water-carrier/west-7.png"
+        ],
+        "north-east": [
+          "assets/water-carrier/north-east-0.png",
+          "assets/water-carrier/north-east-1.png",
+          "assets/water-carrier/north-east-2.png",
+          "assets/water-carrier/north-east-3.png",
+          "assets/water-carrier/north-east-4.png",
+          "assets/water-carrier/north-east-5.png",
+          "assets/water-carrier/north-east-6.png",
+          "assets/water-carrier/north-east-7.png"
+        ],
+        "south-west": [
+          "assets/water-carrier/south-west-0.png",
+          "assets/water-carrier/south-west-1.png",
+          "assets/water-carrier/south-west-2.png",
+          "assets/water-carrier/south-west-3.png",
+          "assets/water-carrier/south-west-4.png",
+          "assets/water-carrier/south-west-5.png",
+          "assets/water-carrier/south-west-6.png",
+          "assets/water-carrier/south-west-7.png"
+        ],
+        "south-east": [
+          "assets/water-carrier/south-east-0.png",
+          "assets/water-carrier/south-east-1.png",
+          "assets/water-carrier/south-east-2.png",
+          "assets/water-carrier/south-east-3.png",
+          "assets/water-carrier/south-east-4.png",
+          "assets/water-carrier/south-east-5.png",
+          "assets/water-carrier/south-east-6.png",
+          "assets/water-carrier/south-east-7.png"
+        ],
+        "east": [
+          "assets/water-carrier/east-0.png",
+          "assets/water-carrier/east-1.png",
+          "assets/water-carrier/east-2.png",
+          "assets/water-carrier/east-3.png",
+          "assets/water-carrier/east-4.png",
+          "assets/water-carrier/east-5.png",
+          "assets/water-carrier/east-6.png",
+          "assets/water-carrier/east-7.png"
+        ],
+        "north-west": [
+          "assets/water-carrier/north-west-0.png",
+          "assets/water-carrier/north-west-1.png",
+          "assets/water-carrier/north-west-2.png",
+          "assets/water-carrier/north-west-3.png",
+          "assets/water-carrier/north-west-4.png",
+          "assets/water-carrier/north-west-5.png",
+          "assets/water-carrier/north-west-6.png",
+          "assets/water-carrier/north-west-7.png"
+        ],
+        "north": [
+          "assets/water-carrier/north-0.png",
+          "assets/water-carrier/north-1.png",
+          "assets/water-carrier/north-2.png",
+          "assets/water-carrier/north-3.png",
+          "assets/water-carrier/north-4.png",
+          "assets/water-carrier/north-5.png",
+          "assets/water-carrier/north-6.png",
+          "assets/water-carrier/north-7.png"
+        ],
+        "south": [
+          "assets/water-carrier/south-0.png",
+          "assets/water-carrier/south-1.png",
+          "assets/water-carrier/south-2.png",
+          "assets/water-carrier/south-3.png",
+          "assets/water-carrier/south-4.png",
+          "assets/water-carrier/south-5.png",
+          "assets/water-carrier/south-6.png",
+          "assets/water-carrier/south-7.png"
+        ]
+      },
+      "src": "assets/water-carrier/south-0.png",
+      "fps": 8,
+      "x": 338,
+      "y": 540,
+      "scale": 0.364,
+      "scaleX": 0.364,
+      "scaleY": 0.364,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false,
+      "life": {
+        "kind": "wander",
+        "bounds": {
+          "x": 280,
+          "y": 484,
+          "w": 104,
+          "h": 64
+        },
+        "seed": 1284552508,
+        "range": 34,
+        "speedMin": 9,
+        "speedMax": 15,
+        "pauseMin": 2.4,
+        "pauseMax": 7.5,
+        "stepMin": 0.25,
+        "stepMax": 0.8,
+        "bob": 1,
+        "bobRate": 2.2,
+        "faceMotion": true,
+        "walkOnly": true,
+        "walkPct": 0.6320612980769231,
+        "phase": 32.92985056198912
+      }
+    },
+    {
+      "id": "a312",
+      "group": "props",
+      "dirs": {
+        "south": [
+          "assets/vendor-straw-hat-20/south-0.png"
+        ],
+        "west": [
+          "assets/vendor-straw-hat-20/west-0.png"
+        ],
+        "east": [
+          "assets/vendor-straw-hat-20/east-0.png"
+        ],
+        "north": [
+          "assets/vendor-straw-hat-20/north-0.png"
+        ],
+        "south-east": [
+          "assets/vendor-straw-hat-20/south-east-0.png"
+        ],
+        "north-east": [
+          "assets/vendor-straw-hat-20/north-east-0.png"
+        ],
+        "north-west": [
+          "assets/vendor-straw-hat-20/north-west-0.png"
+        ],
+        "south-west": [
+          "assets/vendor-straw-hat-20/south-west-0.png"
+        ]
+      },
+      "src": "assets/vendor-straw-hat-20/south-0.png",
+      "fps": 8,
+      "x": 124,
+      "y": 472,
+      "scale": 0.298,
+      "scaleX": 0.298,
+      "scaleY": 0.298,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a314",
+      "group": "people",
+      "dirs": {
+        "west": [
+          "assets/sailor/west-0.png",
+          "assets/sailor/west-1.png",
+          "assets/sailor/west-2.png",
+          "assets/sailor/west-3.png",
+          "assets/sailor/west-4.png",
+          "assets/sailor/west-5.png",
+          "assets/sailor/west-6.png",
+          "assets/sailor/west-7.png"
+        ],
+        "east": [
+          "assets/sailor/east-0.png",
+          "assets/sailor/east-1.png",
+          "assets/sailor/east-2.png",
+          "assets/sailor/east-3.png",
+          "assets/sailor/east-4.png",
+          "assets/sailor/east-5.png",
+          "assets/sailor/east-6.png",
+          "assets/sailor/east-7.png"
+        ],
+        "south": [
+          "assets/sailor/south-0.png",
+          "assets/sailor/south-1.png",
+          "assets/sailor/south-2.png",
+          "assets/sailor/south-3.png",
+          "assets/sailor/south-4.png",
+          "assets/sailor/south-5.png",
+          "assets/sailor/south-6.png",
+          "assets/sailor/south-7.png"
+        ],
+        "north-east": [
+          "assets/sailor/north-east-0.png",
+          "assets/sailor/north-east-1.png",
+          "assets/sailor/north-east-2.png",
+          "assets/sailor/north-east-3.png",
+          "assets/sailor/north-east-4.png",
+          "assets/sailor/north-east-5.png",
+          "assets/sailor/north-east-6.png",
+          "assets/sailor/north-east-7.png"
+        ],
+        "north-west": [
+          "assets/sailor/north-west-0.png",
+          "assets/sailor/north-west-1.png",
+          "assets/sailor/north-west-2.png",
+          "assets/sailor/north-west-3.png",
+          "assets/sailor/north-west-4.png",
+          "assets/sailor/north-west-5.png",
+          "assets/sailor/north-west-6.png",
+          "assets/sailor/north-west-7.png"
+        ],
+        "south-east": [
+          "assets/sailor/south-east-0.png",
+          "assets/sailor/south-east-1.png",
+          "assets/sailor/south-east-2.png",
+          "assets/sailor/south-east-3.png",
+          "assets/sailor/south-east-4.png",
+          "assets/sailor/south-east-5.png",
+          "assets/sailor/south-east-6.png",
+          "assets/sailor/south-east-7.png"
+        ],
+        "south-west": [
+          "assets/sailor/south-west-0.png",
+          "assets/sailor/south-west-1.png",
+          "assets/sailor/south-west-2.png",
+          "assets/sailor/south-west-3.png",
+          "assets/sailor/south-west-4.png",
+          "assets/sailor/south-west-5.png",
+          "assets/sailor/south-west-6.png",
+          "assets/sailor/south-west-7.png"
+        ],
+        "north": [
+          "assets/sailor/north-0.png",
+          "assets/sailor/north-1.png",
+          "assets/sailor/north-2.png",
+          "assets/sailor/north-3.png",
+          "assets/sailor/north-4.png",
+          "assets/sailor/north-5.png",
+          "assets/sailor/north-6.png",
+          "assets/sailor/north-7.png"
+        ]
+      },
+      "src": "assets/sailor/south-0.png",
+      "fps": 8,
+      "x": 547,
+      "y": 506,
+      "scale": 0.329,
+      "scaleX": 0.329,
+      "scaleY": 0.329,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false,
+      "life": {
+        "kind": "wander",
+        "bounds": {
+          "x": 471,
+          "y": 463,
+          "w": 104,
+          "h": 64
+        },
+        "seed": 419925707,
+        "range": 34,
+        "speedMin": 9,
+        "speedMax": 15,
+        "pauseMin": 2.4,
+        "pauseMax": 7.5,
+        "stepMin": 0.25,
+        "stepMax": 0.8,
+        "bob": 1,
+        "bobRate": 2.2,
+        "faceMotion": true,
+        "walkOnly": true,
+        "walkPct": 0.6320612980769231,
+        "phase": 41.65093532611998
+      }
+    },
+    {
+      "id": "a315",
+      "group": "props",
+      "dirs": {
+        "south": [
+          "assets/child-barefoot/south-0.png",
+          "assets/child-barefoot/south-1.png",
+          "assets/child-barefoot/south-2.png",
+          "assets/child-barefoot/south-3.png",
+          "assets/child-barefoot/south-4.png",
+          "assets/child-barefoot/south-5.png",
+          "assets/child-barefoot/south-6.png",
+          "assets/child-barefoot/south-7.png"
+        ],
+        "east": [
+          "assets/child-barefoot/east-0.png",
+          "assets/child-barefoot/east-1.png",
+          "assets/child-barefoot/east-2.png",
+          "assets/child-barefoot/east-3.png",
+          "assets/child-barefoot/east-4.png",
+          "assets/child-barefoot/east-5.png",
+          "assets/child-barefoot/east-6.png",
+          "assets/child-barefoot/east-7.png"
+        ],
+        "west": [
+          "assets/child-barefoot/west-0.png",
+          "assets/child-barefoot/west-1.png",
+          "assets/child-barefoot/west-2.png",
+          "assets/child-barefoot/west-3.png",
+          "assets/child-barefoot/west-4.png",
+          "assets/child-barefoot/west-5.png",
+          "assets/child-barefoot/west-6.png",
+          "assets/child-barefoot/west-7.png"
+        ],
+        "north": [
+          "assets/child-barefoot/north-0.png",
+          "assets/child-barefoot/north-1.png",
+          "assets/child-barefoot/north-2.png",
+          "assets/child-barefoot/north-3.png",
+          "assets/child-barefoot/north-4.png",
+          "assets/child-barefoot/north-5.png",
+          "assets/child-barefoot/north-6.png",
+          "assets/child-barefoot/north-7.png"
+        ],
+        "south-west": [
+          "assets/child-barefoot/south-west-0.png",
+          "assets/child-barefoot/south-west-1.png",
+          "assets/child-barefoot/south-west-2.png",
+          "assets/child-barefoot/south-west-3.png",
+          "assets/child-barefoot/south-west-4.png",
+          "assets/child-barefoot/south-west-5.png",
+          "assets/child-barefoot/south-west-6.png",
+          "assets/child-barefoot/south-west-7.png"
+        ],
+        "south-east": [
+          "assets/child-barefoot/south-east-0.png",
+          "assets/child-barefoot/south-east-1.png",
+          "assets/child-barefoot/south-east-2.png",
+          "assets/child-barefoot/south-east-3.png",
+          "assets/child-barefoot/south-east-4.png",
+          "assets/child-barefoot/south-east-5.png",
+          "assets/child-barefoot/south-east-6.png",
+          "assets/child-barefoot/south-east-7.png"
+        ],
+        "north-west": [
+          "assets/child-barefoot/north-west-0.png",
+          "assets/child-barefoot/north-west-1.png",
+          "assets/child-barefoot/north-west-2.png",
+          "assets/child-barefoot/north-west-3.png",
+          "assets/child-barefoot/north-west-4.png",
+          "assets/child-barefoot/north-west-5.png",
+          "assets/child-barefoot/north-west-6.png",
+          "assets/child-barefoot/north-west-7.png"
+        ],
+        "north-east": [
+          "assets/child-barefoot/north-east-0.png",
+          "assets/child-barefoot/north-east-1.png",
+          "assets/child-barefoot/north-east-2.png",
+          "assets/child-barefoot/north-east-3.png",
+          "assets/child-barefoot/north-east-4.png",
+          "assets/child-barefoot/north-east-5.png",
+          "assets/child-barefoot/north-east-6.png",
+          "assets/child-barefoot/north-east-7.png"
+        ]
+      },
+      "src": "assets/child-barefoot/south-0.png",
+      "fps": 8,
+      "x": 346,
+      "y": 538,
+      "scale": 0.252,
+      "scaleX": 0.252,
+      "scaleY": 0.243,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false,
+      "life": {
+        "kind": "wander",
+        "bounds": {
+          "x": 281,
+          "y": 484,
+          "w": 104,
+          "h": 64
+        },
+        "seed": 182488825,
+        "range": 34,
+        "speedMin": 9,
+        "speedMax": 15,
+        "pauseMin": 2.4,
+        "pauseMax": 7.5,
+        "stepMin": 0.25,
+        "stepMax": 0.8,
+        "bob": 1,
+        "bobRate": 2.2,
+        "faceMotion": true,
+        "walkOnly": true,
+        "walkPct": 0.6320612980769231,
+        "phase": 12.483568707707978
+      }
+    },
+    {
+      "id": "a316",
+      "group": "props",
+      "dirs": {
+        "east": [
+          "assets/dock-porter/east-0.png",
+          "assets/dock-porter/east-1.png",
+          "assets/dock-porter/east-2.png",
+          "assets/dock-porter/east-3.png",
+          "assets/dock-porter/east-4.png",
+          "assets/dock-porter/east-5.png",
+          "assets/dock-porter/east-6.png",
+          "assets/dock-porter/east-7.png"
+        ],
+        "north-east": [
+          "assets/dock-porter/north-east-0.png",
+          "assets/dock-porter/north-east-1.png",
+          "assets/dock-porter/north-east-2.png",
+          "assets/dock-porter/north-east-3.png",
+          "assets/dock-porter/north-east-4.png",
+          "assets/dock-porter/north-east-5.png",
+          "assets/dock-porter/north-east-6.png",
+          "assets/dock-porter/north-east-7.png"
+        ],
+        "west": [
+          "assets/dock-porter/west-0.png",
+          "assets/dock-porter/west-1.png",
+          "assets/dock-porter/west-2.png",
+          "assets/dock-porter/west-3.png",
+          "assets/dock-porter/west-4.png",
+          "assets/dock-porter/west-5.png",
+          "assets/dock-porter/west-6.png",
+          "assets/dock-porter/west-7.png"
+        ],
+        "south-west": [
+          "assets/dock-porter/south-west-0.png",
+          "assets/dock-porter/south-west-1.png",
+          "assets/dock-porter/south-west-2.png",
+          "assets/dock-porter/south-west-3.png",
+          "assets/dock-porter/south-west-4.png",
+          "assets/dock-porter/south-west-5.png",
+          "assets/dock-porter/south-west-6.png",
+          "assets/dock-porter/south-west-7.png"
+        ],
+        "north-west": [
+          "assets/dock-porter/north-west-0.png",
+          "assets/dock-porter/north-west-1.png",
+          "assets/dock-porter/north-west-2.png",
+          "assets/dock-porter/north-west-3.png",
+          "assets/dock-porter/north-west-4.png",
+          "assets/dock-porter/north-west-5.png",
+          "assets/dock-porter/north-west-6.png",
+          "assets/dock-porter/north-west-7.png"
+        ],
+        "south-east": [
+          "assets/dock-porter/south-east-0.png",
+          "assets/dock-porter/south-east-1.png",
+          "assets/dock-porter/south-east-2.png",
+          "assets/dock-porter/south-east-3.png",
+          "assets/dock-porter/south-east-4.png",
+          "assets/dock-porter/south-east-5.png",
+          "assets/dock-porter/south-east-6.png",
+          "assets/dock-porter/south-east-7.png"
+        ],
+        "south": [
+          "assets/dock-porter/south-0.png",
+          "assets/dock-porter/south-1.png",
+          "assets/dock-porter/south-2.png",
+          "assets/dock-porter/south-3.png",
+          "assets/dock-porter/south-4.png",
+          "assets/dock-porter/south-5.png",
+          "assets/dock-porter/south-6.png",
+          "assets/dock-porter/south-7.png"
+        ],
+        "north": [
+          "assets/dock-porter/north-0.png",
+          "assets/dock-porter/north-1.png",
+          "assets/dock-porter/north-2.png",
+          "assets/dock-porter/north-3.png",
+          "assets/dock-porter/north-4.png",
+          "assets/dock-porter/north-5.png",
+          "assets/dock-porter/north-6.png",
+          "assets/dock-porter/north-7.png"
+        ]
+      },
+      "src": "assets/dock-porter/south-0.png",
+      "fps": 8,
+      "x": 351,
+      "y": 535,
+      "scale": 0.357,
+      "scaleX": 0.357,
+      "scaleY": 0.357,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false,
+      "life": {
+        "kind": "wander",
+        "bounds": {
+          "x": 278,
+          "y": 480,
+          "w": 104,
+          "h": 64
+        },
+        "seed": 668573134,
+        "range": 34,
+        "speedMin": 9,
+        "speedMax": 15,
+        "pauseMin": 2.4,
+        "pauseMax": 7.5,
+        "stepMin": 0.25,
+        "stepMax": 0.8,
+        "bob": 1,
+        "bobRate": 2.2,
+        "faceMotion": true,
+        "walkOnly": true,
+        "walkPct": 0.6320612980769231,
+        "phase": 34.27627927279393
+      }
+    },
+    {
+      "id": "a317",
+      "group": "props",
+      "dirs": {
+        "south": [
+          "assets/dockhand-barrels/south-0.png"
+        ],
+        "west": [
+          "assets/dockhand-barrels/west-0.png"
+        ],
+        "east": [
+          "assets/dockhand-barrels/east-0.png"
+        ],
+        "north": [
+          "assets/dockhand-barrels/north-0.png"
+        ],
+        "south-east": [
+          "assets/dockhand-barrels/south-east-0.png"
+        ],
+        "north-east": [
+          "assets/dockhand-barrels/north-east-0.png"
+        ],
+        "north-west": [
+          "assets/dockhand-barrels/north-west-0.png"
+        ],
+        "south-west": [
+          "assets/dockhand-barrels/south-west-0.png"
+        ]
+      },
+      "src": "assets/dockhand-barrels/south-0.png",
+      "fps": 8,
+      "x": 152,
+      "y": 394,
+      "scale": 0.362,
+      "scaleX": 0.362,
+      "scaleY": 0.362,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a318",
+      "group": "props",
+      "dirs": {
+        "south-west": [
+          "assets/dockworker-crate/south-west-0.png",
+          "assets/dockworker-crate/south-west-1.png",
+          "assets/dockworker-crate/south-west-2.png",
+          "assets/dockworker-crate/south-west-3.png",
+          "assets/dockworker-crate/south-west-4.png",
+          "assets/dockworker-crate/south-west-5.png",
+          "assets/dockworker-crate/south-west-6.png",
+          "assets/dockworker-crate/south-west-7.png"
+        ],
+        "north-west": [
+          "assets/dockworker-crate/north-west-0.png",
+          "assets/dockworker-crate/north-west-1.png",
+          "assets/dockworker-crate/north-west-2.png",
+          "assets/dockworker-crate/north-west-3.png",
+          "assets/dockworker-crate/north-west-4.png",
+          "assets/dockworker-crate/north-west-5.png",
+          "assets/dockworker-crate/north-west-6.png",
+          "assets/dockworker-crate/north-west-7.png"
+        ],
+        "south-east": [
+          "assets/dockworker-crate/south-east-0.png",
+          "assets/dockworker-crate/south-east-1.png",
+          "assets/dockworker-crate/south-east-2.png",
+          "assets/dockworker-crate/south-east-3.png",
+          "assets/dockworker-crate/south-east-4.png",
+          "assets/dockworker-crate/south-east-5.png",
+          "assets/dockworker-crate/south-east-6.png",
+          "assets/dockworker-crate/south-east-7.png"
+        ],
+        "east": [
+          "assets/dockworker-crate/east-0.png",
+          "assets/dockworker-crate/east-1.png",
+          "assets/dockworker-crate/east-2.png",
+          "assets/dockworker-crate/east-3.png",
+          "assets/dockworker-crate/east-4.png",
+          "assets/dockworker-crate/east-5.png",
+          "assets/dockworker-crate/east-6.png",
+          "assets/dockworker-crate/east-7.png"
+        ],
+        "south": [
+          "assets/dockworker-crate/south-0.png",
+          "assets/dockworker-crate/south-1.png",
+          "assets/dockworker-crate/south-2.png",
+          "assets/dockworker-crate/south-3.png",
+          "assets/dockworker-crate/south-4.png",
+          "assets/dockworker-crate/south-5.png",
+          "assets/dockworker-crate/south-6.png",
+          "assets/dockworker-crate/south-7.png"
+        ],
+        "west": [
+          "assets/dockworker-crate/west-0.png",
+          "assets/dockworker-crate/west-1.png",
+          "assets/dockworker-crate/west-2.png",
+          "assets/dockworker-crate/west-3.png",
+          "assets/dockworker-crate/west-4.png",
+          "assets/dockworker-crate/west-5.png",
+          "assets/dockworker-crate/west-6.png",
+          "assets/dockworker-crate/west-7.png"
+        ],
+        "north": [
+          "assets/dockworker-crate/north-0.png",
+          "assets/dockworker-crate/north-1.png",
+          "assets/dockworker-crate/north-2.png",
+          "assets/dockworker-crate/north-3.png",
+          "assets/dockworker-crate/north-4.png",
+          "assets/dockworker-crate/north-5.png",
+          "assets/dockworker-crate/north-6.png",
+          "assets/dockworker-crate/north-7.png"
+        ],
+        "north-east": [
+          "assets/dockworker-crate/north-east-0.png",
+          "assets/dockworker-crate/north-east-1.png",
+          "assets/dockworker-crate/north-east-2.png",
+          "assets/dockworker-crate/north-east-3.png",
+          "assets/dockworker-crate/north-east-4.png",
+          "assets/dockworker-crate/north-east-5.png",
+          "assets/dockworker-crate/north-east-6.png",
+          "assets/dockworker-crate/north-east-7.png"
+        ]
+      },
+      "src": "assets/dockworker-crate/south-0.png",
+      "fps": 8,
+      "x": 348,
+      "y": 528,
+      "scale": 0.4,
+      "scaleX": 0.4,
+      "scaleY": 0.4,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false,
+      "life": {
+        "kind": "wander",
+        "bounds": {
+          "x": 281,
+          "y": 484,
+          "w": 104,
+          "h": 64
+        },
+        "seed": 1838268476,
+        "range": 34,
+        "speedMin": 9,
+        "speedMax": 15,
+        "pauseMin": 2.4,
+        "pauseMax": 7.5,
+        "stepMin": 0.25,
+        "stepMax": 0.8,
+        "bob": 1,
+        "bobRate": 2.2,
+        "faceMotion": true,
+        "walkOnly": true,
+        "walkPct": 0.6320612980769231,
+        "phase": 50.16094102089401
+      }
+    },
+    {
+      "id": "a321",
+      "group": "props",
+      "dirs": {
+        "south-east": [
+          "assets/knight-watch/south-east-0.png",
+          "assets/knight-watch/south-east-1.png",
+          "assets/knight-watch/south-east-2.png",
+          "assets/knight-watch/south-east-3.png",
+          "assets/knight-watch/south-east-4.png",
+          "assets/knight-watch/south-east-5.png",
+          "assets/knight-watch/south-east-6.png",
+          "assets/knight-watch/south-east-7.png"
+        ],
+        "south": [
+          "assets/knight-watch/south-0.png",
+          "assets/knight-watch/south-1.png",
+          "assets/knight-watch/south-2.png",
+          "assets/knight-watch/south-3.png",
+          "assets/knight-watch/south-4.png",
+          "assets/knight-watch/south-5.png",
+          "assets/knight-watch/south-6.png",
+          "assets/knight-watch/south-7.png"
+        ],
+        "south-west": [
+          "assets/knight-watch/south-west-0.png",
+          "assets/knight-watch/south-west-1.png",
+          "assets/knight-watch/south-west-2.png",
+          "assets/knight-watch/south-west-3.png",
+          "assets/knight-watch/south-west-4.png",
+          "assets/knight-watch/south-west-5.png",
+          "assets/knight-watch/south-west-6.png",
+          "assets/knight-watch/south-west-7.png"
+        ],
+        "west": [
+          "assets/knight-watch/west-0.png"
+        ],
+        "east": [
+          "assets/knight-watch/east-0.png"
+        ],
+        "north": [
+          "assets/knight-watch/north-0.png"
+        ],
+        "north-east": [
+          "assets/knight-watch/north-east-0.png"
+        ],
+        "north-west": [
+          "assets/knight-watch/north-west-0.png"
+        ]
+      },
+      "src": "assets/knight-watch/south-0.png",
+      "fps": 8,
+      "x": 325,
+      "y": 394,
+      "scale": 0.469,
+      "scaleX": 0.469,
+      "scaleY": 0.5,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a322",
+      "group": "props",
+      "dirs": {
+        "south": [
+          "assets/knight-gate/south-0.png",
+          "assets/knight-gate/south-1.png",
+          "assets/knight-gate/south-2.png",
+          "assets/knight-gate/south-3.png",
+          "assets/knight-gate/south-4.png",
+          "assets/knight-gate/south-5.png",
+          "assets/knight-gate/south-6.png",
+          "assets/knight-gate/south-7.png"
+        ],
+        "south-west": [
+          "assets/knight-gate/south-west-0.png",
+          "assets/knight-gate/south-west-1.png",
+          "assets/knight-gate/south-west-2.png",
+          "assets/knight-gate/south-west-3.png",
+          "assets/knight-gate/south-west-4.png",
+          "assets/knight-gate/south-west-5.png",
+          "assets/knight-gate/south-west-6.png",
+          "assets/knight-gate/south-west-7.png"
+        ],
+        "south-east": [
+          "assets/knight-gate/south-east-0.png",
+          "assets/knight-gate/south-east-1.png",
+          "assets/knight-gate/south-east-2.png",
+          "assets/knight-gate/south-east-3.png",
+          "assets/knight-gate/south-east-4.png",
+          "assets/knight-gate/south-east-5.png",
+          "assets/knight-gate/south-east-6.png",
+          "assets/knight-gate/south-east-7.png"
+        ],
+        "west": [
+          "assets/knight-gate/west-0.png"
+        ],
+        "east": [
+          "assets/knight-gate/east-0.png"
+        ],
+        "north": [
+          "assets/knight-gate/north-0.png"
+        ],
+        "north-east": [
+          "assets/knight-gate/north-east-0.png"
+        ],
+        "north-west": [
+          "assets/knight-gate/north-west-0.png"
+        ]
+      },
+      "src": "assets/knight-gate/south-0.png",
+      "fps": 8,
+      "x": 438,
+      "y": 472,
+      "scale": 0.454,
+      "scaleX": 0.454,
+      "scaleY": 0.454,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a324",
+      "group": "people",
+      "dirs": {
+        "west": [
+          "assets/sailor/west-0.png",
+          "assets/sailor/west-1.png",
+          "assets/sailor/west-2.png",
+          "assets/sailor/west-3.png",
+          "assets/sailor/west-4.png",
+          "assets/sailor/west-5.png",
+          "assets/sailor/west-6.png",
+          "assets/sailor/west-7.png"
+        ],
+        "east": [
+          "assets/sailor/east-0.png",
+          "assets/sailor/east-1.png",
+          "assets/sailor/east-2.png",
+          "assets/sailor/east-3.png",
+          "assets/sailor/east-4.png",
+          "assets/sailor/east-5.png",
+          "assets/sailor/east-6.png",
+          "assets/sailor/east-7.png"
+        ],
+        "south": [
+          "assets/sailor/south-0.png",
+          "assets/sailor/south-1.png",
+          "assets/sailor/south-2.png",
+          "assets/sailor/south-3.png",
+          "assets/sailor/south-4.png",
+          "assets/sailor/south-5.png",
+          "assets/sailor/south-6.png",
+          "assets/sailor/south-7.png"
+        ],
+        "north-east": [
+          "assets/sailor/north-east-0.png",
+          "assets/sailor/north-east-1.png",
+          "assets/sailor/north-east-2.png",
+          "assets/sailor/north-east-3.png",
+          "assets/sailor/north-east-4.png",
+          "assets/sailor/north-east-5.png",
+          "assets/sailor/north-east-6.png",
+          "assets/sailor/north-east-7.png"
+        ],
+        "north-west": [
+          "assets/sailor/north-west-0.png",
+          "assets/sailor/north-west-1.png",
+          "assets/sailor/north-west-2.png",
+          "assets/sailor/north-west-3.png",
+          "assets/sailor/north-west-4.png",
+          "assets/sailor/north-west-5.png",
+          "assets/sailor/north-west-6.png",
+          "assets/sailor/north-west-7.png"
+        ],
+        "south-east": [
+          "assets/sailor/south-east-0.png",
+          "assets/sailor/south-east-1.png",
+          "assets/sailor/south-east-2.png",
+          "assets/sailor/south-east-3.png",
+          "assets/sailor/south-east-4.png",
+          "assets/sailor/south-east-5.png",
+          "assets/sailor/south-east-6.png",
+          "assets/sailor/south-east-7.png"
+        ],
+        "south-west": [
+          "assets/sailor/south-west-0.png",
+          "assets/sailor/south-west-1.png",
+          "assets/sailor/south-west-2.png",
+          "assets/sailor/south-west-3.png",
+          "assets/sailor/south-west-4.png",
+          "assets/sailor/south-west-5.png",
+          "assets/sailor/south-west-6.png",
+          "assets/sailor/south-west-7.png"
+        ],
+        "north": [
+          "assets/sailor/north-0.png",
+          "assets/sailor/north-1.png",
+          "assets/sailor/north-2.png",
+          "assets/sailor/north-3.png",
+          "assets/sailor/north-4.png",
+          "assets/sailor/north-5.png",
+          "assets/sailor/north-6.png",
+          "assets/sailor/north-7.png"
+        ]
+      },
+      "src": "assets/sailor/south-0.png",
+      "fps": 8,
+      "x": 552,
+      "y": 511,
+      "scale": 0.329,
+      "scaleX": 0.329,
+      "scaleY": 0.329,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false,
+      "life": {
+        "kind": "wander",
+        "bounds": {
+          "x": 476,
+          "y": 468,
+          "w": 104,
+          "h": 64
+        },
+        "seed": 650589956,
+        "range": 34,
+        "speedMin": 9,
+        "speedMax": 15,
+        "pauseMin": 2.4,
+        "pauseMax": 7.5,
+        "stepMin": 0.25,
+        "stepMax": 0.8,
+        "bob": 1,
+        "bobRate": 2.2,
+        "faceMotion": true,
+        "walkOnly": true,
+        "walkPct": 0.6320612980769231,
+        "phase": 3.3918590000359083
+      }
+    },
+    {
+      "id": "a325",
+      "group": "props",
+      "dirs": {
+        "south": [
+          "assets/fishmonger/south-0.png",
+          "assets/fishmonger/south-1.png",
+          "assets/fishmonger/south-2.png",
+          "assets/fishmonger/south-3.png",
+          "assets/fishmonger/south-4.png",
+          "assets/fishmonger/south-5.png",
+          "assets/fishmonger/south-6.png",
+          "assets/fishmonger/south-7.png"
+        ],
+        "south-east": [
+          "assets/fishmonger/south-east-0.png",
+          "assets/fishmonger/south-east-1.png",
+          "assets/fishmonger/south-east-2.png",
+          "assets/fishmonger/south-east-3.png",
+          "assets/fishmonger/south-east-4.png",
+          "assets/fishmonger/south-east-5.png",
+          "assets/fishmonger/south-east-6.png",
+          "assets/fishmonger/south-east-7.png"
+        ],
+        "south-west": [
+          "assets/fishmonger/south-west-0.png",
+          "assets/fishmonger/south-west-1.png",
+          "assets/fishmonger/south-west-2.png",
+          "assets/fishmonger/south-west-3.png",
+          "assets/fishmonger/south-west-4.png",
+          "assets/fishmonger/south-west-5.png",
+          "assets/fishmonger/south-west-6.png",
+          "assets/fishmonger/south-west-7.png"
+        ],
+        "west": [
+          "assets/fishmonger/west-0.png"
+        ],
+        "east": [
+          "assets/fishmonger/east-0.png"
+        ],
+        "north": [
+          "assets/fishmonger/north-0.png"
+        ],
+        "north-east": [
+          "assets/fishmonger/north-east-0.png"
+        ],
+        "north-west": [
+          "assets/fishmonger/north-west-0.png"
+        ]
+      },
+      "src": "assets/fishmonger/south-0.png",
+      "fps": 8,
+      "x": 423,
+      "y": 434,
+      "scale": 0.4,
+      "scaleX": 0.4,
+      "scaleY": 0.4,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a326",
+      "group": "props",
+      "dirs": {
+        "south": [
+          "assets/fishmonger/south-0.png",
+          "assets/fishmonger/south-1.png",
+          "assets/fishmonger/south-2.png",
+          "assets/fishmonger/south-3.png",
+          "assets/fishmonger/south-4.png",
+          "assets/fishmonger/south-5.png",
+          "assets/fishmonger/south-6.png",
+          "assets/fishmonger/south-7.png"
+        ],
+        "south-east": [
+          "assets/fishmonger/south-east-0.png",
+          "assets/fishmonger/south-east-1.png",
+          "assets/fishmonger/south-east-2.png",
+          "assets/fishmonger/south-east-3.png",
+          "assets/fishmonger/south-east-4.png",
+          "assets/fishmonger/south-east-5.png",
+          "assets/fishmonger/south-east-6.png",
+          "assets/fishmonger/south-east-7.png"
+        ],
+        "south-west": [
+          "assets/fishmonger/south-west-0.png",
+          "assets/fishmonger/south-west-1.png",
+          "assets/fishmonger/south-west-2.png",
+          "assets/fishmonger/south-west-3.png",
+          "assets/fishmonger/south-west-4.png",
+          "assets/fishmonger/south-west-5.png",
+          "assets/fishmonger/south-west-6.png",
+          "assets/fishmonger/south-west-7.png"
+        ],
+        "west": [
+          "assets/fishmonger/west-0.png"
+        ],
+        "east": [
+          "assets/fishmonger/east-0.png"
+        ],
+        "north": [
+          "assets/fishmonger/north-0.png"
+        ],
+        "north-east": [
+          "assets/fishmonger/north-east-0.png"
+        ],
+        "north-west": [
+          "assets/fishmonger/north-west-0.png"
+        ]
+      },
+      "src": "assets/fishmonger/south-0.png",
+      "fps": 8,
+      "x": 395,
+      "y": 432,
+      "scale": 0.389,
+      "scaleX": 0.389,
+      "scaleY": 0.389,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a327",
+      "group": "people",
+      "dirs": {
+        "south": [
+          "assets/woman-blue-wrap/south-0.png"
+        ],
+        "west": [
+          "assets/woman-blue-wrap/west-0.png"
+        ],
+        "east": [
+          "assets/woman-blue-wrap/east-0.png"
+        ],
+        "north": [
+          "assets/woman-blue-wrap/north-0.png"
+        ],
+        "south-east": [
+          "assets/woman-blue-wrap/south-east-0.png"
+        ],
+        "north-east": [
+          "assets/woman-blue-wrap/north-east-0.png"
+        ],
+        "north-west": [
+          "assets/woman-blue-wrap/north-west-0.png"
+        ],
+        "south-west": [
+          "assets/woman-blue-wrap/south-west-0.png"
+        ]
+      },
+      "src": "assets/woman-blue-wrap/south-0.png",
+      "fps": 8,
+      "x": 193,
+      "y": 390,
+      "scale": 0.4,
+      "scaleX": 0.4,
+      "scaleY": 0.4,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a328",
+      "group": "props",
+      "dirs": {
+        "south-east": [
+          "assets/fruit-seller/south-east-0.png",
+          "assets/fruit-seller/south-east-1.png",
+          "assets/fruit-seller/south-east-2.png",
+          "assets/fruit-seller/south-east-3.png",
+          "assets/fruit-seller/south-east-4.png",
+          "assets/fruit-seller/south-east-5.png",
+          "assets/fruit-seller/south-east-6.png",
+          "assets/fruit-seller/south-east-7.png"
+        ],
+        "south-west": [
+          "assets/fruit-seller/south-west-0.png",
+          "assets/fruit-seller/south-west-1.png",
+          "assets/fruit-seller/south-west-2.png",
+          "assets/fruit-seller/south-west-3.png",
+          "assets/fruit-seller/south-west-4.png",
+          "assets/fruit-seller/south-west-5.png",
+          "assets/fruit-seller/south-west-6.png",
+          "assets/fruit-seller/south-west-7.png"
+        ],
+        "south": [
+          "assets/fruit-seller/south-0.png",
+          "assets/fruit-seller/south-1.png",
+          "assets/fruit-seller/south-2.png",
+          "assets/fruit-seller/south-3.png",
+          "assets/fruit-seller/south-4.png",
+          "assets/fruit-seller/south-5.png",
+          "assets/fruit-seller/south-6.png",
+          "assets/fruit-seller/south-7.png"
+        ],
+        "west": [
+          "assets/fruit-seller/west-0.png"
+        ],
+        "east": [
+          "assets/fruit-seller/east-0.png"
+        ],
+        "north": [
+          "assets/fruit-seller/north-0.png"
+        ],
+        "north-east": [
+          "assets/fruit-seller/north-east-0.png"
+        ],
+        "north-west": [
+          "assets/fruit-seller/north-west-0.png"
+        ]
+      },
+      "src": "assets/fruit-seller/south-0.png",
+      "fps": 8,
+      "x": 419,
+      "y": 497,
+      "scale": 0.4,
+      "scaleX": 0.4,
+      "scaleY": 0.4,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a329",
+      "group": "props",
+      "dirs": {
+        "south": [
+          "assets/fishmonger/south-0.png",
+          "assets/fishmonger/south-1.png",
+          "assets/fishmonger/south-2.png",
+          "assets/fishmonger/south-3.png",
+          "assets/fishmonger/south-4.png",
+          "assets/fishmonger/south-5.png",
+          "assets/fishmonger/south-6.png",
+          "assets/fishmonger/south-7.png"
+        ],
+        "south-east": [
+          "assets/fishmonger/south-east-0.png",
+          "assets/fishmonger/south-east-1.png",
+          "assets/fishmonger/south-east-2.png",
+          "assets/fishmonger/south-east-3.png",
+          "assets/fishmonger/south-east-4.png",
+          "assets/fishmonger/south-east-5.png",
+          "assets/fishmonger/south-east-6.png",
+          "assets/fishmonger/south-east-7.png"
+        ],
+        "south-west": [
+          "assets/fishmonger/south-west-0.png",
+          "assets/fishmonger/south-west-1.png",
+          "assets/fishmonger/south-west-2.png",
+          "assets/fishmonger/south-west-3.png",
+          "assets/fishmonger/south-west-4.png",
+          "assets/fishmonger/south-west-5.png",
+          "assets/fishmonger/south-west-6.png",
+          "assets/fishmonger/south-west-7.png"
+        ],
+        "west": [
+          "assets/fishmonger/west-0.png"
+        ],
+        "east": [
+          "assets/fishmonger/east-0.png"
+        ],
+        "north": [
+          "assets/fishmonger/north-0.png"
+        ],
+        "north-east": [
+          "assets/fishmonger/north-east-0.png"
+        ],
+        "north-west": [
+          "assets/fishmonger/north-west-0.png"
+        ]
+      },
+      "src": "assets/fishmonger/south-0.png",
+      "fps": 8,
+      "x": 472,
+      "y": 468,
+      "scale": 0.387,
+      "scaleX": 0.387,
+      "scaleY": 0.387,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a335",
+      "group": "people",
+      "dirs": {
+        "north-west": [
+          "assets/market-woman/north-west-0.png",
+          "assets/market-woman/north-west-1.png",
+          "assets/market-woman/north-west-2.png",
+          "assets/market-woman/north-west-3.png",
+          "assets/market-woman/north-west-4.png",
+          "assets/market-woman/north-west-5.png",
+          "assets/market-woman/north-west-6.png",
+          "assets/market-woman/north-west-7.png"
+        ],
+        "south-east": [
+          "assets/market-woman/south-east-0.png",
+          "assets/market-woman/south-east-1.png",
+          "assets/market-woman/south-east-2.png",
+          "assets/market-woman/south-east-3.png",
+          "assets/market-woman/south-east-4.png",
+          "assets/market-woman/south-east-5.png",
+          "assets/market-woman/south-east-6.png",
+          "assets/market-woman/south-east-7.png"
+        ],
+        "west": [
+          "assets/market-woman/west-0.png",
+          "assets/market-woman/west-1.png",
+          "assets/market-woman/west-2.png",
+          "assets/market-woman/west-3.png",
+          "assets/market-woman/west-4.png",
+          "assets/market-woman/west-5.png",
+          "assets/market-woman/west-6.png",
+          "assets/market-woman/west-7.png"
+        ],
+        "east": [
+          "assets/market-woman/east-0.png",
+          "assets/market-woman/east-1.png",
+          "assets/market-woman/east-2.png",
+          "assets/market-woman/east-3.png",
+          "assets/market-woman/east-4.png",
+          "assets/market-woman/east-5.png",
+          "assets/market-woman/east-6.png",
+          "assets/market-woman/east-7.png"
+        ],
+        "south": [
+          "assets/market-woman/south-0.png",
+          "assets/market-woman/south-1.png",
+          "assets/market-woman/south-2.png",
+          "assets/market-woman/south-3.png",
+          "assets/market-woman/south-4.png",
+          "assets/market-woman/south-5.png",
+          "assets/market-woman/south-6.png",
+          "assets/market-woman/south-7.png"
+        ],
+        "north": [
+          "assets/market-woman/north-0.png",
+          "assets/market-woman/north-1.png",
+          "assets/market-woman/north-2.png",
+          "assets/market-woman/north-3.png",
+          "assets/market-woman/north-4.png",
+          "assets/market-woman/north-5.png",
+          "assets/market-woman/north-6.png",
+          "assets/market-woman/north-7.png"
+        ],
+        "south-west": [
+          "assets/market-woman/south-west-0.png",
+          "assets/market-woman/south-west-1.png",
+          "assets/market-woman/south-west-2.png",
+          "assets/market-woman/south-west-3.png",
+          "assets/market-woman/south-west-4.png",
+          "assets/market-woman/south-west-5.png",
+          "assets/market-woman/south-west-6.png",
+          "assets/market-woman/south-west-7.png"
+        ],
+        "north-east": [
+          "assets/market-woman/north-east-0.png",
+          "assets/market-woman/north-east-1.png",
+          "assets/market-woman/north-east-2.png",
+          "assets/market-woman/north-east-3.png",
+          "assets/market-woman/north-east-4.png",
+          "assets/market-woman/north-east-5.png",
+          "assets/market-woman/north-east-6.png",
+          "assets/market-woman/north-east-7.png"
+        ]
+      },
+      "src": "assets/market-woman/south-0.png",
+      "fps": 8,
+      "x": 196,
+      "y": 416,
+      "scale": 0.362,
+      "scaleX": 0.362,
+      "scaleY": 0.362,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false,
+      "life": {
+        "kind": "wander",
+        "bounds": {
+          "x": 138,
+          "y": 372,
+          "w": 170,
+          "h": 70
+        },
+        "seed": 1026923478,
+        "range": 34,
+        "speedMin": 9,
+        "speedMax": 15,
+        "pauseMin": 2.4,
+        "pauseMax": 7,
+        "stepMin": 0.25,
+        "stepMax": 0.8,
+        "bob": 1,
+        "bobRate": 2.4,
+        "faceMotion": true,
+        "walkOnly": true,
+        "walkPct": 0.5105042016806722,
+        "phase": 7.868151516970996
+      }
+    },
+    {
+      "id": "a336",
+      "group": "props",
+      "dirs": {
+        "west": [
+          "assets/water-carrier/west-0.png",
+          "assets/water-carrier/west-1.png",
+          "assets/water-carrier/west-2.png",
+          "assets/water-carrier/west-3.png",
+          "assets/water-carrier/west-4.png",
+          "assets/water-carrier/west-5.png",
+          "assets/water-carrier/west-6.png",
+          "assets/water-carrier/west-7.png"
+        ],
+        "north-east": [
+          "assets/water-carrier/north-east-0.png",
+          "assets/water-carrier/north-east-1.png",
+          "assets/water-carrier/north-east-2.png",
+          "assets/water-carrier/north-east-3.png",
+          "assets/water-carrier/north-east-4.png",
+          "assets/water-carrier/north-east-5.png",
+          "assets/water-carrier/north-east-6.png",
+          "assets/water-carrier/north-east-7.png"
+        ],
+        "south-west": [
+          "assets/water-carrier/south-west-0.png",
+          "assets/water-carrier/south-west-1.png",
+          "assets/water-carrier/south-west-2.png",
+          "assets/water-carrier/south-west-3.png",
+          "assets/water-carrier/south-west-4.png",
+          "assets/water-carrier/south-west-5.png",
+          "assets/water-carrier/south-west-6.png",
+          "assets/water-carrier/south-west-7.png"
+        ],
+        "south-east": [
+          "assets/water-carrier/south-east-0.png",
+          "assets/water-carrier/south-east-1.png",
+          "assets/water-carrier/south-east-2.png",
+          "assets/water-carrier/south-east-3.png",
+          "assets/water-carrier/south-east-4.png",
+          "assets/water-carrier/south-east-5.png",
+          "assets/water-carrier/south-east-6.png",
+          "assets/water-carrier/south-east-7.png"
+        ],
+        "east": [
+          "assets/water-carrier/east-0.png",
+          "assets/water-carrier/east-1.png",
+          "assets/water-carrier/east-2.png",
+          "assets/water-carrier/east-3.png",
+          "assets/water-carrier/east-4.png",
+          "assets/water-carrier/east-5.png",
+          "assets/water-carrier/east-6.png",
+          "assets/water-carrier/east-7.png"
+        ],
+        "north-west": [
+          "assets/water-carrier/north-west-0.png",
+          "assets/water-carrier/north-west-1.png",
+          "assets/water-carrier/north-west-2.png",
+          "assets/water-carrier/north-west-3.png",
+          "assets/water-carrier/north-west-4.png",
+          "assets/water-carrier/north-west-5.png",
+          "assets/water-carrier/north-west-6.png",
+          "assets/water-carrier/north-west-7.png"
+        ],
+        "north": [
+          "assets/water-carrier/north-0.png",
+          "assets/water-carrier/north-1.png",
+          "assets/water-carrier/north-2.png",
+          "assets/water-carrier/north-3.png",
+          "assets/water-carrier/north-4.png",
+          "assets/water-carrier/north-5.png",
+          "assets/water-carrier/north-6.png",
+          "assets/water-carrier/north-7.png"
+        ],
+        "south": [
+          "assets/water-carrier/south-0.png",
+          "assets/water-carrier/south-1.png",
+          "assets/water-carrier/south-2.png",
+          "assets/water-carrier/south-3.png",
+          "assets/water-carrier/south-4.png",
+          "assets/water-carrier/south-5.png",
+          "assets/water-carrier/south-6.png",
+          "assets/water-carrier/south-7.png"
+        ]
+      },
+      "src": "assets/water-carrier/south-0.png",
+      "fps": 8,
+      "x": 258,
+      "y": 447,
+      "scale": 0.364,
+      "scaleX": 0.364,
+      "scaleY": 0.364,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false,
+      "life": {
+        "kind": "wander",
+        "bounds": {
+          "x": 200,
+          "y": 391,
+          "w": 104,
+          "h": 64
+        },
+        "seed": 1310484623,
+        "range": 34,
+        "speedMin": 9,
+        "speedMax": 15,
+        "pauseMin": 2.4,
+        "pauseMax": 7.5,
+        "stepMin": 0.25,
+        "stepMax": 0.8,
+        "bob": 1,
+        "bobRate": 2.2,
+        "faceMotion": true,
+        "walkOnly": true,
+        "walkPct": 0.6320612980769231,
+        "phase": 40.00052451058482
+      }
+    },
+    {
+      "id": "a337",
+      "group": "props",
+      "dirs": {
+        "south": [
+          "assets/child-barefoot/south-0.png",
+          "assets/child-barefoot/south-1.png",
+          "assets/child-barefoot/south-2.png",
+          "assets/child-barefoot/south-3.png",
+          "assets/child-barefoot/south-4.png",
+          "assets/child-barefoot/south-5.png",
+          "assets/child-barefoot/south-6.png",
+          "assets/child-barefoot/south-7.png"
+        ],
+        "east": [
+          "assets/child-barefoot/east-0.png",
+          "assets/child-barefoot/east-1.png",
+          "assets/child-barefoot/east-2.png",
+          "assets/child-barefoot/east-3.png",
+          "assets/child-barefoot/east-4.png",
+          "assets/child-barefoot/east-5.png",
+          "assets/child-barefoot/east-6.png",
+          "assets/child-barefoot/east-7.png"
+        ],
+        "west": [
+          "assets/child-barefoot/west-0.png",
+          "assets/child-barefoot/west-1.png",
+          "assets/child-barefoot/west-2.png",
+          "assets/child-barefoot/west-3.png",
+          "assets/child-barefoot/west-4.png",
+          "assets/child-barefoot/west-5.png",
+          "assets/child-barefoot/west-6.png",
+          "assets/child-barefoot/west-7.png"
+        ],
+        "north": [
+          "assets/child-barefoot/north-0.png",
+          "assets/child-barefoot/north-1.png",
+          "assets/child-barefoot/north-2.png",
+          "assets/child-barefoot/north-3.png",
+          "assets/child-barefoot/north-4.png",
+          "assets/child-barefoot/north-5.png",
+          "assets/child-barefoot/north-6.png",
+          "assets/child-barefoot/north-7.png"
+        ],
+        "south-west": [
+          "assets/child-barefoot/south-west-0.png",
+          "assets/child-barefoot/south-west-1.png",
+          "assets/child-barefoot/south-west-2.png",
+          "assets/child-barefoot/south-west-3.png",
+          "assets/child-barefoot/south-west-4.png",
+          "assets/child-barefoot/south-west-5.png",
+          "assets/child-barefoot/south-west-6.png",
+          "assets/child-barefoot/south-west-7.png"
+        ],
+        "south-east": [
+          "assets/child-barefoot/south-east-0.png",
+          "assets/child-barefoot/south-east-1.png",
+          "assets/child-barefoot/south-east-2.png",
+          "assets/child-barefoot/south-east-3.png",
+          "assets/child-barefoot/south-east-4.png",
+          "assets/child-barefoot/south-east-5.png",
+          "assets/child-barefoot/south-east-6.png",
+          "assets/child-barefoot/south-east-7.png"
+        ],
+        "north-west": [
+          "assets/child-barefoot/north-west-0.png",
+          "assets/child-barefoot/north-west-1.png",
+          "assets/child-barefoot/north-west-2.png",
+          "assets/child-barefoot/north-west-3.png",
+          "assets/child-barefoot/north-west-4.png",
+          "assets/child-barefoot/north-west-5.png",
+          "assets/child-barefoot/north-west-6.png",
+          "assets/child-barefoot/north-west-7.png"
+        ],
+        "north-east": [
+          "assets/child-barefoot/north-east-0.png",
+          "assets/child-barefoot/north-east-1.png",
+          "assets/child-barefoot/north-east-2.png",
+          "assets/child-barefoot/north-east-3.png",
+          "assets/child-barefoot/north-east-4.png",
+          "assets/child-barefoot/north-east-5.png",
+          "assets/child-barefoot/north-east-6.png",
+          "assets/child-barefoot/north-east-7.png"
+        ]
+      },
+      "src": "assets/child-barefoot/south-0.png",
+      "fps": 8,
+      "x": 266,
+      "y": 445,
+      "scale": 0.252,
+      "scaleX": 0.252,
+      "scaleY": 0.243,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false,
+      "life": {
+        "kind": "wander",
+        "bounds": {
+          "x": 201,
+          "y": 391,
+          "w": 104,
+          "h": 64
+        },
+        "seed": 206453218,
+        "range": 34,
+        "speedMin": 9,
+        "speedMax": 15,
+        "pauseMin": 2.4,
+        "pauseMax": 7.5,
+        "stepMin": 0.25,
+        "stepMax": 0.8,
+        "bob": 1,
+        "bobRate": 2.2,
+        "faceMotion": true,
+        "walkOnly": true,
+        "walkPct": 0.6320612980769231,
+        "phase": 34.846333650558385
+      }
+    },
+    {
+      "id": "a338",
+      "group": "props",
+      "dirs": {
+        "east": [
+          "assets/dock-porter/east-0.png",
+          "assets/dock-porter/east-1.png",
+          "assets/dock-porter/east-2.png",
+          "assets/dock-porter/east-3.png",
+          "assets/dock-porter/east-4.png",
+          "assets/dock-porter/east-5.png",
+          "assets/dock-porter/east-6.png",
+          "assets/dock-porter/east-7.png"
+        ],
+        "north-east": [
+          "assets/dock-porter/north-east-0.png",
+          "assets/dock-porter/north-east-1.png",
+          "assets/dock-porter/north-east-2.png",
+          "assets/dock-porter/north-east-3.png",
+          "assets/dock-porter/north-east-4.png",
+          "assets/dock-porter/north-east-5.png",
+          "assets/dock-porter/north-east-6.png",
+          "assets/dock-porter/north-east-7.png"
+        ],
+        "west": [
+          "assets/dock-porter/west-0.png",
+          "assets/dock-porter/west-1.png",
+          "assets/dock-porter/west-2.png",
+          "assets/dock-porter/west-3.png",
+          "assets/dock-porter/west-4.png",
+          "assets/dock-porter/west-5.png",
+          "assets/dock-porter/west-6.png",
+          "assets/dock-porter/west-7.png"
+        ],
+        "south-west": [
+          "assets/dock-porter/south-west-0.png",
+          "assets/dock-porter/south-west-1.png",
+          "assets/dock-porter/south-west-2.png",
+          "assets/dock-porter/south-west-3.png",
+          "assets/dock-porter/south-west-4.png",
+          "assets/dock-porter/south-west-5.png",
+          "assets/dock-porter/south-west-6.png",
+          "assets/dock-porter/south-west-7.png"
+        ],
+        "north-west": [
+          "assets/dock-porter/north-west-0.png",
+          "assets/dock-porter/north-west-1.png",
+          "assets/dock-porter/north-west-2.png",
+          "assets/dock-porter/north-west-3.png",
+          "assets/dock-porter/north-west-4.png",
+          "assets/dock-porter/north-west-5.png",
+          "assets/dock-porter/north-west-6.png",
+          "assets/dock-porter/north-west-7.png"
+        ],
+        "south-east": [
+          "assets/dock-porter/south-east-0.png",
+          "assets/dock-porter/south-east-1.png",
+          "assets/dock-porter/south-east-2.png",
+          "assets/dock-porter/south-east-3.png",
+          "assets/dock-porter/south-east-4.png",
+          "assets/dock-porter/south-east-5.png",
+          "assets/dock-porter/south-east-6.png",
+          "assets/dock-porter/south-east-7.png"
+        ],
+        "south": [
+          "assets/dock-porter/south-0.png",
+          "assets/dock-porter/south-1.png",
+          "assets/dock-porter/south-2.png",
+          "assets/dock-porter/south-3.png",
+          "assets/dock-porter/south-4.png",
+          "assets/dock-porter/south-5.png",
+          "assets/dock-porter/south-6.png",
+          "assets/dock-porter/south-7.png"
+        ],
+        "north": [
+          "assets/dock-porter/north-0.png",
+          "assets/dock-porter/north-1.png",
+          "assets/dock-porter/north-2.png",
+          "assets/dock-porter/north-3.png",
+          "assets/dock-porter/north-4.png",
+          "assets/dock-porter/north-5.png",
+          "assets/dock-porter/north-6.png",
+          "assets/dock-porter/north-7.png"
+        ]
+      },
+      "src": "assets/dock-porter/south-0.png",
+      "fps": 8,
+      "x": 277,
+      "y": 452,
+      "scale": 0.357,
+      "scaleX": 0.357,
+      "scaleY": 0.357,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false,
+      "life": {
+        "kind": "wander",
+        "bounds": {
+          "x": 204,
+          "y": 397,
+          "w": 104,
+          "h": 64
+        },
+        "seed": 772596366,
+        "range": 34,
+        "speedMin": 9,
+        "speedMax": 15,
+        "pauseMin": 2.4,
+        "pauseMax": 7.5,
+        "stepMin": 0.25,
+        "stepMax": 0.8,
+        "bob": 1,
+        "bobRate": 2.2,
+        "faceMotion": true,
+        "walkOnly": true,
+        "walkPct": 0.6320612980769231,
+        "phase": 21.143352276242148
+      }
+    },
+    {
+      "id": "a339",
+      "group": "props",
+      "dirs": {
+        "south-west": [
+          "assets/dockworker-crate/south-west-0.png",
+          "assets/dockworker-crate/south-west-1.png",
+          "assets/dockworker-crate/south-west-2.png",
+          "assets/dockworker-crate/south-west-3.png",
+          "assets/dockworker-crate/south-west-4.png",
+          "assets/dockworker-crate/south-west-5.png",
+          "assets/dockworker-crate/south-west-6.png",
+          "assets/dockworker-crate/south-west-7.png"
+        ],
+        "north-west": [
+          "assets/dockworker-crate/north-west-0.png",
+          "assets/dockworker-crate/north-west-1.png",
+          "assets/dockworker-crate/north-west-2.png",
+          "assets/dockworker-crate/north-west-3.png",
+          "assets/dockworker-crate/north-west-4.png",
+          "assets/dockworker-crate/north-west-5.png",
+          "assets/dockworker-crate/north-west-6.png",
+          "assets/dockworker-crate/north-west-7.png"
+        ],
+        "south-east": [
+          "assets/dockworker-crate/south-east-0.png",
+          "assets/dockworker-crate/south-east-1.png",
+          "assets/dockworker-crate/south-east-2.png",
+          "assets/dockworker-crate/south-east-3.png",
+          "assets/dockworker-crate/south-east-4.png",
+          "assets/dockworker-crate/south-east-5.png",
+          "assets/dockworker-crate/south-east-6.png",
+          "assets/dockworker-crate/south-east-7.png"
+        ],
+        "east": [
+          "assets/dockworker-crate/east-0.png",
+          "assets/dockworker-crate/east-1.png",
+          "assets/dockworker-crate/east-2.png",
+          "assets/dockworker-crate/east-3.png",
+          "assets/dockworker-crate/east-4.png",
+          "assets/dockworker-crate/east-5.png",
+          "assets/dockworker-crate/east-6.png",
+          "assets/dockworker-crate/east-7.png"
+        ],
+        "south": [
+          "assets/dockworker-crate/south-0.png",
+          "assets/dockworker-crate/south-1.png",
+          "assets/dockworker-crate/south-2.png",
+          "assets/dockworker-crate/south-3.png",
+          "assets/dockworker-crate/south-4.png",
+          "assets/dockworker-crate/south-5.png",
+          "assets/dockworker-crate/south-6.png",
+          "assets/dockworker-crate/south-7.png"
+        ],
+        "west": [
+          "assets/dockworker-crate/west-0.png",
+          "assets/dockworker-crate/west-1.png",
+          "assets/dockworker-crate/west-2.png",
+          "assets/dockworker-crate/west-3.png",
+          "assets/dockworker-crate/west-4.png",
+          "assets/dockworker-crate/west-5.png",
+          "assets/dockworker-crate/west-6.png",
+          "assets/dockworker-crate/west-7.png"
+        ],
+        "north": [
+          "assets/dockworker-crate/north-0.png",
+          "assets/dockworker-crate/north-1.png",
+          "assets/dockworker-crate/north-2.png",
+          "assets/dockworker-crate/north-3.png",
+          "assets/dockworker-crate/north-4.png",
+          "assets/dockworker-crate/north-5.png",
+          "assets/dockworker-crate/north-6.png",
+          "assets/dockworker-crate/north-7.png"
+        ],
+        "north-east": [
+          "assets/dockworker-crate/north-east-0.png",
+          "assets/dockworker-crate/north-east-1.png",
+          "assets/dockworker-crate/north-east-2.png",
+          "assets/dockworker-crate/north-east-3.png",
+          "assets/dockworker-crate/north-east-4.png",
+          "assets/dockworker-crate/north-east-5.png",
+          "assets/dockworker-crate/north-east-6.png",
+          "assets/dockworker-crate/north-east-7.png"
+        ]
+      },
+      "src": "assets/dockworker-crate/south-0.png",
+      "fps": 8,
+      "x": 237,
+      "y": 431,
+      "scale": 0.4,
+      "scaleX": 0.4,
+      "scaleY": 0.4,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false,
+      "life": {
+        "kind": "wander",
+        "bounds": {
+          "x": 170,
+          "y": 387,
+          "w": 104,
+          "h": 64
+        },
+        "seed": 429108543,
+        "range": 34,
+        "speedMin": 9,
+        "speedMax": 15,
+        "pauseMin": 2.4,
+        "pauseMax": 7.5,
+        "stepMin": 0.25,
+        "stepMax": 0.8,
+        "bob": 1,
+        "bobRate": 2.2,
+        "faceMotion": true,
+        "walkOnly": true,
+        "walkPct": 0.6320612980769231,
+        "phase": 45.95514538001724
+      }
+    },
+    {
+      "id": "a340",
+      "group": "people",
+      "dirs": {
+        "north-west": [
+          "assets/market-woman/north-west-0.png",
+          "assets/market-woman/north-west-1.png",
+          "assets/market-woman/north-west-2.png",
+          "assets/market-woman/north-west-3.png",
+          "assets/market-woman/north-west-4.png",
+          "assets/market-woman/north-west-5.png",
+          "assets/market-woman/north-west-6.png",
+          "assets/market-woman/north-west-7.png"
+        ],
+        "south-east": [
+          "assets/market-woman/south-east-0.png",
+          "assets/market-woman/south-east-1.png",
+          "assets/market-woman/south-east-2.png",
+          "assets/market-woman/south-east-3.png",
+          "assets/market-woman/south-east-4.png",
+          "assets/market-woman/south-east-5.png",
+          "assets/market-woman/south-east-6.png",
+          "assets/market-woman/south-east-7.png"
+        ],
+        "west": [
+          "assets/market-woman/west-0.png",
+          "assets/market-woman/west-1.png",
+          "assets/market-woman/west-2.png",
+          "assets/market-woman/west-3.png",
+          "assets/market-woman/west-4.png",
+          "assets/market-woman/west-5.png",
+          "assets/market-woman/west-6.png",
+          "assets/market-woman/west-7.png"
+        ],
+        "east": [
+          "assets/market-woman/east-0.png",
+          "assets/market-woman/east-1.png",
+          "assets/market-woman/east-2.png",
+          "assets/market-woman/east-3.png",
+          "assets/market-woman/east-4.png",
+          "assets/market-woman/east-5.png",
+          "assets/market-woman/east-6.png",
+          "assets/market-woman/east-7.png"
+        ],
+        "south": [
+          "assets/market-woman/south-0.png",
+          "assets/market-woman/south-1.png",
+          "assets/market-woman/south-2.png",
+          "assets/market-woman/south-3.png",
+          "assets/market-woman/south-4.png",
+          "assets/market-woman/south-5.png",
+          "assets/market-woman/south-6.png",
+          "assets/market-woman/south-7.png"
+        ],
+        "north": [
+          "assets/market-woman/north-0.png",
+          "assets/market-woman/north-1.png",
+          "assets/market-woman/north-2.png",
+          "assets/market-woman/north-3.png",
+          "assets/market-woman/north-4.png",
+          "assets/market-woman/north-5.png",
+          "assets/market-woman/north-6.png",
+          "assets/market-woman/north-7.png"
+        ],
+        "south-west": [
+          "assets/market-woman/south-west-0.png",
+          "assets/market-woman/south-west-1.png",
+          "assets/market-woman/south-west-2.png",
+          "assets/market-woman/south-west-3.png",
+          "assets/market-woman/south-west-4.png",
+          "assets/market-woman/south-west-5.png",
+          "assets/market-woman/south-west-6.png",
+          "assets/market-woman/south-west-7.png"
+        ],
+        "north-east": [
+          "assets/market-woman/north-east-0.png",
+          "assets/market-woman/north-east-1.png",
+          "assets/market-woman/north-east-2.png",
+          "assets/market-woman/north-east-3.png",
+          "assets/market-woman/north-east-4.png",
+          "assets/market-woman/north-east-5.png",
+          "assets/market-woman/north-east-6.png",
+          "assets/market-woman/north-east-7.png"
+        ]
+      },
+      "src": "assets/market-woman/south-0.png",
+      "fps": 8,
+      "x": 204,
+      "y": 477,
+      "scale": 0.362,
+      "scaleX": 0.362,
+      "scaleY": 0.362,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false,
+      "life": {
+        "kind": "wander",
+        "bounds": {
+          "x": 146,
+          "y": 433,
+          "w": 170,
+          "h": 70
+        },
+        "seed": 679574183,
+        "range": 34,
+        "speedMin": 9,
+        "speedMax": 15,
+        "pauseMin": 2.4,
+        "pauseMax": 7,
+        "stepMin": 0.25,
+        "stepMax": 0.8,
+        "bob": 1,
+        "bobRate": 2.4,
+        "faceMotion": true,
+        "walkOnly": true,
+        "walkPct": 0.5105042016806722,
+        "phase": 32.855787956952064
+      }
+    },
+    {
+      "id": "a341",
+      "group": "props",
+      "dirs": {
+        "west": [
+          "assets/water-carrier/west-0.png",
+          "assets/water-carrier/west-1.png",
+          "assets/water-carrier/west-2.png",
+          "assets/water-carrier/west-3.png",
+          "assets/water-carrier/west-4.png",
+          "assets/water-carrier/west-5.png",
+          "assets/water-carrier/west-6.png",
+          "assets/water-carrier/west-7.png"
+        ],
+        "north-east": [
+          "assets/water-carrier/north-east-0.png",
+          "assets/water-carrier/north-east-1.png",
+          "assets/water-carrier/north-east-2.png",
+          "assets/water-carrier/north-east-3.png",
+          "assets/water-carrier/north-east-4.png",
+          "assets/water-carrier/north-east-5.png",
+          "assets/water-carrier/north-east-6.png",
+          "assets/water-carrier/north-east-7.png"
+        ],
+        "south-west": [
+          "assets/water-carrier/south-west-0.png",
+          "assets/water-carrier/south-west-1.png",
+          "assets/water-carrier/south-west-2.png",
+          "assets/water-carrier/south-west-3.png",
+          "assets/water-carrier/south-west-4.png",
+          "assets/water-carrier/south-west-5.png",
+          "assets/water-carrier/south-west-6.png",
+          "assets/water-carrier/south-west-7.png"
+        ],
+        "south-east": [
+          "assets/water-carrier/south-east-0.png",
+          "assets/water-carrier/south-east-1.png",
+          "assets/water-carrier/south-east-2.png",
+          "assets/water-carrier/south-east-3.png",
+          "assets/water-carrier/south-east-4.png",
+          "assets/water-carrier/south-east-5.png",
+          "assets/water-carrier/south-east-6.png",
+          "assets/water-carrier/south-east-7.png"
+        ],
+        "east": [
+          "assets/water-carrier/east-0.png",
+          "assets/water-carrier/east-1.png",
+          "assets/water-carrier/east-2.png",
+          "assets/water-carrier/east-3.png",
+          "assets/water-carrier/east-4.png",
+          "assets/water-carrier/east-5.png",
+          "assets/water-carrier/east-6.png",
+          "assets/water-carrier/east-7.png"
+        ],
+        "north-west": [
+          "assets/water-carrier/north-west-0.png",
+          "assets/water-carrier/north-west-1.png",
+          "assets/water-carrier/north-west-2.png",
+          "assets/water-carrier/north-west-3.png",
+          "assets/water-carrier/north-west-4.png",
+          "assets/water-carrier/north-west-5.png",
+          "assets/water-carrier/north-west-6.png",
+          "assets/water-carrier/north-west-7.png"
+        ],
+        "north": [
+          "assets/water-carrier/north-0.png",
+          "assets/water-carrier/north-1.png",
+          "assets/water-carrier/north-2.png",
+          "assets/water-carrier/north-3.png",
+          "assets/water-carrier/north-4.png",
+          "assets/water-carrier/north-5.png",
+          "assets/water-carrier/north-6.png",
+          "assets/water-carrier/north-7.png"
+        ],
+        "south": [
+          "assets/water-carrier/south-0.png",
+          "assets/water-carrier/south-1.png",
+          "assets/water-carrier/south-2.png",
+          "assets/water-carrier/south-3.png",
+          "assets/water-carrier/south-4.png",
+          "assets/water-carrier/south-5.png",
+          "assets/water-carrier/south-6.png",
+          "assets/water-carrier/south-7.png"
+        ]
+      },
+      "src": "assets/water-carrier/south-0.png",
+      "fps": 8,
+      "x": 224,
+      "y": 500,
+      "scale": 0.364,
+      "scaleX": 0.364,
+      "scaleY": 0.364,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false,
+      "life": {
+        "kind": "wander",
+        "bounds": {
+          "x": 166,
+          "y": 444,
+          "w": 104,
+          "h": 64
+        },
+        "seed": 1498278554,
+        "range": 34,
+        "speedMin": 9,
+        "speedMax": 15,
+        "pauseMin": 2.4,
+        "pauseMax": 7.5,
+        "stepMin": 0.25,
+        "stepMax": 0.8,
+        "bob": 1,
+        "bobRate": 2.2,
+        "faceMotion": true,
+        "walkOnly": true,
+        "walkPct": 0.6320612980769231,
+        "phase": 25.693611693960424
+      }
+    },
+    {
+      "id": "a342",
+      "group": "props",
+      "dirs": {
+        "south": [
+          "assets/child-barefoot/south-0.png",
+          "assets/child-barefoot/south-1.png",
+          "assets/child-barefoot/south-2.png",
+          "assets/child-barefoot/south-3.png",
+          "assets/child-barefoot/south-4.png",
+          "assets/child-barefoot/south-5.png",
+          "assets/child-barefoot/south-6.png",
+          "assets/child-barefoot/south-7.png"
+        ],
+        "east": [
+          "assets/child-barefoot/east-0.png",
+          "assets/child-barefoot/east-1.png",
+          "assets/child-barefoot/east-2.png",
+          "assets/child-barefoot/east-3.png",
+          "assets/child-barefoot/east-4.png",
+          "assets/child-barefoot/east-5.png",
+          "assets/child-barefoot/east-6.png",
+          "assets/child-barefoot/east-7.png"
+        ],
+        "west": [
+          "assets/child-barefoot/west-0.png",
+          "assets/child-barefoot/west-1.png",
+          "assets/child-barefoot/west-2.png",
+          "assets/child-barefoot/west-3.png",
+          "assets/child-barefoot/west-4.png",
+          "assets/child-barefoot/west-5.png",
+          "assets/child-barefoot/west-6.png",
+          "assets/child-barefoot/west-7.png"
+        ],
+        "north": [
+          "assets/child-barefoot/north-0.png",
+          "assets/child-barefoot/north-1.png",
+          "assets/child-barefoot/north-2.png",
+          "assets/child-barefoot/north-3.png",
+          "assets/child-barefoot/north-4.png",
+          "assets/child-barefoot/north-5.png",
+          "assets/child-barefoot/north-6.png",
+          "assets/child-barefoot/north-7.png"
+        ],
+        "south-west": [
+          "assets/child-barefoot/south-west-0.png",
+          "assets/child-barefoot/south-west-1.png",
+          "assets/child-barefoot/south-west-2.png",
+          "assets/child-barefoot/south-west-3.png",
+          "assets/child-barefoot/south-west-4.png",
+          "assets/child-barefoot/south-west-5.png",
+          "assets/child-barefoot/south-west-6.png",
+          "assets/child-barefoot/south-west-7.png"
+        ],
+        "south-east": [
+          "assets/child-barefoot/south-east-0.png",
+          "assets/child-barefoot/south-east-1.png",
+          "assets/child-barefoot/south-east-2.png",
+          "assets/child-barefoot/south-east-3.png",
+          "assets/child-barefoot/south-east-4.png",
+          "assets/child-barefoot/south-east-5.png",
+          "assets/child-barefoot/south-east-6.png",
+          "assets/child-barefoot/south-east-7.png"
+        ],
+        "north-west": [
+          "assets/child-barefoot/north-west-0.png",
+          "assets/child-barefoot/north-west-1.png",
+          "assets/child-barefoot/north-west-2.png",
+          "assets/child-barefoot/north-west-3.png",
+          "assets/child-barefoot/north-west-4.png",
+          "assets/child-barefoot/north-west-5.png",
+          "assets/child-barefoot/north-west-6.png",
+          "assets/child-barefoot/north-west-7.png"
+        ],
+        "north-east": [
+          "assets/child-barefoot/north-east-0.png",
+          "assets/child-barefoot/north-east-1.png",
+          "assets/child-barefoot/north-east-2.png",
+          "assets/child-barefoot/north-east-3.png",
+          "assets/child-barefoot/north-east-4.png",
+          "assets/child-barefoot/north-east-5.png",
+          "assets/child-barefoot/north-east-6.png",
+          "assets/child-barefoot/north-east-7.png"
+        ]
+      },
+      "src": "assets/child-barefoot/south-0.png",
+      "fps": 8,
+      "x": 232,
+      "y": 498,
+      "scale": 0.252,
+      "scaleX": 0.252,
+      "scaleY": 0.243,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false,
+      "life": {
+        "kind": "wander",
+        "bounds": {
+          "x": 167,
+          "y": 444,
+          "w": 104,
+          "h": 64
+        },
+        "seed": 615288514,
+        "range": 34,
+        "speedMin": 9,
+        "speedMax": 15,
+        "pauseMin": 2.4,
+        "pauseMax": 7.5,
+        "stepMin": 0.25,
+        "stepMax": 0.8,
+        "bob": 1,
+        "bobRate": 2.2,
+        "faceMotion": true,
+        "walkOnly": true,
+        "walkPct": 0.6320612980769231,
+        "phase": 8.59633411523573
+      }
+    },
+    {
+      "id": "a343",
+      "group": "props",
+      "dirs": {
+        "east": [
+          "assets/dock-porter/east-0.png",
+          "assets/dock-porter/east-1.png",
+          "assets/dock-porter/east-2.png",
+          "assets/dock-porter/east-3.png",
+          "assets/dock-porter/east-4.png",
+          "assets/dock-porter/east-5.png",
+          "assets/dock-porter/east-6.png",
+          "assets/dock-porter/east-7.png"
+        ],
+        "north-east": [
+          "assets/dock-porter/north-east-0.png",
+          "assets/dock-porter/north-east-1.png",
+          "assets/dock-porter/north-east-2.png",
+          "assets/dock-porter/north-east-3.png",
+          "assets/dock-porter/north-east-4.png",
+          "assets/dock-porter/north-east-5.png",
+          "assets/dock-porter/north-east-6.png",
+          "assets/dock-porter/north-east-7.png"
+        ],
+        "west": [
+          "assets/dock-porter/west-0.png",
+          "assets/dock-porter/west-1.png",
+          "assets/dock-porter/west-2.png",
+          "assets/dock-porter/west-3.png",
+          "assets/dock-porter/west-4.png",
+          "assets/dock-porter/west-5.png",
+          "assets/dock-porter/west-6.png",
+          "assets/dock-porter/west-7.png"
+        ],
+        "south-west": [
+          "assets/dock-porter/south-west-0.png",
+          "assets/dock-porter/south-west-1.png",
+          "assets/dock-porter/south-west-2.png",
+          "assets/dock-porter/south-west-3.png",
+          "assets/dock-porter/south-west-4.png",
+          "assets/dock-porter/south-west-5.png",
+          "assets/dock-porter/south-west-6.png",
+          "assets/dock-porter/south-west-7.png"
+        ],
+        "north-west": [
+          "assets/dock-porter/north-west-0.png",
+          "assets/dock-porter/north-west-1.png",
+          "assets/dock-porter/north-west-2.png",
+          "assets/dock-porter/north-west-3.png",
+          "assets/dock-porter/north-west-4.png",
+          "assets/dock-porter/north-west-5.png",
+          "assets/dock-porter/north-west-6.png",
+          "assets/dock-porter/north-west-7.png"
+        ],
+        "south-east": [
+          "assets/dock-porter/south-east-0.png",
+          "assets/dock-porter/south-east-1.png",
+          "assets/dock-porter/south-east-2.png",
+          "assets/dock-porter/south-east-3.png",
+          "assets/dock-porter/south-east-4.png",
+          "assets/dock-porter/south-east-5.png",
+          "assets/dock-porter/south-east-6.png",
+          "assets/dock-porter/south-east-7.png"
+        ],
+        "south": [
+          "assets/dock-porter/south-0.png",
+          "assets/dock-porter/south-1.png",
+          "assets/dock-porter/south-2.png",
+          "assets/dock-porter/south-3.png",
+          "assets/dock-porter/south-4.png",
+          "assets/dock-porter/south-5.png",
+          "assets/dock-porter/south-6.png",
+          "assets/dock-porter/south-7.png"
+        ],
+        "north": [
+          "assets/dock-porter/north-0.png",
+          "assets/dock-porter/north-1.png",
+          "assets/dock-porter/north-2.png",
+          "assets/dock-porter/north-3.png",
+          "assets/dock-porter/north-4.png",
+          "assets/dock-porter/north-5.png",
+          "assets/dock-porter/north-6.png",
+          "assets/dock-porter/north-7.png"
+        ]
+      },
+      "src": "assets/dock-porter/south-0.png",
+      "fps": 8,
+      "x": 237,
+      "y": 497,
+      "scale": 0.357,
+      "scaleX": 0.357,
+      "scaleY": 0.357,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false,
+      "life": {
+        "kind": "wander",
+        "bounds": {
+          "x": 164,
+          "y": 442,
+          "w": 104,
+          "h": 64
+        },
+        "seed": 724974321,
+        "range": 34,
+        "speedMin": 9,
+        "speedMax": 15,
+        "pauseMin": 2.4,
+        "pauseMax": 7.5,
+        "stepMin": 0.25,
+        "stepMax": 0.8,
+        "bob": 1,
+        "bobRate": 2.2,
+        "faceMotion": true,
+        "walkOnly": true,
+        "walkPct": 0.6320612980769231,
+        "phase": 5.664104623542638
+      }
+    },
+    {
+      "id": "a344",
+      "group": "props",
+      "dirs": {
+        "south-west": [
+          "assets/dockworker-crate/south-west-0.png",
+          "assets/dockworker-crate/south-west-1.png",
+          "assets/dockworker-crate/south-west-2.png",
+          "assets/dockworker-crate/south-west-3.png",
+          "assets/dockworker-crate/south-west-4.png",
+          "assets/dockworker-crate/south-west-5.png",
+          "assets/dockworker-crate/south-west-6.png",
+          "assets/dockworker-crate/south-west-7.png"
+        ],
+        "north-west": [
+          "assets/dockworker-crate/north-west-0.png",
+          "assets/dockworker-crate/north-west-1.png",
+          "assets/dockworker-crate/north-west-2.png",
+          "assets/dockworker-crate/north-west-3.png",
+          "assets/dockworker-crate/north-west-4.png",
+          "assets/dockworker-crate/north-west-5.png",
+          "assets/dockworker-crate/north-west-6.png",
+          "assets/dockworker-crate/north-west-7.png"
+        ],
+        "south-east": [
+          "assets/dockworker-crate/south-east-0.png",
+          "assets/dockworker-crate/south-east-1.png",
+          "assets/dockworker-crate/south-east-2.png",
+          "assets/dockworker-crate/south-east-3.png",
+          "assets/dockworker-crate/south-east-4.png",
+          "assets/dockworker-crate/south-east-5.png",
+          "assets/dockworker-crate/south-east-6.png",
+          "assets/dockworker-crate/south-east-7.png"
+        ],
+        "east": [
+          "assets/dockworker-crate/east-0.png",
+          "assets/dockworker-crate/east-1.png",
+          "assets/dockworker-crate/east-2.png",
+          "assets/dockworker-crate/east-3.png",
+          "assets/dockworker-crate/east-4.png",
+          "assets/dockworker-crate/east-5.png",
+          "assets/dockworker-crate/east-6.png",
+          "assets/dockworker-crate/east-7.png"
+        ],
+        "south": [
+          "assets/dockworker-crate/south-0.png",
+          "assets/dockworker-crate/south-1.png",
+          "assets/dockworker-crate/south-2.png",
+          "assets/dockworker-crate/south-3.png",
+          "assets/dockworker-crate/south-4.png",
+          "assets/dockworker-crate/south-5.png",
+          "assets/dockworker-crate/south-6.png",
+          "assets/dockworker-crate/south-7.png"
+        ],
+        "west": [
+          "assets/dockworker-crate/west-0.png",
+          "assets/dockworker-crate/west-1.png",
+          "assets/dockworker-crate/west-2.png",
+          "assets/dockworker-crate/west-3.png",
+          "assets/dockworker-crate/west-4.png",
+          "assets/dockworker-crate/west-5.png",
+          "assets/dockworker-crate/west-6.png",
+          "assets/dockworker-crate/west-7.png"
+        ],
+        "north": [
+          "assets/dockworker-crate/north-0.png",
+          "assets/dockworker-crate/north-1.png",
+          "assets/dockworker-crate/north-2.png",
+          "assets/dockworker-crate/north-3.png",
+          "assets/dockworker-crate/north-4.png",
+          "assets/dockworker-crate/north-5.png",
+          "assets/dockworker-crate/north-6.png",
+          "assets/dockworker-crate/north-7.png"
+        ],
+        "north-east": [
+          "assets/dockworker-crate/north-east-0.png",
+          "assets/dockworker-crate/north-east-1.png",
+          "assets/dockworker-crate/north-east-2.png",
+          "assets/dockworker-crate/north-east-3.png",
+          "assets/dockworker-crate/north-east-4.png",
+          "assets/dockworker-crate/north-east-5.png",
+          "assets/dockworker-crate/north-east-6.png",
+          "assets/dockworker-crate/north-east-7.png"
+        ]
+      },
+      "src": "assets/dockworker-crate/south-0.png",
+      "fps": 8,
+      "x": 234,
+      "y": 488,
+      "scale": 0.4,
+      "scaleX": 0.4,
+      "scaleY": 0.4,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false,
+      "life": {
+        "kind": "wander",
+        "bounds": {
+          "x": 167,
+          "y": 444,
+          "w": 104,
+          "h": 64
+        },
+        "seed": 177647279,
+        "range": 34,
+        "speedMin": 9,
+        "speedMax": 15,
+        "pauseMin": 2.4,
+        "pauseMax": 7.5,
+        "stepMin": 0.25,
+        "stepMax": 0.8,
+        "bob": 1,
+        "bobRate": 2.2,
+        "faceMotion": true,
+        "walkOnly": true,
+        "walkPct": 0.6320612980769231,
+        "phase": 43.10247643743243
+      }
+    },
+    {
+      "id": "a350",
+      "group": "props",
+      "dirs": {
+        "south": [
+          "assets/net-mender/south-0.png",
+          "assets/net-mender/south-1.png",
+          "assets/net-mender/south-2.png",
+          "assets/net-mender/south-3.png",
+          "assets/net-mender/south-4.png",
+          "assets/net-mender/south-5.png",
+          "assets/net-mender/south-6.png",
+          "assets/net-mender/south-7.png"
+        ],
+        "south-east": [
+          "assets/net-mender/south-east-0.png",
+          "assets/net-mender/south-east-1.png",
+          "assets/net-mender/south-east-2.png",
+          "assets/net-mender/south-east-3.png",
+          "assets/net-mender/south-east-4.png",
+          "assets/net-mender/south-east-5.png",
+          "assets/net-mender/south-east-6.png",
+          "assets/net-mender/south-east-7.png"
+        ],
+        "south-west": [
+          "assets/net-mender/south-west-0.png",
+          "assets/net-mender/south-west-1.png",
+          "assets/net-mender/south-west-2.png",
+          "assets/net-mender/south-west-3.png",
+          "assets/net-mender/south-west-4.png",
+          "assets/net-mender/south-west-5.png",
+          "assets/net-mender/south-west-6.png",
+          "assets/net-mender/south-west-7.png"
+        ],
+        "west": [
+          "assets/net-mender/west-0.png"
+        ],
+        "east": [
+          "assets/net-mender/east-0.png"
+        ],
+        "north": [
+          "assets/net-mender/north-0.png"
+        ],
+        "north-east": [
+          "assets/net-mender/north-east-0.png"
+        ],
+        "north-west": [
+          "assets/net-mender/north-west-0.png"
+        ]
+      },
+      "src": "assets/net-mender/south-0.png",
+      "fps": 8,
+      "x": 612,
+      "y": 424,
+      "scale": 0.37,
+      "scaleX": 0.37,
+      "scaleY": 0.37,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a351",
+      "group": "people",
+      "dirs": {
+        "south": [
+          "assets/old-fisherman/south-0.png",
+          "assets/old-fisherman/south-1.png",
+          "assets/old-fisherman/south-2.png",
+          "assets/old-fisherman/south-3.png",
+          "assets/old-fisherman/south-4.png",
+          "assets/old-fisherman/south-5.png",
+          "assets/old-fisherman/south-6.png",
+          "assets/old-fisherman/south-7.png",
+          "assets/old-fisherman/south-8.png",
+          "assets/old-fisherman/south-9.png",
+          "assets/old-fisherman/south-10.png",
+          "assets/old-fisherman/south-11.png"
+        ],
+        "south-west": [
+          "assets/old-fisherman/south-west-0.png",
+          "assets/old-fisherman/south-west-1.png",
+          "assets/old-fisherman/south-west-2.png",
+          "assets/old-fisherman/south-west-3.png",
+          "assets/old-fisherman/south-west-4.png",
+          "assets/old-fisherman/south-west-5.png",
+          "assets/old-fisherman/south-west-6.png",
+          "assets/old-fisherman/south-west-7.png",
+          "assets/old-fisherman/south-west-8.png",
+          "assets/old-fisherman/south-west-9.png",
+          "assets/old-fisherman/south-west-10.png",
+          "assets/old-fisherman/south-west-11.png"
+        ],
+        "south-east": [
+          "assets/old-fisherman/south-east-0.png",
+          "assets/old-fisherman/south-east-1.png",
+          "assets/old-fisherman/south-east-2.png",
+          "assets/old-fisherman/south-east-3.png",
+          "assets/old-fisherman/south-east-4.png",
+          "assets/old-fisherman/south-east-5.png",
+          "assets/old-fisherman/south-east-6.png",
+          "assets/old-fisherman/south-east-7.png",
+          "assets/old-fisherman/south-east-8.png",
+          "assets/old-fisherman/south-east-9.png",
+          "assets/old-fisherman/south-east-10.png",
+          "assets/old-fisherman/south-east-11.png"
+        ],
+        "west": [
+          "assets/old-fisherman/west-0.png"
+        ],
+        "east": [
+          "assets/old-fisherman/east-0.png"
+        ],
+        "north": [
+          "assets/old-fisherman/north-0.png"
+        ],
+        "north-east": [
+          "assets/old-fisherman/north-east-0.png"
+        ],
+        "north-west": [
+          "assets/old-fisherman/north-west-0.png"
+        ]
+      },
+      "src": "assets/old-fisherman/south-0.png",
+      "fps": 8,
+      "x": 541,
+      "y": 511,
+      "scale": 0.4,
+      "scaleX": 0.4,
+      "scaleY": 0.4,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a352",
+      "group": "props",
+      "dirs": {
+        "south-east": [
+          "assets/knight-watch/south-east-0.png",
+          "assets/knight-watch/south-east-1.png",
+          "assets/knight-watch/south-east-2.png",
+          "assets/knight-watch/south-east-3.png",
+          "assets/knight-watch/south-east-4.png",
+          "assets/knight-watch/south-east-5.png",
+          "assets/knight-watch/south-east-6.png",
+          "assets/knight-watch/south-east-7.png"
+        ],
+        "south": [
+          "assets/knight-watch/south-0.png",
+          "assets/knight-watch/south-1.png",
+          "assets/knight-watch/south-2.png",
+          "assets/knight-watch/south-3.png",
+          "assets/knight-watch/south-4.png",
+          "assets/knight-watch/south-5.png",
+          "assets/knight-watch/south-6.png",
+          "assets/knight-watch/south-7.png"
+        ],
+        "south-west": [
+          "assets/knight-watch/south-west-0.png",
+          "assets/knight-watch/south-west-1.png",
+          "assets/knight-watch/south-west-2.png",
+          "assets/knight-watch/south-west-3.png",
+          "assets/knight-watch/south-west-4.png",
+          "assets/knight-watch/south-west-5.png",
+          "assets/knight-watch/south-west-6.png",
+          "assets/knight-watch/south-west-7.png"
+        ],
+        "west": [
+          "assets/knight-watch/west-0.png"
+        ],
+        "east": [
+          "assets/knight-watch/east-0.png"
+        ],
+        "north": [
+          "assets/knight-watch/north-0.png"
+        ],
+        "north-east": [
+          "assets/knight-watch/north-east-0.png"
+        ],
+        "north-west": [
+          "assets/knight-watch/north-west-0.png"
+        ]
+      },
+      "src": "assets/knight-watch/south-0.png",
+      "fps": 8,
+      "x": 189,
+      "y": 409,
+      "scale": 0.404,
+      "scaleX": 0.404,
+      "scaleY": 0.431,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a353",
+      "group": "effects",
+      "frames": [
+        "assets/lighthouse-lamp-sweep/0.png",
+        "assets/lighthouse-lamp-sweep/1.png",
+        "assets/lighthouse-lamp-sweep/2.png",
+        "assets/lighthouse-lamp-sweep/3.png",
+        "assets/lighthouse-lamp-sweep/4.png",
+        "assets/lighthouse-lamp-sweep/5.png",
+        "assets/lighthouse-lamp-sweep/6.png",
+        "assets/lighthouse-lamp-sweep/7.png",
+        "assets/lighthouse-lamp-sweep/8.png",
+        "assets/lighthouse-lamp-sweep/9.png",
+        "assets/lighthouse-lamp-sweep/10.png",
+        "assets/lighthouse-lamp-sweep/11.png",
+        "assets/lighthouse-lamp-sweep/12.png",
+        "assets/lighthouse-lamp-sweep/13.png",
+        "assets/lighthouse-lamp-sweep/14.png",
+        "assets/lighthouse-lamp-sweep/15.png"
+      ],
+      "fps": 6,
+      "x": 640,
+      "y": 470,
+      "scale": 1,
+      "scaleX": 1,
+      "scaleY": 1,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a355",
+      "group": "effects",
+      "frames": [
+        "assets/lighthouse-lamp-sweep-3/0.png",
+        "assets/lighthouse-lamp-sweep-3/1.png",
+        "assets/lighthouse-lamp-sweep-3/2.png",
+        "assets/lighthouse-lamp-sweep-3/3.png",
+        "assets/lighthouse-lamp-sweep-3/4.png",
+        "assets/lighthouse-lamp-sweep-3/5.png",
+        "assets/lighthouse-lamp-sweep-3/6.png",
+        "assets/lighthouse-lamp-sweep-3/7.png",
+        "assets/lighthouse-lamp-sweep-3/8.png",
+        "assets/lighthouse-lamp-sweep-3/9.png",
+        "assets/lighthouse-lamp-sweep-3/10.png",
+        "assets/lighthouse-lamp-sweep-3/11.png",
+        "assets/lighthouse-lamp-sweep-3/12.png",
+        "assets/lighthouse-lamp-sweep-3/13.png",
+        "assets/lighthouse-lamp-sweep-3/14.png",
+        "assets/lighthouse-lamp-sweep-3/15.png"
+      ],
+      "fps": 6,
+      "x": 640,
+      "y": 470,
+      "scale": 1,
+      "scaleX": 1,
+      "scaleY": 1,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a360",
+      "group": "effects",
+      "frames": [
+        "assets/slow-wash-splash/0.png",
+        "assets/slow-wash-splash/1.png",
+        "assets/slow-wash-splash/2.png",
+        "assets/slow-wash-splash/3.png",
+        "assets/slow-wash-splash/4.png",
+        "assets/slow-wash-splash/5.png",
+        "assets/slow-wash-splash/6.png",
+        "assets/slow-wash-splash/7.png",
+        "assets/slow-wash-splash/8.png",
+        "assets/slow-wash-splash/9.png",
+        "assets/slow-wash-splash/10.png",
+        "assets/slow-wash-splash/11.png",
+        "assets/slow-wash-splash/12.png",
+        "assets/slow-wash-splash/13.png",
+        "assets/slow-wash-splash/14.png",
+        "assets/slow-wash-splash/15.png"
+      ],
+      "fps": 3,
+      "x": 113,
+      "y": 493,
+      "scale": 0.532,
+      "scaleX": 0.532,
+      "scaleY": 0.402,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a362",
+      "group": "effects",
+      "frames": [
+        "assets/slow-wash-splash/0.png",
+        "assets/slow-wash-splash/1.png",
+        "assets/slow-wash-splash/2.png",
+        "assets/slow-wash-splash/3.png",
+        "assets/slow-wash-splash/4.png",
+        "assets/slow-wash-splash/5.png",
+        "assets/slow-wash-splash/6.png",
+        "assets/slow-wash-splash/7.png",
+        "assets/slow-wash-splash/8.png",
+        "assets/slow-wash-splash/9.png",
+        "assets/slow-wash-splash/10.png",
+        "assets/slow-wash-splash/11.png",
+        "assets/slow-wash-splash/12.png",
+        "assets/slow-wash-splash/13.png",
+        "assets/slow-wash-splash/14.png",
+        "assets/slow-wash-splash/15.png"
+      ],
+      "fps": 3,
+      "x": 138,
+      "y": 493,
+      "scale": 0.532,
+      "scaleX": 0.532,
+      "scaleY": 0.402,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a363",
+      "group": "effects",
+      "frames": [
+        "assets/slow-wash-splash/0.png",
+        "assets/slow-wash-splash/1.png",
+        "assets/slow-wash-splash/2.png",
+        "assets/slow-wash-splash/3.png",
+        "assets/slow-wash-splash/4.png",
+        "assets/slow-wash-splash/5.png",
+        "assets/slow-wash-splash/6.png",
+        "assets/slow-wash-splash/7.png",
+        "assets/slow-wash-splash/8.png",
+        "assets/slow-wash-splash/9.png",
+        "assets/slow-wash-splash/10.png",
+        "assets/slow-wash-splash/11.png",
+        "assets/slow-wash-splash/12.png",
+        "assets/slow-wash-splash/13.png",
+        "assets/slow-wash-splash/14.png",
+        "assets/slow-wash-splash/15.png"
+      ],
+      "fps": 3,
+      "x": 154,
+      "y": 489,
+      "scale": 0.532,
+      "scaleX": 0.532,
+      "scaleY": 0.402,
+      "rot": -0.3366,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a365",
+      "group": "effects",
+      "frames": [
+        "assets/slow-wash-splash/0.png",
+        "assets/slow-wash-splash/1.png",
+        "assets/slow-wash-splash/2.png",
+        "assets/slow-wash-splash/3.png",
+        "assets/slow-wash-splash/4.png",
+        "assets/slow-wash-splash/5.png",
+        "assets/slow-wash-splash/6.png",
+        "assets/slow-wash-splash/7.png",
+        "assets/slow-wash-splash/8.png",
+        "assets/slow-wash-splash/9.png",
+        "assets/slow-wash-splash/10.png",
+        "assets/slow-wash-splash/11.png",
+        "assets/slow-wash-splash/12.png",
+        "assets/slow-wash-splash/13.png",
+        "assets/slow-wash-splash/14.png",
+        "assets/slow-wash-splash/15.png"
+      ],
+      "fps": 3,
+      "x": 93,
+      "y": 480,
+      "scale": 0.532,
+      "scaleX": 0.532,
+      "scaleY": 0.402,
+      "rot": 1.0944,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a366",
+      "group": "effects",
+      "frames": [
+        "assets/slow-wash-splash/0.png",
+        "assets/slow-wash-splash/1.png",
+        "assets/slow-wash-splash/2.png",
+        "assets/slow-wash-splash/3.png",
+        "assets/slow-wash-splash/4.png",
+        "assets/slow-wash-splash/5.png",
+        "assets/slow-wash-splash/6.png",
+        "assets/slow-wash-splash/7.png",
+        "assets/slow-wash-splash/8.png",
+        "assets/slow-wash-splash/9.png",
+        "assets/slow-wash-splash/10.png",
+        "assets/slow-wash-splash/11.png",
+        "assets/slow-wash-splash/12.png",
+        "assets/slow-wash-splash/13.png",
+        "assets/slow-wash-splash/14.png",
+        "assets/slow-wash-splash/15.png"
+      ],
+      "fps": 3,
+      "x": 79,
+      "y": 468,
+      "scale": 0.532,
+      "scaleX": 0.532,
+      "scaleY": 0.402,
+      "rot": 0.2589,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a367",
+      "group": "effects",
+      "frames": [
+        "assets/slow-wash-splash/0.png",
+        "assets/slow-wash-splash/1.png",
+        "assets/slow-wash-splash/2.png",
+        "assets/slow-wash-splash/3.png",
+        "assets/slow-wash-splash/4.png",
+        "assets/slow-wash-splash/5.png",
+        "assets/slow-wash-splash/6.png",
+        "assets/slow-wash-splash/7.png",
+        "assets/slow-wash-splash/8.png",
+        "assets/slow-wash-splash/9.png",
+        "assets/slow-wash-splash/10.png",
+        "assets/slow-wash-splash/11.png",
+        "assets/slow-wash-splash/12.png",
+        "assets/slow-wash-splash/13.png",
+        "assets/slow-wash-splash/14.png",
+        "assets/slow-wash-splash/15.png"
+      ],
+      "fps": 3,
+      "x": 56,
+      "y": 466,
+      "scale": 0.532,
+      "scaleX": 0.532,
+      "scaleY": 0.402,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a368",
+      "group": "effects",
+      "frames": [
+        "assets/slow-wash-splash/0.png",
+        "assets/slow-wash-splash/1.png",
+        "assets/slow-wash-splash/2.png",
+        "assets/slow-wash-splash/3.png",
+        "assets/slow-wash-splash/4.png",
+        "assets/slow-wash-splash/5.png",
+        "assets/slow-wash-splash/6.png",
+        "assets/slow-wash-splash/7.png",
+        "assets/slow-wash-splash/8.png",
+        "assets/slow-wash-splash/9.png",
+        "assets/slow-wash-splash/10.png",
+        "assets/slow-wash-splash/11.png",
+        "assets/slow-wash-splash/12.png",
+        "assets/slow-wash-splash/13.png",
+        "assets/slow-wash-splash/14.png",
+        "assets/slow-wash-splash/15.png"
+      ],
+      "fps": 3,
+      "x": 34,
+      "y": 465,
+      "scale": 0.532,
+      "scaleX": 0.532,
+      "scaleY": 0.402,
+      "rot": 0.1857,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a369",
+      "group": "effects",
+      "frames": [
+        "assets/slow-wash-splash/0.png",
+        "assets/slow-wash-splash/1.png",
+        "assets/slow-wash-splash/2.png",
+        "assets/slow-wash-splash/3.png",
+        "assets/slow-wash-splash/4.png",
+        "assets/slow-wash-splash/5.png",
+        "assets/slow-wash-splash/6.png",
+        "assets/slow-wash-splash/7.png",
+        "assets/slow-wash-splash/8.png",
+        "assets/slow-wash-splash/9.png",
+        "assets/slow-wash-splash/10.png",
+        "assets/slow-wash-splash/11.png",
+        "assets/slow-wash-splash/12.png",
+        "assets/slow-wash-splash/13.png",
+        "assets/slow-wash-splash/14.png",
+        "assets/slow-wash-splash/15.png"
+      ],
+      "fps": 3,
+      "x": 14,
+      "y": 451,
+      "scale": 0.532,
+      "scaleX": 0.532,
+      "scaleY": 0.402,
+      "rot": 0.749,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a370",
+      "group": "effects",
+      "frames": [
+        "assets/slow-wash-splash/0.png",
+        "assets/slow-wash-splash/1.png",
+        "assets/slow-wash-splash/2.png",
+        "assets/slow-wash-splash/3.png",
+        "assets/slow-wash-splash/4.png",
+        "assets/slow-wash-splash/5.png",
+        "assets/slow-wash-splash/6.png",
+        "assets/slow-wash-splash/7.png",
+        "assets/slow-wash-splash/8.png",
+        "assets/slow-wash-splash/9.png",
+        "assets/slow-wash-splash/10.png",
+        "assets/slow-wash-splash/11.png",
+        "assets/slow-wash-splash/12.png",
+        "assets/slow-wash-splash/13.png",
+        "assets/slow-wash-splash/14.png",
+        "assets/slow-wash-splash/15.png"
+      ],
+      "fps": 3,
+      "x": 9,
+      "y": 430,
+      "scale": 0.532,
+      "scaleX": 0.532,
+      "scaleY": 0.402,
+      "rot": 2.1089,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a371",
+      "group": "effects",
+      "frames": [
+        "assets/slow-wash-splash/0.png",
+        "assets/slow-wash-splash/1.png",
+        "assets/slow-wash-splash/2.png",
+        "assets/slow-wash-splash/3.png",
+        "assets/slow-wash-splash/4.png",
+        "assets/slow-wash-splash/5.png",
+        "assets/slow-wash-splash/6.png",
+        "assets/slow-wash-splash/7.png",
+        "assets/slow-wash-splash/8.png",
+        "assets/slow-wash-splash/9.png",
+        "assets/slow-wash-splash/10.png",
+        "assets/slow-wash-splash/11.png",
+        "assets/slow-wash-splash/12.png",
+        "assets/slow-wash-splash/13.png",
+        "assets/slow-wash-splash/14.png",
+        "assets/slow-wash-splash/15.png"
+      ],
+      "fps": 3,
+      "x": 26,
+      "y": 416,
+      "scale": 0.532,
+      "scaleX": 0.532,
+      "scaleY": 0.402,
+      "rot": 2.6147,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a372",
+      "group": "effects",
+      "frames": [
+        "assets/slow-wash-splash/0.png",
+        "assets/slow-wash-splash/1.png",
+        "assets/slow-wash-splash/2.png",
+        "assets/slow-wash-splash/3.png",
+        "assets/slow-wash-splash/4.png",
+        "assets/slow-wash-splash/5.png",
+        "assets/slow-wash-splash/6.png",
+        "assets/slow-wash-splash/7.png",
+        "assets/slow-wash-splash/8.png",
+        "assets/slow-wash-splash/9.png",
+        "assets/slow-wash-splash/10.png",
+        "assets/slow-wash-splash/11.png",
+        "assets/slow-wash-splash/12.png",
+        "assets/slow-wash-splash/13.png",
+        "assets/slow-wash-splash/14.png",
+        "assets/slow-wash-splash/15.png"
+      ],
+      "fps": 3,
+      "x": 36,
+      "y": 405,
+      "scale": 0.532,
+      "scaleX": 0.532,
+      "scaleY": 0.402,
+      "rot": 2.0083,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a375",
+      "group": "effects",
+      "frames": [
+        "assets/chimney-smoke-thin-3/0.png",
+        "assets/chimney-smoke-thin-3/1.png",
+        "assets/chimney-smoke-thin-3/2.png",
+        "assets/chimney-smoke-thin-3/3.png",
+        "assets/chimney-smoke-thin-3/4.png",
+        "assets/chimney-smoke-thin-3/5.png",
+        "assets/chimney-smoke-thin-3/6.png",
+        "assets/chimney-smoke-thin-3/7.png",
+        "assets/chimney-smoke-thin-3/8.png",
+        "assets/chimney-smoke-thin-3/9.png",
+        "assets/chimney-smoke-thin-3/10.png",
+        "assets/chimney-smoke-thin-3/11.png",
+        "assets/chimney-smoke-thin-3/12.png",
+        "assets/chimney-smoke-thin-3/13.png",
+        "assets/chimney-smoke-thin-3/14.png",
+        "assets/chimney-smoke-thin-3/15.png"
+      ],
+      "fps": 3,
+      "x": 482,
+      "y": 335,
+      "scale": 0.646,
+      "scaleX": 0.646,
+      "scaleY": 0.599,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a376",
+      "group": "effects",
+      "frames": [
+        "assets/chimney-smoke-thin-3/0.png",
+        "assets/chimney-smoke-thin-3/1.png",
+        "assets/chimney-smoke-thin-3/2.png",
+        "assets/chimney-smoke-thin-3/3.png",
+        "assets/chimney-smoke-thin-3/4.png",
+        "assets/chimney-smoke-thin-3/5.png",
+        "assets/chimney-smoke-thin-3/6.png",
+        "assets/chimney-smoke-thin-3/7.png",
+        "assets/chimney-smoke-thin-3/8.png",
+        "assets/chimney-smoke-thin-3/9.png",
+        "assets/chimney-smoke-thin-3/10.png",
+        "assets/chimney-smoke-thin-3/11.png",
+        "assets/chimney-smoke-thin-3/12.png",
+        "assets/chimney-smoke-thin-3/13.png",
+        "assets/chimney-smoke-thin-3/14.png",
+        "assets/chimney-smoke-thin-3/15.png"
+      ],
+      "fps": 3,
+      "x": 537,
+      "y": 302,
+      "scale": 0.887,
+      "scaleX": 0.887,
+      "scaleY": 0.599,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false
+    },
+    {
+      "id": "a392",
+      "group": "props",
+      "src": "assets/skiff-rowboat.png",
+      "x": 537,
+      "y": 481,
+      "scale": 0.226,
+      "scaleX": 0.226,
+      "scaleY": 0.224,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false,
+      "life": {
+        "kind": "drift",
+        "bounds": {
+          "x": 522,
+          "y": 447,
+          "w": 66,
+          "h": 50
+        },
+        "seed": 604466103,
+        "rock": 3,
+        "rockRate": 0.3,
+        "driftX": 1.5,
+        "driftY": 1,
+        "period": 7,
+        "faceMotion": false,
+        "walkPct": 0.07606060606060606,
+        "phase": 4.630971809363864
+      }
+    },
+    {
+      "id": "a393",
+      "group": "props",
+      "src": "assets/skiff-cargo.png",
+      "x": 555,
+      "y": 491,
+      "scale": 0.209,
+      "scaleX": 0.209,
+      "scaleY": 0.208,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false,
+      "life": {
+        "kind": "drift",
+        "bounds": {
+          "x": 522,
+          "y": 447,
+          "w": 66,
+          "h": 50
+        },
+        "seed": 458652493,
+        "rock": 3,
+        "rockRate": 0.3,
+        "driftX": 1.5,
+        "driftY": 1,
+        "period": 7,
+        "faceMotion": false,
+        "walkPct": 0.07606060606060606,
+        "phase": 9.648559842262658
+      }
+    },
+    {
+      "id": "a394",
+      "group": "props",
+      "src": "assets/skiff-sail.png",
+      "x": 575,
+      "y": 502,
+      "scale": 0.214,
+      "scaleX": 0.214,
+      "scaleY": 0.215,
+      "rot": 0,
+      "flipX": false,
+      "flipY": false,
+      "life": {
+        "kind": "drift",
+        "bounds": {
+          "x": 522,
+          "y": 447,
+          "w": 66,
+          "h": 50
+        },
+        "seed": 215930603,
+        "rock": 3,
+        "rockRate": 0.3,
+        "driftX": 1.5,
+        "driftY": 1,
+        "period": 7,
+        "faceMotion": false,
+        "walkPct": 0.07606060606060606,
+        "phase": 15.099334653018545
+      }
+    }
+  ]
+}

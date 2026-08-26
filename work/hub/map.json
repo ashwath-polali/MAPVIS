@@ -1,0 +1,83 @@
+{
+  "id": "hub",
+  "w": 688,
+  "h": 640,
+  "encoding": {
+    "blocked": 0,
+    "L0": 40,
+    "ramp01": 50,
+    "L1": 60,
+    "ramp12": 70,
+    "L2": 80,
+    "ramp23": 90,
+    "L3": 100,
+    "stepTolerance": 10
+  },
+  "spawn": [
+    557,
+    508
+  ],
+  "character": {
+    "heightPx": 18,
+    "hip": 2,
+    "hipDY": 1
+  },
+  "speed": 34,
+  "yScale": 0.72,
+  "stairs": [
+    {
+      "value": 50,
+      "connects": [
+        40,
+        60
+      ],
+      "rect": [
+        262,
+        511,
+        300,
+        547
+      ],
+      "px": 708
+    },
+    {
+      "value": 70,
+      "connects": [
+        60,
+        80
+      ],
+      "rect": [
+        326,
+        444,
+        397,
+        506
+      ],
+      "px": 1823
+    },
+    {
+      "value": 90,
+      "connects": [
+        80,
+        100
+      ],
+      "rect": [
+        317,
+        393,
+        369,
+        421
+      ],
+      "px": 1529
+    }
+  ],
+  "occluders": [],
+  "events": [
+    {
+      "id": 2,
+      "type": "door",
+      "x": 343,
+      "y": 362,
+      "r": 14,
+      "label": "Panther's Maw",
+      "to": "panther-maw"
+    }
+  ]
+}
