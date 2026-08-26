@@ -229,10 +229,37 @@ to be the same requirement.
       is the case that made the old order look correct.
 - [ ] **2. Anchors.** Editor naming UI, `to_anchor`, placement binding, the listing endpoint, export
       writing both shapes.
-- [ ] **3. Accounts.** Auth, sessions, ownership, providers, key vault, ledger, a functional my-maps
-      list that is not yet designed.
-- [ ] **4. Jobs and degraded routing.** Every long call becomes a row. The four fall-through paths.
-      The relay daemon.
+- [x] **3. Accounts.** Signup, login, sessions, ownership, providers, the key vault, the ledger and
+      `/api/my-maps`. `verify-auth.mjs` proves the refusals as hard as the successes: a wrong
+      password, a forged token, an expired session whose row still exists, one account posting to
+      another's map, and whether a stored key can ever come back out over http.
+
+      **Ownership is checked at the door, in one place.** Every write route takes a map id out of its
+      own body, so an account that simply types someone else's slug had to be stopped before the
+      route, not inside forty of them. A rule enforced in forty places is enforced in thirty-nine.
+
+      **`MAPVIS_SOLO`** is the one deliberate exception. It names an account that an unauthenticated
+      request is treated as, and it exists because the tool has to stay usable the way it has always
+      been used: one person on one laptop with no login screen in front of the map they are drawing.
+      Without it, the moment the hub had an owner its own author was locked out by his own signed-out
+      browser. It lives only in `.env`, so on a host every request is exactly who its cookie says.
+
+- [x] **4. Jobs and degraded routing.** `runPlanner` kept its signature and became a dispatcher over
+      three providers, so all ten callers were left alone: `key` calls the anthropic api directly and
+      drops the 3.77 s process start the cli costs, `relay` posts a job row a linked machine claims,
+      `none` throws `NoPlanner`.
+
+      **The fall-through is the rule, stated in Ash's words:** anything that ROUTES through claude
+      sends the author's own words straight to pixellab when claude cannot be reached; anything that
+      IS claude denies until there is a key. `translateAsk` already had the fallback prompt, so what
+      was missing was saying so, because a silent degrade spends a real generation on a worse prompt
+      and leaves nobody any way to know why the picture got worse.
+
+      `server/relay.mjs` is the linked machine. It holds no key, runs the cli that is already paid
+      for here, and polls rather than being called, which is the only shape that works from a laptop
+      with no public address that closes at night. It stops checking in, the platform notices in 90
+      seconds and degrades. `for update skip locked` on the claim is what stops two machines running
+      and billing the same question twice.
 - [ ] **5. Deploy.** Vercel plus Neon plus R2 on a domain.
 - [ ] **6. UI.** Ash steers this one. Held to the MAPVIS UI law: not a default-looking React page.
 - [x] **7a. Publish and the read API.** **Landed 2026-08-26, early, because export was already
@@ -261,6 +288,24 @@ to be the same requirement.
       Still to come here: the game reading `/api/v1` instead of `public/maps-painted/`.
 
 ---
+
+## Running it
+
+```
+npm run dev       the tool, api included, on 5274
+npm run doctor    is anything unwired
+npm run migrate   apply schema, re-runnable
+npm run verify    every check below, in order
+npm run relay     the linked machine, for a hosted MAPVIS
+```
+
+`npm run verify` runs 86 checks: the document round-trips losslessly, an idle autosave writes
+nothing, a generated asset survives, undo works off a machine that never saw the edit, the read api
+refuses what it should, accounts hold, keys never come back out, degraded routing degrades, a relay
+claims work, and the whole map answers with the disk turned off.
+
+Per-map tooling: `import-work.mjs <slug>` moves a folder in, `publish-work.mjs <slug>` publishes one
+without a browser, `verify-map.mjs <slug>`, `gate.mjs <slug>`.
 
 ## Known and deliberately parked
 
