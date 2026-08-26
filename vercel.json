@@ -4,14 +4,24 @@
   "outputDirectory": "dist",
   "functions": {
     "api/index.mjs": {
-      "memory": 1024,
       "maxDuration": 300
     }
   },
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/index.mjs" },
-    { "source": "/work/(.*)", "destination": "/api/index.mjs" },
-    { "source": "/((?!api/|work/|assets/).*)", "destination": "/index.html" }
+    {
+      "source": "/api/(.*)",
+      "destination": "/api/index.mjs"
+    },
+    {
+      "source": "/work/(.*)",
+      "destination": "/api/index.mjs"
+    },
+    {
+      "source": "/((?!api/|work/|assets/).*)",
+      "destination": "/index.html"
+    }
   ],
-  "regions": ["pdx1"]
+  "regions": [
+    "pdx1"
+  ]
 }

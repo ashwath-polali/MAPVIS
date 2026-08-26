@@ -150,10 +150,22 @@ export async function currentUser(req) {
   return solo ? await one(`select ${PUBLIC} from users where email = $1`, [String(solo).toLowerCase()]) : null
 }
 
-// MAPVIS_NO_SOLO is how the auth test turns this off, so it can prove the door
-// holds without a local convenience quietly opening it.
+/* SOLO MODE CANNOT EXIST ON A HOST, whatever any file says.
+ *
+ * The first deploy shipped .env by accident, so MAPVIS_SOLO went up with it and
+ * /api/me answered as the club account to a request carrying no cookie: every
+ * anonymous visitor was signed in as ATC. .vercelignore stops that file going
+ * up again, and this stops it mattering if one ever does.
+ *
+ * A convenience that is safe on one laptop and catastrophic on a server should
+ * not be one config line away from the wrong one. Refusing it wherever a
+ * serverless runtime is detected costs nothing and closes the whole class.
+ *
+ * MAPVIS_NO_SOLO is how the auth test turns it off locally, so it can prove the
+ * door holds without the convenience quietly propping it open. */
 export const soloMode = () => {
   const E = env()
+  if (E.VERCEL || E.AWS_LAMBDA_FUNCTION_NAME || E.MAPVIS_HOSTED === '1') return null
   return E.MAPVIS_NO_SOLO === '1' ? null : E.MAPVIS_SOLO || null
 }
 

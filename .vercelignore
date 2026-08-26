@@ -1,0 +1,33 @@
+# What must never reach the host.
+#
+# The vercel cli uploads the working directory, and it does NOT reliably fall
+# back to .gitignore, so an ignored file is not automatically an unshipped one.
+# The first deploy proved that the hard way: .env went up, MAPVIS_SOLO came
+# with it, and /api/me answered as the club account to a request carrying no
+# cookie at all. Every anonymous visitor would have been signed in as ATC.
+#
+# Real configuration lives in vercel's own environment variables. This file
+# exists so a local convenience can never become a hosted one.
+.env
+.env.*
+!.env.example
+
+# scratch. On a host this is /tmp and is rebuilt per request; shipping a
+# laptop's copy would be megabytes of pngs that get ignored anyway.
+work/
+public/work/
+
+# the previous generation's dead weight
+archive/
+.vite-cache/
+.tmp-refute/
+dist-ssr/
+
+# history and tooling the runtime never reads
+.git/
+.github/
+docs/
+reference/
+*.blend
+*.blend1
+__pycache__/
