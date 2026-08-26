@@ -2212,18 +2212,26 @@ async function route(req, res, p, url) {
 
   if (p.startsWith('/api/doc/') && req.method === 'GET') {
     const id = safeId(decodeURIComponent(p.slice('/api/doc/'.length)))
+    // savedAt travels with the document because the browser also holds a copy,
+    // and something has to decide which of the two is the real one. Without it
+    // the editor prefers localStorage forever and the map still lives in one
+    // browser, which is the whole thing this was meant to fix.
     if (platformOn()) {
       try {
-        const doc = await loadDocument(id)
-        if (doc) return send(res, 200, { doc })
+        const r = await loadDocument(id)
+        if (r?.doc) return send(res, 200, { doc: r.doc, savedAt: r.savedAt, from: 'platform' })
       } catch (e) {
         console.error('[doc] platform load failed, trying disk:', e.message)
       }
-      if (!diskAllowed()) return send(res, 200, { doc: '' })
+      if (!diskAllowed()) return send(res, 200, { doc: '', savedAt: 0 })
     }
     const f = path.join(WORK, id, 'doc.json')
-    if (!f.startsWith(WORK) || !fs.existsSync(f)) return send(res, 200, { doc: '' })
-    return send(res, 200, { doc: fs.readFileSync(f, 'utf8') })
+    if (!f.startsWith(WORK) || !fs.existsSync(f)) return send(res, 200, { doc: '', savedAt: 0 })
+    return send(res, 200, {
+      doc: fs.readFileSync(f, 'utf8'),
+      savedAt: fs.statSync(f).mtimeMs,
+      from: 'disk',
+    })
   }
 
   return notFound(res)

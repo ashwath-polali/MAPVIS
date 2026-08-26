@@ -843,11 +843,17 @@ export const saveCutPNG = (id: string, image: string, cut: string) =>
 
 export const exportBundle = (b: unknown) => jpost<{ dir: string; files: string[] }>('/api/export', b)
 
-/* The map's own state, mirrored to disk on the same beat as the browser
+/* The map's own state, saved to the platform on the same beat as the browser
  * autosave. Export is a different job: it is the bundle the game reads, it is
  * lossy about the editor's state, and it should not be the only way work leaves
  * the browser. This is the save. The payload is the exact string the doc
- * serializes to, so nothing here has to understand the format. */
-export const saveDoc = (id: string, doc: string) => jpost<{ bytes: number }>('/api/doc', { id, doc })
+ * serializes to, so nothing here has to understand the format.
+ *
+ * savedAt is the server's own clock, not this browser's, and it is what decides
+ * which copy wins when the browser also has one. wrote says which halves
+ * actually changed: an autosave with nothing new in it writes neither. */
+export const saveDoc = (id: string, doc: string) =>
+  jpost<{ bytes: number; savedAt?: number; wrote?: string[] }>('/api/doc', { id, doc })
 
-export const loadDoc = (id: string) => jget<{ doc: string }>('/api/doc/' + encodeURIComponent(id))
+export const loadDoc = (id: string) =>
+  jget<{ doc: string; savedAt?: number; from?: string }>('/api/doc/' + encodeURIComponent(id))

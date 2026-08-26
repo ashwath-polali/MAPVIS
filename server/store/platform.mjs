@@ -59,13 +59,19 @@ export const forgetMap = (slug) => ids.delete(slug)
 export async function saveDocument(slug, docString) {
   const id = await mapIdFor(slug, { create: true })
   const r = await putDoc(id, docString)
-  return { bytes: docString.length, ...r }
+  // the row's own updated_at, so the browser records exactly what the server
+  // thinks the time is rather than what the browser's clock thinks
+  const t = await one('select updated_at from maps where id = $1', [id])
+  return { bytes: docString.length, savedAt: t ? +new Date(t.updated_at) : Date.now(), ...r }
 }
 
 export async function loadDocument(slug) {
   const id = await mapIdFor(slug)
-  if (!id) return ''
-  return (await getDoc(id)) || ''
+  if (!id) return null
+  const doc = await getDoc(id)
+  if (!doc) return null
+  const t = await one('select updated_at from maps where id = $1', [id])
+  return { doc, savedAt: t ? +new Date(t.updated_at) : 0 }
 }
 
 // ---- the library -----------------------------------------------------------

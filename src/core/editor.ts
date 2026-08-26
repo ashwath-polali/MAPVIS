@@ -683,10 +683,12 @@ export class Editor {
       g.drawImage(img, 0, 0)
       this.pix = g.getImageData(0, 0, this.doc.W, this.doc.H).data
     }
-    // this browser first, then the doc mirrored to disk, then a bundle if one
-    // was exported under this id. Newest and most complete first.
+    // restoreDoc weighs this browser against the platform and takes the newer
+    // one; a bundle exported under this id is the last resort. It used to try
+    // the browser first unconditionally, which meant a map in a database was
+    // never actually read from it.
     try {
-      if (!this.restoreLocal() && !(await this.restoreDoc())) await this.restoreFromDisk()
+      if (!(await this.restoreDoc())) await this.restoreFromDisk()
     } finally {
       this.loading = false
     }
@@ -3404,25 +3406,29 @@ export class Editor {
       // in one browser stops saving. Silently, which is the part that cost work.
       this.say('this browser is full · saving to disk only')
     }
-    // the copy that survives a cleared browser or a different machine
-    void saveDoc(this.sceneId, s).catch(() => {
-      if (this.diskWarned) return
-      this.diskWarned = true
-      this.say('could not save to disk · this browser is the only copy')
-    })
+    // the copy that survives a cleared browser or a different machine. The
+    // server answers with its own clock, and recording that here is what lets
+    // the next open tell which of the two copies is really the newer one.
+    void saveDoc(this.sceneId, s)
+      .then((r) => {
+        localStorage.setItem(this.key() + ':at', String(r?.savedAt || Date.now()))
+        this.diskWarned = false
+      })
+      .catch(() => {
+        // an unreachable platform means this browser is ahead of it, so stamp
+        // local time and let the comparison on the next open notice
+        localStorage.setItem(this.key() + ':at', String(Date.now()))
+        if (this.diskWarned) return
+        this.diskWarned = true
+        this.say('could not reach the platform · this browser is the only copy')
+      })
   }
-  private restoreLocal() {
-    const legacyKey = `mapvis:${this.sceneId}:${this.doc.W}x${this.doc.H}`
+  /* Unpack a saved string into this doc. A v3 envelope may describe a grown
+   * canvas, so match its base against the painting that just loaded, grow
+   * first, then unpack into the grown planes. Shared by every restore path
+   * because they only differ in where the string came from. */
+  private applyDoc(raw: string) {
     try {
-      let raw = localStorage.getItem(this.key())
-      let legacy = false
-      if (!raw) {
-        raw = localStorage.getItem(legacyKey)
-        legacy = true
-      }
-      if (!raw) return false
-      // a v3 envelope may describe a grown canvas: match its base against the
-      // painting that just loaded, grow first, then unpack into the grown planes
       if (raw.startsWith('{')) {
         const d = JSON.parse(raw) as {
           w?: number
@@ -3435,7 +3441,29 @@ export class Editor {
           this.relayCanvas(b.ox, b.oy, d.w, d.h)
         }
       }
-      if (this.doc.deserialize(raw)) {
+      return this.doc.deserialize(raw)
+    } catch {
+      return false
+    }
+  }
+
+  /* When this browser last saved. Kept beside the document rather than inside
+   * it, so the saved format is untouched and an older build still reads it. */
+  private localAt() {
+    return Number(localStorage.getItem(this.key() + ':at') || 0)
+  }
+
+  private restoreLocal() {
+    const legacyKey = `mapvis:${this.sceneId}:${this.doc.W}x${this.doc.H}`
+    try {
+      let raw = localStorage.getItem(this.key())
+      let legacy = false
+      if (!raw) {
+        raw = localStorage.getItem(legacyKey)
+        legacy = true
+      }
+      if (!raw) return false
+      if (this.applyDoc(raw)) {
         if (legacy) {
           const m = localStorage.getItem(legacyKey + ':meta')
           if (m) this.doc.spawn = JSON.parse(m).spawn
@@ -3453,28 +3481,43 @@ export class Editor {
    * a cleared browser, or the quota having eaten the local copy. Same string
    * and the same grow-then-unpack order restoreLocal uses, because deserialize
    * ignores the envelope's w/h and unpack refuses a length mismatch. */
+  /* Whichever copy is newer wins, and that is the whole difference between a
+   * tool and a platform.
+   *
+   * This used to try localStorage first and only reach for the server when the
+   * browser had nothing. On one machine that is right. The moment a map lives
+   * in a database it is wrong: opening it here would read this browser forever,
+   * a second browser would quietly diverge, and the map would still effectively
+   * live in one place.
+   *
+   * So both are asked, and the server's own clock decides. The browser copy is
+   * still what makes the tool work with no network, and it still wins when it
+   * is genuinely the newer one, which is what happens after editing offline. */
   private async restoreDoc() {
+    const localRaw = localStorage.getItem(this.key())
+    const localAt = this.localAt()
+    let server: { doc: string; savedAt?: number; from?: string } | null = null
     try {
-      const { doc: raw } = await loadDoc(this.sceneId)
-      if (!raw) return false
-      if (raw.startsWith('{')) {
-        const d = JSON.parse(raw) as {
-          w?: number
-          h?: number
-          base?: { w: number; h: number; ox: number; oy: number }
-        }
-        if (typeof d.w === 'number' && typeof d.h === 'number' && (d.w !== this.doc.W || d.h !== this.doc.H)) {
-          const b = d.base
-          if (!b || b.w !== this.doc.W || b.h !== this.doc.H) return false // saved against another painting
-          this.relayCanvas(b.ox, b.oy, d.w, d.h)
-        }
-      }
-      if (this.doc.deserialize(raw)) {
-        this.say('restored from disk')
-        return true
-      }
+      server = await loadDoc(this.sceneId)
     } catch {
-      /* no mirror yet, or the server is not up */
+      /* the server is not up; the browser copy is all there is */
+    }
+    const serverAt = Number(server?.savedAt || 0)
+
+    // a browser copy with no recorded time predates this and cannot be
+    // compared, so the platform is trusted over it
+    if (server?.doc && (!localRaw || serverAt >= localAt) && this.applyDoc(server.doc)) {
+      localStorage.setItem(this.key() + ':at', String(serverAt || Date.now()))
+      this.say(localRaw && localAt && serverAt > localAt ? 'loaded a newer copy from the platform' : 'loaded from the platform')
+      return true
+    }
+    if (localRaw && this.restoreLocal()) {
+      if (serverAt && localAt > serverAt) this.say('this browser has newer work · it will save over the platform copy')
+      return true
+    }
+    if (server?.doc && this.applyDoc(server.doc)) {
+      this.say('loaded from the platform')
+      return true
     }
     return false
   }
