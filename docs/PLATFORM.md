@@ -14,10 +14,20 @@ is a contract handed here by the game side, not a suggestion.
 | | free tier, verified 2026-08-26 | what lives there | headroom |
 |---|---|---|---|
 | Neon Postgres | 0.5 GB/project, 100 CU-hr/mo, 5 GB egress, autosuspend at 5 min | map documents, anchors, accounts, jobs, ledger | ~1,500 maps |
-| Cloudflare R2 | 10 GB, 1M writes, 10M reads/mo, **egress free** | every PNG, published bundles | ~1,600 maps with libraries |
+| Backblaze B2 | 10 GB permanent, **no credit card**, egress free to 3x stored | every PNG, published bundles | ~1,600 maps with libraries |
 | Vercel Hobby | 300 s function max, 100 GB transfer, 1M invocations | the app and the API | past any school scale |
 
 Neon's half-gigabyte is enough because the big things are not in it. See the storage split below.
+
+**B2 rather than Cloudflare R2, and the reason is the signup, not the product.** R2 is the better
+object store on paper: its egress is unconditionally free where B2's is free up to three times what
+you store. But enabling R2 forces a credit card on file even for the free tier, despite Cloudflare's
+own product page saying otherwise, and a card was a line Ash drew. B2's 10 GB is permanent and needs
+no card.
+
+This costs nothing to get wrong. `server/store/blobs.mjs` speaks the **S3 API and nothing else**, which
+B2, R2, S3 and MinIO all implement, so the provider is four lines in `.env`. That is deliberate: the
+one thing that must never happen is coming back to rewrite storage because a free tier changed.
 
 **Two standing rules that keep this free and keep it portable.**
 
