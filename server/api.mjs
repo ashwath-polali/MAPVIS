@@ -51,6 +51,19 @@ import {
 import { publishBundle, publishedMap, publishHistory } from './store/publish.mjs'
 import { store } from './store/blobs.mjs'
 import { one, many } from './db/pool.mjs'
+import { listMaps } from './store/maps.mjs'
+import {
+  signUp,
+  signIn,
+  openSession,
+  closeSession,
+  currentUser,
+  tokenFrom,
+  setSessionCookie,
+  clearSessionCookie,
+  setProvider,
+  spendSince,
+} from './store/auth.mjs'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(HERE, '..')
@@ -74,6 +87,7 @@ export function api(req, res, next) {
 async function route(req, res, p, url) {
   if (p.startsWith('/work/')) return serveWork(res, p.slice('/work/'.length))
   if (p.startsWith('/api/v1/')) return readApi(req, res, p, url)
+  if (p.startsWith('/api/auth/') || p === '/api/me' || p === '/api/my-maps') return authApi(req, res, p, url)
   if (p === '/api/balance') return send(res, 200, await pixellab.balance())
 
   if (p === '/api/generate' && req.method === 'POST') {
@@ -2310,6 +2324,82 @@ async function route(req, res, p, url) {
   }
 
   return notFound(res)
+}
+
+/* ---- accounts -------------------------------------------------------------
+ *
+ * Anyone can make one. ATC and Ash share a single login on purpose, so there is
+ * no team model here and adding one would be machinery serving nobody.
+ *
+ * Signed out is not signed out of MAPVIS: the cut tool, levels, the walk test,
+ * placing and export all work with no account at all, and always will. An
+ * account is what makes a map yours across machines and what holds the keys.
+ */
+async function authApi(req, res, p, url) {
+  const body_ = async () => (req.method === 'POST' ? await body(req) : {})
+
+  if (p === '/api/auth/signup' && req.method === 'POST') {
+    const b = await body_()
+    try {
+      const user = await signUp({ email: b.email, password: b.password, displayName: b.displayName })
+      const token = await openSession(user.id, req.headers['user-agent'] || '')
+      setSessionCookie(res, token)
+      return send(res, 200, { user })
+    } catch (e) {
+      return send(res, 400, { error: String(e.message || e) })
+    }
+  }
+
+  if (p === '/api/auth/login' && req.method === 'POST') {
+    const b = await body_()
+    try {
+      const { token, user } = await signIn({
+        email: b.email,
+        password: b.password,
+        userAgent: req.headers['user-agent'] || '',
+      })
+      setSessionCookie(res, token)
+      return send(res, 200, { user })
+    } catch (e) {
+      // deliberately one message for both "no such email" and "wrong password",
+      // so this cannot be used to find out who has an account here
+      return send(res, 401, { error: String(e.message || e) })
+    }
+  }
+
+  if (p === '/api/auth/logout' && req.method === 'POST') {
+    await closeSession(tokenFrom(req))
+    clearSessionCookie(res)
+    return send(res, 200, { ok: true })
+  }
+
+  if (p === '/api/me') {
+    const user = await currentUser(req)
+    if (!user) return send(res, 200, { user: null })
+    return send(res, 200, { user, spend: await spendSince(user.id, 30) })
+  }
+
+  /* Which service this account reaches how. The key itself never comes back
+   * out; the account only ever learns whether one is stored. */
+  if (p === '/api/auth/provider' && req.method === 'POST') {
+    const user = await currentUser(req)
+    if (!user) return send(res, 401, { error: 'sign in first' })
+    const b = await body_()
+    try {
+      return send(res, 200, { user: await setProvider(user.id, b.service, b.mode, b.key) })
+    } catch (e) {
+      return send(res, 400, { error: String(e.message || e) })
+    }
+  }
+
+  // the dashboard: what this account has made, without any of it being loaded
+  if (p === '/api/my-maps') {
+    const user = await currentUser(req)
+    if (!user) return send(res, 200, { maps: [] })
+    return send(res, 200, { maps: await listMaps(user.id) })
+  }
+
+  return send(res, 404, { error: 'no such endpoint' })
 }
 
 /* ---- /api/v1, the read side ---------------------------------------------
