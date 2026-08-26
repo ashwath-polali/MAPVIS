@@ -209,8 +209,24 @@ to be the same requirement.
       `verify-map.mjs <slug>` proves a round trip is lossless, `gate.mjs <slug>` proves the map does
       not need this laptop.
 
-      Still on disk and still to move: the export writer, every generation path that writes a png,
-      states, and `.prev`. Those are writes; this gate was about reads and the document.
+      **Writes followed.** The listing comes from the database now, so anything generation wrote to
+      disk and did not push would simply vanish from the library. Every library write ends at one of
+      four functions, so those four push to the store before responding: `saveStatic`, `swapFolder`,
+      and the two places `saveFrames` is finished off by `trimSet`. Deleting drops from both.
+      `verify-map.mjs` walks that path with a real png and checks it lists, round-trips and deletes.
+
+      Disk did not go away and should not: it is where the collision loops, the `.stage` swap and
+      `.prev` still run, all of it already tested. It is scratch, and the store is truth by the time
+      a request ends, which is also what lets a hosted server work with an ephemeral disk.
+
+      Still on disk and still to move: the export writer, states, and `.prev`.
+
+      **The browser was still winning, and that was the real bug.** `restoreLocal()` ran first and
+      `restoreDoc()` was documented as "read when this browser has nothing", so a map in a database
+      was never actually read from it and two browsers would diverge silently. The document now
+      carries `savedAt` from the server's own clock, the browser records the same number beside its
+      copy, and **the newer one wins**. Offline edits still win when they are genuinely newer, which
+      is the case that made the old order look correct.
 - [ ] **2. Anchors.** Editor naming UI, `to_anchor`, placement binding, the listing endpoint, export
       writing both shapes.
 - [ ] **3. Accounts.** Auth, sessions, ownership, providers, key vault, ledger, a functional my-maps
