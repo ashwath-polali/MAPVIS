@@ -10,9 +10,19 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '.
 
 let cached = null
 
+/* A REAL ENVIRONMENT VARIABLE ALWAYS WINS over a line in .env.
+ *
+ * That ordering is not a preference. .env is the local fallback for values
+ * nobody has set; a variable that IS set was set deliberately, by a host, by a
+ * CI job, or by a test that needs a local convenience turned off. Letting the
+ * file override it means a test can never disable something .env enables, and
+ * a deploy can never override a file that got committed by accident.
+ *
+ * Written the wrong way round first, and found by a test that kept passing for
+ * the wrong reason. */
 export function env() {
   if (cached) return cached
-  const out = { ...process.env }
+  const fromFile = {}
   const f = path.join(ROOT, '.env')
   if (fs.existsSync(f)) {
     for (const line of fs.readFileSync(f, 'utf8').split(/\r?\n/)) {
@@ -21,10 +31,11 @@ export function env() {
       const i = s.indexOf('=')
       if (i < 1) continue
       const v = s.slice(i + 1).trim()
-      if (v) out[s.slice(0, i).trim()] = v
+      if (v) fromFile[s.slice(0, i).trim()] = v
     }
   }
-  return (cached = out)
+  // the file fills in what the environment has not already said
+  return (cached = { ...fromFile, ...process.env })
 }
 
 export function need(key) {

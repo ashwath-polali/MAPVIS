@@ -50,8 +50,10 @@ import {
 } from './store/platform.mjs'
 import { publishBundle, publishedMap, publishHistory } from './store/publish.mjs'
 import { store } from './store/blobs.mjs'
-import { one, many } from './db/pool.mjs'
+import { q, one, many } from './db/pool.mjs'
+import { newToken, hashToken } from './store/crypto.mjs'
 import { listMaps } from './store/maps.mjs'
+import { ask, plannerReady, NoPlanner } from './store/planner.mjs'
 import {
   signUp,
   signIn,
@@ -94,6 +96,7 @@ async function route(req, res, p, url) {
   if (p.startsWith('/work/')) return serveWork(res, p.slice('/work/'.length))
   if (p.startsWith('/api/v1/')) return readApi(req, res, p, url)
   if (p.startsWith('/api/auth/') || p === '/api/me' || p === '/api/my-maps') return authApi(req, res, p, url)
+  if (p.startsWith('/api/relay/')) return relayApi(req, res, p)
 
   /* OWNERSHIP IS CHECKED HERE, once, rather than in forty routes.
    *
@@ -2356,6 +2359,70 @@ async function route(req, res, p, url) {
   return notFound(res)
 }
 
+/* ---- the linked machine ---------------------------------------------------
+ *
+ * A relay authenticates with its own token, not a session, because it is a
+ * process on a laptop rather than a person in a browser. The token is stored
+ * hashed the same way a session is, so a stolen database cannot be replayed.
+ *
+ * It can only ever claim jobs belonging to the account it is linked to, and it
+ * never sees a map, a key or anything else. All it does is answer questions.
+ */
+async function relayApi(req, res, p) {
+  if (req.method !== 'POST') return send(res, 405, { error: 'post only' })
+  const auth = String(req.headers.authorization || '')
+  const token = auth.startsWith('Relay ') ? auth.slice(6).trim() : ''
+  const link = token
+    ? await one('select * from relay_links where token_hash = $1', [hashToken(token)])
+    : null
+  if (!link) return send(res, 401, { error: 'unknown relay token' })
+
+  const b = await body(req)
+
+  if (p === '/api/relay/claim') {
+    // asking for work IS the heartbeat: a relay that is polling is by
+    // definition alive, so there is no second timer to forget to send
+    const caps = Array.isArray(b.caps) && b.caps.length ? b.caps : ['claude']
+    await q(
+      `update relay_links set last_seen_at = now(), name = coalesce(nullif($2,''), name), capabilities = $3
+       where id = $1`,
+      [link.id, String(b.name || '').slice(0, 80), caps],
+    )
+    /* One job, taken atomically. `for update skip locked` is what makes two
+     * machines on the same account safe: each grabs a different row instead of
+     * both running the same question and billing it twice. */
+    const job = await one(
+      `update jobs set status = 'claimed', claimed_by = $1, heartbeat_at = now()
+       where id = (
+         select id from jobs
+          where user_id = $2 and status = 'queued' and provider = any($3::text[])
+          order by created_at
+          for update skip locked
+          limit 1
+       )
+       returning id, kind, provider, payload`,
+      [link.id, link.user_id, caps],
+    )
+    return send(res, 200, { job: job || null })
+  }
+
+  if (p === '/api/relay/done') {
+    const owned = await one('select id from jobs where id = $1 and claimed_by = $2', [String(b.id || ''), link.id])
+    if (!owned) return send(res, 404, { error: 'not your job' })
+    if (b.error) {
+      await q(`update jobs set status='error', error=$2, finished_at=now() where id=$1`, [owned.id, String(b.error).slice(0, 300)])
+    } else {
+      await q(`update jobs set status='done', result=$2::jsonb, finished_at=now() where id=$1`, [
+        owned.id,
+        JSON.stringify({ text: String(b.text ?? '') }),
+      ])
+    }
+    return send(res, 200, { ok: true })
+  }
+
+  return send(res, 404, { error: 'no such endpoint' })
+}
+
 /* ---- accounts -------------------------------------------------------------
  *
  * Anyone can make one. ATC and Ash share a single login on purpose, so there is
@@ -2420,6 +2487,36 @@ async function authApi(req, res, p, url) {
     } catch (e) {
       return send(res, 400, { error: String(e.message || e) })
     }
+  }
+
+  /* Link a machine. The token is shown once and stored only as its hash, the
+   * same rule sessions follow, so losing it means making another rather than
+   * reading it back out of the database. */
+  if (p === '/api/auth/relay-token' && req.method === 'POST') {
+    const user = await currentUser(req)
+    if (!user) return send(res, 401, { error: 'sign in first' })
+    const b = await body_()
+    const token = newToken()
+    const caps = Array.isArray(b.caps) && b.caps.length ? b.caps : ['claude']
+    const link = await one(
+      `insert into relay_links (user_id, name, token_hash, capabilities)
+       values ($1,$2,$3,$4) returning id, name, capabilities, created_at`,
+      [user.id, String(b.name || 'a machine').slice(0, 80), hashToken(token), caps],
+    )
+    return send(res, 200, { link, token, note: 'copy it now · it is not shown again' })
+  }
+
+  if (p === '/api/auth/relays') {
+    const user = await currentUser(req)
+    if (!user) return send(res, 200, { relays: [] })
+    return send(res, 200, {
+      relays: await many(
+        `select id, name, capabilities, last_seen_at,
+                (last_seen_at > now() - interval '90 seconds') as live
+         from relay_links where user_id = $1 order by created_at`,
+        [user.id],
+      ),
+    })
   }
 
   // the dashboard: what this account has made, without any of it being loaded
@@ -5074,9 +5171,38 @@ async function translateAsk(ask, kind, styleClause, id, job) {
       h: clampPx(o.h),
       belongs,
     }
-  } catch {
-    return fallback
+  } catch (e) {
+    /* THE FALL-THROUGH, and it is the whole degraded-routing rule in one place.
+     *
+     * With no claude there is nobody to rewrite the ask, so the author's own
+     * words go to pixellab instead of the request failing. That is Ash's rule
+     * stated exactly: things that route through claude route straight to
+     * pixellab when claude cannot be reached.
+     *
+     * The difference from the old behaviour is only that it says so. A silent
+     * degrade spends a real generation on a worse prompt and leaves the author
+     * wondering why the picture got worse. */
+    return {
+      ...fallback,
+      degraded: e instanceof NoPlanner ? e.mode : 'error',
+      why:
+        e instanceof NoPlanner
+          ? e.mode === 'relay'
+            ? 'no linked machine answered · your words went straight to pixellab'
+            : 'no claude key · your words went straight to pixellab'
+          : 'the interpreter could not answer · your words went straight to pixellab',
+    }
   }
+}
+
+/* A feature that is purely claude has nothing to fall through to, so it says so
+ * instead of pretending. 402 rather than 401: the caller is who they say they
+ * are, they simply cannot reach the thing this needs. */
+function denyNoPlanner(res, what) {
+  return send(res, 402, {
+    error: `${what} needs claude · add a key in your account, or link a machine`,
+    needs: 'claude',
+  })
 }
 
 // ---- the style card -----------------------------------------------------
@@ -6020,74 +6146,28 @@ export function stopJob(job) {
   return hit
 }
 
-function runPlanner(prompt, timeoutMs, job) {
-  return new Promise((resolve, reject) => {
-    let ps
-    try {
-      // the strong model, never a fast one: the rewrite IS the product, and a
-      // small model's decorations cost real generations ("crystalline" turned a
-      // water sparkle into an ice cube, 2026-08-16)
-      /* Bounded on purpose.
-       *
-       * A planner handed two images and asked for a list went into a tool loop:
-       * read the map, read the crop, then read them AGAIN to check itself, and
-       * never finish. Measured 2026-08-20: it burned the full five-minute
-       * timeout and came back with nothing, while the same words answered in
-       * fifteen seconds once it was told to look once.
-       *
-       * Read is the only tool any of these need and now the only one they get,
-       * and the turn cap makes an unproductive loop fail in a minute rather
-       * than hang for five. The real fix is in the prompts, which say to read
-       * once and answer; these two are the fence behind it. */
-      ps = spawn(
-        'claude',
-        ['-p', '--output-format', 'json', '--model', PLANNER_MODEL, '--max-turns', '6', '--allowedTools', 'Read'],
-        { windowsHide: true, shell: true },
-      )
-    } catch (e) {
-      return reject(e)
-    }
-    if (job) LIVE.set(job, ps)
-    let out = ''
-    let err = ''
-    let done = false
-    const finish = () => {
-      if (job && LIVE.get(job) === ps) LIVE.delete(job)
-    }
-    const t = setTimeout(() => {
-      if (done) return
-      done = true
-      finish()
-      try {
-        if (process.platform === 'win32') spawn('taskkill', ['/pid', String(ps.pid), '/T', '/F'], { windowsHide: true })
-        else ps.kill()
-      } catch {
-        /* already gone */
-      }
-      reject(new Error('the interpreter timed out'))
-    }, timeoutMs)
-    ps.stdout.on('data', (d) => (out += d))
-    ps.stderr.on('data', (d) => (err += d))
-    ps.on('error', (e) => {
-      if (done) return
-      done = true
-      finish()
-      clearTimeout(t)
-      reject(e)
-    })
-    ps.on('close', (code) => {
-      if (done) return
-      done = true
-      const killed = job && !LIVE.has(job)
-      finish()
-      clearTimeout(t)
-      if (killed) reject(new Error('stopped'))
-      else if (code === 0) resolve(out)
-      else reject(new Error((err || 'the interpreter exited ' + code).slice(-300)))
-    })
-    ps.stdin.on('error', () => {})
-    ps.stdin.write(prompt)
-    ps.stdin.end()
+/* Ask the planner, whichever provider this account uses.
+ *
+ * Ten places call this and none of them should know or care whether the answer
+ * came from a local cli, the account's own anthropic key, or a laptop that
+ * claimed a job row. Keeping the signature is the point: the dispatch changed,
+ * the callers did not.
+ *
+ * A NoPlanner thrown from here is not a fault. It means this account cannot
+ * reach claude right now, and the caller decides between falling through to the
+ * author's own words and denying a feature that is purely claude. */
+async function runPlanner(prompt, timeoutMs, job, user, images) {
+  return ask({
+    user,
+    prompt,
+    timeoutMs,
+    images,
+    jobKey: job || '',
+    // the stop button still has to reach a local process, so the registry that
+    // makes that possible is handed the child rather than owning the spawn
+    onProcess: (ps) => {
+      if (job) LIVE.set(job, ps)
+    },
   })
 }
 
