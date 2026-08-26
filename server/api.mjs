@@ -77,6 +77,12 @@ const SAM_CKPT =
 
 const MIME = { '.png': 'image/png', '.jpg': 'image/jpeg', '.json': 'application/json' }
 
+/* POSTs that carry an `id` that is not a map anybody owns, so the ownership
+ * gate must not stand in front of them. Auth has its own handler and never
+ * reaches the gate; these are the ones whose `id` means something else or
+ * nothing at all. */
+const OPEN_POSTS = new Set(['/api/stop', '/api/propose', '/api/account-import', '/api/character-import'])
+
 export function api(req, res, next) {
   const url = new URL(req.url, 'http://local')
   const p = url.pathname
@@ -88,6 +94,30 @@ async function route(req, res, p, url) {
   if (p.startsWith('/work/')) return serveWork(res, p.slice('/work/'.length))
   if (p.startsWith('/api/v1/')) return readApi(req, res, p, url)
   if (p.startsWith('/api/auth/') || p === '/api/me' || p === '/api/my-maps') return authApi(req, res, p, url)
+
+  /* OWNERSHIP IS CHECKED HERE, once, rather than in forty routes.
+   *
+   * "the dashboard only lists your maps" is a convenience, not a rule: every
+   * write below takes a map id out of its own body, so without this an account
+   * could name somebody else's map and edit it. The check is at the door
+   * because a rule enforced in forty places is a rule enforced in thirty-nine.
+   *
+   * Signing in is not required to use MAPVIS. Anonymous still works exactly as
+   * it always has, and only stops at a map that already has an owner, which is
+   * what makes a map yours instead of merely listed under you. */
+  if (req.method === 'POST' && !OPEN_POSTS.has(p)) {
+    const b = await body(req)
+    const slug = b && b.id ? safeId(b.id) : ''
+    if (slug && platformOn()) {
+      const owner = await one('select u.id, u.email from maps m join users u on u.id = m.owner_id where m.slug = $1', [slug])
+      if (owner) {
+        const me = await currentUser(req)
+        if (!me || me.id !== owner.id) {
+          return send(res, 403, { error: `${slug} belongs to another account` })
+        }
+      }
+    }
+  }
   if (p === '/api/balance') return send(res, 200, await pixellab.balance())
 
   if (p === '/api/generate' && req.method === 'POST') {
@@ -6073,7 +6103,18 @@ function run(cmd, args) {
   })
 }
 
+/* Read once, hand back the same object after that.
+ *
+ * The ownership check at the door has to see the map id, which lives in the
+ * body, and a request stream can only be drained once. Without this the check
+ * would consume it and every route after it would wait forever for data that
+ * had already arrived. */
 function body(req) {
+  if (req._body) return req._body
+  return (req._body = readBody(req))
+}
+
+function readBody(req) {
   return new Promise((resolve, reject) => {
     let n = 0
     const chunks = []

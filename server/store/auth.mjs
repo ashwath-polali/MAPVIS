@@ -101,7 +101,31 @@ export function setSessionCookie(res, token) {
 export const clearSessionCookie = (res) =>
   res.setHeader('Set-Cookie', `${COOKIE}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax`)
 
-export const currentUser = (req) => whoIs(tokenFrom(req))
+/* Who this request is, and the one deliberate exception to it.
+ *
+ * MAPVIS_SOLO names an account that an unauthenticated request is treated as.
+ * It exists because the tool has to stay usable the way it has always been
+ * used: one person, one laptop, no login screen in front of the map they are
+ * in the middle of drawing. Without it, the moment a map has an owner its own
+ * author is locked out of it by their own signed-out browser.
+ *
+ * It lives only in .env, which is gitignored and never deployed. On a host the
+ * variable is absent and every request is exactly who its cookie says it is.
+ * Nothing else in the code knows this happened, so there is one place to look
+ * when asking whether it is on. */
+export async function currentUser(req) {
+  const real = await whoIs(tokenFrom(req))
+  if (real) return real
+  const solo = soloMode()
+  return solo ? await one(`select ${PUBLIC} from users where email = $1`, [String(solo).toLowerCase()]) : null
+}
+
+// MAPVIS_NO_SOLO is how the auth test turns this off, so it can prove the door
+// holds without a local convenience quietly opening it.
+export const soloMode = () => {
+  const E = env()
+  return E.MAPVIS_NO_SOLO === '1' ? null : E.MAPVIS_SOLO || null
+}
 
 // ---- what an account may reach ---------------------------------------------
 

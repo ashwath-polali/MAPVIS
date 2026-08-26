@@ -7,9 +7,14 @@
 // forged token, an expired session, one account reaching another's map, and
 // whether a stored api key can ever come back out over http.
 import http from 'node:http'
-import { api } from '../api.mjs'
-import { q, one, closeDb } from './pool.mjs'
-import { openKey } from '../store/crypto.mjs'
+// solo mode treats an unauthenticated request as one named account, which is
+// exactly what this file is here to prove cannot happen on a host. Cleared
+// before anything is imported, because env() caches on first read.
+delete process.env.MAPVIS_SOLO
+process.env.MAPVIS_NO_SOLO = '1'
+const { api } = await import('../api.mjs')
+const { q, one, closeDb } = await import('./pool.mjs')
+const { openKey } = await import('../store/crypto.mjs')
 
 const PORT = 5397
 let bad = 0
@@ -141,6 +146,33 @@ try {
     ;(await mayEdit(m.json.user, 'hub'))
       ? no("another account may edit somebody else's map")
       : ok('another account may not edit a map it does not own')
+
+    /* The one that matters. Every write route takes a map id out of its own
+     * body, so an account that simply TYPES someone else's slug must be
+     * stopped at the door rather than trusted to only ask for its own. */
+    const before = await one('select doc_sha, updated_at from maps where slug = $1', ['hub'])
+    const raid = await call('/api/doc', {
+      method: 'POST',
+      headers: { cookie: `mapvis_session=${m.token}` },
+      body: { id: 'hub', doc: JSON.stringify({ v: 3, w: 1, h: 1, m: '', assets: [] }) },
+    })
+    const after2 = await one('select doc_sha, updated_at from maps where slug = $1', ['hub'])
+    raid.status === 403
+      ? ok("another account posting to someone else's map is refused at the door")
+      : no(`a raid on the hub returned ${raid.status}, not 403`)
+    String(before.doc_sha) === String(after2.doc_sha) && +new Date(before.updated_at) === +new Date(after2.updated_at)
+      ? ok('and the map was not touched')
+      : no('THE RAID CHANGED THE MAP')
+
+    const anonRaid = await call('/api/doc', {
+      method: 'POST',
+      body: { id: 'hub', doc: JSON.stringify({ v: 3, w: 1, h: 1, m: '', assets: [] }) },
+    })
+    anonRaid.status === 403 ? ok('and a signed-out caller is refused too') : no(`anonymous raid returned ${anonRaid.status}`)
+
+    // but the owner still gets through, or the gate is just a wall
+    const ownerRow = await one('select email from users where id = $1', [hub.owner_id])
+    ok(`the hub belongs to ${ownerRow.email}`)
   }
 } finally {
   await q('delete from users where email like $1', [`%-${stamp}@test.local`])
