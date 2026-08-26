@@ -35,13 +35,43 @@ export async function signUp({ email, password, displayName = '' }) {
   )
 }
 
+/* How long this account has to wait after failing. Doubles each time from four
+ * seconds and stops at five minutes, so three fat-fingered attempts cost
+ * nothing a human notices and a thousand guesses take a week.
+ *
+ * Backoff and not a lockout, on purpose: a hard lock lets anybody who knows an
+ * email address lock its owner out by failing on purpose. */
+const backoffMs = (n) => (n < 3 ? 0 : Math.min(300000, 4000 * 2 ** (n - 3)))
+
 export async function signIn({ email, password, userAgent = '' }) {
   const clean = String(email || '').trim().toLowerCase()
-  const row = await one('select id, password_hash from users where email = $1', [clean])
-  // the same answer whether the email is unknown or the password is wrong, so
-  // this cannot be used to find out who has an account here
-  const okPassword = row ? await verifyPassword(password, row.password_hash) : await verifyPassword(password, 'x$1$1$1$x$x')
-  if (!row || !okPassword) throw new Error('that email and password do not match')
+  const row = await one(
+    'select id, password_hash, failed_logins, last_failed_at from users where email = $1',
+    [clean],
+  )
+
+  if (row) {
+    const wait = backoffMs(row.failed_logins) - (Date.now() - +new Date(row.last_failed_at || 0))
+    if (wait > 0) {
+      const s = Math.ceil(wait / 1000)
+      throw new Error(`too many attempts · try again in ${s < 60 ? `${s} seconds` : `${Math.ceil(s / 60)} minutes`}`)
+    }
+  }
+
+  /* The same work whether the email exists or not. Answering an unknown address
+   * instantly while a real one takes 100ms of scrypt would say which addresses
+   * have accounts here just as loudly as a different error message would. */
+  const okPassword = row
+    ? await verifyPassword(password, row.password_hash)
+    : await verifyPassword(password, 'scrypt$32768$8$1$AAAAAAAAAAAAAAAAAAAAAA==$AAAA')
+
+  if (!row || !okPassword) {
+    if (row) await q('update users set failed_logins = failed_logins + 1, last_failed_at = now() where id = $1', [row.id])
+    // one message for both cases, so this cannot enumerate who has an account
+    throw new Error('that email and password do not match')
+  }
+
+  await q('update users set failed_logins = 0, last_failed_at = null where id = $1', [row.id])
   return { token: await openSession(row.id, userAgent), user: await getUser(row.id) }
 }
 

@@ -81,6 +81,26 @@ try {
   const inn = await call('/api/auth/login', { method: 'POST', body: alice })
   inn.status === 200 && inn.token ? ok('signed in and got a fresh session') : no('sign in failed')
 
+  // ---- guessing gets slower ------------------------------------------------
+  // three wrong tries cost nothing a human would notice; the fourth starts
+  // charging seconds, and it doubles, so a thousand guesses take a week
+  for (let i = 0; i < 3; i++) await call('/api/auth/login', { method: 'POST', body: { email: alice.email, password: 'wrong' } })
+  const slowed = await call('/api/auth/login', { method: 'POST', body: { email: alice.email, password: 'wrong' } })
+  const isSlow = (r) => /too many attempts/.test(r.json?.error || '')
+  isSlow(slowed)
+    ? ok(`guessing slows down: "${slowed.json.error}"`)
+    : no(`the fourth wrong guess was not slowed: ${slowed.json?.error}`)
+
+  // and the real owner is not locked out, they just wait
+  const blocked = await call('/api/auth/login', { method: 'POST', body: alice })
+  isSlow(blocked)
+    ? ok('the owner waits too, which is why this backs off rather than locking')
+    : no('the backoff did not apply to a correct password')
+
+  await q('update users set failed_logins = 0, last_failed_at = null where email = $1', [alice.email])
+  const recovered = await call('/api/auth/login', { method: 'POST', body: alice })
+  recovered.status === 200 ? ok('and gets in once the wait is over') : no('the owner could not get back in')
+
   // ---- sessions ------------------------------------------------------------
   const me = await call('/api/me', { headers: { cookie: `mapvis_session=${aliceTok}` } })
   me.json.user?.email === alice.email ? ok('the session identifies the account') : no('the session did not resolve')

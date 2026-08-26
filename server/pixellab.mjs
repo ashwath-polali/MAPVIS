@@ -25,25 +25,52 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { currentPixellabKey } from './store/ctx.mjs'
 
 const BASE = 'https://api.pixellab.ai'
 let cached = null
 
+export class NoPixellab extends Error {
+  constructor() {
+    super('generation needs a pixellab key · add one in your account')
+    this.name = 'NoPixellab'
+    this.needs = 'pixellab'
+  }
+}
+
+/* WHOSE SUBSCRIPTION THIS SPENDS.
+ *
+ * The signed-in account's own key comes first, always. This file used to read
+ * one token out of ~/.claude.json and use it for everybody, which was correct
+ * when MAPVIS had exactly one user and became a hole the moment anyone else
+ * could sign up: every generation they made would have been billed to Ash.
+ *
+ * The machine's own token is the fallback and only that. On a laptop it is what
+ * has always happened and nothing changed. On a host there is no home directory
+ * to read, so an account with no key gets NoPixellab and generation is simply
+ * unavailable, which is the decided behaviour: no pixellab means no generation,
+ * and everything else still works. */
 export function token() {
+  const mine = currentPixellabKey()
+  if (mine) return mine
   if (cached) return cached
   if (process.env.PIXELLAB_TOKEN) return (cached = process.env.PIXELLAB_TOKEN)
-  const p = path.join(os.homedir(), '.claude.json')
-  const d = JSON.parse(fs.readFileSync(p, 'utf8'))
-  for (const proj of Object.values(d.projects || {})) {
-    const s = (proj.mcpServers || {}).pixellab
-    if (!s) continue
-    for (const [k, v] of Object.entries(s.headers || {})) {
-      if (k.toLowerCase() === 'authorization') return (cached = String(v).split(/\s+/).pop())
+  try {
+    const p = path.join(os.homedir(), '.claude.json')
+    const d = JSON.parse(fs.readFileSync(p, 'utf8'))
+    for (const proj of Object.values(d.projects || {})) {
+      const s = (proj.mcpServers || {}).pixellab
+      if (!s) continue
+      for (const [k, v] of Object.entries(s.headers || {})) {
+        if (k.toLowerCase() === 'authorization') return (cached = String(v).split(/\s+/).pop())
+      }
+      if (s.token) return (cached = s.token)
+      if ((s.url || '').includes('token=')) return (cached = s.url.split('token=')[1].split('&')[0])
     }
-    if (s.token) return (cached = s.token)
-    if ((s.url || '').includes('token=')) return (cached = s.url.split('token=')[1].split('&')[0])
+  } catch {
+    /* no home directory, which is every hosted environment */
   }
-  throw new Error('no pixellab token in ~/.claude.json and no PIXELLAB_TOKEN set')
+  throw new NoPixellab()
 }
 
 async function call(method, route, body) {

@@ -55,6 +55,8 @@ import { q, one, many } from './db/pool.mjs'
 import { newToken, hashToken } from './store/crypto.mjs'
 import { listMaps } from './store/maps.mjs'
 import { ask, plannerReady, NoPlanner } from './store/planner.mjs'
+import { withRequest } from './store/ctx.mjs'
+import { keyFor } from './store/auth.mjs'
 import {
   signUp,
   signIn,
@@ -105,7 +107,35 @@ export function api(req, res, next) {
   const url = new URL(req.url, 'http://local')
   const p = url.pathname
   if (!p.startsWith('/api/') && !p.startsWith('/work/')) return next ? next() : notFound(res)
-  Promise.resolve(route(req, res, p, url)).catch((e) => send(res, 500, { error: String(e.message || e) }))
+  Promise.resolve(serve(req, res, p, url)).catch((e) => {
+    // a missing key is a condition, not a crash, and it has to say which one so
+    // the ui can put the right wall in front of the right button
+    if (e && (e.name === 'NoPixellab' || e.name === 'NoPlanner')) {
+      return send(res, 402, { error: String(e.message || e), needs: e.needs || 'claude' })
+    }
+    send(res, 500, { error: String(e.message || e) })
+  })
+}
+
+/* Everything below runs inside this request's own context, which is what makes
+ * a generation spend the signed-in account's pixellab subscription instead of
+ * whatever token the machine happens to hold. Resolved once, here, because a
+ * dozen calls deep in pixellab.mjs need it and threading it through every
+ * signature is how one of them ends up billing the wrong person. */
+async function serve(req, res, p, url) {
+  // the read api is public and spends nothing, so it never pays for a lookup
+  if (p.startsWith('/api/v1/')) return route(req, res, p, url)
+  let ctx = {}
+  try {
+    const user = await currentUser(req)
+    if (user) {
+      const how = await keyFor(user.id, 'pixellab')
+      ctx = { user, pixellabKey: how?.mode === 'key' ? how.key : null }
+    }
+  } catch {
+    /* no database configured is the local tool it has always been */
+  }
+  return withRequest(ctx, () => route(req, res, p, url))
 }
 
 async function route(req, res, p, url) {
