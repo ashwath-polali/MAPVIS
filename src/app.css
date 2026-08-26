@@ -781,11 +781,22 @@ input[type='range']:disabled {
 .insp > * {
   min-width: 0;
 }
+/* Thumbnail and name on the first line, the two action pills on the second.
+ * They shared a line until the pills gained words, and at 272px the name was
+ * the thing that lost, which is the one part of that row you cannot do without. */
 .insp-head {
   display: flex;
   align-items: center;
   gap: 8px;
   min-width: 0;
+  flex-wrap: wrap;
+  row-gap: 6px;
+}
+.insp-acts {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 0 100%;
 }
 .insp-name {
   flex: 1;
@@ -2692,4 +2703,303 @@ footer [data-tip]:hover::after {
     animation: none !important;
     transition: none !important;
   }
+}
+
+
+/* ---- the help panel -----------------------------------------------------
+ *
+ * One overlay, a column of sections down the left and the list of what each
+ * one can do on the right. It is a reference rather than a tour, so nothing
+ * animates in, nothing is paged, and the whole list is scrollable from the
+ * moment it opens.
+ *
+ * It closes on the backdrop as well as on the button, because it is a thing
+ * you open mid-task to check one answer and then get out of. */
+.helpbtn {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--line, #3a3a42);
+  background: transparent;
+  color: var(--dim, #9a9aa6);
+  font: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  margin-left: 10px;
+  flex: 0 0 auto;
+}
+.helpbtn:hover {
+  color: var(--fg, #e8e8ee);
+  border-color: var(--dim, #9a9aa6);
+}
+
+.helpwrap {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 10, 14, 0.66);
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.helppanel {
+  width: min(940px, 92vw);
+  height: min(78vh, 760px);
+  background: var(--panel, #1b1b21);
+  border: 1px solid var(--line, #3a3a42);
+  border-radius: 10px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.help-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line, #3a3a42);
+}
+/* .abtn stretches to its container by default, which is right everywhere else
+ * it is used and wrong on a header where it sits next to a title */
+.help-head .abtn {
+  flex: 0 0 auto;
+  width: auto;
+}
+.help-title {
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  color: var(--fg, #e8e8ee);
+}
+.help-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.help-nav {
+  width: 148px;
+  flex: 0 0 auto;
+  border-right: 1px solid var(--line, #3a3a42);
+  padding: 8px 0;
+  overflow-y: auto;
+}
+.help-sec {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 14px;
+  background: none;
+  border: 0;
+  color: var(--dim, #9a9aa6);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.help-sec:hover {
+  color: var(--fg, #e8e8ee);
+}
+.help-sec.on {
+  color: var(--fg, #e8e8ee);
+  background: rgba(255, 255, 255, 0.05);
+  box-shadow: inset 2px 0 0 var(--acc, #d8a657);
+}
+.help-list {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 14px 16px 24px;
+}
+.help-gist {
+  margin: 0 0 14px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--dim, #9a9aa6);
+  max-width: 62ch;
+}
+.help-item {
+  border-top: 1px solid var(--line, #2e2e36);
+}
+.help-item:last-child {
+  border-bottom: 1px solid var(--line, #2e2e36);
+}
+.help-row {
+  display: grid;
+  grid-template-columns: 190px 1fr 18px;
+  gap: 12px;
+  align-items: baseline;
+  width: 100%;
+  padding: 9px 2px;
+  background: none;
+  border: 0;
+  color: var(--fg, #e8e8ee);
+  font: inherit;
+  font-size: 12.5px;
+  text-align: left;
+  cursor: pointer;
+}
+.help-row:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+.help-what {
+  color: var(--fg, #e8e8ee);
+}
+.help-line {
+  color: var(--dim, #9a9aa6);
+}
+.help-caret {
+  color: var(--dim, #9a9aa6);
+  text-align: right;
+}
+.help-item.on .help-what {
+  color: var(--acc, #d8a657);
+}
+.help-more {
+  padding: 2px 2px 14px 202px;
+  max-width: 74ch;
+}
+.help-more ol {
+  margin: 0;
+  padding-left: 18px;
+}
+.help-more li {
+  font-size: 12.5px;
+  line-height: 1.7;
+  color: var(--fg, #e8e8ee);
+  margin-bottom: 3px;
+}
+.help-note {
+  margin: 10px 0 0;
+  font-size: 12px;
+  line-height: 1.65;
+  color: var(--dim, #9a9aa6);
+  border-left: 2px solid var(--line, #3a3a42);
+  padding-left: 10px;
+}
+
+@media (max-width: 720px) {
+  .help-row {
+    grid-template-columns: 1fr 18px;
+  }
+  .help-line {
+    display: none;
+  }
+  .help-more {
+    padding-left: 2px;
+  }
+}
+
+
+/* ---- moves / becomes ----------------------------------------------------
+ *
+ * These two were round icon buttons of the same size sitting next to each
+ * other, and Ash's first question on seeing them was which was which. Fair:
+ * one is behaviour and free, the other draws a picture and spends, and nothing
+ * about a sparkle beside a wand says that. Icons cannot carry the difference
+ * between free and paid, so they carry a word instead, and the one that spends
+ * carries its price the way every other spending button in the tool does. */
+.actpill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 22px;
+  padding: 0 8px;
+  flex: 0 0 auto;
+  border: 1px solid var(--edge);
+  border-radius: 11px;
+  background: transparent;
+  color: var(--dim);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+.actpill svg {
+  width: 12px;
+  height: 12px;
+}
+.actpill:hover:not(:disabled) {
+  color: var(--acc);
+  border-color: var(--acc);
+}
+.actpill.on {
+  background: var(--acc-soft);
+  border-color: var(--acc);
+  color: var(--acc);
+}
+.actpill.has {
+  color: var(--ok);
+  border-color: var(--ok);
+}
+.actpill:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+/* the price, so a button that spends never looks like one that does not */
+.pill-cost {
+  display: grid;
+  place-items: center;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 7px;
+  background: var(--warn-soft, rgba(216, 166, 87, 0.18));
+  color: var(--warn, #d8a657);
+  font-size: 10px;
+  line-height: 1;
+}
+.actpill.spends:hover:not(:disabled) {
+  color: var(--warn, #d8a657);
+  border-color: var(--warn, #d8a657);
+}
+
+/* what an open box is for. A bare input carrying a greyed example looks like a
+ * field on a form, and two of them stacked look like a form with two required
+ * fields, which is exactly how the pair was read the first time it was used. */
+.boxwhat {
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--dim);
+  margin-bottom: 1px;
+}
+
+/* the one thing a toast can offer to do about itself. Used by the in-place
+ * pixel edits, which z cannot take back. */
+.toast-act {
+  margin-left: 10px;
+  padding: 2px 8px;
+  border: 1px solid var(--acc, #d8a657);
+  border-radius: 10px;
+  background: transparent;
+  color: var(--acc, #d8a657);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+.toast-act:hover {
+  background: var(--acc-soft, rgba(216, 166, 87, 0.16));
+}
+
+/* who a pixel edit lands on. Sits under the edit buttons rather than beside one
+ * of them, because it governs all of them. */
+.editall {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 2px 2px;
+  font-size: 11px;
+  color: var(--dim);
+  cursor: pointer;
+}
+.editall input {
+  width: 13px;
+  height: 13px;
+  margin: 0;
+  padding: 0;
+  accent-color: var(--acc, #d8a657);
+  cursor: pointer;
+}
+.editall:hover {
+  color: var(--ink, #e8e8ee);
 }
