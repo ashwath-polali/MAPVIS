@@ -69,7 +69,9 @@ import {
   clearSessionCookie,
   setProvider,
   spendSince,
+  sessionUser,
 } from './store/auth.mjs'
+import { verifyPassword } from './store/crypto.mjs'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(HERE, '..')
@@ -142,7 +144,10 @@ async function serve(req, res, p, url) {
 async function route(req, res, p, url) {
   if (p.startsWith('/work/')) return serveWork(res, p.slice('/work/'.length), req)
   if (p.startsWith('/api/v1/')) return readApi(req, res, p, url)
-  if (p.startsWith('/api/auth/') || p === '/api/me' || p === '/api/my-maps') return authApi(req, res, p, url)
+  // deleting a map lives with auth rather than with the map routes, because it
+  // is the password that authorises it and not the ownership gate below
+  if (p.startsWith('/api/auth/') || p === '/api/me' || p === '/api/my-maps' || p === '/api/maps/delete')
+    return authApi(req, res, p, url)
   if (p.startsWith('/api/relay/')) return relayApi(req, res, p)
 
   /* OWNERSHIP IS CHECKED HERE, once, rather than in forty routes.
@@ -2528,6 +2533,64 @@ async function authApi(req, res, p, url) {
       // so this cannot be used to find out who has an account here
       return send(res, 401, { error: String(e.message || e) })
     }
+  }
+
+  /* DELETING A MAP, WHICH IS THE ONE THING HERE THAT CANNOT BE UNDONE.
+   *
+   * A cut and its levels are hours of hand work and there is no version of them
+   * anywhere else once the rows and the blobs are gone, so this asks for the
+   * account password again even though the caller is already signed in. A
+   * session proves the browser was left open. It does not prove the person
+   * asking meant this.
+   *
+   * The order matters and is the whole safeguard:
+   *   1. signed in at all
+   *   2. this map exists
+   *   3. this account owns it, checked against the row and not the UI
+   *   4. the password is right
+   * Only then does anything get destroyed. Every failure returns before a
+   * single byte is touched. */
+  if (p === '/api/maps/delete' && req.method === 'POST') {
+    // sessionUser and NOT currentUser: solo mode must never authorise a delete
+    const me = await sessionUser(req)
+    if (!me) return send(res, 401, { error: 'sign in first' })
+
+    const b = await body_()
+    const slug = safeId(b.id || '')
+    if (!slug) return send(res, 400, { error: 'which map' })
+
+    const m = await one('select id, slug, owner_id from maps where slug = $1', [slug])
+    if (!m) return send(res, 404, { error: 'no such map' })
+    if (m.owner_id && m.owner_id !== me.id) return send(res, 403, { error: `${slug} belongs to another account` })
+
+    const row = await one('select password_hash from users where id = $1', [me.id])
+    if (!row || !(await verifyPassword(String(b.password || ''), row.password_hash))) {
+      // deliberately vague and deliberately not destructive
+      return send(res, 401, { error: 'that password is not right' })
+    }
+
+    // the bytes first, then the rows. If this dies halfway the map is still
+    // listed and can be asked to delete again, which is recoverable. Rows first
+    // would strand the blobs with nothing pointing at them.
+    const s = store()
+    try {
+      await s.delPrefix(`maps/${m.id}/`)
+      await s.delPrefix(`publish/${slug}/`)
+    } catch (e) {
+      return send(res, 502, { error: `storage refused: ${String(e.message || e).slice(0, 140)}` })
+    }
+    await q('delete from maps where id = $1', [m.id])
+
+    // and this machine's own copy, so a deleted map cannot reappear from disk
+    try {
+      const dir = path.join(WORK, slug)
+      if (dir.startsWith(WORK) && fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true })
+    } catch (e) {
+      console.error('[delete] local copy survived:', e.message)
+    }
+
+    console.log(`[delete] ${slug} removed by ${me.email}`)
+    return send(res, 200, { ok: true, slug })
   }
 
   if (p === '/api/auth/logout' && req.method === 'POST') {

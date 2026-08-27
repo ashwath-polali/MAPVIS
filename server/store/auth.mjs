@@ -14,6 +14,8 @@ import { env } from '../db/env.mjs'
 
 const DAYS = 30
 const COOKIE = 'mapvis_session'
+// set when somebody signs out on purpose, read only by solo mode
+const OUT_COOKIE = 'mapvis_out'
 
 // Never select the key columns. A shape with a name says what may leave the
 // server much more reliably than remembering to delete fields at each caller.
@@ -118,18 +120,24 @@ export function tokenFrom(req) {
   return null
 }
 
+// signing in is also the end of having deliberately signed out, so the crumb
+// that suppresses solo mode is dropped here
 export function setSessionCookie(res, token) {
   // httpOnly so no script can read it, sameSite=Lax so it is not sent from
   // another site's form, secure once there is a domain in front of it
   const secure = env().MAPVIS_INSECURE_COOKIE === '1' ? '' : '; Secure'
-  res.setHeader(
-    'Set-Cookie',
+  res.setHeader('Set-Cookie', [
     `${COOKIE}=${encodeURIComponent(token)}; Path=/; Max-Age=${DAYS * 86400}; HttpOnly; SameSite=Lax${secure}`,
-  )
+    `${OUT_COOKIE}=; Path=/; Max-Age=0; SameSite=Lax`,
+  ])
 }
 
 export const clearSessionCookie = (res) =>
-  res.setHeader('Set-Cookie', `${COOKIE}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax`)
+  res.setHeader('Set-Cookie', [
+    `${COOKIE}=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax`,
+    // remembers that this was a real sign-out, so solo mode does not undo it
+    `${OUT_COOKIE}=1; Path=/; Max-Age=${DAYS * 86400}; SameSite=Lax`,
+  ])
 
 /* Who this request is, and the one deliberate exception to it.
  *
@@ -143,9 +151,32 @@ export const clearSessionCookie = (res) =>
  * variable is absent and every request is exactly who its cookie says it is.
  * Nothing else in the code knows this happened, so there is one place to look
  * when asking whether it is on. */
+/* AN EXPLICIT SIGN-OUT BEATS THE CONVENIENCE.
+ *
+ * Solo mode treats an unauthenticated request as the named account, which is
+ * what stops a signed-out browser locking the author out of their own laptop.
+ * Signing out then refreshing, though, is not an accident: it is somebody
+ * asking to see what a signed-out visitor sees. Without this the landing page
+ * bounced straight back to the dashboard on localhost and nowhere else, which
+ * reads as a bug in the router rather than the convenience doing its job.
+ *
+ * Logging out sets this crumb, and signing back in clears it. */
+const optedOut = (req) => /(?:^|;\s*)mapvis_out=1(?:;|$)/.test(req.headers?.cookie || '')
+
+/* WHO THIS REQUEST IS WITH NO CONVENIENCE APPLIED.
+ *
+ * currentUser falls back to solo mode, which means a request carrying no cookie
+ * at all is still somebody. That is right for reading and editing on one
+ * laptop, and it is catastrophic for deleting: a delete with no session was
+ * authorised as the solo account and destroyed a real map during testing. Every
+ * irreversible route asks this instead, so the answer is the session or nothing.
+ */
+export const sessionUser = (req) => whoIs(tokenFrom(req))
+
 export async function currentUser(req) {
   const real = await whoIs(tokenFrom(req))
   if (real) return real
+  if (optedOut(req)) return null
   const solo = soloMode()
   return solo ? await one(`select ${PUBLIC} from users where email = $1`, [String(solo).toLowerCase()]) : null
 }
