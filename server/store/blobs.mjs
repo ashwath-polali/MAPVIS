@@ -108,6 +108,18 @@ function s3Store(E) {
           credentials: { accessKeyId: E.S3_ACCESS_KEY_ID, secretAccessKey: E.S3_SECRET_ACCESS_KEY },
           // b2 and r2 both want path-style rather than a bucket subdomain
           forcePathStyle: true,
+          /* A REFUSAL IS AN ANSWER, SO STOP ASKING AGAIN.
+           *
+           * The sdk retries with backoff by default, which is right for a
+           * flaky connection and wrong for a cap: the bucket is not going to
+           * change its mind inside three hundred milliseconds. Exporting reads
+           * a source per placement, so on a capped bucket ninety-four refusals
+           * each became three refusals plus waiting, and the export outlived
+           * the browser's own timeout. That is what "export failed to fetch"
+           * was. One attempt makes a capped read fail in milliseconds, which
+           * lets the caller fall back to disk while the request is still
+           * alive. */
+          maxAttempts: 1,
         }),
       }
     }
