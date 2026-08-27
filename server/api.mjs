@@ -56,7 +56,7 @@ import { q, one, many } from './db/pool.mjs'
 import { newToken, hashToken } from './store/crypto.mjs'
 import { listMaps } from './store/maps.mjs'
 import { ask, plannerReady, NoPlanner } from './store/planner.mjs'
-import { withRequest } from './store/ctx.mjs'
+import { withRequest, request } from './store/ctx.mjs'
 import { keyFor } from './store/auth.mjs'
 import {
   signUp,
@@ -6366,7 +6366,23 @@ export function stopJob(job) {
  * author's own words and denying a feature that is purely claude. */
 async function runPlanner(prompt, timeoutMs, job, user, images) {
   return ask({
-    user,
+    /* THE ACCOUNT COMES FROM THE REQUEST, NOT FROM THE CALLER.
+     *
+     * user and images were added to this signature when dispatch grew from "run
+     * the cli" to "key, relay or cli", and the comment above says keeping the
+     * signature was the point because the callers did not change. They did not:
+     * all ten pass exactly (prompt, timeoutMs, job). So user arrived undefined
+     * every time, ask() took its `if (!user) return viaCli(...)` branch, and
+     * every planner call spawned the local claude binary. On a laptop that is
+     * invisible, because the binary is there. On Vercel there is no binary, so
+     * translate, style-card, asset-plan, life-plan, effect-plan and the reviews
+     * were all dead on the host, a stored key was never read, and a relay
+     * polled an empty jobs table forever.
+     *
+     * serve() already resolved the account into the request context for exactly
+     * this reason. Reading it here fixes all ten call sites at once and leaves
+     * the explicit parameter working for anything that wants to override. */
+    user: user || request().user || null,
     prompt,
     timeoutMs,
     images,
