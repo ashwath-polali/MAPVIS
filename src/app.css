@@ -7,19 +7,30 @@
  */
 
 :root {
-  --bg: #101214;
-  --panel: #16181b;
-  --raised: #1d2126;
-  --edge: #272b31;
-  --ink: #e7eaee;
-  --dim: #8a919b;
-  --acc: #8f93f5;
-  --acc-soft: #8f93f52a;
-  --acc-ink: #131328;
-  --ok: #6fd08c;
-  --stage: #0a0b0d;
-  --font-ui: 'Inter', 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
-  --font-mono: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  /* THE TOOL AND THE PLATFORM ARE ONE PIECE OF SOFTWARE NOW.
+   *
+   * These were a warm grey and an iris violet, chosen when the editor was the
+   * only screen anybody saw. It now opens from a dashboard, so walking between
+   * them should not feel like changing applications.
+   *
+   * Same surfaces as the site, same type. The accent moves from iris to a cool
+   * verdigris for the reason the iris was picked in the first place: it is a
+   * hue the MAP never contains. Levels are red through pink, the cut is
+   * magenta, occluders are lilac. Nothing painted is this green, so an accent
+   * stroke always means the tool talking and never map data. */
+  --bg: #0a0c0f;
+  --panel: #10141a;
+  --raised: #161c24;
+  --edge: #1f2731;
+  --ink: #e6e9ee;
+  --dim: #7d8794;
+  --acc: #6fbf9d;
+  --acc-soft: #6fbf9d24;
+  --acc-ink: #06120d;
+  --ok: #6fbf9d;
+  --stage: #06080b;
+  --font-ui: 'Archivo Narrow', 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'Martian Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
 
   /* One left line for the whole side panel, declared here and read by every
      rule that touches it. The panel keeps its own gutter and every block
@@ -3093,4 +3104,163 @@ footer [data-tip]:hover::after {
 .evrow .ev-name i {
   font-style: normal;
   color: var(--dim);
+}
+
+/* ---- the reskin -----------------------------------------------------------
+ *
+ * The structure of this tool is right and none of it moves. What changes is
+ * everything that decides whether it reads as software somebody made or a
+ * default: the type, the weight of the rules, how a step tells you it is the
+ * one you are on, and how loud the chrome is next to the painting.
+ *
+ * The painting is the brightest thing on screen. Everything else steps back.
+ */
+
+/* Archivo Narrow is a label face and needs its tracking opened up at small
+   sizes or it reads as a wall. Numbers stay in the mono, always, so a
+   coordinate never gets confused with a word. */
+body[data-view='editor'] {
+  letter-spacing: 0.005em;
+}
+
+/* THE STEPS. Six across the top, and the current one used to say so with a
+   filled circle and a coloured word, which is the shape of a wizard. It is a
+   route through a piece of work, so the live one carries a rule under it and
+   the rest are quiet. */
+.step {
+  position: relative;
+  letter-spacing: 0.02em;
+}
+.step .num {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  opacity: 0.55;
+}
+.step.on::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -9px;
+  height: 2px;
+  background: var(--acc);
+  animation: step-draw 320ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes step-draw {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+/* the header wordmark matches the site's, so the two screens are obviously the
+   same product */
+.brandmark,
+.logo {
+  font-family: var(--font-ui);
+  font-weight: 700;
+  letter-spacing: 0.34em;
+  font-size: 12px;
+}
+
+/* SIDE PANEL. The left rule this file is careful about stays exactly where it
+   was; only its weight changes, from a line you notice to a line you feel. */
+.panel,
+aside {
+  background: var(--panel);
+  border-right: 1px solid var(--edge);
+}
+
+/* A ROW is the tool's main unit and was a rounded card. Cards stack into a
+   sheet of boxes; a row with a hairline under it stacks into a list, which is
+   what this actually is. */
+.row {
+  border-radius: 0;
+  border: 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--edge) 55%, transparent);
+  transition:
+    background 160ms ease,
+    color 160ms ease;
+}
+.row:hover {
+  background: color-mix(in srgb, var(--acc) 6%, transparent);
+}
+.row.on {
+  background: color-mix(in srgb, var(--acc) 10%, transparent);
+  box-shadow: inset 2px 0 0 var(--acc);
+}
+
+/* every number in the tool: pixel counts, coordinates, percentages */
+.stat,
+.readout,
+.count,
+.px {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: -0.02em;
+  color: var(--dim);
+}
+
+/* THE STAGE. The painting gets a true black surround and a checker that sits
+   far enough back to read as absence rather than as pattern. */
+.stage,
+.canvaswrap {
+  background: var(--stage);
+}
+
+/* the status bar along the foot: quieter, mono, and it stops competing with
+   the map for attention */
+.foot,
+.statusbar {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  color: var(--dim);
+  border-top: 1px solid var(--edge);
+}
+
+/* Buttons lose their pill. A tool this dense reads better with square edges:
+   round corners at 12px are a decoration nobody asked for and they fight the
+   pixel grid the whole app is drawn on. */
+.abtn,
+.mbtn,
+.tbtn,
+.pill,
+.actpill {
+  border-radius: 2px;
+}
+.abtn,
+.actpill {
+  font-family: var(--font-ui);
+  letter-spacing: 0.06em;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    color 160ms ease;
+}
+
+/* focus you can actually see, in the accent, on everything */
+body[data-view='editor'] :focus-visible {
+  outline: 1px solid var(--acc);
+  outline-offset: 1px;
+}
+
+/* scrollbars stop being the one thing on screen that looks like an operating
+   system rather than like this program */
+body[data-view='editor'] * {
+  scrollbar-width: thin;
+  scrollbar-color: var(--edge) transparent;
+}
+body[data-view='editor'] *::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+body[data-view='editor'] *::-webkit-scrollbar-thumb {
+  background: var(--edge);
+  border: 2px solid var(--panel);
+}
+body[data-view='editor'] *::-webkit-scrollbar-thumb:hover {
+  background: #2b3542;
+}
+body[data-view='editor'] *::-webkit-scrollbar-track {
+  background: transparent;
 }

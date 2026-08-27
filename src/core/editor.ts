@@ -3371,9 +3371,15 @@ export class Editor {
       levels: this.doc.levelsCanvas(hasCut ? this.doc.cut : undefined).toDataURL('image/png'),
       cut: hasCut ? this.doc.cutCanvas().toDataURL('image/png') : null,
       occluders: this.doc.occludersCanvas().toDataURL('image/png'),
-      // the placements as the editor holds them; the server rewrites the
-      // /library/ urls into the bundle's own assets/ folder and copies pngs
-      assets: this.doc.assets,
+      /* the placements as the editor holds them, MINUS anything in a hidden
+       * group. The server rewrites the /library/ urls into the bundle's own
+       * assets/ folder and copies the pngs.
+       *
+       * Hidden used to mean hidden IN THE EDITOR ONLY: a group with its eye
+       * closed still shipped, at full opacity, with nothing anywhere saying so.
+       * Turning a thing off and then finding it in the game is the worst kind
+       * of surprise, because it reads as the tool ignoring you. */
+      assets: this.doc.assets.filter((a) => !this.hiddenGroups.has(a.group)),
       map: {
         id: this.sceneId,
         w: this.doc.W,
