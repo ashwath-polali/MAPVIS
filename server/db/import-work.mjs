@@ -183,10 +183,19 @@ if (fs.existsSync(libDir)) {
       for (const [heading, list] of Object.entries(dirsMeta.dirs)) {
         dirs[heading] = []
         for (let i = 0; i < list.length; i++) {
-          const f = path.join(sub, heading, i + '.png')
+          /* The writer lays a direction set down as FLAT files beside
+           * dirs.json, <name>/<heading>-<i>.png, not as <name>/<heading>/<i>.png.
+           * Looking only under a subfolder found nothing, so every sprite
+           * imported as kind 'static' with dirs null and its library tile came
+           * back blank. dirs.json already names the files, so use it and keep
+           * the subfolder shape as the fallback. */
+          const named = String(list[i] || '').split('/').pop()
+          const flat = named && path.join(sub, named)
+          const nested = path.join(sub, heading, i + '.png')
+          const f = flat && fs.existsSync(flat) ? flat : nested
           if (!fs.existsSync(f)) continue
           if (!w) ({ w, h } = pngSize(f))
-          const key = `maps/${mapId}/library/${name}/${heading}/${i}.png`
+          const key = `maps/${mapId}/library/${name}/${path.relative(sub, f).replace(/\\/g, '/')}`
           await upload(key, f)
           dirs[heading].push(key)
           frames++

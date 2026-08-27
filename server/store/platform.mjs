@@ -102,12 +102,19 @@ export async function libraryOf(slug) {
     if (r.fps) it.fps = r.fps
     if (r.is_effect) it.effect = true
     if (r.frame_count > 0) it.frames = Array.from({ length: r.frame_count }, (_, i) => `${base}/${r.name}/${i}.png`)
-    else it.src = `${base}/${r.name}.png`
     if (r.dirs) {
       // stored as blob keys; handed back as urls in the same /work/ space
       it.dirs = Object.fromEntries(
         Object.entries(r.dirs).map(([h, list]) => [h, list.map((k) => '/work/' + k.replace(`maps/${id}/`, `${slug}/`))]),
       )
+    }
+    /* A direction set owns no flat still, so its thumbnail is the first frame
+     * of the heading a character faces by default. Without this the panel asks
+     * for <name>.png, which for a sprite is a key that was never written, and
+     * the tile renders empty. */
+    if (r.frame_count === 0) {
+      const facing = it.dirs && (it.dirs.south || it.dirs[Object.keys(it.dirs)[0]])
+      it.src = facing?.length ? facing[0] : `${base}/${r.name}.png`
     }
     // the same shape statesOf() returned off disk, because App.tsx picks a face
     // by name and draws it at the size it reports
@@ -285,6 +292,53 @@ export async function pushItem(slug, name, workDir) {
       dirs[heading].push(key)
     }
     if (!dirs[heading].length) delete dirs[heading]
+  }
+
+  /* A DIRECTION SET ARRIVES AS FLAT FILES BESIDE dirs.json, NOT AS SUBFOLDERS.
+   *
+   * The character writer lays down <name>/<heading>-<i>.png. Everything above
+   * looks for <name>/<i>.png or <name>/<heading>/<i>.png, so a sprite matched
+   * neither: it fell through as kind 'static' with dirs null, and libraryOf
+   * then pointed src at <name>.png, a key nobody ever wrote. That is why all
+   * nineteen people on the hub, plus the troll and the gull, were blank tiles
+   * in the library panel. Measured on disk: work/hub/library/troll/ holds
+   * dirs.json and east-0.png through west-7.png and no 0.png at all.
+   *
+   * dirs.json is the authority rather than the filename pattern: it already
+   * lists each heading's files in order, so reading it means this keeps working
+   * if the writer ever renames them. The pattern scan is only the fallback for
+   * a folder whose dirs.json went missing, and it tries the two-word headings
+   * first so north-east never reads as north. Either way the key keeps the
+   * relative path the file had, because blobKeyForWorkPath translates /work/
+   * urls to bucket keys by position. */
+  const HEADINGS = ['north-east', 'north-west', 'south-east', 'south-west', 'north', 'south', 'east', 'west']
+  if (!Object.keys(dirs).length) {
+    const take = async (heading, file, into) => {
+      const f = path.join(folder, file)
+      if (!fs.existsSync(f)) return
+      if (!w) ({ w, h } = size(f))
+      const key = `maps/${id}/library/${name}/${file}`
+      await s.put(key, fs.readFileSync(f), 'image/png')
+      into.push(key)
+    }
+    if (meta?.dirs && typeof meta.dirs === 'object') {
+      for (const [heading, list] of Object.entries(meta.dirs)) {
+        const out = []
+        // the entries are /work/<slug>/library/<name>/<file> urls; only the
+        // last segment is ours to trust, since the slug in them can be stale
+        for (const u of Array.isArray(list) ? list : []) await take(heading, String(u).split('/').pop(), out)
+        if (out.length) dirs[heading] = out
+      }
+    } else {
+      for (const heading of HEADINGS) {
+        const out = []
+        for (let i = 0; fs.existsSync(path.join(folder, `${heading}-${i}.png`)); i++) await take(heading, `${heading}-${i}.png`, out)
+        // a standing view set is one bare <heading>.png with no cycle beside
+        // it, and a sprite that has both keeps the cycle rather than the pose
+        if (!out.length) await take(heading, `${heading}.png`, out)
+        if (out.length) dirs[heading] = out
+      }
+    }
   }
 
   await upsertItem(id, name, n > 1 || Object.keys(dirs).length ? 'animated' : 'static', {
