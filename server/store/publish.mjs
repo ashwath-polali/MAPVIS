@@ -62,9 +62,43 @@ export function hotPut(key, buf) {
 // files is a Map of relative path inside the bundle -> Buffer, exactly the
 // shape the export route already builds for the assets folder, so the caller
 // hands over what it was going to write to disk anyway.
+/* A FREE TIER THAT BILLS INSTEAD OF STOPPING NEEDS THE STOP PUT BACK.
+ *
+ * Backblaze refused to serve once the daily allowance was gone. That broke the
+ * site and never cost a penny. R2 does the opposite: it keeps working and
+ * charges for the overage, and Cloudflare has no hard spend cap to switch on.
+ * So the ceiling has to live here, in the code.
+ *
+ * Publishing is the only thing that writes objects in bulk, about 950 an
+ * export, and writes are the class with the smallest monthly allowance. This
+ * counts what this month's publishes already wrote, straight off their
+ * manifests, and refuses the export that would cross the line instead of
+ * letting it through and being invoiced for it.
+ *
+ * Set well under the real limit so the refusal comes with room to spare. */
+const WRITE_CEILING = 800_000
+
+async function writesThisMonth() {
+  const r = await one(
+    `select coalesce(sum((select count(*) from jsonb_object_keys(manifest))), 0) n
+       from publishes where published_at >= date_trunc('month', now())`,
+  )
+  return Number(r.n) || 0
+}
+
 export async function publishBundle(slug, { mapJson, assetsJson, images, files }) {
   const m = await one('select id from maps where slug = $1', [slug])
   if (!m) throw new Error(`no map ${slug}`)
+
+  const already = await writesThisMonth()
+  const about = (files?.size || 0) + Object.keys(images || {}).length + 4
+  if (already + about > WRITE_CEILING) {
+    throw new Error(
+      `this export would write ${about} objects and ${already} have already been written this month, ` +
+        `which crosses the ${WRITE_CEILING} ceiling that keeps storage inside its free allowance. ` +
+        `The count resets on the 1st. Nothing was written.`,
+    )
+  }
 
   const last = await one('select coalesce(max(version), 0) v from publishes where map_id = $1', [m.id])
   const version = Number(last.v) + 1
