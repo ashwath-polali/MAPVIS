@@ -6,6 +6,7 @@
 // of object storage now. Keeping the old shape is what lets the whole backend
 // move without touching 17,000 lines of client, and it is why the placement
 // urls already sitting inside every saved document keep resolving.
+import crypto from 'node:crypto'
 import { q, one, many } from '../db/pool.mjs'
 import { store, keys } from './blobs.mjs'
 import { getDoc, putDoc, getMapBySlug, createMap, ensureUser } from './maps.mjs'
@@ -134,7 +135,7 @@ export async function blobKeyForWorkPath(rel) {
 
 const MIME = { png: 'image/png', json: 'application/json', jpg: 'image/jpeg' }
 
-export async function serveFromStore(res, rel) {
+export async function serveFromStore(res, rel, req) {
   const key = await blobKeyForWorkPath(rel)
   if (!key) return false
   let buf
@@ -144,9 +145,28 @@ export async function serveFromStore(res, rel) {
     return false
   }
   res.setHeader('Content-Type', MIME[key.split('.').pop().toLowerCase()] || 'application/octet-stream')
-  // the author's working copy, which changes under them constantly. A published
-  // bundle is a different key space and is cached forever; this must not be.
-  res.setHeader('Cache-Control', 'no-store')
+
+  /* THE AUTHOR'S WORKING COPY, WHICH CHANGES UNDER THEM, AND STILL MUST NOT BE
+   * RE-DOWNLOADED EVERY TIME.
+   *
+   * This was no-store, which is the honest answer to "these bytes can change"
+   * and the wrong one. no-store means the browser keeps nothing, so re-opening
+   * a map pulled every png in its library down again, and the dashboard pulled
+   * every thumbnail again on every visit.
+   *
+   * An ETag says the same thing without the cost. The tag is the content, so it
+   * changes exactly when the picture changes and never when it has not, and a
+   * browser holding the current bytes gets a 304 with no body. What it cannot
+   * do is show a stale picture: a changed png is a changed tag, which is a
+   * full response. */
+  const etag = '"' + crypto.createHash('sha1').update(buf).digest('base64url') + '"'
+  res.setHeader('ETag', etag)
+  res.setHeader('Cache-Control', 'private, no-cache')
+  if (req && req.headers['if-none-match'] === etag) {
+    res.statusCode = 304
+    res.end()
+    return true
+  }
   res.end(buf)
   return true
 }

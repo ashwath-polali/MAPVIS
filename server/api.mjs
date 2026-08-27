@@ -139,7 +139,7 @@ async function serve(req, res, p, url) {
 }
 
 async function route(req, res, p, url) {
-  if (p.startsWith('/work/')) return serveWork(res, p.slice('/work/'.length))
+  if (p.startsWith('/work/')) return serveWork(res, p.slice('/work/'.length), req)
   if (p.startsWith('/api/v1/')) return readApi(req, res, p, url)
   if (p.startsWith('/api/auth/') || p === '/api/me' || p === '/api/my-maps') return authApi(req, res, p, url)
   if (p.startsWith('/api/relay/')) return relayApi(req, res, p)
@@ -2730,10 +2730,10 @@ async function readApi(req, res, p, url) {
 // space saved inside every placement. Where the bytes come from moved; the
 // address did not, which is the whole reason 17,000 lines of client did not
 // have to change.
-async function serveWork(res, rel) {
+async function serveWork(res, rel, req) {
   if (platformOn()) {
     try {
-      if (await serveFromStore(res, rel)) return
+      if (await serveFromStore(res, rel, req)) return
     } catch (e) {
       console.error('[work] store read failed, trying disk:', e.message)
     }

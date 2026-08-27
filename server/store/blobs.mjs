@@ -26,7 +26,60 @@ let cached = null
 export function store() {
   if (cached) return cached
   const E = env()
-  return (cached = E.S3_ACCESS_KEY_ID && E.S3_ENDPOINT ? s3Store(E) : localStore())
+  return (cached = memo(E.S3_ACCESS_KEY_ID && E.S3_ENDPOINT ? s3Store(E) : localStore()))
+}
+
+/* THE SAME BYTES ARE NEVER FETCHED TWICE.
+ *
+ * A published version is immutable and is cached forever by the browser, but
+ * the editor's own working copy is not, and it was being served with no-store
+ * and no memory behind it. So every open of a map went to the bucket for every
+ * png in its library, every dashboard thumbnail went again, and a free tier's
+ * 2,500 daily transactions were gone in an afternoon of ordinary use.
+ *
+ * The working copy really does change under the author, so it cannot simply be
+ * cached and forgotten. What makes this safe is that every change to a key goes
+ * through put, del, delPrefix or copy in this same object, so a write is the
+ * one moment the cached copy can become wrong, and a write evicts it. A reader
+ * can therefore never be handed bytes that some earlier writer replaced.
+ *
+ * Bounded because this runs in a serverless function: least recently used falls
+ * off first, and anything genuinely large is passed straight through rather
+ * than held. */
+const MEM_MAX = 400
+const MEM_BYTES = 48 * 1024 * 1024
+const MEM_ONE = 2 * 1024 * 1024
+
+function memo(b) {
+  const mem = new Map()
+  let held = 0
+
+  const drop = (k) => {
+    const v = mem.get(k)
+    if (v) { mem.delete(k); held -= v.length }
+  }
+  // a prefix write invalidates everything under it, which is what delPrefix and
+  // a copy into a folder both do
+  const dropPrefix = (p) => { for (const k of [...mem.keys()]) if (k.startsWith(p)) drop(k) }
+
+  return {
+    ...b,
+    async get(key) {
+      const hit = mem.get(key)
+      if (hit) { mem.delete(key); mem.set(key, hit); return hit }
+      const buf = await b.get(key)
+      if (buf && buf.length <= MEM_ONE) {
+        mem.set(key, buf)
+        held += buf.length
+        while (mem.size > MEM_MAX || held > MEM_BYTES) drop(mem.keys().next().value)
+      }
+      return buf
+    },
+    async put(key, body, contentType) { drop(key); return b.put(key, body, contentType) },
+    async del(key) { drop(key); return b.del(key) },
+    async delPrefix(prefix) { dropPrefix(prefix); return b.delPrefix(prefix) },
+    async copy(from, to) { drop(to); dropPrefix(to); return b.copy(from, to) },
+  }
 }
 
 // A key is a posix path under the bucket. Never absolute, never containing a

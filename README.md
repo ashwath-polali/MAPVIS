@@ -10,23 +10,6 @@ engine reads over HTTP.
 Maps are drawn on a picture rather than assembled from tiles, so a map looks like whatever it was
 painted as. Nothing is snapped to a grid. Elevation and collision are stored per pixel.
 
-## Running it
-
-```
-npm install
-npm run dev
-```
-
-Then open http://localhost:5274. The API is Vite middleware, so there is no second process to start.
-
-Set `DATABASE_URL` and the four S3 variables in `.env` to persist maps and their images. Without
-them the tool falls back to local disk and still runs.
-
-```
-npm run migrate    apply the schema
-npm run verify     check the database, storage, auth and the read API
-```
-
 ## Layout
 
 - `src/core/` the editor: masks, elevation, movement, export
