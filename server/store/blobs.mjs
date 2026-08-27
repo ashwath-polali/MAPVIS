@@ -26,7 +26,56 @@ let cached = null
 export function store() {
   if (cached) return cached
   const E = env()
-  return (cached = memo(E.S3_ACCESS_KEY_ID && E.S3_ENDPOINT ? s3Store(E) : localStore()))
+  // meter UNDER the cache on purpose: a memo hit never reaches the bucket, so
+  // counting it would trip the ceiling on reads that cost nothing
+  return (cached = memo(meter(E.S3_ACCESS_KEY_ID && E.S3_ENDPOINT ? s3Store(E) : localStore())))
+}
+
+/* A BUG MUST NOT BE ABLE TO RUN UP A BILL.
+ *
+ * B2 stops when its daily cap is gone, which is a broken site and a free
+ * lesson. R2 does not stop, it invoices, and there is no spend cap to set in
+ * the dashboard. That difference is the whole risk of moving, and it is not
+ * about ordinary use: at the measured 249 reads to open a map, R2's ten
+ * million free reads a month are forty thousand map opens. Nobody reaches that
+ * by working. A loop reaches it in a minute.
+ *
+ * So the ceiling is per process and deliberately far above anything real. A
+ * serverless instance serving one map open spends a few hundred; publishing
+ * the biggest map spends a few thousand. Twenty thousand means something is
+ * looping, and the right answer to that is to stop rather than to keep paying.
+ * Counted by class because R2 prices them differently and a runaway ListObjects
+ * is twelve times worse than a runaway GetObject. */
+let ceiling = null
+const OP_CEILING = () => (ceiling ??= Number(env().S3_MAX_OPS || 20000))
+const ops = { a: 0, b: 0, tripped: false }
+
+export const bucketOps = () => ({ ...ops, ceiling: OP_CEILING() })
+export const resetBucketOps = () => { ops.a = 0; ops.b = 0; ops.tripped = false }
+
+function meter(b) {
+  const spend = (cls) => {
+    ops[cls]++
+    if (ops.a + ops.b <= OP_CEILING()) return
+    if (!ops.tripped) {
+      ops.tripped = true
+      console.error(`[blobs] STOPPED: ${ops.a + ops.b} bucket operations in one process (ceiling ${OP_CEILING()}). Something is looping.`)
+    }
+    throw new Error(`bucket operation ceiling reached (${OP_CEILING()} in one process); refusing to spend more`)
+  }
+  return {
+    ...b,
+    // class B on r2: reads
+    async get(key) { spend('b'); return b.get(key) },
+    async exists(key) { spend('b'); return b.exists(key) },
+    // class A on r2: writes and listings. list is the expensive one per call.
+    async put(key, body, ct) { spend('a'); return b.put(key, body, ct) },
+    async list(prefix) { spend('a'); return b.list(prefix) },
+    async copy(from, to) { spend('a'); return b.copy(from, to) },
+    // delete is free on r2, and is not metered
+    async del(key) { return b.del(key) },
+    async delPrefix(prefix) { spend('a'); return b.delPrefix(prefix) },
+  }
 }
 
 /* THE SAME BYTES ARE NEVER FETCHED TWICE.
