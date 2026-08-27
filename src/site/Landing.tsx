@@ -22,12 +22,13 @@ import { go } from './router'
 type Beat = { slug: string; say: string; side: 'left' | 'right' }
 
 const BEATS: Beat[] = [
-  { slug: 'site-1', say: 'all of this is one painting', side: 'left' },
+  // the words are the running order; only which painting carries each one moved
+  { slug: 'site-6', say: 'all of this is one painting', side: 'left' },
   { slug: 'site-2', say: 'you cut the water off it by hand', side: 'right' },
   { slug: 'site-3', say: 'then mark the ground people can stand on', side: 'left' },
   { slug: 'site-4', say: 'put things on it that move on their own', side: 'right' },
   { slug: 'site-5', say: 'name the door, and code can find it later', side: 'left' },
-  { slug: 'site-6', say: 'export. it is in the game.', side: 'right' },
+  { slug: 'site-1', say: 'export. it is in the game.', side: 'right' },
 ]
 
 const HOLD = 5200

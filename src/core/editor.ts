@@ -1041,13 +1041,24 @@ export class Editor {
       this.emit()
       return
     }
-    if (this.tool === 'region' && !this.drawing && !this.walking) {
+    /* A TOOL THAT CANNOT ACT MUST NOT LOOK LIKE IT CAN.
+     *
+     * Painting is refused when the step does not own it, but this highlight was
+     * not, so arriving at the test step with fill-by-colour still selected lit
+     * a region under the cursor on every move. It read as an armed tool,
+     * because that is exactly what an armed tool looks like. */
+    if (this.tool === 'region' && this.paintable && !this.drawing && !this.walking) {
       const id = this.regionAt(x, y)
       if (id !== this.hoverRegion) {
         this.hoverRegion = id
         this.bakeRegionHL()
         this.dirty = true
       }
+    } else if (!this.paintable && this.hoverRegion >= 0) {
+      // and leaving the step clears whatever was already lit
+      this.hoverRegion = -1
+      this.bakeRegionHL()
+      this.dirty = true
     }
     if (this.drawing) {
       const [px, py] = this.lastPx || [x, y]
