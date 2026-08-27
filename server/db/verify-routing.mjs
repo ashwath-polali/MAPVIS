@@ -3,7 +3,7 @@
 //
 //   node server/db/verify-routing.mjs
 //
-// Ash's rule, stated exactly: if claude cannot be reached, anything that ROUTES
+// The rule: if the model cannot be reached, anything that ROUTES
 // through claude sends the author's own words straight to pixellab instead.
 // Anything that IS claude denies until there is a key. No pixellab means every
 // generation feature is off and nothing else changes.

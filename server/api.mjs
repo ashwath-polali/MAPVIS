@@ -378,7 +378,7 @@ async function route(req, res, p, url) {
   //
   // It goes through the OBJECT endpoint, not pixflux. pixflux draws freeform
   // illustrations, so it stands things on invented plinths: a palm came back
-  // on a stone slab, twice. The 47 objects on this account that he rates as
+  // on a stone slab, twice. The 47 objects on this account that were judged
   // good were all made through /v2/map-objects, in its basic mode with no
   // background image, which is what this sends. Same price class as any other
   // single generation.
@@ -543,8 +543,7 @@ async function route(req, res, p, url) {
     const sent = new Set((Array.isArray(b.names) ? b.names : []).map(fold).filter(Boolean))
     /* THE FACES THIS THING HAS, and not the whole library.
      *
-     * Ash's two objections to the old shape, 2026-08-25, and they were the same
-     * objection twice: a boulder drawn separately does not match the troll, and
+     * Two objections to the old shape, and they were the same objection twice: a boulder drawn separately does not match the troll, and
      * a library with three boulders in it gives the planner a choice nobody can
      * make for it. Both are gone if the pictures a thing can wear belong TO the
      * thing. A face is generated as an edit of the row that owns it and stored
@@ -1283,9 +1282,9 @@ async function route(req, res, p, url) {
    * ITSELF, curled up. Those are not the same picture and the difference is
    * the whole feature: a boulder drawn from scratch is its own palette, its own
    * canvas and its own silhouette, so the swap mid-round reads as one sprite
-   * being replaced by another rather than one thing changing. Ash named both
-   * halves of it, 2026-08-25: "what if the boulder and troll dont match", and
-   * "what if there are multiple boulders".
+   * being replaced by another rather than one thing changing. There are two
+   * halves to it: whether the boulder and the troll match, and what happens
+   * when the library holds more than one boulder.
    *
    * Both go away here, and neither needs a rule to keep them away. The state is
    * an EDIT of the art that is already on the account, so it cannot drift off
@@ -1838,8 +1837,7 @@ async function route(req, res, p, url) {
    * that folder, so the copies were a comfort and not a way back, and z only
    * ever undid the PLACEMENT half of a crop. That is worse than no undo:
    * placements moved back to where they belonged around art that was still
-   * cropped, so nineteen trees looked like they had slid down the map. Ash hit
-   * exactly that on 2026-08-25.
+   * cropped, so nineteen trees looked like they had slid down the map.
    *
    * Newest first, because .prev numbers copies upward as they pile up and the
    * one worth wanting is the one written a moment ago. */
@@ -2492,7 +2490,7 @@ async function relayApi(req, res, p) {
 
 /* ---- accounts -------------------------------------------------------------
  *
- * Anyone can make one. ATC and Ash share a single login on purpose, so there is
+ * Anyone can make one. The club shares a single login on purpose, so there is
  * no team model here and adding one would be machinery serving nobody.
  *
  * Signed out is not signed out of MAPVIS: the cut tool, levels, the walk test,
@@ -4398,7 +4396,7 @@ const WALK_WAIT = 900000
  *
  * The measured diagnosis: short asks like "a palm tree, clean hand-painted
  * pixel art, isometric" come back as illustrations standing on invented stone
- * slabs. The 47 objects on this account he rates as good are 60 to 100 words
+ * slabs. The 47 objects on this account judged good are 60 to 100 words
  * and every single one of them STATES the projection, the light direction, the
  * value count, the palette, that it is one piece, and that there is no ground.
  * Verbatim from the lighthouse: "in strict 2:1 isometric pixel art ... warm
@@ -4663,7 +4661,7 @@ async function planMake({ ask, what, kind, id, mapFile, boxFile, box, previous, 
        * solid box in that town is drawn raked. On a map painted flat the same
        * bookshelf should be flat.
        *
-       * Ash's own words, 2026-08-25: not every map is in the same view, and the
+       * Not every map is in the same view, and the
        * area is where the angle is understood relative to the whole map. So the
        * order is fixed here. Read what the painting does with things of this
        * FAMILY in this area, then use the object's shape to pick which family it
@@ -4807,9 +4805,8 @@ async function planMake({ ask, what, kind, id, mapFile, boxFile, box, previous, 
    *
    * The model is already reading the whole sentence to write the prompt. Asking
    * it to split out the faces and the round costs nothing extra and moves the
-   * ordering problem to the side that knows the rule. Ash, 2026-08-25: "make
-   * sure this entire system is easy to do, not a bunch of clicks over different
-   * fields."
+   * ordering problem to the side that knows the rule, and keeps the whole thing
+   * one sentence instead of a row of fields to click through.
    *
    * Both fields are allowed to be empty and usually are. A plain ask for a
    * fisherman is a body and nothing else. */
@@ -5286,9 +5283,9 @@ async function translateAsk(ask, kind, styleClause, id, job) {
     /* THE FALL-THROUGH, and it is the whole degraded-routing rule in one place.
      *
      * With no claude there is nobody to rewrite the ask, so the author's own
-     * words go to pixellab instead of the request failing. That is Ash's rule
-     * stated exactly: things that route through claude route straight to
-     * pixellab when claude cannot be reached.
+     * words go to pixellab instead of the request failing. The rule: anything that
+     * routes through the model routes straight to pixellab when the model
+     * cannot be reached.
      *
      * The difference from the old behaviour is only that it says so. A silent
      * degrade spends a real generation on a worse prompt and leaves the author

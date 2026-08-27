@@ -54,6 +54,12 @@ archive/*
 archive/pipeline/*.png
 archive/pipeline/*.txt
 
+# --- notes ---
+# Working notes, plans and design documents stay on disk. Only the README ships.
+*.md
+!README.md
+docs/
+
 # --- general ---
 # Anchored so a future src/assets/ or src/export/out/ is not swallowed by them.
 /out/

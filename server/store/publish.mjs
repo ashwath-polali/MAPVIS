@@ -1,7 +1,6 @@
 // Export is a save, not a finish line.
 //
-// Ash, 2026-08-23: maps live in a database, any map can be reopened and edited
-// at any time, and re-exporting updates that map in the game. So export and
+// Maps live in a database, any map can be reopened and edited at any time, and re-exporting updates that map in the game. So export and
 // publish are not two acts. Pressing export writes an immutable version into
 // object storage and records it, and the game reads whichever version it asks
 // for.

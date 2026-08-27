@@ -18,7 +18,7 @@
 -- ---------------------------------------------------------------- identity --
 
 -- A user IS an account. There is no org model on purpose: the club's plan is
--- one shared login that Ash and every ATC member use, not a membership graph.
+-- one shared login that every club member uses, not a membership graph.
 create table users (
   id             uuid primary key default gen_random_uuid(),
   email          text not null unique,
@@ -51,7 +51,7 @@ create table sessions (
 create index on sessions (user_id);
 create index on sessions (expires_at);
 
--- A machine that runs the claude cli and SAM on this account's behalf. It long
+-- A machine that runs the model cli and SAM on this account's behalf. It long
 -- polls the jobs table, does the work locally, and posts the result back. When
 -- no link has checked in recently, routing degrades instead of failing.
 create table relay_links (

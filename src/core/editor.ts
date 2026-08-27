@@ -2843,8 +2843,8 @@ export class Editor {
    *
    * It used to be the area gesture wearing a different label: the box vanished
    * and you were asked to drag a new one out of nothing, over a sprite that was
-   * often a dozen pixels across. Ash on trying it: "when i double click, it asks
-   * me to select the area, that is completely wrong."
+   * often a dozen pixels across. Double clicking a sprite and then being asked
+   * to select an area is backwards.
    *
    * It opens round the whole picture instead, and you take it in by dragging the
    * box's own edges, which is what every slide editor does and is the reason
@@ -3102,7 +3102,7 @@ export class Editor {
   // transparent edge, made at once. One snapshot first, so one undo takes the
   // whole proposal back. FIXED tolerance, never the slider: at a raised manual
   // tolerance the margin floods walked from sea navy into island rock and
-  // proposed half the island (Ash hit this 2026-08-15). One press must behave
+  // proposed half the island. One press must behave
   // the same every time; wider grabs belong to the human's cut-fill clicks.
   autoSea() {
     if (!this.pix || !this.painting) return
@@ -3572,8 +3572,8 @@ export class Editor {
    *
    * A crop is two changes: pixels on disk and anchors in the document. z only
    * ever knew about the second, so undoing one put every placement back around
-   * art that was still cropped and the map read as though it had slid. Ash lost
-   * nineteen trees to exactly that on 2026-08-25.
+   * art that was still cropped and the map read as though it had slid, which
+   * cost nineteen trees once.
    *
    * The hook is asked first and told how deep the stack is, so it can tell its
    * own edit apart from three moves that happened after it. It answers nothing;
@@ -4605,9 +4605,9 @@ export class Editor {
     if (rig) {
       // the real character, drawn the way PmapScene draws him: frames are
       // pre-trimmed to their drawn feet so the bottom edge IS the feet, and
-      // his drawn height scales to the document's charH. Idle shows frame 0,
+      // the drawn height scales to the document's charH. Idle shows frame 0,
       // walking cycles frames 1-5 on the walker's own clock. Drawn slightly
-      // smaller than the contract height (test-stage feel only, Ash 2026-08-16);
+      // smaller than the contract height (test-stage feel only);
       // the exported heightPx and the collision probes stay untouched.
       const ts = (this.cfg.charH * 0.7) / rig.drawnH
       const { rise, stretch } = W.hop()

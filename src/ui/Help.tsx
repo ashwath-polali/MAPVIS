@@ -230,7 +230,7 @@ export const HELP: HelpSection[] = [
           'Read what it says it will draw, then press the button with the cost on it.',
         ],
         note:
-          'The words you type are not the prompt. Claude looks at the painting itself, picks the camera by what your map does with things of that shape, picks the size against things already on the map, and writes the whole prompt. Colours and pixel size are not your job.',
+          'The words you type are not the prompt. The tool reads the painting itself, picks the camera by what your map does with things of that shape, picks the size against things already on the map, and writes the whole prompt. Colours and pixel size are not your job.',
       },
       {
         what: 'a sprite',
@@ -241,7 +241,7 @@ export const HELP: HelpSection[] = [
           'Press "read the map", then confirm the cost.',
         ],
         note:
-          'PixelLab has six skeletons and no more. Nothing asks you which one. Claude picks the nearest by body plan, so an upright robot is the humanoid rig and a four-legged dragon is the lion rig, and the prompt carries what it actually is.',
+          'PixelLab has six skeletons and no more. Nothing asks you which one. The tool picks the nearest by body plan, so an upright robot is the humanoid rig and a four-legged dragon is the lion rig, and the prompt carries what it actually is.',
       },
       {
         what: 'another face, on something that already exists',

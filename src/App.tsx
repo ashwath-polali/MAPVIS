@@ -4330,8 +4330,8 @@ export default function App() {
           /* Opening one closes the other. They are two different jobs on the
            * same thing and never both at once, but the panel let both boxes
            * stand open, stacked, each with its own greyed example and its own
-           * send button. Ash's first read of that was "do i have to type it
-           * into both", which is the only thing it could have looked like. */
+           * send button, which reads as though the same thing has to be typed into
+           * both. That is the only thing it could have looked like. */
           onClick={() => {
             setLifeOpen((v) => !v)
             setFaceOpen(false)
@@ -5629,9 +5629,9 @@ export default function App() {
         </div>
   )
 
-  /* Every ask this map has been given, in his words, behind one small toggle.
-     The library only kept a four-word slug of them, so the thing he typed to
-     get a tree he liked was gone the moment the box cleared. It stays shut
+  /* Every ask this map has been given, worded as it was typed, behind one
+     small toggle. The library only kept a four-word slug of them, so the
+     wording that produced a good tree was gone the moment the box cleared. It stays shut
      until asked for. */
   const askLog = asks.length > 0 && (
     <div className="askwrap">

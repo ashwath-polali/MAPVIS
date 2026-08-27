@@ -3,7 +3,7 @@
 //   node server/relay.mjs
 //
 // This is what makes the club account work. It holds no api key: it runs the
-// `claude` cli that is already installed and already paid for on this laptop,
+// model cli that is already installed and already paid for on this machine,
 // and posts the answers back to a MAPVIS that may be hosted anywhere.
 //
 // It polls rather than being called, which is the only shape that works from a
@@ -13,8 +13,9 @@
 // pixellab and the purely-claude features say they need a key. Nothing hangs
 // waiting for a machine that went to sleep.
 //
-// After Ash graduates somebody sets the account's claude provider to 'key' from
-// a dropdown, this stops mattering, and nothing else changes.
+// When the linked machine goes away for good, somebody sets the account's
+// provider to 'key' from a dropdown, this stops mattering, and nothing else
+// changes.
 import os from 'node:os'
 import { env } from './db/env.mjs'
 import { viaCli } from './store/planner.mjs'

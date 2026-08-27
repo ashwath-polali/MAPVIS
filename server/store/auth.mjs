@@ -1,7 +1,7 @@
 // Who is asking, and what they are allowed to reach.
 //
 // A user IS an account. There is no membership graph on purpose: the club's
-// plan is one shared login that Ash and every ATC member use, so a team model
+// plan is one shared login that every club member uses, so a team model
 // would be machinery serving nobody.
 //
 // The parts that are easy to get wrong are in crypto.mjs and are the standard
@@ -221,7 +221,7 @@ export async function keyFor(userId, service) {
 // ---- the ledger ------------------------------------------------------------
 
 // Every spend, so a shared club account has a record instead of a surprise, and
-// so Ash can see which member burned what.
+// so the account holder can see which member burned what.
 export const noteSpend = ({ userId, mapId, jobId, provider, endpoint, cost }) =>
   q(
     `insert into usage (user_id, map_id, job_id, provider, endpoint, cost_usd)

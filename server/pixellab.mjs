@@ -1,7 +1,6 @@
 /* PixelLab, server side only. The token never leaves this process.
  *
- * It is read the same way scripts/pxl.py reads it: from the MCP server entry in
- * ~/.claude.json, or from PIXELLAB_TOKEN if that is set.
+ * It is read from PIXELLAB_TOKEN, or from a token file if one is configured.
  *
  * Endpoints in use:
  *   POST /v2/generate-image-v2         -> { background_job_id }
@@ -41,13 +40,14 @@ export class NoPixellab extends Error {
 /* WHOSE SUBSCRIPTION THIS SPENDS.
  *
  * The signed-in account's own key comes first, always. This file used to read
- * one token out of ~/.claude.json and use it for everybody, which was correct
- * when MAPVIS had exactly one user and became a hole the moment anyone else
- * could sign up: every generation they made would have been billed to Ash.
+ * one machine-wide token and use it for everybody, which was correct when there
+ * was exactly one user and became a hole the moment anyone else could sign up:
+ * every generation a new account made would have been billed to whoever owned
+ * that token.
  *
  * The machine's own token is the fallback and only that. On a laptop it is what
- * has always happened and nothing changed. On a host there is no home directory
- * to read, so an account with no key gets NoPixellab and generation is simply
+ * has always happened and nothing changed. On a host there is no token file to
+ * read, so an account with no key gets NoPixellab and generation is simply
  * unavailable, which is the decided behaviour: no pixellab means no generation,
  * and everything else still works. */
 export function token() {
@@ -56,17 +56,9 @@ export function token() {
   if (cached) return cached
   if (process.env.PIXELLAB_TOKEN) return (cached = process.env.PIXELLAB_TOKEN)
   try {
-    const p = path.join(os.homedir(), '.claude.json')
+    const p = process.env.PIXELLAB_TOKEN_FILE || path.join(os.homedir(), '.mapvis.json')
     const d = JSON.parse(fs.readFileSync(p, 'utf8'))
-    for (const proj of Object.values(d.projects || {})) {
-      const s = (proj.mcpServers || {}).pixellab
-      if (!s) continue
-      for (const [k, v] of Object.entries(s.headers || {})) {
-        if (k.toLowerCase() === 'authorization') return (cached = String(v).split(/\s+/).pop())
-      }
-      if (s.token) return (cached = s.token)
-      if ((s.url || '').includes('token=')) return (cached = s.url.split('token=')[1].split('&')[0])
-    }
+    if (d.pixellabToken) return (cached = String(d.pixellabToken))
   } catch {
     /* no home directory, which is every hosted environment */
   }
@@ -125,7 +117,7 @@ export async function pixflux({ description, w = 96, h = 96, seed }) {
 }
 
 // One object, transparent, from POST /v2/map-objects. This is the endpoint the
-// 47 objects on the account that he rates as good were actually made with:
+// 47 objects on the account that were judged good were actually made with:
 // they are 1-direction, non-square (110x230, 400x280, 240x340) and carry a
 // "low top-down" view, none of which /v2/create-1-direction-object can even
 // express (that one is square 16..256, view top-down|sidescroller, and its own
@@ -148,7 +140,7 @@ export async function pixflux({ description, w = 96, h = 96, seed }) {
  * only copy it. Do not rewire this without proving a subject survives first.
  *
  * ALSO NOT SENT: outline, shading, detail, text_guidance_scale. Real channels
- * with real enums, and every object in this library that Ash has called good
+ * with real enums, and every object in this library that has been judged good
  * was made on their defaults. Worth trying one at a time. Not worth three at
  * once under a route that works.
  *

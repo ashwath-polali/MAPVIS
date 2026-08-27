@@ -29,7 +29,7 @@ export const defaultCfg = (): WalkCfg => ({
   yScale: 0.72,
 })
 
-// test-stage feel only (Ash, 2026-08-16: "quite faster"): the exported map.json speed stays
+// test-stage feel only: the exported map.json speed stays
 // the contract value; the tool's walk test just moves at this multiple of it
 export const TEST_SPEED = 1.9
 

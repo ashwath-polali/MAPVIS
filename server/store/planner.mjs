@@ -4,15 +4,15 @@
 // a question and none of them should know or care which one answered:
 //
 //   key    the account's own anthropic key, called over http
-//   relay  a machine linked to this account runs the claude cli locally and
+//   relay  a machine linked to this account runs the model cli locally and
 //          posts the answer back. This is how the club account works: no key is
-//          stored, Ash's laptop is wired in, and after he graduates somebody
-//          switches it to 'key' from a dropdown
+//          stored, one machine is wired in, and if it goes away somebody
+//          switches this to 'key' from a dropdown
 //   none   no claude. Not an error by itself: the caller decides whether its
 //          feature is purely claude and must be denied, or whether it can fall
 //          through and send the author's own words straight to pixellab
 //
-// The rule, in Ash's words: if the api key fails, things that route to claude
+// The rule: if the api key fails, things that route to the model
 // route directly to pixellab instead. A feature that is purely claude denies
 // the user until they have a valid key. A tool that is useless without a key is
 // not a bridge.
@@ -84,9 +84,8 @@ async function viaKey(key, prompt, timeoutMs, images = []) {
 // ---- a linked machine ------------------------------------------------------
 
 /* Post the question as a job and wait for a relay to answer it. The relay long
- * polls, runs the local claude cli, and posts the result back, so the
- * subscription Ash already pays for is the compute budget and no key is stored
- * anywhere.
+ * polls, runs the local model cli, and posts the result back, so an existing
+ * subscription is the compute budget and no key is stored anywhere.
  *
  * If nothing claims it before the timeout the job is marked and NoPlanner is
  * thrown, which is the degrade signal. A laptop being closed is a normal
