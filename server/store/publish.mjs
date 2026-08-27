@@ -156,8 +156,18 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
      * keys built an index nothing could look itself up in, so every frame
      * missed, fell back to a loose file, and the atlas shipped as 333 KB of
      * dead weight beside the 794 downloads it was written to prevent. It looked
-     * like it worked because the fallback works. */
-    packed = packAtlas(new Map([...files].map(([k, v]) => ['assets/' + k, v])))
+     * like it worked because the fallback works.
+     *
+     * NORMALISED RATHER THAN PREFIXED, because the two callers disagreed. The
+     * export route passes bare keys ("gull/0.png") and publish-work.mjs walks
+     * the folder passing them already prefixed ("assets/gull/0.png"), so adding
+     * the folder unconditionally produced "assets/assets/gull/0.png" for every
+     * frame the command-line publisher handed over. Nothing matched, all 94
+     * placements shipped loose, and the bundle cost 800 requests to open while
+     * reporting success. Stripping first means the caller's convention stops
+     * mattering, which is the only version of this that stays fixed. */
+    const inAssets = (k) => 'assets/' + String(k).replace(/^\/+/, '').replace(/^assets\//, '')
+    packed = packAtlas(new Map([...files].map(([k, v]) => [inAssets(k), v])))
     if (packed) {
       all.set('atlas.png', packed.png)
       all.set('atlas.json', Buffer.from(JSON.stringify(packed.index)))
@@ -166,16 +176,13 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
 
   for (const [name, buf] of Object.entries(images)) if (buf) all.set(name, buf)
   all.set('map.json', Buffer.from(JSON.stringify(map, null, 2)))
+  // kept, because the cost measured at the bottom has to read the array that
+  // actually shipped rather than the one it was built from
+  const atlased = packed ? atlasify(assetsJson.assets || [], packed.index) : null
   all.set(
     'assets.json',
     Buffer.from(
-      JSON.stringify(
-        packed
-          ? { ...assetsJson, atlas: 'atlas.png', assets: atlasify(assetsJson.assets || [], packed.index) }
-          : assetsJson,
-        null,
-        2,
-      ),
+      JSON.stringify(atlased ? { ...assetsJson, atlas: 'atlas.png', assets: atlased } : assetsJson, null, 2),
     ),
   )
 
@@ -209,8 +216,15 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
    * and said out loud. Six is the floor: map.json, scene, levels, assets.json,
    * atlas.png, atlas.json. If this number is ever in the hundreds again,
    * something regressed and the log says so before anybody's bucket does. */
-  const loose = packed
-    ? (assetsJson.assets || []).filter((a) => !a.srcAt && !a.framesAt && !a.dirsAt).length
+  /* MEASURE THE ARRAY THAT SHIPPED, NOT THE ONE IT CAME FROM.
+   *
+   * atlasify returns new objects rather than mutating in place, so filtering
+   * assetsJson.assets asked the pre-atlas array whether it had atlas fields.
+   * It never does. loose therefore always equalled the full placement count and
+   * the warning always fired, which made the one tripwire guarding this
+   * unreadable: it cried wolf on a good bundle and on a broken one alike. */
+  const loose = atlased
+    ? atlased.filter((a) => !a.srcAt && !a.framesAt && !a.dirsAt).length
     : (assetsJson.assets || []).length
   const cost = 6 + loose
   if (loose)
