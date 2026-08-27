@@ -2185,11 +2185,33 @@ async function route(req, res, p, url) {
           } catch {
             /* no dirs.json beside the views, or unreadable: the default stands */
           }
+          /* THE HEADING THE AUTHOR PICKED, not south.
+           *
+           * A standing figure has no movement to derive a facing from, so its
+           * resting view is whatever the facing picker set, and that choice is
+           * carried on the placement's own src. This line used to hand back
+           * outDirs.south unconditionally, which silently turned 17 of the
+           * hub's hand-turned figures back to front: 21 south, 8 south-west and
+           * 9 south-east went in, 38 south came out.
+           *
+           * Nothing about the pixels or the JSON was wrong, which is what made
+           * it invisible. editor.ts documents this exact contract one file over
+           * and the exporter broke it. */
+          const wanted = String(s.src || '')
+          let rest = ''
+          for (const [k, arr] of Object.entries(s.dirs)) {
+            if (Array.isArray(arr) && arr.some((u) => String(u) === wanted)) {
+              rest = k
+              break
+            }
+          }
+          const restSet = (rest && outDirs[rest]) || outDirs.south || Object.values(outDirs)[0]
           return {
             dirs: outDirs,
-            // frame 0 of the front view: a reader that knows nothing about
-            // headings still gets a picture rather than a blank
-            src: outDirs.south ? outDirs.south[0] : Object.values(outDirs)[0][0],
+            // frame 0 of the resting view, so a reader that knows nothing about
+            // headings still gets the picture the author actually chose
+            src: restSet[0],
+            facing: rest || 'south',
             fps,
           }
         }

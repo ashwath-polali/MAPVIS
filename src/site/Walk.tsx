@@ -217,26 +217,34 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
           g.clearRect(0, 0, box.width, box.height)
           g.drawImage(scene, ox, oy, w, h)
 
-          // everything that stands on the map, including you, sorted by feet
+          /* Where everything is this frame.
+           *
+           * A placement with no life is FURNITURE and must not move: houses,
+           * stalls and sea walls were being fed through separate() along with
+           * the walkers, so the whole island drifted a few pixels every frame
+           * and read as a map that would not sit still. Only the things that
+           * are actually walking push each other apart.
+           *
+           * A standing figure also has no direction to derive, so its resting
+           * view is the facing the exporter now records rather than south. */
           const pts = live.map((v) => ({ x: v.p.x, y: v.p.y, r: 3 }))
           const shown = live.map((v, i) => {
-            let dx = 0
-            let dy = 0
             let alpha = 1
-            let face = 'south'
+            let face = (v.p as { facing?: string }).facing || 'south'
             let flip = false
             if (v.life) {
               const s = lifeAt(v.life, t, { x: v.p.x, y: v.p.y })
-              dx = s.dx
-              dy = s.dy
+              pts[i] = { x: v.p.x + s.dx, y: v.p.y + s.dy, r: 3 }
               alpha = s.alpha
               face = s.facing
               flip = s.flip
             }
-            pts[i] = { x: v.p.x + dx, y: v.p.y + dy, r: 3 }
-            return { v, alpha, face, flip }
+            return { v, alpha, face, flip, moves: !!v.life }
           })
-          separate(pts, yScale, 1)
+          const movers = pts.filter((_, i) => shown[i].moves)
+          separate(movers, yScale, 1)
+          let mi = 0
+          for (let i = 0; i < pts.length; i++) if (shown[i].moves) pts[i] = movers[mi++]
 
           const order: Array<{ y: number; go: () => void }> = shown.map((s, i) => ({
             y: pts[i].y,
