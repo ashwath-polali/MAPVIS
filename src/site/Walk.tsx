@@ -107,8 +107,26 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
           lg.drawImage(levels, 0, 0)
           lv = lg.getImageData(0, 0, meta.w, meta.h).data
         }
-        const at = (x: number, y: number) =>
-          !lv || x < 0 || y < 0 || x >= meta.w || y >= meta.h ? 40 : lv[((y | 0) * meta.w + (x | 0)) * 4]
+        /* lvlAt, TO THE LETTER. See MaskDoc.lvlAt in src/core/mask.ts.
+         *
+         * Two differences hid here and both changed where the walls are.
+         *
+         * It ROUNDS. This read the level with `| 0`, which truncates, so every
+         * fractional position, and a walking character is never on an integer,
+         * tested a different pixel than the editor tests. That is a systematic
+         * half-pixel shift between the ground you see and the ground you may
+         * stand on, and at the pov zoom it is several screen pixels.
+         *
+         * Off the map is BLOCKED, not ground. This returned 40, which is L0,
+         * the encoding for ordinary walkable floor. So the entire outside of the
+         * canvas read as standable and a character who reached an edge kept
+         * going into nothing. lvlAt returns 0 there, which is blocked. */
+        const at = (x: number, y: number) => {
+          const xi = Math.round(x)
+          const yi = Math.round(y)
+          if (!lv || xi < 0 || yi < 0 || xi >= meta.w || yi >= meta.h) return 0
+          return lv[(yi * meta.w + xi) * 4]
+        }
 
         // ---- the placements ------------------------------------------------
         const aj = await (await fetch(`${base}assets.json`)).json().catch(() => ({ assets: [] }))
@@ -248,32 +266,31 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
          * pixel or two off the walkable band, and they read on screen as people
          * frozen mid-street while the ones beside them move.
          *
-         * Nudged the same way the spawn is, and only a few pixels: far enough to
-         * find the floor, near enough that nobody has been moved anywhere an
-         * author would notice. The saved document is untouched; this is the
-         * reader being forgiving, not the map being rewritten.
+         * A PLACEMENT IS NEVER MOVED. This used to nudge any life-bearing
+         * placement up to eight pixels onto the nearest walkable pixel, on the
+         * theory that a figure standing just off the floor had slipped. That was
+         * wrong, and visibly so: the hub's three rowboats carry life "drift",
+         * they float on water, water is not walkable, and the nudge hauled two
+         * of them out of the harbour and parked them on the quay.
          *
-         * Eight pixels and no further, because past that it stops being a
-         * rounding error and starts being a relocation. Two of the hub's are 82
-         * and 90 pixels from any floor, which is not a placement that slipped,
-         * it is a placement standing somewhere the mask never made walkable.
-         * Papering over that would hide the actual defect, so anything still
-         * stranded is named in the console instead: the map is what needs the
-         * edit, and the tool should say which placement to go and look at. */
-        const stranded: string[] = []
-        for (const v of live) {
-          if (!v.life) continue
-          const s = settle(v.p.x, v.p.y, 8)
-          if (!standable(s.x, s.y)) {
-            stranded.push(`${(v.p as { id?: string }).id ?? '?'} at ${v.p.x},${v.p.y}`)
-            continue
-          }
-          if (s.x !== v.p.x || s.y !== v.p.y) v.p = { ...v.p, x: s.x, y: s.y }
-        }
-        if (stranded.length)
+         * Not everything that moves walks. drift, bob, airborne and rock are all
+         * movement that has no business touching the floor, and only walkOnly
+         * and the wandering figures ever ask. Deciding here which is which means
+         * re-implementing life's own rules, badly, for the second time in one
+         * file. So the reader stops guessing and stops moving people's art.
+         *
+         * A walker that genuinely cannot move is a hole in the mask, which is a
+         * fact about the map and belongs in front of the author rather than
+         * hidden by a fudge. Named below, with coordinates, and left where the
+         * author put it. */
+        const stuckWalkers = live
+          .filter((v) => v.life && !standable(v.p.x, v.p.y))
+          .map((v) => `${(v.p as { id?: string }).id ?? '?'} at ${v.p.x},${v.p.y}`)
+        if (stuckWalkers.length)
           console.warn(
-            `[walk] ${stranded.length} moving placement(s) stand off walkable ground and cannot move: ` +
-              `${stranded.join('; ')}. Widen the mask under them, or move them, in the levels step.`,
+            `[walk] ${stuckWalkers.length} moving placement(s) are not on walkable ground: ` +
+              `${stuckWalkers.join('; ')}. If one of them is meant to walk, the mask under it needs ` +
+              `widening in the levels step. If it floats or bobs, this is expected.`,
           )
 
         const land = (() => {
