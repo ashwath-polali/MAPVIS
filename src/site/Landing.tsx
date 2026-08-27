@@ -48,24 +48,34 @@ export default function Landing() {
     ;(async () => {
       for (const b of BEATS) {
         try {
-          /* THE PUBLISHED SCENE FIRST, THEN THE WORKING ONE.
+          /* THE SHIPPED COPY FIRST. THIS IS A PICTURE ON A HOMEPAGE.
            *
-           * This only ever read the published bundle, which is always fetched
-           * from object storage, so the day storage stopped answering the whole
-           * page went blank, on a laptop that had every one of these images on
-           * its own disk. /work/ is served from disk when this machine has the
-           * file, so the fallback costs nothing and cannot be capped. */
-          let url: string | null = null
-          try {
-            const r = await fetch(`/api/v1/maps/${b.slug}`)
-            if (r.ok) url = (await r.json()).files?.['scene.png']?.url || null
-          } catch {
-            /* fall through to the working copy */
+           * It used to read the published bundle, then fall back to /work/.
+           * Both of those go through the map system, and the map system is the
+           * wrong place for marketing art to live. It broke twice for two
+           * unrelated reasons: publishes do not migrate between buckets, so the
+           * move to R2 left these behind, and /work/ then started requiring
+           * ownership, which a stranger reading the front page does not have.
+           * Neither failure had anything to do with the landing page.
+           *
+           * public/site-art/<slug>.png ships inside the build, so it is served
+           * by the cdn, costs no object storage at all, needs no session, and
+           * cannot be taken down by a bucket, a cap or an auth rule. The map
+           * system remains the fallback for a beat whose art was never staged. */
+          let res: Response | null = await fetch(`/site-art/${b.slug}.png`).catch(() => null)
+          if (!res || !res.ok || !/image/.test(res.headers.get('content-type') || '')) {
+            let url: string | null = null
+            try {
+              const r = await fetch(`/api/v1/maps/${b.slug}`)
+              if (r.ok) url = (await r.json()).files?.['scene.png']?.url || null
+            } catch {
+              /* fall through to the working copy */
+            }
+            if (dead) return
+            res = url ? await fetch(url) : null
+            if (!res || !res.ok) res = await fetch(`/work/${b.slug}/scene.png`)
           }
-          if (dead) return
-          let res = url ? await fetch(url) : null
-          if (!res || !res.ok) res = await fetch(`/work/${b.slug}/scene.png`)
-          if (!res.ok || dead) continue
+          if (!res || !res.ok || dead) continue
           const blob = await res.blob()
           if (dead) return
           setReady((s) => ({ ...s, [b.slug]: URL.createObjectURL(blob) }))
