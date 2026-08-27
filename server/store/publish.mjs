@@ -19,6 +19,45 @@ import { packAtlas, atlasify } from './atlas.mjs'
 
 const sha = (b) => crypto.createHash('sha256').update(b).digest('hex')
 
+/* A PUBLISHED FILE NEVER CHANGES, SO IT SHOULD BE FETCHED ONCE.
+ *
+ * publish/<slug>/v<N>/ is immutable by design, which means the second read of
+ * any file in it is guaranteed to return exactly what the first one did. Going
+ * back to the bucket for it is a transaction spent to learn nothing.
+ *
+ * That matters because the free tier allows 2,500 downloads a day and a day of
+ * building blew through it: every reload of a map page, every walk test, every
+ * dashboard thumbnail was a fresh read of bytes the server had already seen.
+ *
+ * Small files only, and a bounded number of them. map.json and atlas.json are
+ * what get asked for over and over; scene.png and the atlas sheet are hundreds
+ * of kilobytes and belong to the browser's cache, not this one. */
+const HOT_MAX = 200
+const HOT_BYTES = 8 * 1024 * 1024
+const hot = new Map()
+let hotBytes = 0
+
+export function hotGet(key) {
+  const v = hot.get(key)
+  if (!v) return null
+  // touch: least recently used falls off the end first
+  hot.delete(key)
+  hot.set(key, v)
+  return v
+}
+
+export function hotPut(key, buf) {
+  if (buf.length > 512 * 1024) return buf
+  hot.set(key, buf)
+  hotBytes += buf.length
+  while (hot.size > HOT_MAX || hotBytes > HOT_BYTES) {
+    const [k, v] = hot.entries().next().value
+    hot.delete(k)
+    hotBytes -= v.length
+  }
+  return buf
+}
+
 // Everything the game fetches, written under one version prefix.
 //
 // files is a Map of relative path inside the bundle -> Buffer, exactly the

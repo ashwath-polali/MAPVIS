@@ -49,7 +49,7 @@ import {
   snapshotVersion,
   restoreVersion,
 } from './store/platform.mjs'
-import { publishBundle, publishedMap, publishHistory } from './store/publish.mjs'
+import { publishBundle, publishedMap, publishHistory, hotGet, hotPut } from './store/publish.mjs'
 import { store } from './store/blobs.mjs'
 import { q, one, many } from './db/pool.mjs'
 import { newToken, hashToken } from './store/crypto.mjs'
@@ -2675,7 +2675,10 @@ async function readApi(req, res, p, url) {
      * already there. 503 says come back, 404 says it is not here. */
     let map
     try {
-      map = JSON.parse((await store().get(pub.blob_prefix + 'map.json')).toString('utf8'))
+      // a published file never changes, so the second read is a transaction
+      // spent to learn nothing
+      const mk = pub.blob_prefix + 'map.json'
+      map = JSON.parse((hotGet(mk) || hotPut(mk, await store().get(mk))).toString('utf8'))
     } catch (e) {
       const why = String(e.message || e)
       return send(res, 503, {
@@ -2711,7 +2714,8 @@ async function readApi(req, res, p, url) {
     if (!rel || !pub.manifest[rel]) return notFound(res)
     let buf
     try {
-      buf = await store().get(pub.blob_prefix + rel)
+      const ck = pub.blob_prefix + rel
+      buf = hotGet(ck) || hotPut(ck, await store().get(ck))
     } catch {
       return notFound(res)
     }
