@@ -25,6 +25,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { currentPixellabKey } from './store/ctx.mjs'
+import { env } from './db/env.mjs'
 
 const BASE = 'https://api.pixellab.ai'
 let cached = null
@@ -54,9 +55,13 @@ export function token() {
   const mine = currentPixellabKey()
   if (mine) return mine
   if (cached) return cached
-  if (process.env.PIXELLAB_TOKEN) return (cached = process.env.PIXELLAB_TOKEN)
+  // env() and not process.env: .env is read into a merged object and never
+  // exported into the process, so reading process.env here finds nothing on a
+  // laptop and generation fails as though no key were set.
+  const E = env()
+  if (E.PIXELLAB_TOKEN) return (cached = E.PIXELLAB_TOKEN)
   try {
-    const p = process.env.PIXELLAB_TOKEN_FILE || path.join(os.homedir(), '.mapvis.json')
+    const p = E.PIXELLAB_TOKEN_FILE || path.join(os.homedir(), '.mapvis.json')
     const d = JSON.parse(fs.readFileSync(p, 'utf8'))
     if (d.pixellabToken) return (cached = String(d.pixellabToken))
   } catch {
