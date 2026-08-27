@@ -1,0 +1,412 @@
+/* The lead banner, the settings sheet, and the walk screen. */
+
+/* ---- the lead: the newest map, across the whole width -------------------- */
+
+/* A height, not an aspect ratio. With both, max-height wins and the element
+   narrows to keep the ratio, so the banner stopped two thirds across the page
+   while the grid under it ran the full width. */
+.lead {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: clamp(200px, 32svh, 330px);
+  margin-bottom: clamp(16px, 1.6vw, 24px);
+  overflow: hidden;
+  border: 1px solid #1a2027;
+  background: #06080b;
+  text-decoration: none;
+  color: inherit;
+}
+.lead img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center 42%;
+  image-rendering: pixelated;
+  display: block;
+  transition: transform 1200ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.lead:hover img {
+  transform: scale(1.03);
+}
+/* the words sit IN the painting, so the darkening is part of the picture
+   rather than a panel laid on top of it */
+.lead::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(6, 8, 11, 0.92) 0%, rgba(6, 8, 11, 0.7) 32%, transparent 62%);
+}
+.lead-say {
+  position: absolute;
+  inset: 0 auto 0 0;
+  z-index: 2;
+  display: grid;
+  align-content: center;
+  gap: 7px;
+  padding: 0 clamp(20px, 4vw, 52px);
+  max-width: 46ch;
+}
+.lead-when {
+  font: 400 10px var(--font-mono);
+  letter-spacing: 0.06em;
+  color: #7d8794;
+}
+.lead-say h1 {
+  margin: 0;
+  font: 500 clamp(1.5rem, 3vw, 2.4rem) / 1.05 var(--font-label);
+  letter-spacing: -0.02em;
+  color: #fff;
+}
+.lead-nums {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  font: 400 11px var(--font-mono);
+  color: #8d97a4;
+}
+.lead-go {
+  margin-top: 8px;
+  font: 600 11px var(--font-label);
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: #fff;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.4);
+  justify-self: start;
+  padding-bottom: 3px;
+  transition: border-color 200ms ease;
+}
+.lead:hover .lead-go {
+  border-color: #fff;
+}
+
+.blank {
+  display: grid;
+  gap: 12px;
+  justify-items: start;
+  padding: 14vh 0;
+  max-width: 44ch;
+}
+.blank h1 {
+  margin: 0;
+  font: 500 2rem var(--font-label);
+  letter-spacing: -0.02em;
+  color: #e6e9ee;
+}
+.blank p {
+  margin: 0;
+  color: #8d97a4;
+  line-height: 1.55;
+}
+.blank .sheet-btn {
+  margin-top: 10px;
+}
+
+/* ---- the settings sheet -------------------------------------------------- */
+
+.sheetwrap {
+  position: fixed;
+  inset: 0;
+  z-index: 400;
+  display: grid;
+  place-items: center;
+  padding: 5vh 20px;
+  background: rgba(4, 6, 9, 0.72);
+  backdrop-filter: blur(3px);
+  animation: fade 180ms ease both;
+}
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
+.sheet {
+  width: min(560px, 100%);
+  max-height: 90svh;
+  overflow-y: auto;
+  background: #10141a;
+  border: 1px solid #232b34;
+  color: #e6e9ee;
+  font-family: var(--font-label);
+  animation: sheet-in 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes sheet-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.985);
+  }
+}
+.sheet header {
+  position: sticky;
+  top: 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 22px 16px;
+  background: #10141a;
+  border-bottom: 1px solid #1c232b;
+}
+.sheet h2 {
+  margin: 0;
+  font: 500 18px var(--font-label);
+  letter-spacing: -0.01em;
+}
+.sheet-who {
+  font: 400 11px var(--font-mono);
+  color: #6f7885;
+}
+.sheet-x {
+  width: 26px;
+  height: 26px;
+  font-size: 19px;
+  line-height: 1;
+  color: #6f7885;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.sheet-x:hover {
+  color: #fff;
+}
+.sheet section {
+  padding: 18px 22px;
+  border-bottom: 1px solid #1c232b;
+}
+.sheet h3 {
+  margin: 0 0 12px;
+  font: 600 10px var(--font-label);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: #6f7885;
+}
+.sheet-note {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: #7d8794;
+}
+.sheet-bad {
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  color: #d0785f;
+}
+.sheet footer {
+  padding: 16px 22px 20px;
+}
+
+/* a filled dot, on or off. One shape for every state in this panel. */
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #39434f;
+  flex: none;
+}
+.dot.on {
+  background: #6fbf9d;
+  box-shadow: 0 0 0 3px rgba(111, 191, 157, 0.16);
+}
+
+.works,
+.machines,
+.spend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.works li,
+.machines li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+.works li.off span:nth-child(2) {
+  color: #6f7885;
+}
+.works-note,
+.machines-when {
+  margin-left: auto;
+  font: 400 11px var(--font-mono);
+  color: #6f7885;
+}
+
+.key {
+  padding: 14px 0;
+  border-top: 1px solid #1a2027;
+}
+.key:first-of-type {
+  border-top: 0;
+  padding-top: 0;
+}
+.key-top {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 5px;
+  font-size: 13.5px;
+}
+.key-row {
+  display: flex;
+  gap: 7px;
+  margin-top: 10px;
+}
+.key-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  font: 400 12.5px var(--font-label);
+  color: #e6e9ee;
+  background: #0b0e13;
+  border: 1px solid #232b34;
+  outline: none;
+  transition: border-color 180ms ease;
+}
+.key-row input:focus {
+  border-color: #3a4652;
+}
+
+.sheet-btn {
+  padding: 8px 14px;
+  font: 600 11.5px var(--font-label);
+  letter-spacing: 0.04em;
+  color: #0b0e13;
+  background: #d8dee6;
+  border: 0;
+  cursor: pointer;
+  transition:
+    background 160ms ease,
+    opacity 160ms ease;
+}
+.sheet-btn:hover:not(:disabled) {
+  background: #fff;
+}
+.sheet-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.sheet-btn.quiet {
+  color: #8d97a4;
+  background: none;
+  border: 1px solid #232b34;
+}
+.sheet-btn.quiet:hover:not(:disabled) {
+  color: #fff;
+  background: none;
+  border-color: #3a4652;
+}
+.sheet-btn.danger {
+  color: #d0785f;
+  background: none;
+  border: 1px solid #3a2823;
+}
+.sheet-btn.danger:hover {
+  color: #fff;
+  background: #7a3a2a;
+}
+
+.minted {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 12px 14px;
+  background: #0b0e13;
+  border-left: 2px solid #6fbf9d;
+}
+.minted code {
+  font: 400 11px var(--font-mono);
+  color: #9fd8c0;
+  word-break: break-all;
+}
+
+.spend li {
+  display: flex;
+  gap: 12px;
+  font: 400 11.5px var(--font-mono);
+  color: #8d97a4;
+}
+.spend li span:nth-child(2) {
+  margin-left: auto;
+}
+.spend-cost {
+  min-width: 56px;
+  text-align: right;
+  color: #e6e9ee;
+}
+.spend-total {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #1a2027;
+  font: 400 11.5px var(--font-mono);
+  color: #6f7885;
+}
+.spend-total b {
+  color: #e6e9ee;
+  font-weight: 500;
+}
+
+/* ---- walking a map ------------------------------------------------------- */
+
+.playing {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  height: 100svh;
+  background: #06080b;
+  color: #e6e9ee;
+  font-family: var(--font-label);
+}
+.play-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px clamp(16px, 3vw, 32px);
+}
+.play-back,
+.play-edit {
+  font: 500 12.5px var(--font-label);
+  color: #8d97a4;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: none;
+  transition: color 180ms ease;
+}
+.play-back:hover,
+.play-edit:hover {
+  color: #fff;
+}
+.play-edit {
+  margin-left: auto;
+}
+.play-name {
+  font: 500 14px var(--font-label);
+  color: #e6e9ee;
+}
+.play-meta {
+  font: 400 10.5px var(--font-mono);
+  color: #5b6470;
+}
+.play-empty {
+  display: grid;
+  gap: 12px;
+  justify-items: start;
+  align-content: center;
+  padding: 0 clamp(20px, 5vw, 60px);
+  max-width: 46ch;
+}
+.play-empty h1 {
+  margin: 0;
+  font: 500 1.6rem var(--font-label);
+  letter-spacing: -0.02em;
+}
+.play-empty p {
+  margin: 0;
+  color: #8d97a4;
+}

@@ -15,6 +15,7 @@ import './site/site.css'
 import './site/arrive.css'
 import './site/landing.css'
 import './site/pages.css'
+import './site/panels.css'
 import './app.css'
 
 createRoot(document.getElementById('root') as HTMLElement).render(<Shell />)

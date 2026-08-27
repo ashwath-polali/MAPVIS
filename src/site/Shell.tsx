@@ -15,7 +15,6 @@ const Editor = lazy(() => import('../App'))
 const Enter = lazy(() => import('./Enter'))
 const Home = lazy(() => import('./Home'))
 const MapPage = lazy(() => import('./MapPage'))
-const Account = lazy(() => import('./Account'))
 
 /* Ink spreading into paper. Every wait in this app is this, never a spinner,
  * because a spinner is the single most template-shaped thing a page can do. */
@@ -95,7 +94,6 @@ export default function Shell() {
   if (route.path === '/') page = session.loading ? <Ink /> : session.user ? <Home /> : <Landing />
   else if (route.path === '/enter') page = <Enter />
   else if (mapMatch) page = <MapPage slug={mapMatch.slug} />
-  else if (route.path === '/account') page = <Account />
   else page = <Lost path={route.path} />
 
   return (

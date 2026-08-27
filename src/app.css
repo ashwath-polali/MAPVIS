@@ -230,7 +230,12 @@ header .meta {
 
 /* ---- the two columns -------------------------------------------------- */
 
-main {
+/* SCOPED TO THE TOOL. This was a bare `main` rule, which was harmless while the
+   editor was the only screen and is not now: the home page's <main> inherited
+   flex, its grid became a flex item, and a grid that is a flex item shrinks to
+   its content instead of filling the row. Two thirds of that page rendered
+   black with the cards squeezed into 690px of a 1350px window. */
+body[data-view='editor'] main {
   display: flex;
   min-height: 0;
 }

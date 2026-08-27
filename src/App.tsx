@@ -827,9 +827,30 @@ export default function App() {
     ed.attach(canvasRef.current as HTMLCanvasElement)
     setSt(ed.status())
 
+    /* OPENING A MAP THAT ALREADY EXISTS.
+     *
+     * ?img= is how a painting has always been dropped in, and it stays. But a
+     * map in the database has no ?img: the home page links to ?id=hub and the
+     * painting is in object storage, so the editor has to go and get it. It
+     * used to load nothing at all and say "no painting", which severed the
+     * whole link between the dashboard and the tool.
+     *
+     * The scene is served at /work/<id>/scene.png, the same address the tool
+     * has always used, which now resolves through the platform. */
     const q = new URLSearchParams(location.search)
     const img = q.get('img')
-    if (img) ed.loadPainting(img, q.get('id') || slug(img.split('/').pop() || 'scene')).catch(() => ed.say('could not load ' + img))
+    const id = q.get('id')
+    if (img) {
+      void ed.loadPainting(img, id || slug(img.split('/').pop() || 'scene')).catch(() => ed.say('could not load ' + img))
+    } else if (id) {
+      const from = `/work/${encodeURIComponent(id)}/scene.png`
+      void fetch(from, { method: 'HEAD' })
+        .then((r) => {
+          if (!r.ok) throw new Error('no painting saved for ' + id)
+          return ed.loadPainting(from, id)
+        })
+        .catch(() => ed.say(`${id} has no painting yet · drop one in`))
+    }
 
     return () => ed.detach()
   }, [])

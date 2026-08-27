@@ -1,19 +1,18 @@
 /* Home, once you are signed in.
  *
- * NOT a room, not a desk, not a bookshelf with maps in it. Skeuomorphism is
- * where this kind of thing goes wrong: a fake wooden shelf is a costume over a
- * list, it gets in the way the second you have twenty maps, and it looks like
- * somebody's idea of charming rather than somebody's tool.
+ * Not a room, not a desk, not a bookshelf with maps in it. Skeuomorphism is
+ * where this goes wrong: a fake wooden shelf is a costume over a list, and it
+ * gets in the way the moment you have twenty maps.
  *
- * So this is an interface. What makes it not generic is that the ONLY art on it
- * is the maps themselves, at real pixel scale, big, unfiltered, on a surface
- * dark enough to let painted colour be the brightest thing on the screen. The
- * craft goes into the type, the spacing, the edges and the motion. Everything
- * else gets out of the way of the pictures.
+ * So it is an interface, and what stops it being a blank list is that the newest
+ * map runs across the top at full width as a real banner, and every card below
+ * is a big unfiltered painting. The only colour on the page comes out of the
+ * work. Chrome stays out of the way.
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link, go } from './router'
-import { useSession, signOut } from './session'
+import { useSession } from './session'
+import { Settings } from './Settings'
 
 type MapRow = {
   id: string
@@ -36,11 +35,13 @@ const when = (iso: string) => {
   const d = Math.round(s / 86400)
   return d < 30 ? d + ' days ago' : new Date(iso).toLocaleDateString()
 }
+const shot = (m: MapRow) => (m.published != null ? `/api/v1/maps/${m.slug}/file/${m.published}/scene.png` : null)
 
 export default function Home() {
   const { user, loading } = useSession()
   const [maps, setMaps] = useState<MapRow[] | null>(null)
   const [q, setQ] = useState('')
+  const [settings, setSettings] = useState(false)
 
   useEffect(() => {
     if (loading) return
@@ -54,32 +55,28 @@ export default function Home() {
       .catch(() => setMaps([]))
   }, [user, loading])
 
-  const shown = (maps || []).filter((m) => !q || (m.title + m.slug).toLowerCase().includes(q.toLowerCase()))
+  const shown = useMemo(
+    () => (maps || []).filter((m) => !q || (m.title + m.slug).toLowerCase().includes(q.toLowerCase())),
+    [maps, q],
+  )
+  // the most recently touched map that has something to show leads the page
+  const lead = !q ? shown.find((m) => shot(m)) : undefined
+  const rest = lead ? shown.filter((m) => m.id !== lead.id) : shown
 
   return (
     <div className="home">
       <header className="home-bar">
         <span className="home-mark">MAPVIS</span>
         <div className="home-bar-r">
-          {maps && maps.length > 4 ? (
-            <input
-              className="home-find"
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="find"
-              spellCheck={false}
-            />
-          ) : null}
-          <Link to="/account" className="home-icon" aria-label="settings" title="settings">
+          <input
+            className="home-find"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="find a map"
+            spellCheck={false}
+          />
+          <button className="home-icon" aria-label="settings" title="settings" onClick={() => setSettings(true)}>
             <Gear />
-          </Link>
-          <button
-            className="home-icon"
-            aria-label="sign out"
-            title="sign out"
-            onClick={() => void signOut().then(() => go('/'))}
-          >
-            <Out />
           </button>
         </div>
       </header>
@@ -87,36 +84,61 @@ export default function Home() {
       <main className="home-body">
         {maps === null ? (
           <div className="home-wait" />
+        ) : maps.length === 0 ? (
+          <Blank />
         ) : (
-          <div className="grid">
-            <button className="card new" onClick={() => go('/edit')}>
-              <span className="new-plus" aria-hidden>
-                +
-              </span>
-              <span className="new-say">new map</span>
-              <span className="new-sub">start from a painting</span>
-            </button>
-
-            {shown.map((m) => (
-              <Card key={m.id} m={m} />
-            ))}
-          </div>
+          <>
+            {lead && <Lead m={lead} />}
+            <div className="grid">
+              <button className="card new" onClick={() => go('/edit')}>
+                <span className="new-plus" aria-hidden>
+                  +
+                </span>
+                <span className="new-say">new map</span>
+                <span className="new-sub">start from a painting</span>
+              </button>
+              {rest.map((m) => (
+                <Card key={m.id} m={m} />
+              ))}
+            </div>
+          </>
         )}
       </main>
+
+      {settings && <Settings onClose={() => setSettings(false)} />}
     </div>
   )
 }
 
+/* The newest map, across the whole width. It is the one thing on this page that
+ * is allowed to be big, and it is what stops the screen reading as a list. */
+function Lead({ m }: { m: MapRow }) {
+  return (
+    <a className="lead" href={`/edit?id=${encodeURIComponent(m.slug)}`}>
+      <img src={shot(m) as string} alt="" />
+      <div className="lead-say">
+        <span className="lead-when">last opened {when(m.updated_at)}</span>
+        <h1>{m.title || m.slug}</h1>
+        <div className="lead-nums">
+          <span>
+            {m.w}&times;{m.h}
+          </span>
+          <span>{m.placements} placed</span>
+          <span>{m.anchors} named</span>
+          {m.published != null && <span>v{m.published}</span>}
+        </div>
+        <span className="lead-go">keep working</span>
+      </div>
+    </a>
+  )
+}
+
 function Card({ m }: { m: MapRow }) {
-  const live = m.published != null
+  const src = shot(m)
   return (
     <article className="card">
       <a className="card-art" href={`/edit?id=${encodeURIComponent(m.slug)}`}>
-        {live ? (
-          <img src={`/api/v1/maps/${m.slug}/file/${m.published}/scene.png`} alt="" loading="lazy" decoding="async" />
-        ) : (
-          <span className="card-none">not published</span>
-        )}
+        {src ? <img src={src} alt="" loading="lazy" decoding="async" /> : <span className="card-none">no painting yet</span>}
       </a>
       <div className="card-say">
         <div className="card-top">
@@ -124,33 +146,43 @@ function Card({ m }: { m: MapRow }) {
           <span className="card-when">{when(m.updated_at)}</span>
         </div>
         <div className="card-nums">
-          <span>{m.w}&times;{m.h}</span>
+          <span>
+            {m.w}&times;{m.h}
+          </span>
           <span>{m.placements} placed</span>
           <span className={m.anchors ? 'lit' : ''}>{m.anchors} named</span>
-          {live ? <span className="lit">v{m.published}</span> : null}
+          {m.published != null ? <span className="lit">v{m.published}</span> : null}
         </div>
         <div className="card-do">
           <a href={`/edit?id=${encodeURIComponent(m.slug)}`}>edit</a>
-          {live ? <Link to={`/maps/${m.slug}`}>walk</Link> : null}
+          {m.published != null ? <Link to={`/maps/${m.slug}`}>walk</Link> : null}
         </div>
       </div>
     </article>
   )
 }
 
-/* Icons are drawn on a pixel grid, not lifted from an icon set. Two of them,
- * because two is all this screen needs. */
+function Blank() {
+  return (
+    <div className="blank">
+      <h1>Nothing here yet.</h1>
+      <p>A map starts as one painting. Bring one in and cut the parts you can walk on out of it.</p>
+      <button className="sheet-btn" onClick={() => go('/edit')}>
+        Make your first map
+      </button>
+    </div>
+  )
+}
+
+/* Drawn on a pixel grid rather than lifted from an icon set. One of them,
+ * because one is all this bar needs now that signing out lives in the panel. */
 function Gear() {
   return (
     <svg viewBox="0 0 16 16" width="16" height="16" shapeRendering="crispEdges" aria-hidden>
-      <path fill="currentColor" d="M7 1h2v2H7zM7 13h2v2H7zM1 7h2v2H1zM13 7h2v2h-2zM3 3h2v2H3zM11 3h2v2h-2zM3 11h2v2H3zM11 11h2v2h-2zM6 6h4v4H6z" />
-    </svg>
-  )
-}
-function Out() {
-  return (
-    <svg viewBox="0 0 16 16" width="16" height="16" shapeRendering="crispEdges" aria-hidden>
-      <path fill="currentColor" d="M2 2h7v2H4v8h5v2H2zM10 5h2v2h-2zM12 7h3v2h-3zM10 9h2v2h-2z" />
+      <path
+        fill="currentColor"
+        d="M7 1h2v2H7zM7 13h2v2H7zM1 7h2v2H1zM13 7h2v2h-2zM3 3h2v2H3zM11 3h2v2h-2zM3 11h2v2H3zM11 11h2v2h-2zM6 6h4v4H6z"
+      />
     </svg>
   )
 }
