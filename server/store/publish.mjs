@@ -120,6 +120,10 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
      values ($1, $2, $3, $4::jsonb, $5, (select owner_id from maps where id = $1))`,
     [m.id, version, prefix, JSON.stringify(manifest), bytes],
   )
+  // publishing IS working on a map, so the dashboard should say so. Without
+  // this the home page kept leading with whichever map happened to be saved
+  // last, while the one just re-exported sat further down the grid.
+  await q('update maps set updated_at = now() where id = $1', [m.id])
 
   return {
     version,

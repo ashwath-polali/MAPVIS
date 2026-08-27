@@ -154,15 +154,43 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
         const hip = meta.character?.hip ?? 2
         const charH = meta.character?.heightPx ?? 18
 
+        /* The game's walk law, including hipDY.
+         *
+         * The band is tested at y + hipDY, not at y: feet sit a pixel or two
+         * below the point the collision is meant to read, and dropping that
+         * offset shifts every test by that much. Close enough to look right and
+         * wrong enough that Thor walks a pixel past a wall and jams against the
+         * next one. */
+        const hipDY = meta.character?.hipDY ?? 0
         const standable = (x: number, y: number) => {
-          const here = at(x, y)
+          const yy = y + hipDY
+          const here = at(x, yy)
           if (here <= (meta.encoding?.blocked ?? 0)) return false
           for (let dx = -hip; dx <= hip; dx++) {
-            const v = at(x + dx, y)
+            const v = at(x + dx, yy)
             if (v <= 0 || Math.abs(v - here) > tol) return false
           }
           return true
         }
+        /* Where the ground actually is, measured once off the levels plane.
+         * Everything on screen is framed against this rather than against the
+         * canvas the ground happens to sit inside. */
+        const land = (() => {
+          let x0 = meta.w
+          let y0 = meta.h
+          let x1 = 0
+          let y1 = 0
+          for (let y = 0; y < meta.h; y++)
+            for (let x = 0; x < meta.w; x++)
+              if (at(x, y) > (meta.encoding?.blocked ?? 0)) {
+                if (x < x0) x0 = x
+                if (y < y0) y0 = y
+                if (x > x1) x1 = x
+                if (y > y1) y1 = y
+              }
+          return x1 > x0 ? { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 } : { x: 0, y: 0, w: meta.w, h: meta.h }
+        })()
+
         const headingOf = (dx: number, dy: number) => {
           // the 2:1 squash, so a walking figure picks the view the game picks
           const a = Math.atan2(dy / yScale, dx)
@@ -202,17 +230,18 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
             cv.style.width = box.width + 'px'
             cv.style.height = box.height + 'px'
           }
-          /* THE WHOLE MAP, ALWAYS. Integer zoom, chosen to fit.
+          /* FIT THE LAND, NOT THE CANVAS.
            *
-           * It used to pick the largest zoom that fits the WIDTH and then pan to
-           * follow, which on a 640-tall map in a 756-tall window cropped 524
-           * pixels off the top and cut the volcano in half. A walk test exists
-           * to show you the whole place; scrolling it away defeats the point. */
-          const zoom = Math.max(1, Math.min(6, Math.floor(Math.min(box.width / meta.w, box.height / meta.h))))
+           * A painting is grown with transparent margin so the map can spread,
+           * so the hub is 688x640 with ground only in the middle 400 rows.
+           * Fitting the canvas picked zoom 1 and left the island a stamp in a
+           * field of black. Fitting the ground it actually has picks 2, and the
+           * empty margin is cropped rather than framed. */
+          const zoom = Math.max(1, Math.min(8, Math.floor(Math.min(box.width / land.w, box.height / land.h))))
           const w = meta.w * zoom
           const h = meta.h * zoom
-          const ox = Math.round((box.width - w) / 2)
-          const oy = Math.round((box.height - h) / 2)
+          const ox = Math.round(box.width / 2 - (land.x + land.w / 2) * zoom)
+          const oy = Math.round(box.height / 2 - (land.y + land.h / 2) * zoom)
 
           g.setTransform(dpr, 0, 0, dpr, 0, 0)
           g.imageSmoothingEnabled = false

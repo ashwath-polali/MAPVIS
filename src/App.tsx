@@ -207,7 +207,7 @@ const folderOf = (it: api.LibItem): string => {
  * and losing them mid-round turns a troll south the moment it becomes a rock. */
 const lookOfState = (f: api.AssetState): AssetLook => {
   const L: AssetLook = f.frames && f.frames.length
-    ? { kind: 'animated', frames: f.frames.slice(), fps: f.fps || 6 }
+    ? { kind: 'animated', frames: f.frames.slice(), fps: f.fps || 8 }
     : { kind: 'static', src: f.src }
   if (f.dirs && Object.keys(f.dirs).length) {
     L.dirs = { ...f.dirs }
@@ -219,7 +219,7 @@ const lookOfState = (f: api.AssetState): AssetLook => {
 const lookOfItem = (it: api.LibItem): AssetLook => {
   const L: AssetLook =
     it.kind === 'animated'
-      ? { kind: 'animated', frames: (it.frames || []).slice(), fps: it.fps || 6 }
+      ? { kind: 'animated', frames: (it.frames || []).slice(), fps: it.fps || 8 }
       : { kind: 'static', src: it.src }
   if (it.dirs && Object.keys(it.dirs).length) {
     L.dirs = { ...it.dirs }
@@ -1974,7 +1974,7 @@ export default function App() {
           items.map(async (it) => ({
             name: it.name,
             kind: it.kind,
-            fps: it.fps || 6,
+            fps: it.fps || 8,
             raw: await framesOf(it),
           })),
         )
@@ -3231,7 +3231,7 @@ export default function App() {
         const res = await api.assetCrop(e.sceneId, name, r, {
           kind: a.kind,
           frames,
-          fps: a.fps || 6,
+          fps: a.fps || 8,
           dirKeys: parts.keys,
           ...(alone ? { keepCopy: true, suffix: 'crop' } : {}),
         })

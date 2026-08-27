@@ -1704,7 +1704,7 @@ export class Editor {
     }
     if (it.kind === 'animated') {
       a.frames = it.frames ? it.frames.slice() : []
-      a.fps = it.fps || 6
+      a.fps = it.fps || 8
     } else {
       a.src = it.src
     }
@@ -2108,7 +2108,7 @@ export class Editor {
     for (const a of list) {
       if (item.kind === 'animated') {
         a.frames = item.frames ? item.frames.slice() : []
-        a.fps = item.fps || 6
+        a.fps = item.fps || 8
       } else {
         a.src = item.src
       }
@@ -2402,7 +2402,7 @@ export class Editor {
     a.kind = item.kind
     if (item.kind === 'animated') {
       a.frames = item.frames ? item.frames.slice() : []
-      a.fps = item.fps || 6
+      a.fps = item.fps || 8
       delete a.src
     } else {
       a.src = item.src
@@ -2954,7 +2954,7 @@ export class Editor {
       }
       if (q.item.kind === 'animated') {
         a.frames = q.item.frames ? q.item.frames.slice() : []
-        a.fps = q.item.fps || 6
+        a.fps = q.item.fps || 8
       } else {
         a.src = q.item.src
       }
@@ -3005,7 +3005,7 @@ export class Editor {
     if (facing && L.dirs) {
       const set = L.dirs[facing] || L.dirs[NEAREST_DIR[facing] || 'south'] || L.dirs.south
       if (set && set.length) {
-        const i = set.length > 1 ? Math.floor(gait * (L.fps || 6)) % set.length : 0
+        const i = set.length > 1 ? Math.floor(gait * (L.fps || 8)) % set.length : 0
         return this.assetImg(set[i])
       }
     }
@@ -3017,12 +3017,12 @@ export class Editor {
       const rest = Object.keys(L.dirs).find((k) => L.dirs![k].includes(L.src || '')) || 'south'
       const set = L.dirs[rest] || L.dirs.south
       if (set && set.length) {
-        const i = set.length > 1 ? Math.floor(gait * (L.fps || 6)) % set.length : 0
+        const i = set.length > 1 ? Math.floor(gait * (L.fps || 8)) % set.length : 0
         return this.assetImg(set[i])
       }
     }
     if (L.kind === 'animated' && L.frames && L.frames.length) {
-      const i = Math.floor(now * (L.fps || 6)) % L.frames.length
+      const i = Math.floor(now * (L.fps || 8)) % L.frames.length
       return this.assetImg(L.frames[i])
     }
     return L.src ? this.assetImg(L.src) : null
