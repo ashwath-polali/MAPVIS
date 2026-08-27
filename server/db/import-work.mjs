@@ -63,8 +63,8 @@ const E = env()
 const owner = DRY
   ? { id: '00000000-0000-0000-0000-000000000000', email: 'dry@run' }
   : await ensureUser({
-      email: E.BOOTSTRAP_EMAIL || 'atc@bonneylake.local',
-      password: E.BOOTSTRAP_PASSWORD || 'change-me-on-first-login',
+      email: E.BOOTSTRAP_EMAIL || 'algorithmicthinkingclub@gmail.com',
+      password: E.BOOTSTRAP_PASSWORD || 'atcblhs305',
       displayName: 'Algorithmic Thinking Club',
       // the club account is wired to a linked machine rather than holding keys
       claude: 'relay',

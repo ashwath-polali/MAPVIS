@@ -39,8 +39,8 @@ export async function mapIdFor(slug, { create = false } = {}) {
   if (!m && create) {
     const E = env()
     const owner = await ensureUser({
-      email: E.BOOTSTRAP_EMAIL || 'atc@bonneylake.local',
-      password: E.BOOTSTRAP_PASSWORD || 'change-me-on-first-login',
+      email: E.BOOTSTRAP_EMAIL || 'algorithmicthinkingclub@gmail.com',
+      password: E.BOOTSTRAP_PASSWORD || 'atcblhs305',
       displayName: 'Algorithmic Thinking Club',
       claude: 'relay',
       pixellab: 'relay',

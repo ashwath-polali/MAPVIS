@@ -15,6 +15,7 @@
 import crypto from 'node:crypto'
 import { q, one, many, tx } from '../db/pool.mjs'
 import { store, keys } from './blobs.mjs'
+import { packAtlas, atlasify } from './atlas.mjs'
 
 const sha = (b) => crypto.createHash('sha256').update(b).digest('hex')
 
@@ -63,9 +64,40 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
   }
 
   const all = new Map(files)
+
+  /* EVERY FRAME PACKED INTO ONE SHEET.
+   *
+   * The hub publishes 800 pngs, and opening it once cost 800 downloads, which
+   * emptied Backblaze's 2,500-a-day free allowance in three page loads. Packed,
+   * a map is five requests. Nothing is resampled and nothing is re-encoded
+   * lossily; the frames come back out at exactly the size they went in.
+   *
+   * The loose pngs still ship alongside. Storage is not the constraint,
+   * transactions are, and keeping them means a reader written before this
+   * existed is untouched. */
+  let packed = null
+  if (files.size) {
+    packed = packAtlas(files)
+    if (packed) {
+      all.set('atlas.png', packed.png)
+      all.set('atlas.json', Buffer.from(JSON.stringify(packed.index)))
+    }
+  }
+
   for (const [name, buf] of Object.entries(images)) if (buf) all.set(name, buf)
   all.set('map.json', Buffer.from(JSON.stringify(map, null, 2)))
-  all.set('assets.json', Buffer.from(JSON.stringify(assetsJson, null, 2)))
+  all.set(
+    'assets.json',
+    Buffer.from(
+      JSON.stringify(
+        packed
+          ? { ...assetsJson, atlas: 'atlas.png', assets: atlasify(assetsJson.assets || [], packed.index) }
+          : assetsJson,
+        null,
+        2,
+      ),
+    ),
+  )
 
   let bytes = 0
   const manifest = {}
@@ -81,7 +113,14 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
     [m.id, version, prefix, JSON.stringify(manifest), bytes],
   )
 
-  return { version, prefix, files: [...all.keys()], bytes, anchors: anchors.length }
+  return {
+    version,
+    prefix,
+    files: [...all.keys()],
+    bytes,
+    anchors: anchors.length,
+    atlas: packed ? { frames: packed.count, w: packed.index.w, h: packed.index.h } : null,
+  }
 }
 
 // What the game asks for. Version defaults to the newest, which is what
