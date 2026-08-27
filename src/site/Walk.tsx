@@ -202,15 +202,17 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
             cv.style.width = box.width + 'px'
             cv.style.height = box.height + 'px'
           }
-          // as close as fits whole. The camera follows once the map is bigger
-          // than the window, which is what stops a big island being a postage
-          // stamp in the middle of a black screen.
-          const z = Math.max(1, Math.floor(Math.min(box.width / meta.w, box.height / meta.h) * 2) / 1 || 1)
-          const zoom = Math.max(1, Math.min(4, Math.round(z)))
+          /* THE WHOLE MAP, ALWAYS. Integer zoom, chosen to fit.
+           *
+           * It used to pick the largest zoom that fits the WIDTH and then pan to
+           * follow, which on a 640-tall map in a 756-tall window cropped 524
+           * pixels off the top and cut the volcano in half. A walk test exists
+           * to show you the whole place; scrolling it away defeats the point. */
+          const zoom = Math.max(1, Math.min(6, Math.floor(Math.min(box.width / meta.w, box.height / meta.h))))
           const w = meta.w * zoom
           const h = meta.h * zoom
-          const ox = w <= box.width ? (box.width - w) / 2 : Math.max(Math.min(box.width / 2 - px * zoom, 0), box.width - w)
-          const oy = h <= box.height ? (box.height - h) / 2 : Math.max(Math.min(box.height / 2 - py * zoom, 0), box.height - h)
+          const ox = Math.round((box.width - w) / 2)
+          const oy = Math.round((box.height - h) / 2)
 
           g.setTransform(dpr, 0, 0, dpr, 0, 0)
           g.imageSmoothingEnabled = false
@@ -233,7 +235,11 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
             let face = (v.p as { facing?: string }).facing || 'south'
             let flip = false
             if (v.life) {
-              const s = lifeAt(v.life, t, { x: v.p.x, y: v.p.y })
+              /* canStand is what keeps a walkOnly figure on the ground. Leaving
+               * it out is why the fishwives were strolling across the sea wall:
+               * lifeAt has nothing to test against and happily walks a wander
+               * straight over anything. The game passes it; so must this. */
+              const s = lifeAt(v.life, t, { x: v.p.x, y: v.p.y }, standable)
               pts[i] = { x: v.p.x + s.dx, y: v.p.y + s.dy, r: 3 }
               alpha = s.alpha
               face = s.facing

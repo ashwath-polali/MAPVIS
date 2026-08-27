@@ -77,7 +77,15 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
    * existed is untouched. */
   let packed = null
   if (files.size) {
-    packed = packAtlas(files)
+    /* KEYED THE WAY THE PLACEMENTS ASK FOR THEM.
+     *
+     * files is keyed by path inside assets/ ("gull/0.png") while every url in
+     * assets.json carries the folder ("assets/gull/0.png"). Packing the raw
+     * keys built an index nothing could look itself up in, so every frame
+     * missed, fell back to a loose file, and the atlas shipped as 333 KB of
+     * dead weight beside the 794 downloads it was written to prevent. It looked
+     * like it worked because the fallback works. */
+    packed = packAtlas(new Map([...files].map(([k, v]) => ['assets/' + k, v])))
     if (packed) {
       all.set('atlas.png', packed.png)
       all.set('atlas.json', Buffer.from(JSON.stringify(packed.index)))
