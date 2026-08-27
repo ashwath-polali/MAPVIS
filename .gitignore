@@ -75,3 +75,6 @@ __pycache__/
 
 .vercel
 .env*
+
+# scratch probes
+.probe.mjs
