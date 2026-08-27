@@ -53,9 +53,29 @@ const ops = { a: 0, b: 0, tripped: false }
 export const bucketOps = () => ({ ...ops, ceiling: OP_CEILING() })
 export const resetBucketOps = () => { ops.a = 0; ops.b = 0; ops.tripped = false }
 
+/* What has been spent since this was last asked, taken and zeroed in one step.
+ *
+ * Read once at the end of a request so the month's total can be incremented by
+ * a single row update. Counting into the database per operation would mean a
+ * Postgres write for every png, which costs more than the thing it measures.
+ *
+ * DELIBERATELY A SECOND COUNTER. The ceiling above has to keep counting for the
+ * whole life of the process, because that is what makes it a loop detector;
+ * zeroing it here would reset the guard on every request and a loop spread over
+ * many requests would never trip it. So this one is only for bookkeeping and
+ * the two never share a variable. */
+const since = { a: 0, b: 0 }
+export function takeBucketOps() {
+  const d = { a: since.a, b: since.b }
+  since.a = 0
+  since.b = 0
+  return d
+}
+
 function meter(b) {
   const spend = (cls) => {
     ops[cls]++
+    since[cls]++
     if (ops.a + ops.b <= OP_CEILING()) return
     if (!ops.tripped) {
       ops.tripped = true

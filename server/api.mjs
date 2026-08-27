@@ -46,6 +46,9 @@ import {
   libraryOf,
   serveFromStore,
   hydrateMap,
+  bucketBudget,
+  noteBucketUsage,
+  ownerOfSlug,
   pushItem,
   dropItem,
   snapshotVersion,
@@ -105,12 +108,20 @@ const MIME = { '.png': 'image/png', '.jpg': 'image/jpeg', '.json': 'application/
  * gate must not stand in front of them. Auth has its own handler and never
  * reaches the gate; these are the ones whose `id` means something else or
  * nothing at all. */
-const OPEN_POSTS = new Set(['/api/stop', '/api/propose', '/api/account-import', '/api/character-import'])
+/* The import routes were here because their id means something else. It does
+ * not: both carry the target map in sceneId, which the gate now reads, and
+ * both end in pushLibrary writing rows into that map. Leaving them exempt let
+ * a signed-in stranger overwrite another account's library items by name. */
+const OPEN_POSTS = new Set(['/api/stop', '/api/propose'])
 
 export function api(req, res, next) {
   const url = new URL(req.url, 'http://local')
   const p = url.pathname
   if (!p.startsWith('/api/') && !p.startsWith('/work/')) return next ? next() : notFound(res)
+  if (overRate(req)) {
+    res.setHeader('Retry-After', '2')
+    return send(res, 429, { error: 'too many requests' })
+  }
   Promise.resolve(serve(req, res, p, url)).catch((e) => {
     // a missing key is a condition, not a crash, and it has to say which one so
     // the ui can put the right wall in front of the right button
@@ -127,8 +138,38 @@ export function api(req, res, next) {
  * dozen calls deep in pixellab.mjs need it and threading it through every
  * signature is how one of them ends up billing the wrong person. */
 async function serve(req, res, p, url) {
-  // the read api is public and spends nothing, so it never pays for a lookup
-  if (p.startsWith('/api/v1/')) return route(req, res, p, url)
+  /* THE MONTH'S BUCKET BUDGET, CHECKED BEFORE ANYTHING CAN SPEND IT.
+   *
+   * R2 bills overage and has no spend cap to set, so this is the only thing
+   * standing between a mistake and a card. Checked once per request against a
+   * total cached for a minute, and only in front of the routes that actually
+   * read bytes, so an ordinary api call pays nothing for it. Refusing is the
+   * correct behaviour: a tool that stops working is recoverable and a bill is
+   * not. */
+  if (p.startsWith('/work/') || p.startsWith('/api/v1/')) {
+    const bud = await bucketBudget()
+    if (bud && (bud.overA || bud.overB)) {
+      res.setHeader('Retry-After', '3600')
+      return send(res, 503, {
+        error:
+          `MAPVIS has reached its self-imposed object storage limit for ${bud.month} ` +
+          `(${bud.b.toLocaleString()} reads, ${bud.a.toLocaleString()} writes). Nothing has been billed: ` +
+          `this ceiling sits below the free allowance on purpose. Raise R2_MONTHLY_READ_LIMIT if this is expected.`,
+        month: bud.month,
+        reads: bud.b,
+        writes: bud.a,
+      })
+    }
+  }
+  // the read api is public and spends nothing on a lookup, so it goes straight
+  // through once the budget above has been honoured
+  if (p.startsWith('/api/v1/')) {
+    try {
+      return await route(req, res, p, url)
+    } finally {
+      noteBucketUsage()
+    }
+  }
   let ctx = {}
   try {
     const user = await currentUser(req)
@@ -139,10 +180,82 @@ async function serve(req, res, p, url) {
   } catch {
     /* no database configured is the local tool it has always been */
   }
-  return withRequest(ctx, () => route(req, res, p, url))
+  try {
+    return await withRequest(ctx, () => route(req, res, p, url))
+  } finally {
+    // whatever this request spent, counted into the month exactly once
+    noteBucketUsage()
+  }
+}
+
+/* NOBODY GETS TO SPEND THE BUCKET IN A LOOP.
+ *
+ * There was no rate limit anywhere in this server, and /work/ is dispatched
+ * before any authentication, so a stranger with a slug could ask for pngs as
+ * fast as their connection allowed and every single one was an R2 read plus a
+ * Vercel invocation. That is the only realistic way this project sees a bill,
+ * and it is not the owner reopening maps.
+ *
+ * A token bucket per address, held in the instance. Per-instance state is a
+ * weaker limit than a shared one, but it is a real one: each instance a caller
+ * lands on independently refuses them, and the cost of a shared counter is a
+ * Postgres round trip on the hot path, which is worse than the thing it stops.
+ * SIZED AGAINST A REAL MAP OPEN, which is the thing that must never trip it.
+ * Opening the hub asks for about 250 pngs as fast as the browser will fire
+ * them, so a limit tuned like an api rate limit refuses an author halfway
+ * through their own island. The burst carries two of those back to back and the
+ * refill sustains one every couple of seconds, which no person does and which
+ * still leaves the monthly ceiling as the thing that actually bounds spend. */
+const RATE = { perSec: Number(process.env.RATE_PER_SEC || 120), burst: Number(process.env.RATE_BURST || 600) }
+const buckets = new Map()
+function overRate(req) {
+  const who = String(req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'local').split(',')[0].trim()
+  const now = Date.now()
+  let b = buckets.get(who)
+  if (!b) {
+    // bounded, because the key is attacker-controlled and an unbounded map is
+    // its own denial of service
+    if (buckets.size > 5000) buckets.clear()
+    b = { tokens: RATE.burst, at: now }
+    buckets.set(who, b)
+  }
+  b.tokens = Math.min(RATE.burst, b.tokens + ((now - b.at) / 1000) * RATE.perSec)
+  b.at = now
+  if (b.tokens < 1) return true
+  b.tokens--
+  return false
 }
 
 async function route(req, res, p, url) {
+  /* A MAP NAMED IN A PATH IS STILL A MAP SOMEBODY OWNS.
+   *
+   * The gate below is POST-only, which left every GET that names a map wide
+   * open: /work/<slug>/** served any account's working library to anyone who
+   * could guess a slug, and /api/doc/<slug> handed over the entire document
+   * including the hand-drawn masks. Slugs are enumerable, because
+   * /api/v1/maps lists them all. On a host each of those requests is also a
+   * paid bucket read, so this was simultaneously the privacy hole and the way
+   * somebody else could spend the storage bill.
+   *
+   * The user was already resolved by serve(), so this costs one cached owner
+   * lookup rather than a session round trip per png.
+   *
+   * An ownerless map stays open on purpose. MAPVIS has always worked signed
+   * out, and a map nobody has claimed is not a map anybody is being kept out
+   * of; that is the same rule the POST gate states at its own comment. */
+  const named = p.startsWith('/work/')
+    ? p.slice('/work/'.length).split('/')[0]
+    : /^\/api\/(doc|library|scene|asks|keeps|style)\//.test(p)
+      ? p.split('/')[3]
+      : ''
+  if (named) {
+    const ownerId = await ownerOfSlug(safeId(decodeURIComponent(named)))
+    if (ownerId) {
+      const me = request().user
+      if (!me || me.id !== ownerId) return send(res, 403, { error: `${named} belongs to another account` })
+    }
+  }
+
   if (p.startsWith('/work/')) return serveWork(res, p.slice('/work/'.length), req)
   if (p.startsWith('/api/v1/')) return readApi(req, res, p, url)
   // deleting a map lives with auth rather than with the map routes, because it
@@ -163,7 +276,19 @@ async function route(req, res, p, url) {
    * what makes a map yours instead of merely listed under you. */
   if (req.method === 'POST' && !OPEN_POSTS.has(p)) {
     const b = await body(req)
-    const slug = b && b.id ? safeId(b.id) : ''
+    /* THE GATE HAS TO NAME THE MAP THE HANDLER WILL NAME.
+     *
+     * It read b.id alone, and two things followed. The import routes carry
+     * their target in b.sceneId, so they named a map the gate never looked at,
+     * and pushItem's upsert overwrites a row by (map_id, name), which is
+     * somebody else's library rewritten rather than merely read. And a POST
+     * with no id at all produced '' here and short-circuited, while every
+     * handler resolves it through safeId, whose default is 'untitled', so a map
+     * actually called untitled was writable by anyone.
+     *
+     * Resolved exactly the way the handlers resolve it, so the gate and the
+     * code it guards can no longer disagree about which map is in play. */
+    const slug = safeId(b?.sceneId || b?.slug || b?.id)
     if (slug && platformOn()) {
       const owner = await one('select u.id, u.email from maps m join users u on u.id = m.owner_id where m.slug = $1', [slug])
       if (owner) {

@@ -8,7 +8,7 @@
 // urls already sitting inside every saved document keep resolving.
 import crypto from 'node:crypto'
 import { q, one, many } from '../db/pool.mjs'
-import { store, keys, onBlobWrite } from './blobs.mjs'
+import { store, keys, onBlobWrite, takeBucketOps } from './blobs.mjs'
 import { getDoc, putDoc, getMapBySlug, createMap, ensureUser } from './maps.mjs'
 import { env, need } from '../db/env.mjs'
 
@@ -123,6 +123,102 @@ export async function libraryOf(slug) {
     if (r.origin && (r.origin.objectId || r.origin.characterId)) it.canState = true
     return it
   })
+}
+
+/* Who owns a map, cached, because this is asked on every png.
+ *
+ * Opening a map is a couple of hundred image requests and each one has to be
+ * checked, so an uncached select here would be a couple of hundred round trips
+ * added to the thing this whole session has been trying to make cheaper. An
+ * owner effectively never changes, and the miss is re-asked every half minute,
+ * so handing back a stale answer is bounded and the failure mode is that a map
+ * transferred seconds ago stays readable by its old owner for thirty seconds. */
+const OWNER_TTL = 30_000
+const owners = new Map()
+export async function ownerOfSlug(slug) {
+  if (!platformOn() || !slug) return null
+  const hit = owners.get(slug)
+  if (hit && Date.now() - hit.at < OWNER_TTL) return hit.id
+  try {
+    const r = await one('select owner_id from maps where slug = $1', [slug])
+    const id = r?.owner_id || null
+    if (owners.size > 2000) owners.clear()
+    owners.set(slug, { id, at: Date.now() })
+    return id
+  } catch {
+    return null
+  }
+}
+export const forgetOwner = (slug) => owners.delete(slug)
+
+// ---- what the bucket has been asked to do, and the line it will not cross ---
+
+/* R2 HAS NO SPEND CAP, SO THE CAP LIVES HERE.
+ *
+ * Cloudflare bills overage and offers no dashboard setting to stop at the free
+ * tier, so "we will simply not go over" is a hope unless something enforces it.
+ * The free allowance is 10 million reads and 1 million writes a month. These
+ * default to eighty percent of that, which leaves room to notice and react
+ * rather than room to be surprised.
+ *
+ * Deliberately low-frequency: the totals are read at most once a minute and
+ * written at most once per request, so the guard costs far less than the thing
+ * it guards. */
+const LIMITS = () => ({
+  b: Number(env().R2_MONTHLY_READ_LIMIT || 8_000_000),
+  a: Number(env().R2_MONTHLY_WRITE_LIMIT || 800_000),
+})
+const monthKey = () => new Date().toISOString().slice(0, 7)
+
+let budgetMemo = { at: 0, row: null }
+export async function bucketBudget() {
+  if (!platformOn()) return null
+  const now = Date.now()
+  if (budgetMemo.row && now - budgetMemo.at < 60_000) return budgetMemo.row
+  try {
+    const r = await one('select class_a, class_b from bucket_usage where month = $1', [monthKey()])
+    const lim = LIMITS()
+    const row = {
+      month: monthKey(),
+      a: Number(r?.class_a || 0),
+      b: Number(r?.class_b || 0),
+      limitA: lim.a,
+      limitB: lim.b,
+      overA: Number(r?.class_a || 0) >= lim.a,
+      overB: Number(r?.class_b || 0) >= lim.b,
+    }
+    budgetMemo = { at: now, row }
+    return row
+  } catch {
+    return null
+  }
+}
+
+// Called once at the end of a request, with whatever that request spent.
+export async function noteBucketUsage() {
+  if (!platformOn()) return
+  const d = takeBucketOps()
+  if (!d.a && !d.b) return
+  try {
+    await q(
+      `insert into bucket_usage (month, class_a, class_b, updated_at) values ($1,$2,$3, now())
+       on conflict (month) do update set
+         class_a = bucket_usage.class_a + excluded.class_a,
+         class_b = bucket_usage.class_b + excluded.class_b,
+         updated_at = now()`,
+      [monthKey(), d.a, d.b],
+    )
+    // the cached total is now wrong by exactly this much, so correct it rather
+    // than waiting out the minute
+    if (budgetMemo.row) {
+      budgetMemo.row.a += d.a
+      budgetMemo.row.b += d.b
+      budgetMemo.row.overA = budgetMemo.row.a >= budgetMemo.row.limitA
+      budgetMemo.row.overB = budgetMemo.row.b >= budgetMemo.row.limitB
+    }
+  } catch {
+    /* losing a count must never fail a request that already succeeded */
+  }
 }
 
 // ---- serving a png ---------------------------------------------------------
