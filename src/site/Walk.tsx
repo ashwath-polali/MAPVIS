@@ -8,13 +8,26 @@
  * of eight hundred. Frames come out of one sheet by rectangle, which is the
  * same drawImage the loose files needed, minus 794 downloads.
  *
- * The walk law is the game's: the levels png read per pixel, a hip band tested
- * either side of the feet so nobody balances on one legal pixel, and the two
- * axes resolved separately so a wall stops you without stopping the slide along
- * it.
+ * THE WALK LAW IS IMPORTED, NOT REWRITTEN.
+ *
+ * This file used to carry its own copy of the step test, and it had drifted
+ * four ways from the one the editor runs: it probed the hip band at y + hipDY
+ * where the real law probes y - hipDY, it demanded every pixel across the band
+ * be legal where the real law checks exactly the two hip points, it compared
+ * heights against the destination instead of against the level being stepped
+ * off, and it had none of the escape clause that lets a character standing on a
+ * blocked pixel move at all. The result was invisible walls, a character who
+ * could walk off the quay, and a walk test that disagreed with the tool that
+ * drew the mask, which makes it worse than no walk test.
+ *
+ * So canStandFrom and Walker come from src/core/walk.ts, the same functions the
+ * levels step uses, driven through a tiny adapter over the published levels png.
+ * They cannot disagree now, because there is only one of them.
  */
 import { useEffect, useRef, useState } from 'react'
 import { cleanLife, lifeAt, separate, type Life } from '../core/life'
+import { Walker, canStand, defaultCfg, type WalkCfg } from '../core/walk'
+import type { MaskDoc } from '../core/mask'
 
 type Rect = [number, number, number, number]
 type Placed = {
@@ -55,6 +68,15 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
   const [state, setState] = useState<'loading' | 'playing' | 'failed'>('loading')
   const [near, setNear] = useState('')
   const [why, setWhy] = useState('')
+  /* The camera, in a ref beside the state.
+   *
+   * The draw loop is inside an effect that must not restart when the camera
+   * changes, because restarting it reloads the atlas and puts Thor back at the
+   * spawn. The ref is what the loop reads; the state is only what the button
+   * renders itself from. */
+  const [mode, setMode] = useState<'island' | 'pov'>('island')
+  const modeRef = useRef(mode)
+  modeRef.current = mode
 
   useEffect(() => {
     let dead = false
@@ -162,16 +184,19 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
          * wrong enough that Thor walks a pixel past a wall and jams against the
          * next one. */
         const hipDY = meta.character?.hipDY ?? 0
-        const standable = (x: number, y: number) => {
-          const yy = y + hipDY
-          const here = at(x, yy)
-          if (here <= (meta.encoding?.blocked ?? 0)) return false
-          for (let dx = -hip; dx <= hip; dx++) {
-            const v = at(x + dx, yy)
-            if (v <= 0 || Math.abs(v - here) > tol) return false
-          }
-          return true
-        }
+
+        /* The map's own numbers, in the shape the shared law expects. near is
+         * stepTolerance under its editor name: how much height a step may cross.
+         * Anything the bundle does not carry falls back to the same defaults the
+         * exporter writes, so an older bundle walks the way it always did. */
+        const cfg: WalkCfg = { ...defaultCfg(), speed, hip, hipDY, near: tol, charH, yScale }
+
+        /* canStandFrom only ever asks a document for one thing, the level under
+         * a pixel, and markHit is the editor painting its refused-move layer,
+         * which a published map has nowhere to put. So the whole document
+         * interface a published bundle needs is these two. */
+        const docLike = { lvlAt: (x: number, y: number) => at(x, y), markHit: () => {} } as unknown as MaskDoc
+        const standable = (x: number, y: number) => canStand(docLike, cfg, x, y)
         /* Where the ground actually is, measured once off the levels plane.
          * Everything on screen is framed against this rather than against the
          * canvas the ground happens to sit inside. */
@@ -212,6 +237,7 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
           return any || { x, y }
         }
         ;({ x: px, y: py } = settle(px, py))
+        const walker = new Walker([px, py])
 
         /* A WALKER STANDING OFF THE GROUND CANNOT WALK.
          *
@@ -313,12 +339,9 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
           }
         })()
 
-        const headingOf = (dx: number, dy: number) => {
-          // the 2:1 squash, so a walking figure picks the view the game picks
-          const a = Math.atan2(dy / yScale, dx)
-          const k = Math.round((a * 8) / (Math.PI * 2) + 8) % 8
-          return ['east', 'south-east', 'south', 'south-west', 'west', 'north-west', 'north', 'north-east'][k]
-        }
+        // Which way Thor faces is now Walker's own dirFrom, off the same squash,
+        // so the picked view matches the editor's walk test rather than a second
+        // rounding of the same angle.
 
         let last = performance.now()
         const draw = (now: number) => {
@@ -327,22 +350,27 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
           last = now
           const t = now / 1000
 
-          let ax = 0
-          let ay = 0
-          if (keys.has('a') || keys.has('arrowleft')) ax -= 1
-          if (keys.has('d') || keys.has('arrowright')) ax += 1
-          if (keys.has('w') || keys.has('arrowup')) ay -= 1
-          if (keys.has('s') || keys.has('arrowdown')) ay += 1
-          const moving = !!(ax || ay)
-          if (moving) {
-            const m = Math.hypot(ax, ay) || 1
-            const nx = px + (ax / m) * speed * dt
-            const ny = py + (ay / m) * speed * dt * yScale
-            if (standable(nx, py)) px = nx
-            if (standable(px, ny)) py = ny
-            facing = headingOf(ax, ay)
-            stepT += dt
-          } else stepT = 0
+          /* The editor's own Walker, stepped with the editor's own keys map, so
+           * the axis slide, the height rule and the escape clause for standing
+           * on a blocked pixel are all the ones the levels step demonstrates
+           * rather than a second interpretation of them. */
+          const held: Record<string, boolean> = {}
+          for (const k of keys) held[k] = true
+          const moving = !!(
+            held.w ||
+            held.a ||
+            held.s ||
+            held.d ||
+            held.arrowup ||
+            held.arrowdown ||
+            held.arrowleft ||
+            held.arrowright
+          )
+          walker.step(docLike, cfg, held, dt)
+          px = walker.x
+          py = walker.y
+          facing = walker.facing
+          stepT = moving ? stepT + dt : 0
 
           const box = el.getBoundingClientRect()
           const dpr = Math.min(2, window.devicePixelRatio || 1)
@@ -359,11 +387,38 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
            * Fitting the canvas picked zoom 1 and left the island a stamp in a
            * field of black. Fitting the ground it actually has picks 2, and the
            * empty margin is cropped rather than framed. */
-          const zoom = Math.max(1, Math.min(8, Math.floor(Math.min(box.width / view.w, box.height / view.h))))
+          /* TWO WAYS TO WATCH THE SAME MAP.
+           *
+           * ISLAND frames the whole painting and holds still, which is what you
+           * want when the question is whether the map reads. POV picks a zoom
+           * close enough to see a character's feet against the ground and keeps
+           * him in the middle, which is what you want when the question is
+           * whether he walks. They differ only in zoom and in what the view is
+           * centred on, so nothing below this needs to know which is on.
+           *
+           * The camera is clamped to the painting in POV so walking to an edge
+           * shows the edge rather than sliding the island off into black. */
+          const pov = modeRef.current === 'pov'
+          const fit = Math.min(box.width / view.w, box.height / view.h)
+          const zoom = pov
+            ? Math.max(2, Math.min(8, Math.round(fit * 2.5)))
+            : Math.max(1, Math.min(8, Math.floor(fit)))
           const w = meta.w * zoom
           const h = meta.h * zoom
-          const ox = Math.round(box.width / 2 - (view.x + view.w / 2) * zoom)
-          const oy = Math.round(box.height / 2 - (view.y + view.h / 2) * zoom)
+          let cx = view.x + view.w / 2
+          let cy = view.y + view.h / 2
+          if (pov) {
+            const halfW = box.width / 2 / zoom
+            const halfH = box.height / 2 / zoom
+            // follow him, but never past the edge of the painting
+            cx = Math.min(Math.max(px, view.x + halfW), view.x + view.w - halfW)
+            cy = Math.min(Math.max(py, view.y + halfH), view.y + view.h - halfH)
+            // a painting narrower than the window simply centres
+            if (view.w < halfW * 2) cx = view.x + view.w / 2
+            if (view.h < halfH * 2) cy = view.y + view.h / 2
+          }
+          const ox = Math.round(box.width / 2 - cx * zoom)
+          const oy = Math.round(box.height / 2 - cy * zoom)
 
           g.setTransform(dpr, 0, 0, dpr, 0, 0)
           g.imageSmoothingEnabled = false
@@ -496,6 +551,24 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
       </div>
       <div className="walk-hint">
         <span>WASD or arrows to move</span>
+        <div className="walk-cam" role="group" aria-label="camera">
+          <button
+            type="button"
+            className={mode === 'island' ? 'on' : ''}
+            onClick={() => setMode('island')}
+            aria-pressed={mode === 'island'}
+          >
+            island
+          </button>
+          <button
+            type="button"
+            className={mode === 'pov' ? 'on' : ''}
+            onClick={() => setMode('pov')}
+            aria-pressed={mode === 'pov'}
+          >
+            pov
+          </button>
+        </div>
         <span className={near ? 'on' : ''}>{near || ''}</span>
       </div>
     </div>

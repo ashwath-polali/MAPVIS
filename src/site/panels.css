@@ -521,3 +521,31 @@
   color: #4d5661;
 }
 .walk-hint .on { color: #e6e9ee; }
+
+/* the camera switch, sitting in the middle of the hint bar. Two words rather
+ * than an icon, because nobody has to learn what a word means. */
+.walk-cam {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid #23282f;
+  border-radius: 3px;
+}
+.walk-cam button {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  padding: 3px 10px;
+  border-radius: 2px;
+  color: #4d5661;
+  font: inherit;
+  letter-spacing: 0.08em;
+  transition: color 120ms ease, background-color 120ms ease;
+}
+.walk-cam button:hover { color: #97a1ad; }
+.walk-cam button.on {
+  background: #1b2027;
+  color: #e6e9ee;
+}
+.walk-cam button:focus-visible { outline: 1px solid #3d7f6a; outline-offset: 1px; }
