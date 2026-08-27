@@ -14,7 +14,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import zlib from 'node:zlib'
 import crypto from 'node:crypto'
-import { env } from './env.mjs'
+import { env, need } from './env.mjs'
 import { q, one, closeDb } from './pool.mjs'
 import { store, keys } from '../store/blobs.mjs'
 import { publishBundle } from '../store/publish.mjs'
@@ -33,8 +33,8 @@ console.log(`${path.basename(file)}  ${w}x${h}  ${(png.length / 1024).toFixed(1)
 
 const E = env()
 const owner = await ensureUser({
-  email: E.BOOTSTRAP_EMAIL || 'algorithmicthinkingclub@gmail.com',
-  password: E.BOOTSTRAP_PASSWORD || 'atcblhs305',
+  email: need(`BOOTSTRAP_EMAIL`),
+  password: need(`BOOTSTRAP_PASSWORD`),
   displayName: 'Algorithmic Thinking Club',
   claude: 'relay',
   pixellab: 'relay',

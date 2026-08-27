@@ -10,7 +10,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { env } from './env.mjs'
+import { env, need } from './env.mjs'
 import { q, one, closeDb } from './pool.mjs'
 import { store, keys } from '../store/blobs.mjs'
 import { ensureUser, createMap, getMapBySlug, putDoc } from '../store/maps.mjs'
@@ -63,8 +63,8 @@ const E = env()
 const owner = DRY
   ? { id: '00000000-0000-0000-0000-000000000000', email: 'dry@run' }
   : await ensureUser({
-      email: E.BOOTSTRAP_EMAIL || 'algorithmicthinkingclub@gmail.com',
-      password: E.BOOTSTRAP_PASSWORD || 'atcblhs305',
+      email: need(`BOOTSTRAP_EMAIL`),
+      password: need(`BOOTSTRAP_PASSWORD`),
       displayName: 'Algorithmic Thinking Club',
       // the club account is wired to a linked machine rather than holding keys
       claude: 'relay',

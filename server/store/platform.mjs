@@ -9,7 +9,7 @@
 import { q, one, many } from '../db/pool.mjs'
 import { store, keys } from './blobs.mjs'
 import { getDoc, putDoc, getMapBySlug, createMap, ensureUser } from './maps.mjs'
-import { env } from '../db/env.mjs'
+import { env, need } from '../db/env.mjs'
 
 // Is the platform on at all? With no database configured the tool falls back to
 // work/ and behaves exactly as it did before, which is the degraded-not-broken
@@ -39,8 +39,8 @@ export async function mapIdFor(slug, { create = false } = {}) {
   if (!m && create) {
     const E = env()
     const owner = await ensureUser({
-      email: E.BOOTSTRAP_EMAIL || 'algorithmicthinkingclub@gmail.com',
-      password: E.BOOTSTRAP_PASSWORD || 'atcblhs305',
+      email: need(`BOOTSTRAP_EMAIL`),
+      password: need(`BOOTSTRAP_PASSWORD`),
       displayName: 'Algorithmic Thinking Club',
       claude: 'relay',
       pixellab: 'relay',
