@@ -33,6 +33,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import crypto from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { spawn } from 'node:child_process'
 import * as pixellab from './pixellab.mjs'
@@ -2730,20 +2731,47 @@ async function readApi(req, res, p, url) {
 // space saved inside every placement. Where the bytes come from moved; the
 // address did not, which is the whole reason 17,000 lines of client did not
 // have to change.
+/* THE COPY ON THIS MACHINE IS THE FREE ONE, SO ASK FOR IT FIRST.
+ *
+ * This used to go to the bucket first and fall back to disk, which meant that
+ * on the laptop the map was drawn on, where all fourteen hundred of its library
+ * files already sit, every open of the editor fetched them out of object
+ * storage anyway. A day of ordinary building spent 3,244 download transactions
+ * against a free allowance of 2,500 to read files that were on the hard drive
+ * the whole time.
+ *
+ * Disk first inverts that. On a laptop nearly every read is now free and the
+ * bucket is touched only for what was made somewhere else. On a host there is
+ * no work directory, so it falls straight through and behaves exactly as it did
+ * before. Correctness is unchanged either way, because the local file and the
+ * stored object are written together by the same save. */
 async function serveWork(res, rel, req) {
+  const f = path.join(WORK, rel.split('/').map(decodeURIComponent).join(path.sep))
+  const onDisk = diskAllowed() && f.startsWith(WORK) && fs.existsSync(f) && !fs.statSync(f).isDirectory()
+
+  if (onDisk) {
+    const buf = fs.readFileSync(f)
+    // same revalidation the stored path gives, so a browser holding the current
+    // bytes gets a 304 instead of the file again
+    const etag = '"' + crypto.createHash('sha1').update(buf).digest('base64url') + '"'
+    res.setHeader('Content-Type', MIME[path.extname(f).toLowerCase()] || 'application/octet-stream')
+    res.setHeader('ETag', etag)
+    res.setHeader('Cache-Control', 'private, no-cache')
+    if (req && req.headers['if-none-match'] === etag) {
+      res.statusCode = 304
+      return res.end()
+    }
+    return res.end(buf)
+  }
+
   if (platformOn()) {
     try {
       if (await serveFromStore(res, rel, req)) return
     } catch (e) {
-      console.error('[work] store read failed, trying disk:', e.message)
+      console.error('[work] store read failed:', e.message)
     }
-    if (!diskAllowed()) return notFound(res)
   }
-  const f = path.join(WORK, rel.split('/').map(decodeURIComponent).join(path.sep))
-  if (!f.startsWith(WORK) || !fs.existsSync(f) || fs.statSync(f).isDirectory()) return notFound(res)
-  res.setHeader('Content-Type', MIME[path.extname(f).toLowerCase()] || 'application/octet-stream')
-  res.setHeader('Cache-Control', 'no-store')
-  res.end(fs.readFileSync(f))
+  return notFound(res)
 }
 
 // ---- the asset library --------------------------------------------------
