@@ -68,6 +68,7 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
   const [state, setState] = useState<'loading' | 'playing' | 'failed'>('loading')
   const [near, setNear] = useState('')
   const [why, setWhy] = useState('')
+  const [where, setAt] = useState('')
   /* The camera, in a ref beside the state.
    *
    * The draw loop is inside an effect that must not restart when the camera
@@ -77,6 +78,9 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
   const [mode, setMode] = useState<'island' | 'pov'>('island')
   const modeRef = useRef(mode)
   modeRef.current = mode
+  const [showMask, setShowMask] = useState(false)
+  const maskRef = useRef(showMask)
+  maskRef.current = showMask
 
   useEffect(() => {
     let dead = false
@@ -256,6 +260,35 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
         }
         ;({ x: px, y: py } = settle(px, py))
         const walker = new Walker([px, py])
+
+        /* Built once, at map resolution, from the same lvlAt the law uses.
+         * Green is a pixel the mask marks; yellow is a pixel a body can actually
+         * stand on, which is the stricter thing and the one that decides whether
+         * you move. Seeing both at once is how you tell "I did not paint here"
+         * apart from "I painted a strip too narrow to stand in". */
+        const maskCv = (() => {
+          try {
+            const c = document.createElement('canvas')
+            c.width = meta.w
+            c.height = meta.h
+            const mg = c.getContext('2d')!
+            const im = mg.createImageData(meta.w, meta.h)
+            for (let y = 0; y < meta.h; y++)
+              for (let x = 0; x < meta.w; x++) {
+                const i = (y * meta.w + x) * 4
+                if (at(x, y) <= 0) continue
+                const ok = standable(x, y)
+                im.data[i] = ok ? 250 : 40
+                im.data[i + 1] = ok ? 240 : 200
+                im.data[i + 2] = ok ? 60 : 90
+                im.data[i + 3] = 130
+              }
+            mg.putImageData(im, 0, 0)
+            return c
+          } catch {
+            return null
+          }
+        })()
 
         /* A WALKER STANDING OFF THE GROUND CANNOT WALK.
          *
@@ -441,6 +474,15 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
           g.imageSmoothingEnabled = false
           g.clearRect(0, 0, box.width, box.height)
           g.drawImage(scene, ox, oy, w, h)
+          /* THE MASK, ON TOP OF THE PAINTING, WHILE YOU WALK IT.
+           *
+           * "it stops me somewhere that looks like floor" is unanswerable while
+           * the floor is invisible. Painted once into an offscreen canvas at map
+           * resolution and blitted with the same transform as the scene, so what
+           * you see under your feet is literally the plane the step test reads:
+           * if they ever disagree, the disagreement is on screen instead of in
+           * an argument. */
+          if (maskRef.current && maskCv) g.drawImage(maskCv, ox, oy, w, h)
 
           /* Where everything is this frame.
            *
@@ -533,6 +575,14 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
             }
           }
           setNear(closest)
+          /* WHERE HE IS AND WHAT IS UNDER HIM.
+           *
+           * Walkability arguments are unanswerable without this. "it stops me
+           * here" and "it lets me walk there" are both about one pixel, and
+           * until the page says which pixel and what level it holds, the only
+           * way to settle it is to guess. Reads straight off the same lvlAt the
+           * step test uses, so what it prints is what the law saw. */
+          setAt(`${Math.round(px)},${Math.round(py)} lv ${at(px, py)}${walker.blocked ? ' blocked' : ''}`)
           raf = requestAnimationFrame(draw)
         }
         raf = requestAnimationFrame(draw)
@@ -586,7 +636,18 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
             pov
           </button>
         </div>
-        <span className={near ? 'on' : ''}>{near || ''}</span>
+        <div className="walk-cam">
+          <button
+            type="button"
+            className={showMask ? 'on' : ''}
+            onClick={() => setShowMask((v) => !v)}
+            aria-pressed={showMask}
+            title="show the ground the step test reads: green is painted, yellow is where a body fits"
+          >
+            mask
+          </button>
+        </div>
+        <span className={near ? 'on' : ''}>{near || where}</span>
       </div>
     </div>
   )
