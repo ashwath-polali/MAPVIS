@@ -10,6 +10,7 @@
  * work. Chrome stays out of the way.
  */
 import { useEffect, useMemo, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { Link, go } from './router'
 import { useSession, signOut } from './session'
 import { Settings } from './Settings'
@@ -61,10 +62,27 @@ export default function Home() {
       go('/', true)
       return
     }
+    /* A FAILED REFETCH MUST NOT LOOK LIKE AN EMPTY ACCOUNT.
+     *
+     * This set the list to [] on any error, and [] is not "we could not ask",
+     * it is "you have no maps", which renders the first-run screen. So a blip
+     * while a panel was open wiped a page full of work off the screen and a
+     * refresh brought it all back, because nothing was ever wrong with the data.
+     *
+     * A refetch that fails now leaves what is already on screen alone, and only
+     * an answer the server actually gave can empty the page. */
+    let dead = false
     fetch('/api/my-maps')
-      .then((r) => r.json())
-      .then((j) => setMaps(j.maps || []))
-      .catch(() => setMaps([]))
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((j) => {
+        if (!dead) setMaps(j.maps || [])
+      })
+      .catch(() => {
+        if (!dead) setMaps((prev) => prev ?? [])
+      })
+    return () => {
+      dead = true
+    }
   }, [user, loading])
 
   const shown = useMemo(
@@ -297,7 +315,15 @@ function DeleteMap({ m, onClose, onGone }: { m: MapRow; onClose: () => void; onG
     }
   }
 
-  return (
+  /* PORTALLED TO THE BODY, NOT LEFT INSIDE THE PAGE.
+   *
+   * .home and its cards carry transforms, and a transformed ancestor becomes the
+   * containing block for position:fixed, so a panel rendered inside the grid is
+   * fixed to the grid rather than to the window. That is how a dialog ends up
+   * dragging the page behind it around and leaving it looking like a different
+   * screen. At the body it is fixed to the viewport, which is the only thing it
+   * was ever meant to be fixed to. */
+  return createPortal(
     <div className="sheet-wrap" onMouseDown={(e) => e.target === e.currentTarget && !busy && onClose()}>
       <div className="sheet danger" role="dialog" aria-modal="true" aria-label={`delete ${m.slug}`}>
         {step === 'confirm' ? (
@@ -346,7 +372,8 @@ function DeleteMap({ m, onClose, onGone }: { m: MapRow; onClose: () => void; onG
           </>
         )}
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 

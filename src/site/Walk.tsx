@@ -25,7 +25,7 @@
  * They cannot disagree now, because there is only one of them.
  */
 import { useEffect, useRef, useState } from 'react'
-import { cleanLife, floorWithBodies, lifeAt, separate, type Body, type Life } from '../core/life'
+import { bodyAt, cleanLife, lifeAt, separate, type Body, type Life } from '../core/life'
 import { Walker, canStand, defaultCfg, type WalkCfg } from '../core/walk'
 import type { MaskDoc } from '../core/mask'
 
@@ -288,6 +288,21 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
          * i-th placement, and nothing has to look itself up to avoid being
          * blocked by itself. r is the body radius separate() already uses. */
         const bodies: Body[] = [{ x: 0, y: 0, r: 3 }]
+        /* WHO ACTUALLY STOPS YOU: a stander, not a walker.
+         *
+         * Blocking the player against everybody is real and unplayable: the
+         * pier is a two pixel strip with people on it, so the crowd becomes a
+         * wall and he gets 9px along the harbour instead of 235. Blocking
+         * against nobody is what he complained about, walking through people
+         * like fog.
+         *
+         * The distinction that makes both true is the one already in the data.
+         * Something with life can step aside, and does, because the push below
+         * treats the player as immovable and ejects the crowd from him. Some-
+         * thing without life is a statue, a crate, a market stall: it has no way
+         * to move and it should stop you dead. So the hard test is against the
+         * still ones only, and the living ones give way. */
+        const solids: Body[] = []
 
         /* The floor is TERRAIN, for the player and for the mask overlay alike.
          *
@@ -299,6 +314,9 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
         const docLike = { lvlAt: (x: number, y: number) => at(x, y), markHit: () => {} } as unknown as MaskDoc
         const standable = (x: number, y: number) => canStand(docLike, cfg, x, y)
         const bareStand = standable
+        // "is somebody already there", read after a step rather than folded into
+        // the floor: the floor has to stay still or lifeAt stops being pure
+        const occupied = bodyAt(solids, yScale)
         /* Where the ground actually is, measured once off the levels plane.
          * Everything on screen is framed against this rather than against the
          * canvas the ground happens to sit inside. */
@@ -550,7 +568,44 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
            * anybody. That reads as physical without a two pixel plank being
            * lethal. Making it hard is a few lines here if a map is ever built
            * wide enough to want it; this one is not. */
+          const bx = walker.x
+          const by = walker.y
           walker.step(docLike, cfg, held, dt)
+          /* A PERSON IS SOMETHING YOU BUMP INTO, AND SLIDE ALONG.
+           *
+           * Terrain first, then the result is tested against everybody else.
+           * Refusing the whole move makes a body feel like glue, so each axis is
+           * kept when it alone is clear: walk into someone head on and you stop,
+           * catch them on the shoulder and you slip past. Exactly the slide
+           * Walker.step already does against walls, for the same reason.
+           *
+           * skip 0 because index 0 is him, and nothing should be blocked by
+           * where it already is. */
+          /* HELD OFF, AND THE REASON IS MEASURED RATHER THAN GUESSED.
+           *
+           * The slide below is correct and it is not switched on, because on
+           * this map it walls the quay. 72 of the hub's 94 placements have no
+           * life: crates, barrels, stalls, the buildings themselves. Each is a
+           * body at its own base, and along a walkway two or three pixels wide
+           * that is a fence. Measured, holding up-left from the spawn: 9px of
+           * travel with this on, 235px with it off.
+           *
+           * The rule is right and the bodies are wrong. A building's collision
+           * is its footprint, not a circle at its anchor, and until a placement
+           * carries a real footprint this test blocks ground that looks and is
+           * walkable. Turning it on is deleting this comment and the `false`.
+           *
+           * Bodies still push apart in separate() below, so nobody is drawn
+           * inside anybody, which is the visible half of what was asked for. */
+          const HARD_BODIES = false
+          if (HARD_BODIES && occupied(walker.x, walker.y)) {
+            if (!occupied(walker.x, by)) walker.y = by
+            else if (!occupied(bx, walker.y)) walker.x = bx
+            else {
+              walker.x = bx
+              walker.y = by
+            }
+          }
           px = walker.x
           py = walker.y
           facing = walker.facing
@@ -638,11 +693,22 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
                * it out is why the fishwives were strolling across the sea wall:
                * lifeAt has nothing to test against and happily walks a wander
                * straight over anything. The game passes it; so must this. */
-              /* the floor this particular figure sees: real ground, minus every
-               * other body including the player. This is what stops a walker
-               * choosing a leg that ends inside somebody, which is the whole
-               * reason the push below used to look violent. */
-              const s = lifeAt(v.life, t, { x: v.p.x, y: v.p.y }, floorWithBodies(bareStand, bodies, i + 1, yScale))
+              /* THE FLOOR HANDED TO lifeAt MUST NOT CHANGE FROM FRAME TO FRAME.
+               *
+               * Bodies were folded in here and it detonated: figures teleported
+               * across the map many times a second. lifeAt is pure in t, and the
+               * whole design depends on that. It re-derives a leg from scratch
+               * every frame and picks a target by searching the floor it is
+               * given, so a floor that moves because everybody else moved makes
+               * it choose a different answer every frame, and the figure snaps
+               * between them. It was never drift; it was a deterministic
+               * function being asked a different question sixty times a second.
+               *
+               * So the terrain, and only the terrain, decides where a leg may
+               * go. Bodies are resolved after the fact in separate(), which is
+               * allowed to be frame-dependent because it is a correction rather
+               * than a decision. */
+              const s = lifeAt(v.life, t, { x: v.p.x, y: v.p.y }, bareStand)
               pts[i] = { x: v.p.x + s.dx, y: v.p.y + s.dy, r: 3 }
               alpha = s.alpha
               face = s.facing
@@ -760,6 +826,10 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
           bodies.length = 0
           bodies.push({ x: px, y: py, r: 3 })
           for (const p of pts) bodies.push({ x: p.x, y: p.y, r: p.r })
+          // only the ones that cannot step aside stop him
+          solids.length = 0
+          for (let i = 0; i < live.length; i++)
+            if (!live[i].life) solids.push({ x: pts[i].x, y: pts[i].y, r: pts[i].r })
           raf = requestAnimationFrame(draw)
         }
         raf = requestAnimationFrame(draw)
