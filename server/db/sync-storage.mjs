@@ -92,6 +92,45 @@ for (const m of maps) {
   }
 }
 
-console.log(WRITE ? `\ndone, ${sent} uploaded` : `\n${total} file(s) would be uploaded`)
+/* A DERIVED BLOB IS NOT ON DISK, SO COPYING DISK DOES NOT MOVE IT.
+ *
+ * planes.png is the three mask planes packed into one png, and putDoc makes it
+ * out of the document's base64 rather than from any file, so it exists only in
+ * the bucket. Moving buckets by uploading work/ therefore left it behind, and
+ * loadDocument then failed with "the specified key does not exist" on a map
+ * whose mask was sitting safely in doc.json the whole time. Found by the gate
+ * immediately after the B2 to R2 move, which is exactly what the gate is for.
+ *
+ * Re-saving the document regenerates it. That is cheap and idempotent, and it
+ * is skipped when the blob is already there so an ordinary sync stays a sync. */
+let rebuilt = 0
+for (const m of maps) {
+  const doc = path.join(WORK, m.slug, 'doc.json')
+  if (!fs.existsSync(doc)) continue
+  if (await s.exists(`maps/${m.id}/planes.png`)) continue
+  if (!WRITE) {
+    console.log(`would rebuild planes.png for ${m.slug} from doc.json`)
+    rebuilt++
+    continue
+  }
+  /* CLEAR THE SHA FIRST, OR THE SAVE DECIDES IT HAS NOTHING TO DO.
+   *
+   * putDoc writes the planes only when their sha differs from the one on the
+   * map_blobs row, which is what stops a four-second autosave rewriting a
+   * 1.85 MB blob nine hundred times an hour. Across a bucket move that check
+   * is exactly wrong: the row moved with the database, the object did not, and
+   * the content is byte-for-byte what it always was, so the sha matches and
+   * the write is skipped. The row then points confidently at a key that is not
+   * there. Making the sha unmatchable is how the rewrite is made to happen;
+   * it is emptied rather than nulled because the column is not null. */
+  await q("update map_blobs set sha256 = '' where map_id = $1 and role = $2", [m.id, 'planes'])
+  const { saveDocument } = await import('../store/platform.mjs')
+  await saveDocument(m.slug, fs.readFileSync(doc, 'utf8'))
+  const ok = await s.exists(`maps/${m.id}/planes.png`)
+  console.log(`rebuilt planes.png for ${m.slug}${ok ? '' : '  <-- STILL MISSING, look at this'}`)
+  rebuilt++
+}
+
+console.log(WRITE ? `\ndone, ${sent} uploaded, ${rebuilt} plane set(s) rebuilt` : `\n${total} file(s) would be uploaded, ${rebuilt} plane set(s) rebuilt`)
 await q('select 1')
 process.exit(0)
