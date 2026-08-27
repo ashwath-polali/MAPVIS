@@ -419,6 +419,55 @@ export function facingFrom(dx: number, dy: number, yScale = 1): LifeFacing {
  * screen are much further apart in the world than two a pixel apart across it,
  * and separating in screen space would shove them into a vertical line.
  */
+/* A BODY IS PART OF THE FLOOR, WHICH IS THE FIX separate() ASKS FOR BELOW.
+ *
+ * The note under PASSES says it outright: a walker crosses straight through a
+ * stander because nothing in the floor knows the stander is there, it ends up
+ * 87 percent inside, and only then does the push try to eject it. Ejecting a
+ * body from the middle of another body is violent whatever the numbers are, and
+ * the direction flips as it crosses the centre. Three shapes of fix were tried
+ * inside the push and all three measured worse.
+ *
+ * So the floor learns about bodies instead. Wrap the ground test in this and a
+ * leg search will not choose a step that lands in somebody, a walker turns aside
+ * a body-width out rather than tunnelling, and the push goes back to being the
+ * rare small correction it was designed as.
+ *
+ * Everyone is in one list, the player included, so one rule decides walker
+ * against walker, walker against stander, and player against either. `skip` is
+ * how a body avoids blocking itself: pass the index it occupies.
+ *
+ * y is divided by yScale for the same reason it is in separate(): the ground is
+ * squashed, so a circle on screen is an ellipse in the world.
+ */
+export type Body = { x: number; y: number; r: number }
+
+export function bodyAt(bodies: Body[], yScale = 0.72) {
+  return (x: number, y: number, skip = -1): boolean => {
+    for (let i = 0; i < bodies.length; i++) {
+      if (i === skip) continue
+      const b = bodies[i]
+      const dx = x - b.x
+      const dy = (y - b.y) / (yScale || 1)
+      if (dx * dx + dy * dy < b.r * b.r) return true
+    }
+    return false
+  }
+}
+
+/* The ground test a figure should be given: real floor, and nobody already
+ * standing on it. Composed rather than baked in, so a caller that wants the bare
+ * terrain (drawing the mask, checking reach) still gets it. */
+export function floorWithBodies(
+  stands: (x: number, y: number) => boolean,
+  bodies: Body[],
+  self: number,
+  yScale = 0.72,
+): (x: number, y: number) => boolean {
+  const taken = bodyAt(bodies, yScale)
+  return (x, y) => stands(x, y) && !taken(x, y, self)
+}
+
 export function separate(
   pts: { x: number; y: number; r: number }[],
   yScale = 0.55,

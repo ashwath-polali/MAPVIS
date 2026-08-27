@@ -25,7 +25,7 @@
  * They cannot disagree now, because there is only one of them.
  */
 import { useEffect, useRef, useState } from 'react'
-import { cleanLife, lifeAt, separate, type Life } from '../core/life'
+import { cleanLife, floorWithBodies, lifeAt, separate, type Body, type Life } from '../core/life'
 import { Walker, canStand, defaultCfg, type WalkCfg } from '../core/walk'
 import type { MaskDoc } from '../core/mask'
 
@@ -278,8 +278,27 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
          * a pixel, and markHit is the editor painting its refused-move layer,
          * which a published map has nowhere to put. So the whole document
          * interface a published bundle needs is these two. */
+        /* WHERE EVERY BODY IS, READ BY THE FLOOR ITSELF.
+         *
+         * Rebuilt at the end of each frame and read by the next one. The one
+         * frame of lag is 16ms and it is what keeps this acyclic: the floor a
+         * figure walks on cannot depend on where that figure ends up this frame.
+         *
+         * Index 0 is always the player, so `self` is 0 for him and i+1 for the
+         * i-th placement, and nothing has to look itself up to avoid being
+         * blocked by itself. r is the body radius separate() already uses. */
+        const bodies: Body[] = [{ x: 0, y: 0, r: 3 }]
+
+        /* The floor is TERRAIN, for the player and for the mask overlay alike.
+         *
+         * Folding bodies into lvlAt was tried and it walls him in: the hip
+         * probes read two pixels either side, so a body blocks a five pixel
+         * band, and a crowded quay becomes a fence. Measured, he got 18px along
+         * the harbour instead of 235. Bodies are handled after the step instead,
+         * where they can stop him without narrowing the ground. */
         const docLike = { lvlAt: (x: number, y: number) => at(x, y), markHit: () => {} } as unknown as MaskDoc
         const standable = (x: number, y: number) => canStand(docLike, cfg, x, y)
+        const bareStand = standable
         /* Where the ground actually is, measured once off the levels plane.
          * Everything on screen is framed against this rather than against the
          * canvas the ground happens to sit inside. */
@@ -516,6 +535,21 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
             held.arrowleft ||
             held.arrowright
           )
+          /* BODIES GIVE WAY; THEY ARE NOT WALLS. MEASURED, ON THIS MAP.
+           *
+           * Hard collision was built here and then taken out. Blocking the
+           * player on contact ends the game at the pier: the standable strip
+           * there is about two pixels across with people standing on it, so the
+           * crowd becomes a fence and he gets 9px along the harbour instead of
+           * 235.
+           *
+           * The contact is soft instead, the way the editor's walk test has
+           * always done it. He is an immovable body in the push below, so the
+           * crowd is ejected from him rather than him from it: walk into a
+           * fishwife and she steps aside, and nobody is ever drawn inside
+           * anybody. That reads as physical without a two pixel plank being
+           * lethal. Making it hard is a few lines here if a map is ever built
+           * wide enough to want it; this one is not. */
           walker.step(docLike, cfg, held, dt)
           px = walker.x
           py = walker.y
@@ -604,7 +638,11 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
                * it out is why the fishwives were strolling across the sea wall:
                * lifeAt has nothing to test against and happily walks a wander
                * straight over anything. The game passes it; so must this. */
-              const s = lifeAt(v.life, t, { x: v.p.x, y: v.p.y }, standable)
+              /* the floor this particular figure sees: real ground, minus every
+               * other body including the player. This is what stops a walker
+               * choosing a leg that ends inside somebody, which is the whole
+               * reason the push below used to look violent. */
+              const s = lifeAt(v.life, t, { x: v.p.x, y: v.p.y }, floorWithBodies(bareStand, bodies, i + 1, yScale))
               pts[i] = { x: v.p.x + s.dx, y: v.p.y + s.dy, r: 3 }
               alpha = s.alpha
               face = s.facing
@@ -612,10 +650,28 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
             }
             return { v, alpha, face, flip, moves: !!v.life }
           })
-          const movers = pts.filter((_, i) => shown[i].moves)
-          separate(movers, yScale, 1)
-          let mi = 0
-          for (let i = 0; i < pts.length; i++) if (shown[i].moves) pts[i] = movers[mi++]
+          /* STANDERS AND THE PLAYER ARE BODIES TOO, THE WAY THE EDITOR DOES IT.
+           *
+           * This separated only the figures that move, so a walker crossed
+           * straight through anything standing still and straight through Thor.
+           * editor.ts:4231 has had the answer for a while and this is that same
+           * shape, deliberately, because a fourth opinion about how bodies touch
+           * is how the walk law ended up wrong in the first place.
+           *
+           * Immovable rows are LISTED TWICE. separate() splits a pair's
+           * correction down the middle, so a body that discards its half leaves
+           * the other one still half inside it; paying the discarded half a
+           * second time is the whole correction rather than an approximation of
+           * one. Their positions are then read back from the movers only, so a
+           * stall holder never drifts and the player is never shoved by a
+           * passer-by: the crowd goes round him. */
+          const still = [
+            ...live.filter((v) => !v.life).map((v) => ({ x: v.p.x, y: v.p.y, r: 3 })),
+            { x: px, y: py, r: Math.max(3, hip) },
+          ]
+          const crowd = [...pts, ...still, ...still]
+          separate(crowd, yScale, 1, bareStand)
+          for (let i = 0; i < pts.length; i++) if (shown[i].moves) pts[i] = crowd[i]
 
           const order: Array<{ y: number; go: () => void }> = shown.map((s, i) => ({
             y: pts[i].y,
@@ -698,6 +754,12 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
            * way to settle it is to guess. Reads straight off the same lvlAt the
            * step test uses, so what it prints is what the law saw. */
           setAt(`${Math.round(px)},${Math.round(py)} lv ${at(px, py)}${walker.blocked ? ' blocked' : ''}`)
+          /* the body list the NEXT frame's floor reads. Written last, after
+           * everything has settled, so what a figure walks into is where people
+           * actually ended up rather than where they were heading. */
+          bodies.length = 0
+          bodies.push({ x: px, y: py, r: 3 })
+          for (const p of pts) bodies.push({ x: p.x, y: p.y, r: p.r })
           raf = requestAnimationFrame(draw)
         }
         raf = requestAnimationFrame(draw)

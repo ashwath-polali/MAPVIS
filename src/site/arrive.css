@@ -277,6 +277,7 @@
 }
 
 .card {
+  position: relative;
   display: flex;
   flex-direction: column;
   background: #10141a;
@@ -284,6 +285,53 @@
   transition:
     border-color 200ms ease,
     transform 260ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* The bin. Invisible until the pointer is on the card, and only red once it is
+ * on the bin itself, so the destructive control never competes with the
+ * painting for attention but is unmistakable the moment you reach for it. */
+.card-bin {
+  position: absolute;
+  z-index: 3;
+  top: 8px;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: rgba(8, 11, 15, 0.6);
+  color: #5a6470;
+  cursor: pointer;
+  opacity: 0;
+  backdrop-filter: blur(4px);
+  transition:
+    opacity 160ms ease,
+    color 140ms ease,
+    border-color 140ms ease,
+    background-color 140ms ease;
+}
+.card:hover .card-bin,
+.lead:hover .card-bin,
+.card-bin:focus-visible {
+  opacity: 1;
+}
+.card-bin:hover {
+  color: #ff6b5e;
+  border-color: #6d2b26;
+  background: rgba(40, 12, 10, 0.85);
+}
+.card-bin:focus-visible {
+  outline: 1px solid #ff6b5e;
+  outline-offset: 1px;
+}
+.lead-bin {
+  top: 14px;
+  right: 14px;
+  width: 30px;
+  height: 30px;
 }
 .card:hover {
   border-color: #2c3742;

@@ -11,10 +11,57 @@ import { useScrollProgress, installGrain } from './motion'
 import { useSession } from './session'
 import Landing from './Landing'
 
-const Editor = lazy(() => import('../App'))
-const Enter = lazy(() => import('./Enter'))
-const Home = lazy(() => import('./Home'))
-const MapPage = lazy(() => import('./MapPage'))
+/* A DEPLOY IS NOT A BROKEN PANEL, AND IT USED TO LOOK LIKE ONE.
+ *
+ * Every route below is its own chunk with its hash in the filename, and a deploy
+ * replaces all of them. A tab that was already open still holds the previous
+ * index.html, so the moment it navigates it asks for a chunk that no longer
+ * exists, the dynamic import rejects, and the boundary catches it and renders an
+ * error page carrying whatever the old build said. From the outside that is "I
+ * clicked sign in and got an error with old UI in it", and it happens only to a
+ * tab left open across a deploy, which is why it is rare.
+ *
+ * A missing chunk cannot be recovered in place and does not need to be: the fix
+ * is the newest index.html, one reload away. Guarded by a session flag so a
+ * genuinely missing file cannot put the tab in a reload loop; a second failure
+ * falls through to the boundary and shows the real error. */
+const RELOADED = 'mapvis:stale-chunk-reloaded'
+const STALE = /failed to fetch dynamically imported module|error loading dynamically imported module|importing a module script failed/i
+
+function fresh<T>(load: () => Promise<T>): () => Promise<T> {
+  return () =>
+    load().then(
+      (m) => {
+        try {
+          sessionStorage.removeItem(RELOADED)
+        } catch {
+          /* private mode; nothing here is worth failing a route over */
+        }
+        return m
+      },
+      (e: unknown) => {
+        let already = true
+        try {
+          already = sessionStorage.getItem(RELOADED) === '1'
+          if (!already) sessionStorage.setItem(RELOADED, '1')
+        } catch {
+          /* no storage means no loop guard, so do not reload at all */
+        }
+        if (!already && STALE.test(String((e as Error)?.message || e))) {
+          window.location.reload()
+          // the reload owns the page from here; resolving would render into a
+          // document that is on its way out
+          return new Promise<T>(() => {})
+        }
+        throw e
+      },
+    )
+}
+
+const Editor = lazy(fresh(() => import('../App')))
+const Enter = lazy(fresh(() => import('./Enter')))
+const Home = lazy(fresh(() => import('./Home')))
+const MapPage = lazy(fresh(() => import('./MapPage')))
 
 /* One loading mark for the whole app: four squares walking a ring on the pixel
  * grid. The bleeding ink blot it replaced was slow, soft and the wrong shape for
