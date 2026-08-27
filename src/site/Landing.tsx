@@ -1,63 +1,135 @@
 /* The landing page. Signed out only.
  *
- * One painted place, a camera that walks you across it, and a line of text at
- * each stop saying what happens there. Nothing scrolls.
+ * Six paintings, six lines. It advances on its own so somebody who never
+ * touches the wheel still sees the whole thing, and scrolling takes it over the
+ * instant they do. Both drive the same number, so there is never a moment where
+ * the timer and the reader disagree about which stop we are on.
  *
- * ON THE WORDS: they are steps, not slogans. Lower case, imperative, one clause
- * each, no metaphor, no pair of balanced fragments, no "X is not Y, it is Z".
- * That construction and that rhythm are the tell, and no amount of rewriting
- * fixes copy whose SHAPE is wrong. A tool describes itself by saying what you
- * do with it.
+ * THE PAIRING IS NOT DECORATION. The water map is the one where you cut water
+ * off. The six-terrace map is the one about marking ground. The crowded market
+ * is the one about things that move. The canyon has a real door carved into the
+ * cliff. Nobody will read it as a diagram, and nobody will feel it was shuffled
+ * either.
+ *
+ * ON THE WORDS: steps, not slogans. Lower case, imperative, one clause. The
+ * previous attempt read as AI because of its SHAPE, not its vocabulary: pairs
+ * of balanced fragments and "X is not Y, it is Z". No rewriting saves copy whose
+ * structure is the tell.
  */
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { go } from './router'
-import { useTour, type Stop } from './Tour'
 
-type Entry = { slug: string; version: number; w: number; h: number }
+type Beat = { slug: string; say: string; side: 'left' | 'right' }
 
-/* The tour, authored here for now. Once a site scene exists these come off its
- * own anchors, so the walkthrough is arranged in MAPVIS by moving marks around
- * on the painting rather than by editing numbers in a file. */
-const SCRIPT: Array<Omit<Stop, 'x' | 'y'> & { at: [number, number] }> = [
-  { at: [0.5, 0.5], z: 1, say: 'this whole place was one painting', side: 'left' },
-  { at: [0.3, 0.62], z: 2.4, say: 'you cut the water off it by hand', side: 'right' },
-  { at: [0.52, 0.44], z: 2.2, say: 'then mark the ground people can stand on', side: 'left' },
-  { at: [0.68, 0.58], z: 2.6, say: 'put things on it that move on their own', side: 'left' },
-  { at: [0.46, 0.36], z: 2.8, say: 'name the door, so somebody can write code that finds it', side: 'right' },
-  { at: [0.5, 0.5], z: 1.15, say: 'press export. it is in the game.', side: 'left' },
+const BEATS: Beat[] = [
+  { slug: 'site-1', say: 'all of this is one painting', side: 'left' },
+  { slug: 'site-2', say: 'you cut the water off it by hand', side: 'right' },
+  { slug: 'site-3', say: 'then mark the ground people can stand on', side: 'left' },
+  { slug: 'site-4', say: 'put things on it that move on their own', side: 'right' },
+  { slug: 'site-5', say: 'name the door, and code can find it later', side: 'left' },
+  { slug: 'site-6', say: 'export. it is in the game.', side: 'right' },
 ]
 
-export default function Landing() {
-  const [scene, setScene] = useState<Entry | null | 'none'>(null)
-  const [i, setI] = useState(0)
-  const onStop = useCallback((n: number) => setI(n), [])
+const HOLD = 5200
 
+export default function Landing() {
+  const [at, setAt] = useState(0)
+  const [ready, setReady] = useState<Record<string, string>>({})
+  const paused = useRef(0)
+  const wheel = useRef(0)
+
+  /* Every painting is fetched once, up front, and held as an object url. Six
+   * images is a quarter of a megabyte and the alternative is a blank frame
+   * every time the scroll moves, which is the one thing that would make this
+   * feel cheap. */
   useEffect(() => {
-    fetch('/api/v1/maps')
-      .then((r) => r.json())
-      .then((j) => {
-        const site = (j.maps || []).filter((m: Entry & { slug: string }) => m.slug.startsWith('site-'))
-        setScene(site.length ? site[0] : 'none')
-      })
-      .catch(() => setScene('none'))
+    let dead = false
+    ;(async () => {
+      for (const b of BEATS) {
+        try {
+          const r = await fetch(`/api/v1/maps/${b.slug}`)
+          if (!r.ok) continue
+          const man = await r.json()
+          const url = man.files?.['scene.png']?.url
+          if (!url || dead) continue
+          const blob = await (await fetch(url)).blob()
+          if (dead) return
+          setReady((s) => ({ ...s, [b.slug]: URL.createObjectURL(blob) }))
+        } catch {
+          /* a scene that will not load simply does not appear */
+        }
+      }
+    })()
+    return () => {
+      dead = true
+    }
   }, [])
 
-  const w = scene && scene !== 'none' ? scene.w : 1
-  const h = scene && scene !== 'none' ? scene.h : 1
-  const stops: Stop[] = SCRIPT.map((s) => ({ ...s, x: s.at[0] * w, y: s.at[1] * h }))
+  // it moves on its own, unless somebody just took the wheel
+  useEffect(() => {
+    const t = setInterval(() => {
+      if (Date.now() < paused.current) return
+      setAt((n) => (n + 1) % BEATS.length)
+    }, HOLD)
+    return () => clearInterval(t)
+  }, [])
 
-  const tour = useTour({
-    slug: scene && scene !== 'none' ? scene.slug : '',
-    version: scene && scene !== 'none' ? scene.version : 0,
-    stops,
-    onStop,
-  })
+  /* Scroll, keys and touch all mean the same thing: one step. The page itself
+   * never scrolls, so the wheel is captured rather than followed, and a
+   * threshold keeps a trackpad's momentum from firing six stops at once. */
+  useEffect(() => {
+    const step = (d: number) => {
+      paused.current = Date.now() + 9000
+      setAt((n) => Math.max(0, Math.min(BEATS.length - 1, n + d)))
+    }
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      wheel.current += e.deltaY
+      if (Math.abs(wheel.current) < 90) return
+      step(wheel.current > 0 ? 1 : -1)
+      wheel.current = 0
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (['ArrowDown', 'PageDown', ' '].includes(e.key)) {
+        e.preventDefault()
+        step(1)
+      }
+      if (['ArrowUp', 'PageUp'].includes(e.key)) {
+        e.preventDefault()
+        step(-1)
+      }
+    }
+    let y0 = 0
+    const onStart = (e: TouchEvent) => (y0 = e.touches[0].clientY)
+    const onEnd = (e: TouchEvent) => {
+      const dy = y0 - e.changedTouches[0].clientY
+      if (Math.abs(dy) > 40) step(dy > 0 ? 1 : -1)
+    }
+    window.addEventListener('wheel', onWheel, { passive: false })
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('touchstart', onStart, { passive: true })
+    window.addEventListener('touchend', onEnd, { passive: true })
+    return () => {
+      window.removeEventListener('wheel', onWheel)
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('touchstart', onStart)
+      window.removeEventListener('touchend', onEnd)
+    }
+  }, [])
 
-  const line = SCRIPT[i] || SCRIPT[0]
+  const beat = BEATS[at]
 
   return (
     <main className="land">
-      {scene && scene !== 'none' ? tour.view : <Unpainted />}
+      <div className="land-art">
+        {BEATS.map((b, i) => (
+          <div
+            key={b.slug}
+            className={'land-plate' + (i === at ? ' on' : i < at ? ' past' : '')}
+            style={ready[b.slug] ? { backgroundImage: `url(${ready[b.slug]})` } : undefined}
+          />
+        ))}
+      </div>
 
       <div className="land-ui">
         <header>
@@ -67,42 +139,29 @@ export default function Landing() {
           </button>
         </header>
 
-        {/* the line sits beside the thing it is about, and swaps by fading
-            through rather than sliding, so nothing on screen is ever moving in
-            two directions at once */}
-        <div className={'land-say ' + (line.side || 'left')}>
-          <p key={i}>{line.say}</p>
+        <div className={'land-say ' + beat.side}>
+          <p key={at}>{beat.say}</p>
         </div>
 
         <footer>
           <button className="land-go" onClick={() => go('/enter?new=1')}>
             make one
           </button>
-          <nav className="land-dots" aria-label="jump">
-            {SCRIPT.map((s, k) => (
+          <nav className="land-dots" aria-label="progress">
+            {BEATS.map((b, k) => (
               <button
-                key={k}
-                className={k === i ? 'on' : ''}
+                key={b.slug}
+                className={k === at ? 'on' : ''}
                 onClick={() => {
-                  setI(k)
-                  tour.goTo(k)
+                  paused.current = Date.now() + 9000
+                  setAt(k)
                 }}
-                aria-label={s.say}
+                aria-label={b.say}
               />
             ))}
           </nav>
         </footer>
       </div>
     </main>
-  )
-}
-
-/* No site scene has been painted yet. Say so plainly rather than shipping a
- * placeholder that pretends to be art. */
-function Unpainted() {
-  return (
-    <div className="land-unpainted">
-      <span>no scene painted yet</span>
-    </div>
   )
 }
