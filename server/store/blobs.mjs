@@ -99,6 +99,30 @@ const MEM_MAX = 400
 const MEM_BYTES = 48 * 1024 * 1024
 const MEM_ONE = 2 * 1024 * 1024
 
+/* WHO WANTS TO KNOW WHEN BYTES CHANGE.
+ *
+ * The sha of every object is kept in Postgres so a revalidation can be answered
+ * without a download, and that record is only trustworthy if it is updated at
+ * the moment of the write. This is how it hears about one.
+ *
+ * A hook rather than an import because this file talks the S3 API and nothing
+ * else, deliberately. Reaching into the database from here would make the
+ * storage adapter depend on there BEING a database, and the local backend
+ * exists precisely for when there is not. platform.mjs registers a handler when
+ * the platform is on, and when it is off nothing is registered and nothing
+ * changes. */
+const writeHooks = []
+export const onBlobWrite = (fn) => writeHooks.push(fn)
+const announce = async (kind, key, body) => {
+  for (const f of writeHooks) {
+    try {
+      await f(kind, key, body)
+    } catch {
+      /* a bookkeeping failure must never fail the write that succeeded */
+    }
+  }
+}
+
 function memo(b) {
   const mem = new Map()
   let held = 0
@@ -124,10 +148,35 @@ function memo(b) {
       }
       return buf
     },
-    async put(key, body, contentType) { drop(key); return b.put(key, body, contentType) },
-    async del(key) { drop(key); return b.del(key) },
-    async delPrefix(prefix) { dropPrefix(prefix); return b.delPrefix(prefix) },
-    async copy(from, to) { drop(to); dropPrefix(to); return b.copy(from, to) },
+    async put(key, body, contentType) {
+      drop(key)
+      const r = await b.put(key, body, contentType)
+      // after the write lands, so a failed put never records a sha for bytes
+      // that are not there
+      await announce('put', key, body)
+      return r
+    },
+    async del(key) {
+      drop(key)
+      const r = await b.del(key)
+      await announce('del', key)
+      return r
+    },
+    async delPrefix(prefix) {
+      dropPrefix(prefix)
+      const r = await b.delPrefix(prefix)
+      await announce('delPrefix', prefix)
+      return r
+    },
+    async copy(from, to) {
+      drop(to)
+      dropPrefix(to)
+      const r = await b.copy(from, to)
+      // the bytes are not in hand here, so the tag is forgotten rather than
+      // rewritten and the next read recomputes it
+      await announce('del', to)
+      return r
+    },
   }
 }
 

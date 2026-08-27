@@ -8,7 +8,7 @@
 // urls already sitting inside every saved document keep resolving.
 import crypto from 'node:crypto'
 import { q, one, many } from '../db/pool.mjs'
-import { store, keys } from './blobs.mjs'
+import { store, keys, onBlobWrite } from './blobs.mjs'
 import { getDoc, putDoc, getMapBySlug, createMap, ensureUser } from './maps.mjs'
 import { env, need } from '../db/env.mjs'
 
@@ -142,9 +142,67 @@ export async function blobKeyForWorkPath(rel) {
 
 const MIME = { png: 'image/png', json: 'application/json', jpg: 'image/jpeg' }
 
+/* THE TAG IS KNOWN BEFORE THE BYTES ARE, WHICH IS THE WHOLE POINT.
+ *
+ * blob_shas records the sha of every object at the moment it is written, so
+ * "has this changed" is a primary-key lookup rather than a download. Without
+ * it the ETag below was computed from bytes that had just been fetched, so a
+ * 304 cost a full bucket read and reopening a map on the host spent 156 of
+ * them to learn that nothing had changed. */
+const tagOf = (sha) => '"' + sha + '"'
+
+async function knownTag(key) {
+  if (!platformOn()) return null
+  try {
+    const r = await one('select sha from blob_shas where key = $1', [key])
+    return r?.sha ? tagOf(r.sha) : null
+  } catch {
+    return null
+  }
+}
+
+// Registered once. The sha is written beside the bytes rather than derived
+// later, because a tag that is recomputed on read is a tag that costs a read.
+let hooked = false
+function hookBlobWrites() {
+  if (hooked) return
+  hooked = true
+  onBlobWrite(async (kind, key, body) => {
+    if (!platformOn()) return
+    if (kind === 'put' && body) {
+      const sha = crypto.createHash('sha1').update(body).digest('base64url')
+      await q(
+        `insert into blob_shas (key, sha, bytes, updated_at) values ($1,$2,$3, now())
+         on conflict (key) do update set sha = excluded.sha, bytes = excluded.bytes, updated_at = now()`,
+        [key, sha, body.length],
+      )
+    } else if (kind === 'del') {
+      await q('delete from blob_shas where key = $1', [key])
+    } else if (kind === 'delPrefix') {
+      await q('delete from blob_shas where key like $1', [key + '%'])
+    }
+  })
+}
+
 export async function serveFromStore(res, rel, req) {
+  hookBlobWrites()
   const key = await blobKeyForWorkPath(rel)
   if (!key) return false
+
+  /* ANSWERED WITHOUT TOUCHING THE BUCKET AT ALL.
+   *
+   * This is the branch that makes reopening a map free. If the caller already
+   * holds the current bytes and Postgres knows their sha, there is nothing to
+   * fetch and nothing to send. */
+  const known = req && req.headers['if-none-match'] ? await knownTag(key) : null
+  if (known && req.headers['if-none-match'] === known) {
+    res.setHeader('ETag', known)
+    res.setHeader('Cache-Control', 'private, no-cache')
+    res.statusCode = 304
+    res.end()
+    return true
+  }
+
   let buf
   try {
     buf = await store().get(key)
@@ -169,6 +227,25 @@ export async function serveFromStore(res, rel, req) {
   const etag = '"' + crypto.createHash('sha1').update(buf).digest('base64url') + '"'
   res.setHeader('ETag', etag)
   res.setHeader('Cache-Control', 'private, no-cache')
+
+  /* BACKFILL, so this object is only ever paid for once.
+   *
+   * The write hook records a sha for anything written from now on, but every
+   * object that already existed when this table was added has no row, and a
+   * bucket move writes bytes through a path that predates it too. Recording
+   * the tag on the first read means the next revalidation is answered out of
+   * Postgres, without a migration that would have to walk the whole bucket. */
+  if (platformOn()) {
+    q(
+      `insert into blob_shas (key, sha, bytes, updated_at) values ($1,$2,$3, now())
+       on conflict (key) do update set sha = excluded.sha, bytes = excluded.bytes, updated_at = now()`,
+      [key, etag.slice(1, -1), buf.length],
+    ).catch(() => {
+      /* the bytes are already in hand; failing to remember them is not a
+       * reason to fail the response */
+    })
+  }
+
   if (req && req.headers['if-none-match'] === etag) {
     res.statusCode = 304
     res.end()
