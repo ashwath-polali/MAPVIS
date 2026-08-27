@@ -12,10 +12,16 @@
 // hashing each half and skipping the unchanged one removes most of the traffic
 // without the editor having to say what it touched.
 import crypto from 'node:crypto'
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { q, one, many, tx } from '../db/pool.mjs'
 import { store, keys } from './blobs.mjs'
 import { encodePNG, decodePNG } from '../sheet.mjs'
 import { hashPassword } from './crypto.mjs'
+import { env } from '../db/env.mjs'
+
+const WORK_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'work')
 
 const sha = (b) => crypto.createHash('sha256').update(b).digest('hex')
 
@@ -181,15 +187,44 @@ export async function putDoc(mapId, docString) {
   return { wrote, skipped: !wrote.length }
 }
 
+// This machine's own copy of a map document, if it has one. Absent on a host,
+// where WORK is a scratch directory, and that is the case the blob covers.
+function localDoc(slug) {
+  try {
+    if (!slug || env().MAPVIS_NO_DISK === '1') return null
+    const f = path.join(WORK_DIR, slug, 'doc.json')
+    if (!fs.existsSync(f)) return null
+    return JSON.parse(fs.readFileSync(f, 'utf8'))
+  } catch {
+    return null
+  }
+}
+
 // Rebuilds the v3 string the editor expects, so nothing downstream changed.
 export async function getDoc(mapId) {
   const m = await getMapById(mapId)
   if (!m) return null
   const blob = await one('select key from map_blobs where map_id = $1 and role = $2', [mapId, 'planes'])
   let mm = ''
-  if (blob) {
-    const { lvl, occ, cut } = planesFromPNG(await store().get(blob.key))
-    mm = packM(lvl, occ, cut)
+
+  /* THE MASK IS THE ONE THING THAT CANNOT BE REDRAWN, SO NEVER LET ONE COPY
+   * DECIDE WHETHER IT OPENS.
+   *
+   * The planes live in object storage, and the day the bucket stopped serving,
+   * every map on this laptop stopped opening with it, even though work/<slug>/
+   * doc.json on the local disk held the identical mask the whole time. Hours of
+   * hand-drawn cut and levels were unreachable because a free tier's download
+   * counter had run out.
+   *
+   * So the local copy is tried first: it costs nothing, it is written by the
+   * same save that writes the blob, and it means an unreachable bucket degrades
+   * to slower rather than to stopped. The blob stays the source of truth for any
+   * machine that does not have the file. */
+  const local = localDoc(m.slug)
+  if (local && typeof local.m === 'string' && local.m.length) {
+    mm = local.m
+  } else if (blob) {
+    mm = packM(...(({ lvl, occ, cut }) => [lvl, occ, cut])(planesFromPNG(await store().get(blob.key))))
   } else {
     mm = Buffer.alloc(m.w * m.h * 3).toString('base64')
   }
