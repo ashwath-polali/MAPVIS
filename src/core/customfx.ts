@@ -89,12 +89,55 @@ const SRC = `
 'use strict'
 var post = self.postMessage.bind(self)
 
-// the doors come off before any written code is built. A worker has no dom to
+/* The doors come off before any written code is built. A worker has no dom to
 // begin with; this takes the network, the loaders and the other workers too.
-var SHUT = ['fetch','XMLHttpRequest','WebSocket','EventSource','importScripts','Worker','SharedWorker','indexedDB','caches','BroadcastChannel','FileReader','navigator','crypto']
-for (var si = 0; si < SHUT.length; si++) {
-  try { delete self[SHUT[si]] } catch (e) {}
-  try { self[SHUT[si]] = undefined } catch (e) {}
+//
+// READ THIS BEFORE TRUSTING IT. A denylist over a shared JavaScript global is
+// hardening, not a security boundary, and it cannot be made into one: the ways
+// to reach a builtin are not enumerable. What follows closes the two holes that
+// make the naive version trivially escapable, and the honest limit is that a
+// determined body can still get out.
+//
+// That is tolerable only because of who writes the code: the planner, replying
+// to the author's own words, in the author's own browser, against their own
+// map. It stops being tolerable the moment one account's effect can be run by
+// somebody else, which is exactly what a shared club account means. The fix at
+// that point is not a longer list, it is not evaluating written JavaScript at
+// all; a structured effect description this file interprets has no escape.
+//
+// First hole: deleting a name off self does nothing when the property lives on
+// the prototype, so self.fetch = undefined only shadows it and
+// Object.getPrototypeOf(self).fetch is still the real one. The whole chain is
+// blanked now.
+//
+// Second: Function is shadowed as an argument below, but every value carries
+// .constructor, so (function(){}).constructor is Function again and
+// ('return this')() hands back the real global. */
+var SHUT = ['fetch','XMLHttpRequest','WebSocket','EventSource','importScripts','Worker','SharedWorker','indexedDB','caches','BroadcastChannel','FileReader','navigator','crypto','WorkerGlobalScope']
+var scope = self
+while (scope && scope !== Object.prototype) {
+  for (var si = 0; si < SHUT.length; si++) {
+    try { delete scope[SHUT[si]] } catch (e) {}
+    try { Object.defineProperty(scope, SHUT[si], { value: undefined, writable: false, configurable: false }) } catch (e) {}
+  }
+  scope = Object.getPrototypeOf(scope)
+}
+
+// .constructor is the way back to Function from any value at all, so it comes
+// off the intrinsics a written body actually has in hand. post was bound above
+// this, so the worker can still answer.
+var VIA = [Object, Array, String, Number, Boolean, Function, RegExp]
+// the async and generator function constructors are separate intrinsics with
+// the same power, and they are the escape a list of the obvious ones misses.
+// Measured before this line existed: (async function(){}).constructor("return
+// this")() handed back the real global. It could not do anything with it,
+// because the chain above had already been stripped and the properties made
+// non-configurable, but reaching it at all is one step too many.
+try { VIA.push(Object.getPrototypeOf(async function () {}).constructor) } catch (e) {}
+try { VIA.push(Object.getPrototypeOf(function* () {}).constructor) } catch (e) {}
+try { VIA.push(Object.getPrototypeOf(async function* () {}).constructor) } catch (e) {}
+for (var vi = 0; vi < VIA.length; vi++) {
+  try { Object.defineProperty(VIA[vi].prototype, 'constructor', { value: undefined, writable: false, configurable: false }) } catch (e) {}
 }
 
 // the body, built once. The names after api are shadows: inside the body they

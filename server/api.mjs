@@ -170,12 +170,19 @@ async function serve(req, res, p, url) {
       noteBucketUsage()
     }
   }
-  let ctx = {}
+  /* http:true marks "there is a browser on the other end of this".
+   *
+   * mapIdFor needs to tell an anonymous HTTP request apart from a maintenance
+   * script, because they want opposite answers: the script legitimately creates
+   * maps as the bootstrap account, the anonymous request must not be able to
+   * create anything at all. An empty context cannot express that difference,
+   * so the flag is set here whether or not anybody is signed in. */
+  let ctx = { http: true }
   try {
     const user = await currentUser(req)
     if (user) {
       const how = await keyFor(user.id, 'pixellab')
-      ctx = { user, pixellabKey: how?.mode === 'key' ? how.key : null }
+      ctx = { http: true, user, pixellabKey: how?.mode === 'key' ? how.key : null }
     }
   } catch {
     /* no database configured is the local tool it has always been */
@@ -2519,8 +2526,15 @@ async function route(req, res, p, url) {
     if (platformOn()) {
       try {
         const r = await saveDocument(id, b.doc)
-        return send(res, 200, { bytes: b.doc.length, wrote: r.wrote })
+        return send(res, 200, { bytes: b.doc.length, wrote: r.wrote, savedAt: r.savedAt })
       } catch (e) {
+        /* "you are not signed in" is an answer, not an outage.
+         *
+         * The disk fallback below exists so an unreachable database never costs
+         * an author their work. A refusal is the opposite case: falling through
+         * would write a stranger's map into scratch, report success, and lose it
+         * when the instance ends. Say so instead. */
+        if (e.name === 'NoOwner') return send(res, 401, { error: String(e.message) })
         // never lose an author's work to a database being unreachable: fall
         // through and put it on disk, and say so
         console.error('[doc] platform save failed, writing to disk:', e.message)

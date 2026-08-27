@@ -11,6 +11,7 @@ import { q, one, many } from '../db/pool.mjs'
 import { store, keys, onBlobWrite, takeBucketOps } from './blobs.mjs'
 import { getDoc, putDoc, getMapBySlug, createMap, ensureUser } from './maps.mjs'
 import { env, need } from '../db/env.mjs'
+import { request } from './ctx.mjs'
 
 // Is the platform on at all? With no database configured the tool falls back to
 // work/ and behaves exactly as it did before, which is the degraded-not-broken
@@ -38,16 +39,36 @@ export async function mapIdFor(slug, { create = false } = {}) {
   if (hit && (hit.id || Date.now() - hit.at < MISS_MS)) return hit.id
   let m = await getMapBySlug(slug)
   if (!m && create) {
-    const E = env()
-    const owner = await ensureUser({
-      email: need(`BOOTSTRAP_EMAIL`),
-      password: need(`BOOTSTRAP_PASSWORD`),
-      displayName: 'Algorithmic Thinking Club',
-      claude: 'relay',
-      pixellab: 'relay',
-    })
+    /* A NEW MAP BELONGS TO WHOEVER MADE IT.
+     *
+     * This assigned every map to BOOTSTRAP_EMAIL, which is fine on one laptop
+     * where that account is the only one, and wrong the moment a second person
+     * signs up: their very first save created a map owned by the club, and the
+     * ownership gate then locked them out of the thing they had just made. It
+     * is the bug that would have made "anyone can make an account" false in
+     * practice, and it got sharper once ownership started being enforced on
+     * reads as well as writes.
+     *
+     * A script has no request around it, so it still falls back to the
+     * bootstrap account; that is import-work and make-scene, run by hand on the
+     * machine that owns the data. An HTTP request with no signed-in user gets
+     * nothing, because the alternative is letting a stranger create rows and
+     * bucket objects on somebody else's account by naming a slug. */
+    const req = request()
+    if (req.http && !req.user) return null
+    const ownerId =
+      req.user?.id ||
+      (
+        await ensureUser({
+          email: need(`BOOTSTRAP_EMAIL`),
+          password: need(`BOOTSTRAP_PASSWORD`),
+          displayName: 'Algorithmic Thinking Club',
+          claude: 'relay',
+          pixellab: 'relay',
+        })
+      ).id
     // a brand new scene has no geometry yet; the first autosave fills it in
-    m = await createMap({ slug, ownerId: owner.id, title: slug, w: 1, h: 1 })
+    m = await createMap({ slug, ownerId, title: slug, w: 1, h: 1 })
   }
   ids.set(slug, { id: m?.id || null, at: Date.now() })
   return m?.id || null
@@ -59,6 +80,17 @@ export const forgetMap = (slug) => ids.delete(slug)
 
 export async function saveDocument(slug, docString) {
   const id = await mapIdFor(slug, { create: true })
+  /* mapIdFor refuses to invent a map for a caller with no account, and that
+   * refusal has to arrive here as a sentence rather than as a null that travels
+   * two more functions and surfaces as a not-null constraint violation on
+   * map_blobs.map_id. The caller turns this into a 401; without it the failure
+   * looked like the database being unreachable and fell through to the disk
+   * fallback, which on a host writes to /tmp and silently loses the work. */
+  if (!id) {
+    const e = new Error('sign in to create a map')
+    e.name = 'NoOwner'
+    throw e
+  }
   const r = await putDoc(id, docString)
   // the row's own updated_at, so the browser records exactly what the server
   // thinks the time is rather than what the browser's clock thinks
