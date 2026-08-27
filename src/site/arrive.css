@@ -107,13 +107,35 @@
   justify-items: end;
   text-align: right;
 }
+/* A HARD OUTLINE, not a soft shadow.
+ *
+ * White on a painting is legible right up until the letters cross a pale roof
+ * or a sandbar, and a blur only makes the collision softer rather than
+ * readable. A solid ring in the darkest colour on the page separates the type
+ * from whatever is behind it at every stop, and a hard edge is also what
+ * belongs over pixel art, where nothing else is blurred.
+ *
+ * paint-order lets the stroke sit UNDER the fill, so thickening it never eats
+ * into the letterforms. The shadow ring underneath catches browsers that do
+ * not honour a stroke, and the one deep glow stays for weight. */
 .land-say p {
   max-width: 14ch;
   margin: 0;
-  font: 400 clamp(1.6rem, 3.6vw, 3.1rem) / 1.12 var(--font-label);
+  font: 500 clamp(1.6rem, 3.6vw, 3.1rem) / 1.12 var(--font-label);
   letter-spacing: -0.02em;
   color: #fff;
-  text-shadow: 0 2px 34px rgba(0, 0, 0, 0.9);
+  -webkit-text-stroke: 5px #0a0c10;
+  paint-order: stroke fill;
+  text-shadow:
+    2px 2px 0 #0a0c10,
+    -2px 2px 0 #0a0c10,
+    2px -2px 0 #0a0c10,
+    -2px -2px 0 #0a0c10,
+    0 3px 0 #0a0c10,
+    0 -3px 0 #0a0c10,
+    3px 0 0 #0a0c10,
+    -3px 0 0 #0a0c10,
+    0 6px 26px rgba(0, 0, 0, 0.75);
   animation: say-in 640ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 @keyframes say-in {

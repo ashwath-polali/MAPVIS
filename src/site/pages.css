@@ -102,12 +102,18 @@
 }
 .desk-art {
   aspect-ratio: 4 / 5;
-  display: grid;
-  place-items: center;
+  overflow: hidden;
   border: 1px solid color-mix(in srgb, var(--iron) 22%, transparent);
-  background: color-mix(in srgb, var(--vellum-2) 60%, transparent);
   box-shadow: 0 30px 70px -40px rgba(40, 30, 12, 0.7);
+  /* a sheet on a desk is never square to the edge */
   rotate: -1.2deg;
+}
+.desk-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  image-rendering: pixelated;
+  display: block;
 }
 .desk-art .realm-await {
   color: var(--iron-soft);

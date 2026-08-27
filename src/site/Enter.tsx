@@ -26,7 +26,7 @@ export default function Enter() {
   const desk = usePointer<HTMLDivElement>(0.5)
 
   useEffect(() => {
-    if (user) go('/maps', true)
+    if (user) go('/', true)
   }, [user])
   useEffect(() => {
     first.current?.focus()
@@ -40,7 +40,7 @@ export default function Enter() {
     try {
       if (isNew) await signUp(email, password, name)
       else await signIn(email, password)
-      go('/maps')
+      go('/')
     } catch (err) {
       setWhy(String((err as Error).message))
       setBusy(false)
@@ -53,30 +53,29 @@ export default function Enter() {
       <div className="lamp par" style={{ ['--par' as string]: '30px' }} aria-hidden />
 
       <Link to="/" className="enter-back ul">
-        back to open water
+        back
       </Link>
 
       <div className="enter-desk">
-        {/* PLACEHOLDER. PixelLab paints the desk: an unrolled chart, dividers,
-            an ink pot, a brass rule, all seen from above. */}
         <div className="desk-art">
-          <span className="realm-await mono">painting: cartographer-desk</span>
+          <img src="/site-art/desk.png" alt="" />
         </div>
 
         <div className="enter-sheet">
           <div className="sheet-head">
-            <div className="label">{isNew ? 'a new hand' : 'welcome back'}</div>
-            <h1 className="d3">{isNew ? 'Sign the ledger.' : 'Take up the pen.'}</h1>
+            {/* the eyebrow used to repeat the heading word for word, which is
+                the shape of a template rather than a page saying something */}
+            <h1 className="d3">{isNew ? 'Create an account' : 'Sign in'}</h1>
             <p className="aside">
               {isNew
-                ? 'An account is what makes a map yours on any machine. The cut, the levels, the walk test and export never cost anything.'
-                : 'Your maps are where you left them, on whichever machine you left them from.'}
+                ? 'Your maps are saved to your account, so you can open them from any computer. Making maps is free.'
+                : 'Welcome back. Your maps are where you left them.'}
             </p>
           </div>
 
           <form onSubmit={submit} className="sheet-form">
             {isNew && (
-              <Field label="what to call you" hint="shown on nothing yet, and optional">
+              <Field label="your name" hint="optional">
                 <input value={name} onChange={(e) => setName(e.target.value)} autoComplete="nickname" />
               </Field>
             )}
@@ -90,7 +89,7 @@ export default function Enter() {
                 autoComplete="email"
               />
             </Field>
-            <Field label="password" hint={isNew ? 'eight characters at the very least' : undefined}>
+            <Field label="password" hint={isNew ? 'at least 8 characters' : undefined}>
               <input
                 type="password"
                 required
@@ -107,7 +106,7 @@ export default function Enter() {
             )}
 
             <button className="plate" disabled={busy}>
-              {busy ? 'a moment' : isNew ? 'sign the ledger' : 'enter'}
+              {busy ? 'one moment' : isNew ? 'create account' : 'sign in'}
             </button>
           </form>
 
@@ -119,7 +118,7 @@ export default function Enter() {
                 setWhy('')
               }}
             >
-              {isNew ? 'I have been here before' : 'I have never been here'}
+              {isNew ? 'I already have an account' : "I don't have an account yet"}
             </button>
           </div>
         </div>
