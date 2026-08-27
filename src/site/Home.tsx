@@ -35,7 +35,18 @@ const when = (iso: string) => {
   const d = Math.round(s / 86400)
   return d < 30 ? d + ' days ago' : new Date(iso).toLocaleDateString()
 }
-const shot = (m: MapRow) => (m.published != null ? `/api/v1/maps/${m.slug}/file/${m.published}/scene.png` : null)
+/* A MAP THAT HAS NEVER BEEN EXPORTED STILL HAS A PICTURE.
+ *
+ * This only ever pointed at a published bundle, so a map you had painted but
+ * not yet exported showed "no painting yet", and every card on the page was a
+ * read out of object storage. The working scene is the better source for a
+ * thumbnail on both counts: it is what the map looks like right now rather than
+ * at the last export, and /work/ is served from local disk when this machine
+ * has it, so a page of cards costs nothing.
+ *
+ * The published copy stays the first choice, because on a host it is the only
+ * one that exists. */
+const shot = (m: MapRow) => `/work/${m.slug}/scene.png`
 
 export default function Home() {
   const { user, loading } = useSession()

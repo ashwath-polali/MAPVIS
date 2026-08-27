@@ -47,12 +47,25 @@ export default function Landing() {
     ;(async () => {
       for (const b of BEATS) {
         try {
-          const r = await fetch(`/api/v1/maps/${b.slug}`)
-          if (!r.ok) continue
-          const man = await r.json()
-          const url = man.files?.['scene.png']?.url
-          if (!url || dead) continue
-          const blob = await (await fetch(url)).blob()
+          /* THE PUBLISHED SCENE FIRST, THEN THE WORKING ONE.
+           *
+           * This only ever read the published bundle, which is always fetched
+           * from object storage, so the day storage stopped answering the whole
+           * page went blank, on a laptop that had every one of these images on
+           * its own disk. /work/ is served from disk when this machine has the
+           * file, so the fallback costs nothing and cannot be capped. */
+          let url: string | null = null
+          try {
+            const r = await fetch(`/api/v1/maps/${b.slug}`)
+            if (r.ok) url = (await r.json()).files?.['scene.png']?.url || null
+          } catch {
+            /* fall through to the working copy */
+          }
+          if (dead) return
+          let res = url ? await fetch(url) : null
+          if (!res || !res.ok) res = await fetch(`/work/${b.slug}/scene.png`)
+          if (!res.ok || dead) continue
+          const blob = await res.blob()
           if (dead) return
           setReady((s) => ({ ...s, [b.slug]: URL.createObjectURL(blob) }))
         } catch {

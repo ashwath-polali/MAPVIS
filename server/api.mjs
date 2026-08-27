@@ -2412,7 +2412,16 @@ async function route(req, res, p, url) {
     if (platformOn()) {
       try {
         const r = await loadDocument(id)
-        if (r?.doc) return send(res, 200, { doc: r.doc, savedAt: r.savedAt, from: 'platform' })
+        if (r?.doc) {
+          /* OPENING A MAP IS WORKING ON IT.
+           *
+           * The dashboard orders by updated_at, which only a save used to
+           * touch, so the banner kept leading with whichever map was written
+           * last rather than the one just opened. Opening one now counts, which
+           * is what "recent" reads as to the person looking at it. */
+          q('update maps set updated_at = now() where slug = $1', [id]).catch(() => {})
+          return send(res, 200, { doc: r.doc, savedAt: r.savedAt, from: 'platform' })
+        }
       } catch (e) {
         console.error('[doc] platform load failed, trying disk:', e.message)
       }
