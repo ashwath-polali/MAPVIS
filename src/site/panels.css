@@ -410,3 +410,96 @@
   margin: 0;
   color: #8d97a4;
 }
+
+/* ---- one loading mark, everywhere -----------------------------------------
+   Four squares walking a ring on the pixel grid. It replaced a soft ink blot
+   that bled outward, which was slow, apologetic, and the wrong shape for a
+   tool made entirely of hard pixels. */
+.pixload {
+  position: relative;
+  width: 22px;
+  height: 22px;
+}
+.pixload i {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  background: #d8dee6;
+  animation: pixwalk 1s steps(1) infinite;
+}
+.pixload i:nth-child(1) { animation-delay: 0ms; }
+.pixload i:nth-child(2) { animation-delay: 250ms; }
+.pixload i:nth-child(3) { animation-delay: 500ms; }
+.pixload i:nth-child(4) { animation-delay: 750ms; }
+@keyframes pixwalk {
+  0%   { top: 0;    left: 0;    opacity: 1; }
+  25%  { top: 0;    left: 16px; opacity: .75; }
+  50%  { top: 16px; left: 16px; opacity: .5; }
+  75%  { top: 16px; left: 0;    opacity: .75; }
+  100% { top: 0;    left: 0;    opacity: 1; }
+}
+.inkwait {
+  display: grid;
+  place-items: center;
+  gap: 16px;
+  min-height: 46vh;
+  color: #6f7885;
+  font: 400 11px var(--font-mono);
+  letter-spacing: 0.08em;
+}
+
+/* the key each field wants, said plainly beside what it does */
+.key-api {
+  font: 400 11px var(--font-mono);
+  color: #6f7885;
+}
+.key-top .dot { margin-left: auto; }
+
+/* ---- walking --------------------------------------------------------------
+   The stage is the whole screen under the bar. It used to be a boxed 16:9
+   panel with a video-player triangle in the middle of it, which made a map
+   look like a clip of a map. */
+.walk {
+  position: relative;
+  display: grid;
+  grid-template-rows: 1fr auto;
+  min-height: 0;
+}
+.walk-stage {
+  position: relative;
+  min-height: 0;
+  background: #06080b;
+  outline: none;
+  overflow: hidden;
+}
+.walk-mount {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+}
+.walk-canvas {
+  image-rendering: pixelated;
+  display: block;
+}
+.walk-over {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 14px;
+  color: #6f7885;
+  font: 400 11px var(--font-mono);
+  letter-spacing: 0.08em;
+}
+.walk-over.bad { color: #d0785f; }
+.walk-hint {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px clamp(16px, 3vw, 32px) 16px;
+  font: 400 10.5px var(--font-mono);
+  color: #4d5661;
+}
+.walk-hint .on { color: #e6e9ee; }

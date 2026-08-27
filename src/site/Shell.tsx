@@ -16,13 +16,19 @@ const Enter = lazy(() => import('./Enter'))
 const Home = lazy(() => import('./Home'))
 const MapPage = lazy(() => import('./MapPage'))
 
-/* Ink spreading into paper. Every wait in this app is this, never a spinner,
- * because a spinner is the single most template-shaped thing a page can do. */
-export function Ink({ what = 'loading' }: { what?: string }) {
+/* One loading mark for the whole app: four squares walking a ring on the pixel
+ * grid. The bleeding ink blot it replaced was slow, soft and the wrong shape for
+ * a tool made of hard pixels. */
+export function Ink({ what = '' }: { what?: string }) {
   return (
     <div className="inkwait" role="status" aria-live="polite">
-      <div className="inkblot" aria-hidden />
-      <span className="label">{what}</span>
+      <div className="pixload" aria-hidden>
+        <i />
+        <i />
+        <i />
+        <i />
+      </div>
+      {what ? <span>{what}</span> : null}
     </div>
   )
 }

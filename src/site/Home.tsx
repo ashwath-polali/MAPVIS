@@ -11,7 +11,7 @@
  */
 import { useEffect, useMemo, useState } from 'react'
 import { Link, go } from './router'
-import { useSession } from './session'
+import { useSession, signOut } from './session'
 import { Settings } from './Settings'
 
 type MapRow = {
@@ -66,7 +66,9 @@ export default function Home() {
   return (
     <div className="home">
       <header className="home-bar">
-        <span className="home-mark">MAPVIS</span>
+        <button className="home-mark" onClick={() => go('/')} aria-label="home">
+            MAPVIS
+          </button>
         <div className="home-bar-r">
           <input
             className="home-find"
@@ -77,6 +79,14 @@ export default function Home() {
           />
           <button className="home-icon" aria-label="settings" title="settings" onClick={() => setSettings(true)}>
             <Gear />
+          </button>
+          <button
+            className="home-icon"
+            aria-label="sign out"
+            title="sign out"
+            onClick={() => void signOut().then(() => go('/'))}
+          >
+            <Out />
           </button>
         </div>
       </header>
@@ -174,8 +184,15 @@ function Blank() {
   )
 }
 
-/* Drawn on a pixel grid rather than lifted from an icon set. One of them,
- * because one is all this bar needs now that signing out lives in the panel. */
+/* Drawn on a pixel grid rather than lifted from an icon set. */
+function Out() {
+  return (
+    <svg viewBox="0 0 16 16" width="16" height="16" shapeRendering="crispEdges" aria-hidden>
+      <path fill="currentColor" d="M2 2h7v2H4v8h5v2H2zM10 5h2v2h-2zM12 7h3v2h-3zM10 9h2v2h-2z" />
+    </svg>
+  )
+}
+
 function Gear() {
   return (
     <svg viewBox="0 0 16 16" width="16" height="16" shapeRendering="crispEdges" aria-hidden>

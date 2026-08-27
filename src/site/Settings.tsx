@@ -64,8 +64,8 @@ export function Settings({ onClose }: { onClose: () => void }) {
 
         <section className="keys">
           <h3>Keys</h3>
-          <Key user={user} which="pixellab" title="Art generation" note="Without it, generating is unavailable and everything else works." />
-          <Key user={user} which="claude" title="Prompt writing" note="Without it, what you type is used directly." />
+          <Key user={user} which="pixellab" title="Art generation" api="PixelLab API key" note="Without it, generating is unavailable and everything else works." />
+          <Key user={user} which="claude" title="Prompt writing" api="Claude API key" note="Without it, what you type is used directly." />
         </section>
 
         <section>
@@ -148,7 +148,7 @@ function Works({ on = true, what, note }: { on?: boolean; what: string; note: st
   )
 }
 
-function Key({ user, which, title, note }: { user: User; which: 'claude' | 'pixellab'; title: string; note: string }) {
+function Key({ user, which, title, api, note }: { user: User; which: 'claude' | 'pixellab'; title: string; api: string; note: string }) {
   const mode = which === 'claude' ? user.claude_provider : user.pixellab_provider
   const held = which === 'claude' ? user.has_claude_key : user.has_pixellab_key
   const [val, setVal] = useState('')
@@ -171,6 +171,7 @@ function Key({ user, which, title, note }: { user: User; which: 'claude' | 'pixe
     <div className="key">
       <div className="key-top">
         <b>{title}</b>
+        <span className="key-api">({api})</span>
         <span className={'dot ' + (mode === 'none' ? '' : 'on')} />
       </div>
       <p className="sheet-note">{note}</p>

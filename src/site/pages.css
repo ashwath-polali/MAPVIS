@@ -354,67 +354,8 @@
   flex-wrap: wrap;
 }
 
-/* the walk stage */
-.walk {
-  margin: 40px 0 20px;
-}
-.walk-stage {
-  position: relative;
-  /* 16/9 is a video shape and a map is not a video. Islands come out near
-     square, so a wide letterbox wasted the sides and clipped the bottom. */
-  aspect-ratio: 16 / 10;
-  max-height: 76svh;
-  display: grid;
-  place-items: center;
-  background: var(--void);
-  border: 1px solid color-mix(in srgb, var(--gold) 26%, transparent);
-  clip-path: polygon(16px 0, 100% 0, 100% calc(100% - 16px), calc(100% - 16px) 100%, 0 100%, 0 16px);
-  outline: none;
-  overflow: hidden;
-}
-.walk-stage:focus-visible {
-  border-color: var(--gold);
-}
-.walk-canvas {
-  image-rendering: pixelated;
-  max-width: 100%;
-  max-height: 100%;
-}
-.walk-start {
-  display: grid;
-  justify-items: center;
-  gap: 10px;
-  background: none;
-  border: 0;
-  color: var(--ink);
-  cursor: pointer;
-  padding: 30px;
-}
-.walk-tri {
-  width: 0;
-  height: 0;
-  border-left: 22px solid var(--gold);
-  border-top: 14px solid transparent;
-  border-bottom: 14px solid transparent;
-  transition: transform var(--t) var(--ease-paper);
-}
-.walk-start:hover .walk-tri {
-  transform: scale(1.18);
-}
-.walk-load {
-  color: var(--dim);
-}
-.walk-bar {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  padding-top: 12px;
-  font-size: 10.5px;
-  color: var(--dim);
-}
-.walk-near.on {
-  color: var(--gold-lit);
-}
+/* the walk screen moved to panels.css, where it is a full stage rather than a
+   boxed 16:10 panel with a video-player triangle in it. */
 
 .map-cols {
   display: grid;
