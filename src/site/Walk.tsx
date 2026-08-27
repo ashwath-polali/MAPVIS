@@ -169,17 +169,78 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
         }
 
         // ---- Thor ----------------------------------------------------------
-        const thor: Record<string, HTMLImageElement[]> = {}
+        /* THOR'S FEET, NOT THOR'S FILE.
+         *
+         * The frames are 144x144 and the panther stands in the middle of that:
+         * measured, rows 39 to 105, which leaves 38 rows of empty pixels BELOW
+         * his feet. Drawing the whole frame with its bottom edge on the walk
+         * position therefore hangs him almost five painting pixels above the
+         * ground he is actually standing on, and scales him to half the height
+         * map.json asks for, because 144 is mostly padding.
+         *
+         * That single offset is every symptom at once. His feet look like they
+         * are over the water while his collision point is still on the quay, so
+         * he "walks off the harbour". He looks like he is in open street while
+         * his collision point is already against a wall, so he "gets stuck on
+         * nothing". And the whole character reads as sitting slightly up and
+         * left of where he is, which is the shifted feeling.
+         *
+         * So each frame is measured once, and from here on only the drawn
+         * pixels exist: the crop is the sprite, its height is what charH scales,
+         * and the bottom of the CONTENT is what lands on the walk position.
+         *
+         * editor.ts:4693 solved this already and says so: "the canvas padding
+         * under the feet is what floats a character above the mask". This is
+         * that same trimToFeet, to the letter, because the third copy of a rule
+         * is how the first two started.
+         *
+         * Two details that are not optional. The crop keeps rows 0..feet: the
+         * padding ABOVE the head stays and is taken out of the scale instead, by
+         * measuring from the first drawn row. And the scale uses ONE height, the
+         * standing south frame's, for every frame: a per-frame height makes him
+         * pulse as he walks, because east is drawn 75 rows tall and south 67. */
+        const A_MIN = 40 // the repo-wide alpha threshold
+        type Frame = { img: HTMLImageElement; feet: number; top: number }
+        const trimToFeet = (im: HTMLImageElement): Frame | null => {
+          try {
+            const c = document.createElement('canvas')
+            c.width = im.width
+            c.height = im.height
+            const tg = c.getContext('2d', { willReadFrequently: true })!
+            tg.drawImage(im, 0, 0)
+            const d = tg.getImageData(0, 0, im.width, im.height).data
+            let top = -1
+            let feet = -1
+            for (let y = 0; y < im.height; y++) {
+              let hit = false
+              for (let x = 0; x < im.width && !hit; x++) if (d[(y * im.width + x) * 4 + 3] > A_MIN) hit = true
+              if (hit) {
+                if (top < 0) top = y
+                feet = y
+              }
+            }
+            return feet < 0 ? null : { img: im, feet, top }
+          } catch {
+            return null
+          }
+        }
+        const thor: Record<string, Frame[]> = {}
         await Promise.all(
           HEADINGS.map(async (h) => {
-            const set: HTMLImageElement[] = []
+            const set: Frame[] = []
             for (let i = 0; i < 6; i++) {
               const im = await load(`/thor/${h}/${i}.png`)
-              if (im) set.push(im)
+              const t = im && trimToFeet(im)
+              if (t) set.push(t)
             }
             if (set.length) thor[h] = set
           }),
         )
+        // the standing south frame is the one charH measures, exactly as the rig does
+        // 1 is never used: with no frames at all the draw takes its capsule
+        // fallback and never reaches the scale.
+        const stand = thor.south?.[0] || Object.values(thor)[0]?.[0]
+        const drawnH = stand ? stand.feet - stand.top + 1 : 1
 
         if (dead) return
         const el = mount.current!
@@ -551,14 +612,16 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
                 return
               }
               const f = moving ? 1 + (Math.floor(stepT * 9) % (set.length - 1)) : 0
-              const im = set[Math.min(f, set.length - 1)]
-              /* Thor's frames are drawn at 144px; map.json says a person on this
-               * island is 18 painting pixels tall. So the scale is simply how
-               * many screen pixels 18 painting pixels comes to, divided by the
-               * frame height. Getting this wrong drew him eight times life size,
-               * standing over the harbour like a kaiju. */
-              const s = (charH * zoom) / im.height
-              g.drawImage(im, ox + px * zoom - (im.width * s) / 2, oy + py * zoom - im.height * s, im.width * s, im.height * s)
+              const fr = set[Math.min(f, set.length - 1)]
+              /* charH scales the CHARACTER, so it divides the drawn height of
+               * the standing frame, not the 144px canvas he was exported on.
+               * Rows 0..feet are drawn with that bottom edge on the walk
+               * position, so his feet land on the pixel the step test read. */
+              const s = (charH * zoom) / drawnH
+              const rows = fr.feet + 1
+              const dw = fr.img.width * s
+              const dh = rows * s
+              g.drawImage(fr.img, 0, 0, fr.img.width, rows, ox + px * zoom - dw / 2, oy + py * zoom - dh, dw, dh)
             },
           })
           order.sort((a, b) => a.y - b.y).forEach((o) => o.go())

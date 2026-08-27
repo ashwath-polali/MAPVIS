@@ -2281,6 +2281,22 @@ export class Editor {
       // collapsing against the border
       b.x = clamp(Math.round(b.x + (x - a.x)), 0, Math.max(0, this.doc.W - b.w))
       b.y = clamp(Math.round(b.y + (y - a.y)), 0, Math.max(0, this.doc.H - b.h))
+      /* THE BOX MOVED, SO THE NUMBER THAT DESCRIBES IT IS NOW ABOUT SOMEWHERE
+       * ELSE.
+       *
+       * walkPct is the 35% law's input: at or above it a figure is held to the
+       * walkable pixels inside its box and told the area is open, below it the
+       * box alone fences it. It was measured once, when the box was drawn, and
+       * then carried verbatim through every drag and every duplicate. On the
+       * hub that left 8 of 17 walkOnly placements holding a fraction from
+       * ground they no longer stand over: stored 63.2% against 20.3% real.
+       *
+       * The result is a figure fenced to a box with almost no floor in it, and
+       * life falls back to holding still for a whole leg when nothing in the
+       * box is steppable. That is the "walking sprites randomly get stuck",
+       * and it is random because it resolves per leg. */
+      if (a.life && typeof (a.life as { walkPct?: number }).walkPct === 'number')
+        (a.life as { walkPct?: number }).walkPct = this.walkFraction(b)
     }
     a.x = x
     a.y = y
@@ -3928,13 +3944,36 @@ export class Editor {
     const gm = (this.natMask as HTMLCanvasElement).getContext('2d') as CanvasRenderingContext2D
     const d = gm.createImageData(W, H)
     const p = d.data
+    /* PAINTED IS NOT STANDABLE, AND THIS OVERLAY USED TO SAY IT WAS.
+     *
+     * It coloured every pixel that had a level and called that walkable. The
+     * step test asks for more: a body has width, so canStand also needs both
+     * hip pixels, two across and one up, to exist and to sit within
+     * stepTolerance. Measured on the hub, 23,861 pixels are painted and 21,050
+     * can be stood on. So 2,811 of them, 11.8 percent of everything drawn here,
+     * were shown as floor no character can occupy.
+     *
+     * They are not a blob: 99.9 percent are within two pixels of real floor, a
+     * one to two pixel rim along every path edge, and the harbour stair narrows
+     * to a single standable pixel while looking comfortably wide. That rim is
+     * why walking felt wrong in places the editor promised ground, and why the
+     * complaint survived fixing the walk page twice. The canvas the map is
+     * authored on was the thing telling the lie.
+     *
+     * Drawn dim rather than hidden, because painting it was not a mistake. It
+     * is the edge of the path, and seeing where usable floor actually stops is
+     * the entire point of the overlay. */
     for (let i = 0; i < this.doc.lvl.length; i++) {
       const v = this.doc.lvl[i]
+      if (v === 0) {
+        p[i * 4 + 3] = 0
+        continue
+      }
       const c = colOf(v)
       p[i * 4] = c[0]
       p[i * 4 + 1] = c[1]
       p[i * 4 + 2] = c[2]
-      p[i * 4 + 3] = v === 0 ? 0 : 255
+      p[i * 4 + 3] = canStand(this.doc, this.cfg, i % W, (i / W) | 0) ? 255 : 70
     }
     gm.putImageData(d, 0, 0)
 
