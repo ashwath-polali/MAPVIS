@@ -3498,6 +3498,34 @@ export default function App() {
   const loadPanel = (
     <>
       <div className="panel-cap">bring in one whole painting</div>
+
+      {/* A PAINTING YOU ALREADY HAVE, FIRST.
+        *
+        * Dropping a file onto the canvas has always worked and nothing on
+        * screen said so, so the only visible way in was generating one, which
+        * needs a key. Everything after this step is free forever: cut, levels,
+        * doors, the walk test, export. Somebody with no keys at all should be
+        * able to bring their own png and use the whole tool, and that route has
+        * to be the obvious one rather than a gesture you have to guess. */}
+      <Sec>open a file</Sec>
+      <label className="field openfile">
+        <input
+          type="file"
+          accept="image/png,image/jpeg,image/webp"
+          onChange={(ev) => {
+            const f = ev.target.files?.[0]
+            const e = edRef.current
+            if (!f || !e) return
+            const fr = new FileReader()
+            fr.onload = () => void e.loadPainting(String(fr.result), slug(f.name.replace(/\.[a-z]+$/i, '')))
+            fr.readAsDataURL(f)
+            ev.target.value = ''
+          }}
+        />
+        <span className="openfile-btn">choose a png</span>
+        <span className="field-desc">or drop one anywhere on the map · free, no key needed</span>
+      </label>
+
       <Sec>generate</Sec>
       <label className="field">
         <input

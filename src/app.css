@@ -3311,3 +3311,34 @@ body[data-view='editor'] *::-webkit-scrollbar-track {
 .brand:hover {
   color: var(--ink);
 }
+
+/* A PAINTING YOU ALREADY HAVE. The file input itself is invisible; the label is
+   the button, so the whole row is one target and nothing looks like a browser
+   default in the middle of a tool. */
+.openfile {
+  cursor: pointer;
+}
+.openfile input[type='file'] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+.openfile-btn {
+  display: block;
+  padding: 9px 12px;
+  text-align: center;
+  font-weight: 500;
+  color: var(--ink);
+  background: var(--raised);
+  border: 1px solid var(--edge);
+  border-radius: 2px;
+  transition:
+    border-color 160ms ease,
+    color 160ms ease;
+}
+.openfile:hover .openfile-btn {
+  border-color: var(--acc);
+  color: var(--acc);
+}

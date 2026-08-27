@@ -125,6 +125,28 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
   // last, while the one just re-exported sat further down the grid.
   await q('update maps set updated_at = now() where id = $1', [m.id])
 
+  /* A PUBLISH THAT WOULD COST HUNDREDS OF REQUESTS TO OPEN IS A BUG.
+   *
+   * The hub shipped 800 loose pngs, and opening it three times emptied a free
+   * tier's entire daily download allowance. The atlas fixes that structurally,
+   * but an atlas that silently fails to match also 'works' by falling back to
+   * exactly the thing it was written to prevent, which is how it hid for a
+   * whole day.
+   *
+   * So the cost of opening this map is measured here, at publish, every time,
+   * and said out loud. Six is the floor: map.json, scene, levels, assets.json,
+   * atlas.png, atlas.json. If this number is ever in the hundreds again,
+   * something regressed and the log says so before anybody's bucket does. */
+  const loose = packed
+    ? (assetsJson.assets || []).filter((a) => !a.srcAt && !a.framesAt && !a.dirsAt).length
+    : (assetsJson.assets || []).length
+  const cost = 6 + loose
+  if (loose)
+    console.warn(
+      `[publish] ${slug} v${version}: ${loose} placement(s) missed the atlas, so opening this map costs about ${cost} requests`,
+    )
+  else console.log(`[publish] ${slug} v${version}: opening this map costs 6 requests`)
+
   return {
     version,
     prefix,

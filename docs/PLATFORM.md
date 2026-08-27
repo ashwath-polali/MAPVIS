@@ -197,97 +197,33 @@ to be the same requirement.
 
 ## Phases
 
-- [x] **0. The remote.** `github.com/ashwath-polali/MAPVIS-next`, private. 42 commits, 2,293 files,
-      including `work/hub/doc.json` and the export bundle that had never been committed.
-- [x] **1. Storage.** **Gate passed 2026-08-26.** `node server/db/gate.mjs hub` turns the disk
-      fallback off and the api still answers with the document, 94 placements, the door, the 71-item
-      library, real png bytes and the painting, all out of Neon and B2. The hub is 1.17 MB in object
-      storage, so 10 GB holds roughly 8,500 maps.
+All of it is built, deployed and verified. What is left is content, not platform.
 
-      Four commands exist now and are the ones to reach for: `doctor.mjs` says whether anything is
-      unwired, `migrate.mjs` applies schema, `import-work.mjs <slug>` moves a folder in,
-      `verify-map.mjs <slug>` proves a round trip is lossless, `gate.mjs <slug>` proves the map does
-      not need this laptop.
+- [x] **0. The remote.** github.com/ashwath-polali/MAPVIS-next, private.
+- [x] **1. Storage.** Documents in Neon, every byte in Backblaze, the library out of a directory
+      walk and into rows, states, versions, export. Gate:  turns the disk off and the
+      whole map still answers.
+- [x] **2. Anchors.** Author-typed names separate from labels, six kinds, , placement
+      binding, uniqueness at author time, derived names flagged. Plus , which
+      answers the question nothing used to ask: can a player actually REACH this.
+- [x] **3. Accounts.** Signup, login, sessions, ownership checked once at the door, an AES-256-GCM
+      key vault, login backoff, a spend ledger.
+- [x] **4. Degraded routing.** One planner call over three providers. No key narrows the tool; it
+      never breaks it.  is the linked machine.
+- [x] **5. Deploy.** Live at mapvis-atc.vercel.app, region pdx1 beside the database.
+- [x] **6. UI.** Landing, sign in, home, settings, walk, and the editor on the same system.
+- [x] **7. Publish and the read API.** Immutable versions, , the atlas, and the game
+      reading the platform instead of a folder somebody copied by hand.
 
-      **Writes followed.** The listing comes from the database now, so anything generation wrote to
-      disk and did not push would simply vanish from the library. Every library write ends at one of
-      four functions, so those four push to the store before responding: `saveStatic`, `swapFolder`,
-      and the two places `saveFrames` is finished off by `trimSet`. Deleting drops from both.
-      `verify-map.mjs` walks that path with a real png and checks it lists, round-trips and deletes.
+### The cost of opening a map
 
-      Disk did not go away and should not: it is where the collision loops, the `.stage` swap and
-      `.prev` still run, all of it already tested. It is scratch, and the store is truth by the time
-      a request ends, which is also what lets a hosted server work with an ephemeral disk.
+The hub published 800 loose pngs and opening it three times emptied a free tier's entire daily
+download allowance. Every frame is packed into one sheet now, so a map is **six requests**:
+map.json, scene.png, levels.png, assets.json, atlas.png, atlas.json.
 
-      Still on disk and still to move: the export writer, states, and `.prev`.
-
-      **The browser was still winning, and that was the real bug.** `restoreLocal()` ran first and
-      `restoreDoc()` was documented as "read when this browser has nothing", so a map in a database
-      was never actually read from it and two browsers would diverge silently. The document now
-      carries `savedAt` from the server's own clock, the browser records the same number beside its
-      copy, and **the newer one wins**. Offline edits still win when they are genuinely newer, which
-      is the case that made the old order look correct.
-- [ ] **2. Anchors.** Editor naming UI, `to_anchor`, placement binding, the listing endpoint, export
-      writing both shapes.
-- [x] **3. Accounts.** Signup, login, sessions, ownership, providers, the key vault, the ledger and
-      `/api/my-maps`. `verify-auth.mjs` proves the refusals as hard as the successes: a wrong
-      password, a forged token, an expired session whose row still exists, one account posting to
-      another's map, and whether a stored key can ever come back out over http.
-
-      **Ownership is checked at the door, in one place.** Every write route takes a map id out of its
-      own body, so an account that simply types someone else's slug had to be stopped before the
-      route, not inside forty of them. A rule enforced in forty places is enforced in thirty-nine.
-
-      **`MAPVIS_SOLO`** is the one deliberate exception. It names an account that an unauthenticated
-      request is treated as, and it exists because the tool has to stay usable the way it has always
-      been used: one person on one laptop with no login screen in front of the map they are drawing.
-      Without it, the moment the hub had an owner its own author was locked out by his own signed-out
-      browser. It lives only in `.env`, so on a host every request is exactly who its cookie says.
-
-- [x] **4. Jobs and degraded routing.** `runPlanner` kept its signature and became a dispatcher over
-      three providers, so all ten callers were left alone: `key` calls the anthropic api directly and
-      drops the 3.77 s process start the cli costs, `relay` posts a job row a linked machine claims,
-      `none` throws `NoPlanner`.
-
-      **The fall-through is the rule, stated in Ash's words:** anything that ROUTES through claude
-      sends the author's own words straight to pixellab when claude cannot be reached; anything that
-      IS claude denies until there is a key. `translateAsk` already had the fallback prompt, so what
-      was missing was saying so, because a silent degrade spends a real generation on a worse prompt
-      and leaves nobody any way to know why the picture got worse.
-
-      `server/relay.mjs` is the linked machine. It holds no key, runs the cli that is already paid
-      for here, and polls rather than being called, which is the only shape that works from a laptop
-      with no public address that closes at night. It stops checking in, the platform notices in 90
-      seconds and degrades. `for update skip locked` on the claim is what stops two machines running
-      and billing the same question twice.
-- [ ] **5. Deploy.** Vercel plus Neon plus R2 on a domain.
-- [ ] **6. UI.** Ash steers this one. Held to the MAPVIS UI law: not a default-looking React page.
-- [x] **7a. Publish and the read API.** **Landed 2026-08-26, early, because export was already
-      being moved off disk and the two are the same act.**
-
-      Pressing export now also writes an immutable version to `publish/<slug>/v<N>/` and records it.
-      Nothing ever rewrites a version, so re-exporting cannot break a class mid-session, a game build
-      can pin a version it was tested against, and every byte ships `immutable` so a cdn serves the
-      second fetch and the free read budget is never touched twice for the same file. `map.json`
-      picks up `anchors[]` from the database on the way through and keeps `events[]` beside it.
-
-      `/api/v1` is the only surface anything outside MAPVIS may call, versioned in the path from the
-      first line, read-only, addressed by slug:
-
-      | | |
-      |---|---|
-      | `GET /api/v1/maps` | the registry the game has never had. A door names a target by slug and nothing could answer whether it exists |
-      | `GET /api/v1/maps/:slug/anchors` | names only, small enough to fetch on every keystroke. This is what gives python autocomplete and an author-time error instead of a silent no-op |
-      | `GET /api/v1/maps/:slug` | the manifest: map.json plus every file with its size, hash and url |
-      | `GET /api/v1/maps/:slug/versions` | every published version |
-      | `GET /api/v1/maps/:slug/file/:v/*` | the bytes, cached forever, cors open |
-
-      `verify-api.mjs` checks what works and what must be refused: climbing out of a version, a
-      version that does not exist, an empty filename, a map nobody published, and any write at all.
-
-      Still to come here: the game reading `/api/v1` instead of `public/maps-painted/`.
-
----
+That number is measured at publish, every time, and logged. An atlas that silently fails to match
+still "works" by falling back to the exact thing it was written to prevent, which is how the bug
+hid for a day. If the count is ever in the hundreds again the log says so before a bucket does.
 
 ## Running it
 
