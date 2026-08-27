@@ -255,6 +255,104 @@ export async function serveFromStore(res, rel, req) {
   return true
 }
 
+/* PUT THE MAP'S BYTES WHERE THE EXPORTER CAN SEE THEM.
+ *
+ * Export resolves every placement's source through resolveAssetFile, which is
+ * a filesystem call: it joins a path under work/ and returns null when the file
+ * is not there. On a laptop that is always fine, because work/ IS the library.
+ * On the host work/ is an empty tmp directory and the library lives in the
+ * bucket, so every source resolved to null, every placement was skipped by the
+ * `if (!look0) continue` a few lines down from the call, no frames reached the
+ * atlas, and the bundle published as a success carrying an island with nothing
+ * on it. Nobody caught it because the gate never exercises /api/export.
+ *
+ * Rather than teach four call sites and the naming logic to read bytes from two
+ * places, the bytes are brought to the place that already works. Anything
+ * already on disk is left alone, so this costs nothing at all on the machine
+ * that made the map, and on the host it is one listing plus the files that are
+ * genuinely missing.
+ *
+ * Returns what it had to fetch, so the caller can say so out loud rather than
+ * quietly spending a few hundred reads. */
+export async function hydrateMap(slug, dir) {
+  if (!platformOn()) return { pulled: 0, bytes: 0, skipped: 0 }
+  const fs = await import('node:fs')
+  const path = await import('node:path')
+  const id = await mapIdFor(slug)
+  if (!id) return { pulled: 0, bytes: 0, skipped: 0 }
+
+  const s = store()
+  const prefix = `maps/${id}/`
+  let pulled = 0
+  let bytes = 0
+  let skipped = 0
+  const failed = []
+
+  const want = []
+  for (const o of await s.list(prefix)) {
+    const key = String(o.key || o)
+    const rel = key.slice(prefix.length)
+    if (!rel) continue
+    const f = path.join(dir, ...rel.split('/'))
+    if (fs.existsSync(f)) skipped++
+    else want.push([key, f])
+  }
+
+  /* FETCHED IN PARALLEL, BECAUSE THE FUNCTION HAS FIVE MINUTES AND THE HUB HAS
+   * FOURTEEN HUNDRED FILES.
+   *
+   * Measured one at a time: 1,383 objects took 260 seconds, against a
+   * maxDuration of 300. That is not a margin, it is a coin toss, and the export
+   * would have started failing the moment the map grew. Twelve at a time is the
+   * same number of requests and roughly a twentieth of the wall clock, and it
+   * stays well under the ceiling the meter enforces. Kept modest rather than
+   * maximal because this shares a connection with everything else the request
+   * is doing. */
+  const LANES = 12
+  let next = 0
+  await Promise.all(
+    Array.from({ length: Math.min(LANES, want.length) }, async () => {
+      for (;;) {
+        const i = next++
+        if (i >= want.length) return
+        const [key, f] = want[i]
+        /* RETRIED, BECAUSE THE CLIENT IS DELIBERATELY MAXATTEMPTS:1.
+         *
+         * That setting is right for its own reason: against a capped bucket a
+         * refusal is an answer and retrying three times just makes the export
+         * outlive the browser. But it also means a transient reset loses the
+         * object outright, and twelve lanes at once produce those. Measured:
+         * ten of 1,383 files vanished this way, silently, which would have been
+         * ten missing frames in a published bundle reported as a success.
+         *
+         * So the retry lives here rather than in the client, where it applies to
+         * a bulk copy that can afford it and not to the single reads a request
+         * is waiting on. */
+        let got = null
+        for (let attempt = 0; attempt < 3 && !got; attempt++) {
+          try {
+            got = await s.get(key)
+          } catch {
+            if (attempt < 2) await new Promise((r) => setTimeout(r, 150 * (attempt + 1)))
+          }
+        }
+        if (!got) {
+          failed.push(key)
+          continue
+        }
+        fs.mkdirSync(path.dirname(f), { recursive: true })
+        fs.writeFileSync(f, got)
+        pulled++
+        bytes += got.length
+      }
+    }),
+  )
+  // said out loud rather than swallowed: a file that did not arrive is a frame
+  // that will be missing from the bundle, and the export must not look clean
+  if (failed.length) console.error(`[hydrate] ${slug}: ${failed.length} object(s) could not be read, e.g. ${failed[0]}`)
+  return { pulled, bytes, skipped, failed: failed.length }
+}
+
 // ---- writing a png ---------------------------------------------------------
 
 // Every generation path in api.mjs ends by putting bytes somewhere. These are

@@ -45,6 +45,7 @@ import {
   loadDocument,
   libraryOf,
   serveFromStore,
+  hydrateMap,
   pushItem,
   dropItem,
   snapshotVersion,
@@ -2102,6 +2103,15 @@ async function route(req, res, p, url) {
     const id = safeId(b.id)
     const dir = path.join(WORK, id)
     fs.mkdirSync(dir, { recursive: true })
+    /* Every source byte within reach of resolveAssetFile before anything tries
+     * to resolve one. On this machine that is a no-op; on a host it is what
+     * stops the export publishing an empty island. */
+    try {
+      const h = await hydrateMap(id, dir)
+      if (h.pulled) console.log(`[export] ${id}: pulled ${h.pulled} file(s), ${(h.bytes / 1024).toFixed(0)}kb, from object storage`)
+    } catch (e) {
+      console.error('[export] could not hydrate from object storage:', e.message)
+    }
     const files = []
     for (const [name, data] of [
       ['scene.png', b.scene],
