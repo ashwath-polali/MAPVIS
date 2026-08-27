@@ -65,8 +65,19 @@
   font: 400 11px var(--font-mono);
   color: #8d97a4;
 }
-.lead-go {
+.lead-hit {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+.lead-acts {
+  position: relative;
+  z-index: 3;
+  display: flex;
+  gap: 18px;
   margin-top: 8px;
+}
+.lead-go {
   font: 600 11px var(--font-label);
   letter-spacing: 0.18em;
   text-transform: uppercase;
@@ -76,8 +87,15 @@
   padding-bottom: 3px;
   transition: border-color 200ms ease;
 }
-.lead:hover .lead-go {
+.lead-go:hover {
   border-color: #fff;
+}
+.lead-go.alt {
+  color: #9fd8c0;
+  border-color: rgba(159, 216, 192, 0.4);
+}
+.lead-go.alt:hover {
+  border-color: #9fd8c0;
 }
 
 .blank {

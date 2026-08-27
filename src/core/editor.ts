@@ -805,6 +805,36 @@ export class Editor {
     const [x, y] = this.toNative(e)
     this.lastPx = [x, y]
     void r
+
+    /* A DOOR CAN BE DRAGGED. Grab one by clicking inside its ring.
+     *
+     * Anchors were droppable and deletable and nothing else, so a door landing
+     * two pixels off meant deleting it and clicking again, and a door on ground
+     * nobody can stand on could not be rescued at all. The hub's only
+     * interactive thing has been stuck 22px from the nearest floor for exactly
+     * this reason. */
+    if (this.eventsVisible && e.button === 0) {
+      const hit = [...this.doc.events]
+        .reverse()
+        .find((v) => Math.hypot(v.x - x, v.y - y) <= Math.max(6, v.r))
+      if (hit) {
+        this.doc.snap()
+        this.dragEvent = { id: hit.id, dx: hit.x - x, dy: hit.y - y }
+        this.capture(e)
+        e.preventDefault()
+        return
+      }
+    }
+
+    /* TOOLS BELONG TO THE STEP THAT OWNS THEM.
+     *
+     * The tool survived a step change, so arriving at test with the bucket
+     * still armed from cut meant one click cut a hole in the map, and arriving
+     * from levels painted walkable ground. Both silent, both undoable only if
+     * you noticed. Painting is now refused anywhere it is not the point of the
+     * screen you are on. */
+    if (!this.paintable) return
+
     if (this.assetMode) {
       this.assetDown(e, x, y)
       return
@@ -870,6 +900,18 @@ export class Editor {
       this.ox = this.panning.ox + (e.clientX - this.panning.sx)
       this.oy = this.panning.oy + (e.clientY - this.panning.sy)
       this.dirty = true
+      return
+    }
+    // a door being dragged. It says whether the ground under it can be stood
+    // on as it goes, so a door is never left somewhere the game cannot fire it.
+    if (this.dragEvent) {
+      const [x, y] = this.toNative(e)
+      const ev = this.doc.events.find((v) => v.id === this.dragEvent!.id)
+      if (ev) {
+        ev.x = Math.round(x + this.dragEvent.dx)
+        ev.y = Math.round(y + this.dragEvent.dy)
+        this.touched()
+      }
       return
     }
     if (!this.painting) return
@@ -1029,6 +1071,25 @@ export class Editor {
 
   private onUp(_e: PointerEvent) {
     this.panning = null
+    if (this.dragEvent) {
+      const ev = this.doc.events.find((v) => v.id === this.dragEvent!.id)
+      this.dragEvent = null
+      if (ev) {
+        /* Say whether it can be reached, now, while the map is in front of you.
+         *
+         * An anchor drops on any pixel with no ground test, so a door can sit
+         * on a wall or open water and look completely correct. The hub's only
+         * interactive thing sat 22px from the nearest floor for weeks and
+         * nothing anywhere said so. */
+        const ok = this.ringHasGround(ev.x, ev.y, ev.r)
+        this.say(
+          ok
+            ? `${ev.name} at ${ev.x}, ${ev.y} · a player can reach it`
+            : `${ev.name} at ${ev.x}, ${ev.y} · NOTHING WALKABLE INSIDE IT · the game will never fire it`,
+        )
+      }
+      return
+    }
     if (this.bandSt) {
       const b = this.bandSt
       const dragged = Math.abs(b.b[0] - b.a[0]) > 2 || Math.abs(b.b[1] - b.a[1]) > 2
@@ -3142,6 +3203,34 @@ export class Editor {
     if (this.eventsVisible === on) return
     this.eventsVisible = on
     this.dirty = true
+  }
+
+  /* May this screen paint at all? The workflow sets it per step, so cut and
+   * levels paint and load, test and export cannot. Default true, because a
+   * caller that never sets it is the old single-purpose editor. */
+  paintable = true
+  setPaintable(on: boolean) {
+    if (this.paintable === on) return
+    this.paintable = on
+    this.dirty = true
+    this.emit()
+  }
+
+  /* the door being dragged right now, and where inside its ring it was held */
+  private dragEvent: { id: number; dx: number; dy: number } | null = null
+
+  /* Is there anywhere inside this ring a player could actually stand?
+   *
+   * The same test the game applies, so the answer here is the answer there.
+   * One standable pixel is enough: the ring is a trigger, not a floor. */
+  ringHasGround(cx: number, cy: number, r: number) {
+    const rad = Math.max(1, Math.round(r))
+    for (let y = cy - rad; y <= cy + rad; y++)
+      for (let x = cx - rad; x <= cx + rad; x++) {
+        if ((x - cx) ** 2 + (y - cy) ** 2 > rad * rad) continue
+        if (canStand(this.doc, this.cfg, x, y)) return true
+      }
+    return false
   }
   /* A name nobody in this map has used. The suffix walk matches the one the
    * library uses for a filename, so two anchors named the same way read the way

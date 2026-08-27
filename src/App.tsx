@@ -791,6 +791,11 @@ export default function App() {
     const e = edRef.current
     if (!e) return
     e.setAssetMode(s === 'assets')
+    /* PAINTING BELONGS TO THE STEPS THAT PAINT. Cut and levels draw on the
+     * map; load, test and export do not. The tool used to survive a step
+     * change, so arriving at test with the bucket still armed from cut meant
+     * one click cut a hole in the island. */
+    e.setPaintable(s === 'cut' || s === 'levels' || s === 'assets')
     // the events overlay belongs to the steps that read it
     e.setEventsVisible(s === 'test' || s === 'export')
     if (s === 'cut') {
@@ -5741,7 +5746,11 @@ export default function App() {
   return (
     <div className="app">
       <header>
-        <span className="brand">MAPVIS</span>
+        {/* the same wordmark, the same size and face as the home page, and it
+            goes there. One product should not have two logos. */}
+        <a className="brand" href="/" title="your maps">
+          MAPVIS
+        </a>
         <nav className="stepper">
           {STEPS.map((s) => (
             <button
@@ -5754,6 +5763,9 @@ export default function App() {
             </button>
           ))}
         </nav>
+        <a className="helpbtn backbtn" href="/" data-tip="back to your maps">
+          ←
+        </a>
         <button className="helpbtn" data-tip="what this tool can do" onClick={() => setHelpOn(true)}>
           ?
         </button>

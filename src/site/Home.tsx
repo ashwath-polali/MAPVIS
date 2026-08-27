@@ -124,7 +124,8 @@ export default function Home() {
  * is allowed to be big, and it is what stops the screen reading as a list. */
 function Lead({ m }: { m: MapRow }) {
   return (
-    <a className="lead" href={`/edit?id=${encodeURIComponent(m.slug)}`}>
+    <div className="lead">
+      <a className="lead-hit" href={`/edit?id=${encodeURIComponent(m.slug)}`} aria-label={`edit ${m.slug}`} />
       <img src={shot(m) as string} alt="" />
       <div className="lead-say">
         <span className="lead-when">last opened {when(m.updated_at)}</span>
@@ -137,9 +138,20 @@ function Lead({ m }: { m: MapRow }) {
           <span>{m.anchors} named</span>
           {m.published != null && <span>v{m.published}</span>}
         </div>
-        <span className="lead-go">keep working</span>
+        {/* two ways in, because the newest map is the one you are most likely
+            to want to either carry on with OR go and stand in */}
+        <div className="lead-acts">
+          <a className="lead-go" href={`/edit?id=${encodeURIComponent(m.slug)}`}>
+            keep working
+          </a>
+          {m.published != null && (
+            <Link to={`/maps/${m.slug}`} className="lead-go alt">
+              walk it
+            </Link>
+          )}
+        </div>
       </div>
-    </a>
+    </div>
   )
 }
 

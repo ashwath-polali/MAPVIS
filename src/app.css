@@ -3264,3 +3264,50 @@ body[data-view='editor'] *::-webkit-scrollbar-thumb:hover {
 body[data-view='editor'] *::-webkit-scrollbar-track {
   background: transparent;
 }
+
+/* THE ASK BOX. Its hint was sitting in the column beside the textarea, so on a
+   272px panel it wrapped one word per line down the right hand side and read as
+   a broken layout rather than a note. It goes above the box, full width, where
+   a caption belongs. */
+.field:has(.field-desc) {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 5px;
+}
+/* the note reads BEFORE the box it describes, and spans the panel */
+.field:has(.field-desc) .field-desc {
+  order: -1;
+  grid-column: 1;
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+.field:has(.field-desc) > input,
+.field:has(.field-desc) > textarea {
+  grid-column: 1;
+  width: 100%;
+  min-width: 0;
+}
+
+/* the back arrow beside help. Same box, same weight, so the top right corner
+   reads as one pair rather than a button and a link. */
+.backbtn {
+  display: inline-grid;
+  place-items: center;
+  text-decoration: none;
+  font-size: 15px;
+  line-height: 1;
+}
+
+/* the wordmark matches the site's exactly, and it is a link */
+.brand {
+  font-family: var(--font-ui);
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 0.34em;
+  color: var(--dim);
+  text-decoration: none;
+  transition: color 160ms ease;
+}
+.brand:hover {
+  color: var(--ink);
+}
