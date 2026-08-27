@@ -175,6 +175,81 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
         /* Where the ground actually is, measured once off the levels plane.
          * Everything on screen is framed against this rather than against the
          * canvas the ground happens to sit inside. */
+        /* A SPAWN THAT IS NOT STANDABLE IS A CHARACTER WHO CANNOT MOVE.
+         *
+         * Movement only commits a step the collision test accepts, so starting
+         * on a pixel that fails the test leaves every direction refused and Thor
+         * frozen on the spot with no way to tell why. The hub spawns at 557,508
+         * and hip is 2, so the test reads five pixels across and one of them is
+         * off the edge of the walkable band. The nearest pixel that does pass is
+         * 556,507, one across and one up.
+         *
+         * A whole map is not broken by one pixel. The spawn is a hint, so it is
+         * treated as one: search outward for the closest standable pixel and
+         * start there. Nothing is written back, because the document belongs to
+         * the author and the editor is where a spawn gets moved on purpose. */
+        const roomy = (x: number, y: number) =>
+          standable(x, y) &&
+          standable(x - 1, y) &&
+          standable(x + 1, y) &&
+          standable(x, y - 1) &&
+          standable(x, y + 1)
+        const settle = (x: number, y: number, reach = 96) => {
+          if (roomy(x, y)) return { x, y }
+          // two passes outward: somewhere with elbow room first, then anywhere
+          // standable at all. Landing hard against a wall is technically legal
+          // and reads as being stuck, because half the directions refuse.
+          let any: { x: number; y: number } | null = null
+          for (let r = 1; r <= reach; r++)
+            for (let a = 0; a < 360; a += 5) {
+              const nx = Math.round(x + Math.cos((a * Math.PI) / 180) * r)
+              const ny = Math.round(y + Math.sin((a * Math.PI) / 180) * r)
+              if (roomy(nx, ny)) return { x: nx, y: ny }
+              if (!any && standable(nx, ny)) any = { x: nx, y: ny }
+            }
+          // nothing within reach is standable, so leave the hint alone rather
+          // than teleporting somebody to a corner of the canvas
+          return any || { x, y }
+        }
+        ;({ x: px, y: py } = settle(px, py))
+
+        /* A WALKER STANDING OFF THE GROUND CANNOT WALK.
+         *
+         * lifeAt is handed the collision test so a wandering figure stays on the
+         * floor, which means a figure whose own position fails that test has
+         * nowhere legal to step and holds still forever. Seven of the hub's
+         * twenty-two moving placements are in exactly that state, sitting a
+         * pixel or two off the walkable band, and they read on screen as people
+         * frozen mid-street while the ones beside them move.
+         *
+         * Nudged the same way the spawn is, and only a few pixels: far enough to
+         * find the floor, near enough that nobody has been moved anywhere an
+         * author would notice. The saved document is untouched; this is the
+         * reader being forgiving, not the map being rewritten.
+         *
+         * Eight pixels and no further, because past that it stops being a
+         * rounding error and starts being a relocation. Two of the hub's are 82
+         * and 90 pixels from any floor, which is not a placement that slipped,
+         * it is a placement standing somewhere the mask never made walkable.
+         * Papering over that would hide the actual defect, so anything still
+         * stranded is named in the console instead: the map is what needs the
+         * edit, and the tool should say which placement to go and look at. */
+        const stranded: string[] = []
+        for (const v of live) {
+          if (!v.life) continue
+          const s = settle(v.p.x, v.p.y, 8)
+          if (!standable(s.x, s.y)) {
+            stranded.push(`${(v.p as { id?: string }).id ?? '?'} at ${v.p.x},${v.p.y}`)
+            continue
+          }
+          if (s.x !== v.p.x || s.y !== v.p.y) v.p = { ...v.p, x: s.x, y: s.y }
+        }
+        if (stranded.length)
+          console.warn(
+            `[walk] ${stranded.length} moving placement(s) stand off walkable ground and cannot move: ` +
+              `${stranded.join('; ')}. Widen the mask under them, or move them, in the levels step.`,
+          )
+
         const land = (() => {
           let x0 = meta.w
           let y0 = meta.h
@@ -189,6 +264,53 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
                 if (y > y1) y1 = y
               }
           return x1 > x0 ? { x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1 } : { x: 0, y: 0, w: meta.w, h: meta.h }
+        })()
+
+        /* WHAT TO FRAME IS THE PICTURE, NOT THE WALKABLE STRIP.
+         *
+         * Zoom used to fit `land`, the bounding box of standable pixels. On the
+         * hub that box is 534x185 while the painting is 688x640, because the
+         * ground people can stand on is a band across the middle and the volcano,
+         * the cliffs and the rooftops are all above it. Fitting the band picked
+         * zoom 3 and drew the scene at 2064x1920 inside an 880-tall window, so
+         * the island was enormous and cut off at the top and bottom. Fitting the
+         * bare canvas is the other failure the old comment describes: a painting
+         * carries transparent margin, so that leaves the island a stamp in a
+         * field of black.
+         *
+         * The thing that is neither is the painting's own visible extent: the
+         * alpha bounding box. Read once, off the image already loaded. Unioned
+         * with land so no standable pixel can ever fall outside the view, and
+         * falling back to land if the readback is refused. */
+        const view = (() => {
+          try {
+            const c = document.createElement('canvas')
+            c.width = meta.w
+            c.height = meta.h
+            const cg = c.getContext('2d', { willReadFrequently: true })!
+            cg.drawImage(scene, 0, 0, meta.w, meta.h)
+            const d = cg.getImageData(0, 0, meta.w, meta.h).data
+            let x0 = meta.w
+            let y0 = meta.h
+            let x1 = -1
+            let y1 = -1
+            for (let y = 0; y < meta.h; y++)
+              for (let x = 0; x < meta.w; x++)
+                if (d[(y * meta.w + x) * 4 + 3] > 8) {
+                  if (x < x0) x0 = x
+                  if (y < y0) y0 = y
+                  if (x > x1) x1 = x
+                  if (y > y1) y1 = y
+                }
+            if (x1 < x0) return land
+            const ax = Math.min(x0, land.x)
+            const ay = Math.min(y0, land.y)
+            const bx = Math.max(x1, land.x + land.w - 1)
+            const by = Math.max(y1, land.y + land.h - 1)
+            return { x: ax, y: ay, w: bx - ax + 1, h: by - ay + 1 }
+          } catch {
+            return land
+          }
         })()
 
         const headingOf = (dx: number, dy: number) => {
@@ -237,11 +359,11 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
            * Fitting the canvas picked zoom 1 and left the island a stamp in a
            * field of black. Fitting the ground it actually has picks 2, and the
            * empty margin is cropped rather than framed. */
-          const zoom = Math.max(1, Math.min(8, Math.floor(Math.min(box.width / land.w, box.height / land.h))))
+          const zoom = Math.max(1, Math.min(8, Math.floor(Math.min(box.width / view.w, box.height / view.h))))
           const w = meta.w * zoom
           const h = meta.h * zoom
-          const ox = Math.round(box.width / 2 - (land.x + land.w / 2) * zoom)
-          const oy = Math.round(box.height / 2 - (land.y + land.h / 2) * zoom)
+          const ox = Math.round(box.width / 2 - (view.x + view.w / 2) * zoom)
+          const oy = Math.round(box.height / 2 - (view.y + view.h / 2) * zoom)
 
           g.setTransform(dpr, 0, 0, dpr, 0, 0)
           g.imageSmoothingEnabled = false
