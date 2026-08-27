@@ -3415,16 +3415,44 @@ export default function App() {
     [prompt],
   )
 
+  /* AN EXPORT MUST SURVIVE YOU LEAVING THE PAGE.
+   *
+   * It is a single request carrying every png the map uses, so on the hub it is
+   * megabytes and several seconds. Clicking back mid-flight tore the request
+   * down with the document, and a half-written publish is the one thing this
+   * whole system is built to make impossible.
+   *
+   * keepalive lets the browser finish the request after the page is gone, and
+   * beforeunload asks first, because "your export was cancelled" is a worse
+   * thing to discover later than a confirm dialog is now. */
+  const exporting = useRef(false)
+  useEffect(() => {
+    const ask = (ev: BeforeUnloadEvent) => {
+      if (!exporting.current) return
+      ev.preventDefault()
+      ev.returnValue = ''
+    }
+    window.addEventListener('beforeunload', ask)
+    return () => window.removeEventListener('beforeunload', ask)
+  }, [])
+
   const doExport = useCallback(async () => {
     const e = edRef.current
     if (!e || !e.status().hasPainting) return
+    if (exporting.current) return
+    exporting.current = true
     e.setBusy('writing')
     try {
       const r = await api.exportBundle(e.bundle())
-      e.say(`wrote ${r.files.join(', ')} to ${r.dir}`)
+      e.say(
+        r.published
+          ? `published v${r.published.version} · ${r.files.join(', ')}`
+          : `wrote ${r.files.join(', ')} to ${r.dir}`,
+      )
     } catch (err) {
       e.say(String(err instanceof Error ? err.message : err))
     }
+    exporting.current = false
     e.setBusy('')
   }, [])
 

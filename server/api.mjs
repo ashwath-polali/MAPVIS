@@ -2668,8 +2668,23 @@ async function readApi(req, res, p, url) {
     const v = url.searchParams.get('v')
     const pub = await publishedMap(slug, v)
     if (!pub) return send(res, 404, { error: `${slug} has never been published` })
-    const buf = await store().get(pub.blob_prefix + 'map.json')
-    const map = JSON.parse(buf.toString('utf8'))
+    /* A MAP THAT EXISTS AND A STORE THAT WILL NOT ANSWER ARE DIFFERENT THINGS.
+     *
+     * Both used to come back as "never published", so a rate-limited bucket
+     * read as lost work and sent somebody off to re-export something that was
+     * already there. 503 says come back, 404 says it is not here. */
+    let map
+    try {
+      map = JSON.parse((await store().get(pub.blob_prefix + 'map.json')).toString('utf8'))
+    } catch (e) {
+      const why = String(e.message || e)
+      return send(res, 503, {
+        error: /cap exceeded|bandwidth|transaction/i.test(why)
+          ? `${slug} v${pub.version} is published, but object storage has hit its daily download cap. Raise it in the Backblaze console under Caps & Alerts, or wait for the reset.`
+          : `${slug} v${pub.version} is published but its files could not be read: ${why.slice(0, 120)}`,
+        published: pub.version,
+      })
+    }
     // absolute urls, so the game can point at a hosted MAPVIS without knowing
     // how any of this is laid out
     const base = `/api/v1/maps/${slug}/file/${pub.version}/`

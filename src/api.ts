@@ -1,11 +1,14 @@
 /* Calls to the local node side. Nothing here knows a key. */
 import type { CustomControl } from './core/customfx'
 
-async function jpost<T>(url: string, body: unknown): Promise<T> {
+async function jpost<T>(url: string, body: unknown, opts?: { keepalive?: boolean }): Promise<T> {
   const r = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
+    // an export is megabytes and several seconds; keepalive lets the browser
+    // finish it after the page it started on is gone
+    ...(opts?.keepalive ? { keepalive: true } : {}),
   })
   const j = await r.json()
   if (!r.ok || j.error) throw new Error(j.error || r.statusText)
@@ -841,7 +844,8 @@ export const libraryRemove = (id: string, name: string) =>
 export const saveCutPNG = (id: string, image: string, cut: string) =>
   jpost<{ dir: string; files: string[] }>('/api/savecut', { id, image, cut })
 
-export const exportBundle = (b: unknown) => jpost<{ dir: string; files: string[] }>('/api/export', b)
+export const exportBundle = (b: unknown) =>
+  jpost<{ dir: string; files: string[]; published?: { version: number } }>('/api/export', b, { keepalive: true })
 
 /* The map's own state, saved to the platform on the same beat as the browser
  * autosave. Export is a different job: it is the bundle the game reads, it is

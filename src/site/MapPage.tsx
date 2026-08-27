@@ -17,11 +17,22 @@ export default function MapPage({ slug }: { slug: string }) {
   const [man, setMan] = useState<Manifest | null>(null)
   const [gone, setGone] = useState(false)
 
+  const [why, setWhy] = useState('')
+
   useEffect(() => {
     fetch(`/api/v1/maps/${slug}`)
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error('unpublished'))))
+      .then(async (r) => {
+        if (r.ok) return r.json()
+        // 503 means it IS published and storage would not answer, which is a
+        // completely different thing to say to somebody than "not exported"
+        const j = await r.json().catch(() => ({}))
+        throw new Error(j.error || (r.status === 503 ? 'storage is not answering' : 'unpublished'))
+      })
       .then(setMan)
-      .catch(() => setGone(true))
+      .catch((e) => {
+        setWhy(String((e as Error).message))
+        setGone(true)
+      })
   }, [slug])
 
   useEffect(() => {
@@ -34,8 +45,8 @@ export default function MapPage({ slug }: { slug: string }) {
     return (
       <div className="playing">
         <div className="play-empty">
-          <h1>{slug} has not been published.</h1>
-          <p>Open it in the editor and export it, then it can be walked.</p>
+          <h1>{slug} will not open.</h1>
+          <p>{why || 'Open it in the editor and export it, then it can be walked.'}</p>
           <button className="sheet-btn" onClick={() => go('/')}>
             Back
           </button>

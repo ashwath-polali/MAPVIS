@@ -69,12 +69,27 @@
     }
   ],
   "occluders": [],
+  "anchors": [
+    {
+      "name": "panthers_maw",
+      "kind": "door",
+      "x": 343,
+      "y": 378,
+      "r": 14,
+      "to": "panther-maw",
+      "label": "Panther's Maw",
+      "meta": {
+        "docId": 2,
+        "derived": true
+      }
+    }
+  ],
   "events": [
     {
       "id": 2,
       "type": "door",
       "x": 343,
-      "y": 362,
+      "y": 378,
       "r": 14,
       "label": "Panther's Maw",
       "to": "panther-maw"
