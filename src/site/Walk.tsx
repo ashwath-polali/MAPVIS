@@ -377,6 +377,45 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
          * fact about the map and belongs in front of the author rather than
          * hidden by a fudge. Named below, with coordinates, and left where the
          * author put it. */
+        /* walkPct IS DERIVED DATA, SO DERIVE IT RATHER THAN TRUST IT.
+         *
+         * It is the 35% law's input: at or above the threshold a figure is held
+         * to the walkable pixels inside its box and told the area is open;
+         * below it, the box alone fences it. The editor measured it once when
+         * the box was drawn and then carried the number through every drag and
+         * every duplicate, so on this map 8 of 17 walkOnly placements carry a
+         * fraction measured somewhere they no longer stand: 63.2 percent stored
+         * against 20.3 percent real. Fenced to a box with almost no floor in
+         * it, life falls back to holding still for a whole leg, which is the
+         * figures that stop for no visible reason and then start again.
+         *
+         * Fixing the editor stops it happening to boxes moved from now on. It
+         * does nothing for the bundles already published, and this page reads a
+         * published bundle. The mask is right here, so the honest thing is to
+         * measure it now instead of believing a number from a previous position.
+         * Same sampling as editor.ts walkFraction, so the two agree. */
+        const walkFraction = (r: { x: number; y: number; w: number; h: number }) => {
+          const step = Math.max(1, Math.floor(Math.min(r.w, r.h) / 40))
+          let seen = 0
+          let walk = 0
+          for (let y = r.y; y < r.y + r.h; y += step)
+            for (let x = r.x; x < r.x + r.w; x += step) {
+              if (x < 0 || y < 0 || x >= meta.w || y >= meta.h) continue
+              seen++
+              if (at(x, y) > 0) walk++
+            }
+          return seen ? walk / seen : 0
+        }
+        let restated = 0
+        for (const v of live) {
+          const life = v.life as { bounds?: { x: number; y: number; w: number; h: number }; walkPct?: number } | null
+          if (!life?.bounds || typeof life.walkPct !== 'number') continue
+          const now = walkFraction(life.bounds)
+          if (Math.abs(now - life.walkPct) > 0.01) restated++
+          life.walkPct = now
+        }
+        if (restated) console.warn(`[walk] ${restated} placement(s) carried a stale walkPct; re-measured from the mask`)
+
         const stuckWalkers = live
           .filter((v) => v.life && !standable(v.p.x, v.p.y))
           .map((v) => `${(v.p as { id?: string }).id ?? '?'} at ${v.p.x},${v.p.y}`)
@@ -613,14 +652,27 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
               }
               const f = moving ? 1 + (Math.floor(stepT * 9) % (set.length - 1)) : 0
               const fr = set[Math.min(f, set.length - 1)]
-              /* charH scales the CHARACTER, so it divides the drawn height of
-               * the standing frame, not the 144px canvas he was exported on.
-               * Rows 0..feet are drawn with that bottom edge on the walk
-               * position, so his feet land on the pixel the step test read. */
-              const s = (charH * zoom) / drawnH
+              /* THE SAME ts THE EDITOR USES, 0.7 INCLUDED.
+               *
+               * editor.ts:4662 is (cfg.charH * 0.7) / rig.drawnH, and the 0.7 is
+               * not a rounding: its comment calls it "drawn slightly smaller
+               * than the contract height, test-stage feel only". Scaling by a
+               * bare charH here made him 1/0.7, about 1.43 times, larger than
+               * the editor draws him, which is why he towered over the knights
+               * he is supposed to be shorter than. charH stays the contract
+               * height for collision; only the picture is nudged. */
+              const ts = (charH * 0.7) / drawnH
               const rows = fr.feet + 1
-              const dw = fr.img.width * s
-              const dh = rows * s
+              const dw = fr.img.width * ts * zoom
+              const dh = rows * ts * zoom
+              // the editor's contact shadow, which is most of what sells him as
+              // standing on the ground rather than hovering over it
+              g.save()
+              g.fillStyle = 'rgba(6,10,14,0.35)'
+              g.beginPath()
+              g.ellipse(ox + (px + 1) * zoom, oy + (py - 2) * zoom, 15 * ts * zoom, 5.5 * ts * zoom, 0, 0, 6.284)
+              g.fill()
+              g.restore()
               g.drawImage(fr.img, 0, 0, fr.img.width, rows, ox + px * zoom - dw / 2, oy + py * zoom - dh, dw, dh)
             },
           })
