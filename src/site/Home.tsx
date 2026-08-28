@@ -9,11 +9,19 @@
  * is a big unfiltered painting. The only colour on the page comes out of the
  * work. Chrome stays out of the way.
  *
- * Folders sit on top of that and are allowed to be absent. Everything to do
- * with them hangs off one GET, and when that GET does not answer the rail, the
- * per-card picker and the dragging all disappear and this is the page it has
- * always been with every map in one list. Organising is never what decides
- * whether you can see your own work.
+ * A FOLDER IS TWO THINGS AND THEY ARE THE SAME THING. It is a name in the rail
+ * down the left, which is a filter you glance at, and it is a tile in the grid
+ * with a folder shape on it instead of a painting, which is the thing your hand
+ * is already near. Both select it; opening one shows only what is inside it and
+ * the top level then shows the folders plus the maps that are in none of them.
+ * Folder tiles always sort ahead of map tiles, so a map can never be dragged in
+ * among them and a folder can never be dragged in among the maps.
+ *
+ * Folders are allowed to be absent. Everything to do with them hangs off one
+ * GET, and when that GET does not answer, the rail, the tiles, the per-card
+ * picker, the button in the bar and the dragging all disappear and this is the
+ * page it has always been with every map in one list. Organising is never what
+ * decides whether you can see your own work.
  */
 import { useEffect, useMemo, useState, type DragEvent } from 'react'
 import { createPortal } from 'react-dom'
@@ -67,12 +75,57 @@ const shot = (m: MapRow) => `/work/${m.slug}/scene.png`
  * made after that order was made, so it is the newest thing here. Sinking new
  * work under a list sorted a month ago is how a dashboard starts hiding things.
  *
- * The incoming list is already newest-first and sort is stable, so everything
- * unplaced keeps that order among itself. */
+ * The incoming list is already newest-first (listMaps orders by updated_at
+ * desc) and sort is stable, so everything unplaced keeps that order among
+ * itself and an untouched account reads most recent first. */
 const inOrder = (list: MapRow[], seq: string[]) => {
   if (!seq.length) return list
   const at = new Map(seq.map((s, i) => [s, i]))
   return [...list].sort((a, b) => (at.get(a.slug) ?? -1) - (at.get(b.slug) ?? -1))
+}
+
+/* THE HAND ORDER OF THE FOLDERS IS KEPT IN THIS BROWSER AND NOWHERE ELSE.
+ *
+ * The server has exactly one order endpoint and it orders maps: /api/folders/order
+ * writes folder_maps.sort or map_order.sort, looked up by map slug. Nothing
+ * writes folders.sort after the row is created, so a folder dragged in front of
+ * another is remembered here. When this is missing the fallback is the order the
+ * server sent, which is folders.sort then created_at, so a browser that has
+ * never rearranged anything is in creation order.
+ *
+ * The opposite rule to inOrder above, on purpose: an unplaced FOLDER sorts to
+ * the end, because createFolder puts a new one on the end of the rail and it
+ * should stay where it was put. An unplaced MAP sorts to the top, because it is
+ * newer than the order somebody made. */
+const FORDER = 'mapvis:folder-order'
+const readOrder = (): string[] => {
+  try {
+    const v: unknown = JSON.parse(localStorage.getItem(FORDER) || '[]')
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []
+  } catch {
+    return []
+  }
+}
+const writeOrder = (ids: string[]) => {
+  try {
+    localStorage.setItem(FORDER, JSON.stringify(ids))
+  } catch {
+    // private browsing has no storage. The order is then whatever the server
+    // sent, which is a worse answer and not a broken one.
+  }
+}
+const inFolderOrder = (list: Folder[], seq: string[]) => {
+  if (!seq.length) return list
+  const at = new Map(seq.map((s, i) => [s, i]))
+  return [...list].sort((a, b) => (at.get(a.id) ?? 1e9) - (at.get(b.id) ?? 1e9))
+}
+
+// which half of a tile the pointer is on decides which side of it the dragged
+// thing lands, which is the only way a drop between two tiles can be aimed
+// without a separate gap to hit
+const half = (e: DragEvent<HTMLElement>) => {
+  const r = e.currentTarget.getBoundingClientRect()
+  return e.clientX < r.left + r.width / 2
 }
 
 export default function Home() {
@@ -87,12 +140,28 @@ export default function Home() {
   // without checking.
   const [folders, setFolders] = useState<Folder[] | null>(null)
   const [order, setOrder] = useState<string[]>([])
+  const [fOrder, setFOrder] = useState<string[]>(readOrder)
   const [sel, setSel] = useState<string>('')
   const [picking, setPicking] = useState('')
-  // the drag in progress: which map is in the hand, and what it is hovering
+  const [naming, setNaming] = useState(false)
+  // the drag in progress. A map and a folder are different things to be holding
+  // and only one of them can be in the hand, so they are separate: it is what
+  // decides which targets light up and what a drop means when it lands.
   const [lift, setLift] = useState('')
+  const [liftF, setLiftF] = useState('')
+  const [overR, setOverR] = useState('')
   const [overF, setOverF] = useState('')
+  const [overT, setOverT] = useState('')
   const [overM, setOverM] = useState('')
+
+  const drop = () => {
+    setLift('')
+    setLiftF('')
+    setOverR('')
+    setOverF('')
+    setOverT('')
+    setOverM('')
+  }
 
   const pull = () =>
     fetch('/api/folders')
@@ -179,9 +248,9 @@ export default function Home() {
     void post('/api/folders/rename', { folder: id, name: clean })
   }
 
-  // the folder goes, the maps in it do not. They are back on the all-maps list
-  // the moment this returns, which is why it does not ask twice the way
-  // deleting a map does: there is nothing here to lose.
+  // the folder goes, the maps in it do not. They are back on the top level the
+  // moment this returns, which is why it does not ask twice the way deleting a
+  // map does: there is nothing here to lose.
   const scrap = (id: string) => {
     setFolders((fs) => (fs || []).filter((f) => f.id !== id))
     if (sel === id) setSel('')
@@ -192,17 +261,33 @@ export default function Home() {
     () => (maps || []).filter((m) => !q || (m.title + m.slug).toLowerCase().includes(q.toLowerCase())),
     [maps, q],
   )
-  const folder = (folders || []).find((f) => f.id === sel) || null
-  const shown = useMemo(() => {
-    const list = folder ? found.filter((m) => folder.maps.includes(m.slug)) : found
-    return inOrder(list, folder ? folder.maps : order)
-  }, [found, folder, order])
+  const ranked = useMemo(() => inFolderOrder(folders || [], fOrder), [folders, fOrder])
+  const folder = ranked.find((f) => f.id === sel) || null
+  // every slug that lives in at least one folder, so the top level can leave it
+  // out. A map in two folders is filed once as far as this is concerned.
+  const filed = useMemo(() => new Set((folders || []).flatMap((f) => f.maps)), [folders])
 
-  // the most recently touched map that has something to show leads the page.
-  // Inside a folder there is no lead: you came to look at a set, not at one of
-  // them blown up over the rest.
-  const lead = !q && !folder ? shown.find((m) => shot(m)) : undefined
-  const rest = lead ? shown.filter((m) => m.id !== lead.id) : shown
+  const shown = useMemo(() => {
+    if (folder) return inOrder(found.filter((m) => folder.maps.includes(m.slug)), folder.maps)
+    // a search reaches into folders, because you typed a name and not a place,
+    // and a map you cannot find because you filed it is the failure this page
+    // exists to avoid
+    if (q) return inOrder(found, order)
+    return inOrder(found.filter((m) => !filed.has(m.slug)), order)
+  }, [found, folder, filed, order, q])
+
+  /* The most recently touched map leads the page, AND it is the first tile in
+   * the grid underneath. It used to be pulled out of the list once it was up
+   * there, which meant the banner was a map missing from its own grid: you went
+   * looking for it where it had always been and it was not there.
+   *
+   * Inside a folder there is no lead. You came to look at a set, not at one of
+   * them blown up over the rest. */
+  const lead = !q && !folder ? shown[0] : undefined
+
+  // the tiles, at the top level only. Inside a folder there is nothing to show:
+  // folders do not nest, so the grid there is maps and only maps.
+  const tiles = folders && !q && !folder ? ranked : []
 
   /* REORDERING WRITES THE WHOLE VISIBLE SEQUENCE, so it is only offered when
    * the whole list is visible. With a search term on, the sequence sent would
@@ -226,15 +311,33 @@ export default function Home() {
     void post('/api/folders/order', { folder: folder ? folder.id : null, maps: seq })
   }
 
+  // folders move among folders and nothing else, so this cannot produce a
+  // sequence with a map in it and the folders-first rule holds by construction
+  // rather than by being checked afterwards
+  const moveFolder = (from: string, to: string, before: boolean) => {
+    if (from === to) return
+    const seq = ranked.map((f) => f.id)
+    const i = seq.indexOf(from)
+    if (i < 0) return
+    seq.splice(i, 1)
+    let j = seq.indexOf(to)
+    if (j < 0) return
+    if (!before) j++
+    seq.splice(j, 0, from)
+    setFOrder(seq)
+    writeOrder(seq)
+  }
+
   const org = (m: MapRow): Org | undefined =>
     folders
       ? {
-          folders,
+          folders: ranked,
           mine: memberOf(m.slug),
           open: picking === m.slug,
           onOpen: (v: boolean) => setPicking(v ? m.slug : ''),
           onSet: (id, on) => setIn(m.slug, id, on),
           onNew: (name) => void make(name, m.slug),
+          taking: !!lift,
           lifted: lift === m.slug,
           mark: overM === m.slug + ':b' ? 'before' : overM === m.slug + ':a' ? 'after' : '',
           onLift: () => setLift(m.slug),
@@ -242,14 +345,9 @@ export default function Home() {
           onLeave: () => setOverM((v) => (v.startsWith(m.slug + ':') ? '' : v)),
           onDrop: (before) => {
             if (lift) move(lift, m.slug, before)
-            setLift('')
-            setOverM('')
+            drop()
           },
-          onDone: () => {
-            setLift('')
-            setOverM('')
-            setOverF('')
-          },
+          onDone: drop,
         }
       : undefined
 
@@ -267,6 +365,24 @@ export default function Home() {
             placeholder="find a map"
             spellCheck={false}
           />
+          {/* the empty way in. The rail makes a folder next to the folders and
+              the picker makes one around a map you already have in front of
+              you; this one is for deciding a folder exists before deciding what
+              goes in it. */}
+          {folders && (
+            <div className="bar-fold">
+              <button
+                className={'home-icon' + (naming ? ' on' : '')}
+                aria-label="new folder"
+                title="new folder"
+                aria-expanded={naming}
+                onClick={() => setNaming((v) => !v)}
+              >
+                <FolderIcon s={16} />
+              </button>
+              {naming && <NewFolder onMake={(n) => void make(n)} onClose={() => setNaming(false)} />}
+            </div>
+          )}
           <button className="home-icon" aria-label="settings" title="settings" onClick={() => setSettings(true)}>
             <Gear />
           </button>
@@ -292,7 +408,7 @@ export default function Home() {
             <div className={folders ? 'home-split' : ''}>
               {folders && (
                 <Rail
-                  folders={folders}
+                  folders={ranked}
                   all={maps.length}
                   sel={sel}
                   onPick={setSel}
@@ -300,25 +416,69 @@ export default function Home() {
                   onRename={rename}
                   onScrap={scrap}
                   lift={lift}
-                  over={overF}
-                  onOver={setOverF}
+                  over={overR}
+                  onOver={setOverR}
                   onDrop={(id) => {
                     if (lift) setIn(lift, id, true)
-                    setLift('')
-                    setOverF('')
+                    drop()
                   }}
                 />
               )}
               <div>
+                {folder && (
+                  <div className="fold-head">
+                    <button className="fold-back" onClick={() => setSel('')}>
+                      &larr; all maps
+                    </button>
+                    <h2>{folder.name}</h2>
+                    <span>{folder.maps.length === 1 ? '1 map' : folder.maps.length + ' maps'}</span>
+                  </div>
+                )}
                 <div className="grid">
-                  <button className="card new" onClick={() => go('/edit')}>
-                    <span className="new-plus" aria-hidden>
-                      +
-                    </span>
-                    <span className="new-say">new map</span>
-                    <span className="new-sub">start from a painting</span>
-                  </button>
-                  {rest.map((m) => (
+                  {/* folders, then the way to make a map, then the maps. The
+                      dashed card is a control rather than a tile of somebody's
+                      work, and putting it between the two runs is also what
+                      separates them. */}
+                  {tiles.map((f) => (
+                    <FolderTile
+                      key={f.id}
+                      f={f}
+                      over={overF === f.id}
+                      mark={overT === f.id + ':b' ? 'before' : overT === f.id + ':a' ? 'after' : ''}
+                      lifted={liftF === f.id}
+                      taking={!!lift}
+                      holding={!!liftF && liftF !== f.id}
+                      onOpen={() => setSel(f.id)}
+                      onRename={(n) => rename(f.id, n)}
+                      onScrap={() => scrap(f.id)}
+                      onLift={() => setLiftF(f.id)}
+                      onOver={() => setOverF(f.id)}
+                      onHover={(before) => setOverT(f.id + (before ? ':b' : ':a'))}
+                      onLeave={() => {
+                        setOverF((v) => (v === f.id ? '' : v))
+                        setOverT((v) => (v.startsWith(f.id + ':') ? '' : v))
+                      }}
+                      onDropMap={() => {
+                        if (lift) setIn(lift, f.id, true)
+                        drop()
+                      }}
+                      onDropFolder={(before) => {
+                        if (liftF) moveFolder(liftF, f.id, before)
+                        drop()
+                      }}
+                      onDone={drop}
+                    />
+                  ))}
+                  {!folder && (
+                    <button className="card new" onClick={() => go('/edit')}>
+                      <span className="new-plus" aria-hidden>
+                        +
+                      </span>
+                      <span className="new-say">new map</span>
+                      <span className="new-sub">start from a painting</span>
+                    </button>
+                  )}
+                  {shown.map((m) => (
                     <Card key={m.id} m={m} onDelete={() => setDoomed(m)} org={org(m)} />
                   ))}
                 </div>
@@ -352,7 +512,9 @@ export default function Home() {
 }
 
 /* The newest map, across the whole width. It is the one thing on this page that
- * is allowed to be big, and it is what stops the screen reading as a list. */
+ * is allowed to be big, and it is what stops the screen reading as a list. It is
+ * also the first tile in the grid below, so this is the same map twice on
+ * purpose and not a map that has gone missing from its own list. */
 function Lead({ m, onDelete }: { m: MapRow; onDelete: () => void }) {
   return (
     <div className="lead">
@@ -400,6 +562,7 @@ type Org = {
   onOpen: (v: boolean) => void
   onSet: (id: string, on: boolean) => void
   onNew: (name: string) => void
+  taking: boolean
   lifted: boolean
   mark: '' | 'before' | 'after'
   onLift: () => void
@@ -411,13 +574,6 @@ type Org = {
 
 function Card({ m, onDelete, org }: { m: MapRow; onDelete: () => void; org?: Org }) {
   const src = shot(m)
-  // which half of the card the pointer is on decides which side of it the
-  // dragged map lands, which is the only way a drop between two cards can be
-  // aimed without a separate gap to hit
-  const half = (e: DragEvent<HTMLElement>) => {
-    const r = e.currentTarget.getBoundingClientRect()
-    return e.clientX < r.left + r.width / 2
-  }
   return (
     <article
       className={'card' + (org?.mark ? ' drop-' + org.mark : '') + (org?.lifted ? ' lifted' : '')}
@@ -433,8 +589,11 @@ function Card({ m, onDelete, org }: { m: MapRow; onDelete: () => void; org?: Org
         org.onLift()
       }}
       onDragEnd={() => org?.onDone()}
+      /* only a map lands between two maps. A folder in the hand is refused here
+         by never calling preventDefault, which is the same mechanism that keeps
+         a file dragged in off the desktop from looking droppable. */
       onDragOver={(e) => {
-        if (!org) return
+        if (!org?.taking) return
         e.preventDefault()
         e.dataTransfer.dropEffect = 'move'
         org.onHover(half(e))
@@ -447,7 +606,7 @@ function Card({ m, onDelete, org }: { m: MapRow; onDelete: () => void; org?: Org
         org?.onLeave()
       }}
       onDrop={(e) => {
-        if (!org) return
+        if (!org?.taking) return
         e.preventDefault()
         org.onDrop(half(e))
       }}
@@ -497,6 +656,161 @@ function Card({ m, onDelete, org }: { m: MapRow; onDelete: () => void; org?: Org
           {org?.open && (
             <Pick folders={org.folders} mine={org.mine} onSet={org.onSet} onNew={org.onNew} onClose={() => org.onOpen(false)} />
           )}
+        </div>
+      </div>
+    </article>
+  )
+}
+
+/* A FOLDER, AS A TILE IN THE SAME GRID THE MAPS ARE IN.
+ *
+ * The rail is a list of names you read. This is the thing you open, and it is in
+ * the grid because that is where your eyes and your pointer already are. It
+ * carries a folder shape rather than a painting: a tile with a picture on it
+ * would read as a map, and the one thing this has to say at a glance is that it
+ * is not one.
+ *
+ * It takes two different drops and they mean different things. A map landing on
+ * it goes in. A folder landing on it lands beside it, before or after depending
+ * on which half of the tile the pointer is over, which is the same aiming the
+ * map cards use. It never accepts a map as a neighbour and a map card never
+ * accepts a folder, so no sequence containing both can be produced and folders
+ * cannot end up after a map.
+ *
+ * Removing it takes the folder and not the maps, so this asks once, here, rather
+ * than opening the two-step dialog that deleting a map opens. */
+function FolderTile({
+  f,
+  over,
+  mark,
+  lifted,
+  taking,
+  holding,
+  onOpen,
+  onRename,
+  onScrap,
+  onLift,
+  onOver,
+  onHover,
+  onLeave,
+  onDropMap,
+  onDropFolder,
+  onDone,
+}: {
+  f: Folder
+  over: boolean
+  mark: '' | 'before' | 'after'
+  lifted: boolean
+  taking: boolean
+  holding: boolean
+  onOpen: () => void
+  onRename: (name: string) => void
+  onScrap: () => void
+  onLift: () => void
+  onOver: () => void
+  onHover: (before: boolean) => void
+  onLeave: () => void
+  onDropMap: () => void
+  onDropFolder: (before: boolean) => void
+  onDone: () => void
+}) {
+  const [edit, setEdit] = useState(false)
+  const [name, setName] = useState(f.name)
+  const [sure, setSure] = useState(false)
+
+  const done = () => {
+    setEdit(false)
+    if (name.trim() && name.trim() !== f.name) onRename(name)
+    else setName(f.name)
+  }
+
+  return (
+    <article
+      className={'card fold' + (over ? ' over' : '') + (mark ? ' drop-' + mark : '') + (lifted ? ' lifted' : '')}
+      // a draggable ancestor swallows the mouse down that would put a caret in
+      // the name field, the same reason a card stops being draggable while its
+      // picker is open
+      draggable={!edit}
+      onDragStart={(e) => {
+        e.dataTransfer.effectAllowed = 'move'
+        e.dataTransfer.setData('text/plain', f.name)
+        onLift()
+      }}
+      onDragEnd={onDone}
+      onDragOver={(e) => {
+        if (!taking && !holding) return
+        e.preventDefault()
+        /* MOVE, NOT COPY, AND THIS IS THE WHOLE OF THE OLD BUG.
+         *
+         * A card starts its drag with effectAllowed 'move'. The rail said
+         * dropEffect 'copy' here, and the html drag-and-drop model resolves the
+         * pair (move, copy) to no drag operation at all, so the browser cancels
+         * the drag instead of firing drop: the dragover handler had already run
+         * and lit the target, which is exactly what it looked like. Card onto
+         * card always worked because both ends said 'move'. */
+        e.dataTransfer.dropEffect = 'move'
+        if (taking) onOver()
+        else onHover(half(e))
+      }}
+      onDragLeave={(e) => {
+        if (e.currentTarget.contains(e.relatedTarget as Node)) return
+        onLeave()
+      }}
+      onDrop={(e) => {
+        if (!taking && !holding) return
+        e.preventDefault()
+        if (taking) onDropMap()
+        else onDropFolder(half(e))
+      }}
+    >
+      {sure ? (
+        <span className="fold-sure">
+          <button onClick={onScrap}>remove</button>
+          <button onClick={() => setSure(false)}>keep</button>
+        </span>
+      ) : (
+        <button
+          className="card-bin"
+          title={`remove the folder ${f.name}`}
+          aria-label={`remove the folder ${f.name}`}
+          onClick={() => setSure(true)}
+        >
+          <Trash />
+        </button>
+      )}
+      <button className="fold-face" onClick={onOpen} aria-label={`open ${f.name}`}>
+        <FolderBig />
+      </button>
+      <div className="card-say">
+        <div className="card-top">
+          {edit ? (
+            <input
+              className="rail-name-in"
+              autoFocus
+              value={name}
+              spellCheck={false}
+              maxLength={48}
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') done()
+                if (e.key === 'Escape') {
+                  setName(f.name)
+                  setEdit(false)
+                }
+              }}
+              onBlur={done}
+            />
+          ) : (
+            <h2 onDoubleClick={() => setEdit(true)} title="double click to rename">
+              {f.name}
+            </h2>
+          )}
+          <span className="card-when">{f.maps.length === 1 ? '1 map' : f.maps.length + ' maps'}</span>
+        </div>
+        <div className="card-do">
+          <button className="fold-in" onClick={onOpen}>
+            open
+          </button>
         </div>
       </div>
     </article>
@@ -589,12 +903,70 @@ function Pick({
   )
 }
 
-/* The rail. Folders are a filter, not a place a map is moved to, so "all maps"
- * is a row like any other and it is where the page starts.
+/* MAKING A FOLDER WITH NOTHING IN YOUR HAND, from the bar.
  *
- * A folder row is the drop target that makes dragging worth having: pick a card
- * up anywhere in the grid and let go on a name. The counts are there so an
- * empty folder is visibly empty rather than looking like a filter that broke. */
+ * The other two entry points both start from something: the rail makes one at
+ * the end of the list of folders, the picker makes one around the map you are
+ * looking at. This is the empty case, and it is next to the search box because
+ * naming a place to put things is the same kind of act as looking for one.
+ *
+ * There is no blur-to-save here, unlike the rail. It has a create button, and a
+ * blur handler that saves would fire on the way to that button and then save a
+ * second time when the click landed. */
+function NewFolder({ onMake, onClose }: { onMake: (name: string) => void; onClose: () => void }) {
+  const [name, setName] = useState('')
+
+  useEffect(() => {
+    const off = (e: MouseEvent) => {
+      if (!(e.target as HTMLElement)?.closest?.('.bar-fold')) onClose()
+    }
+    const esc = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    const t = window.setTimeout(() => window.addEventListener('mousedown', off), 0)
+    window.addEventListener('keydown', esc)
+    return () => {
+      window.clearTimeout(t)
+      window.removeEventListener('mousedown', off)
+      window.removeEventListener('keydown', esc)
+    }
+  }, [onClose])
+
+  const add = () => {
+    if (!name.trim()) return
+    onMake(name)
+    setName('')
+    onClose()
+  }
+
+  return (
+    <div className="fold-new" role="group" aria-label="new folder">
+      <input
+        className="fold-in-name"
+        autoFocus
+        value={name}
+        spellCheck={false}
+        placeholder="folder name"
+        maxLength={48}
+        onChange={(e) => setName(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') add()
+          if (e.key === 'Escape') onClose()
+        }}
+      />
+      <button className="fold-make" onClick={add} disabled={!name.trim()}>
+        create
+      </button>
+    </div>
+  )
+}
+
+/* The rail. It says the same thing as the tiles in the grid and it says it
+ * while you are scrolled a long way down, which is the whole reason to keep
+ * both: the tiles are where you go, the rail is where you are.
+ *
+ * A folder row is also a drop target, so a card picked up next to the bottom of
+ * the page can be filed without scrolling back up to find the tile. The counts
+ * are there so an empty folder is visibly empty rather than looking like a
+ * filter that broke. */
 function Rail({
   folders,
   all,
@@ -716,7 +1088,16 @@ function RailRow({
       onDragOver={(e) => {
         if (!taking) return
         e.preventDefault()
-        e.dataTransfer.dropEffect = 'copy'
+        /* THE DROP THAT NEVER FIRED. This said 'copy'.
+         *
+         * A card leaves dragstart with effectAllowed 'move'. The html
+         * drag-and-drop model resolves the pair (effectAllowed move, dropEffect
+         * copy) to no drag operation, and a drag with no operation is cancelled
+         * rather than dropped: dragleave and dragend run and the drop event
+         * never happens. The highlight came up because it is set right here,
+         * one line earlier, so the target looked live and let go of nothing.
+         * Card onto card always worked because both ends of it said 'move'. */
+        e.dataTransfer.dropEffect = 'move'
         onOver()
       }}
       onDragLeave={(e) => {
@@ -724,6 +1105,7 @@ function RailRow({
         onOut()
       }}
       onDrop={(e) => {
+        if (!taking) return
         e.preventDefault()
         onDrop()
       }}
@@ -798,10 +1180,23 @@ function Trash() {
   )
 }
 
-function FolderIcon() {
+function FolderIcon({ s = 13 }: { s?: number }) {
   return (
-    <svg viewBox="0 0 16 16" width="13" height="13" shapeRendering="crispEdges" aria-hidden>
+    <svg viewBox="0 0 16 16" width={s} height={s} shapeRendering="crispEdges" aria-hidden>
       <path fill="currentColor" d="M1 3h6v1H1zM1 4h14v1H1zM1 5h1v8H1zM14 5h1v8h-1zM2 13h13v1H2z" />
+    </svg>
+  )
+}
+
+/* The same shape at tile size, filled rather than outlined, because an outline
+ * this big reads as a rectangle with a step in it. Two flat tones and no
+ * gradient: the paintings are the only thing on this page allowed to have
+ * shading in them. */
+function FolderBig() {
+  return (
+    <svg viewBox="0 0 30 22" width="86" height="63" shapeRendering="crispEdges" aria-hidden>
+      <path fill="currentColor" opacity="0.4" d="M0 0h12v2H0zM0 2h30v4H0z" />
+      <path fill="currentColor" d="M0 6h30v16H0z" />
     </svg>
   )
 }

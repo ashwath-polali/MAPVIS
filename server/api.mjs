@@ -497,7 +497,7 @@ async function route(req, res, p, url) {
      * eight ways and the account already holds them, so this pulls the set
      * rather than one view. Same writer the eight-direction generate uses.
      */
-    const rotPlan = saveRotations(id, d, base)
+    const rotPlan = await saveRotations(id, d, base)
     if (rotPlan) {
       const item = await writeRotations(id, rotPlan)
       if (item) return send(res, 200, { item })
@@ -1019,7 +1019,7 @@ async function route(req, res, p, url) {
     } catch (e) {
       return send(res, 502, { error: String(e.message || e).slice(0, 200) })
     }
-    const plan = saveFrames(id, characterDirs(d, b.animation), b.name || d.name || d.state_name || 'someone', 8, cid)
+    const plan = await saveFrames(id, characterDirs(d, b.animation), b.name || d.name || d.state_name || 'someone', 8, cid)
     if (!plan) return send(res, 404, { error: 'that one has fewer than four directions' })
     const item = await writeRotations(id, plan)
     if (!item) return send(res, 502, { error: 'the directions did not save' })
@@ -1188,7 +1188,7 @@ async function route(req, res, p, url) {
       // a template id or the word motion rather than anything with walk in it.
       // Unnamed, the library row is the first few words of the ask, the way a
       // generated object is named; a variant run passes its own name in.
-      const plan = saveFrames(id, characterDirs(d, '*'), b.name ? cleanName(b.name) : slugName(description), 8, cid)
+      const plan = await saveFrames(id, characterDirs(d, '*'), b.name ? cleanName(b.name) : slugName(description), 8, cid)
       if (!plan) throw new Error('it came back with fewer than four directions')
       folder = plan.dir
       const item = await writeRotations(id, plan)
@@ -1399,6 +1399,10 @@ async function route(req, res, p, url) {
         }
         const fsize = pngSize(path.join(fdir, '0.png'))
         noteAsk(id, aname, prompt, t.thing)
+        // two generations were paid for and only disk was told. On a host that
+        // disk is a tmp dir, so the frames were gone with the request. Same
+        // awaited push saveStatic makes on the still branch two lines down.
+        await pushLibrary(id, aname)
         return send(res, 200, {
           item: { name: aname, kind: 'animated', frames: rel, fps: 6, w: fsize.w, h: fsize.h },
         })
@@ -2136,6 +2140,15 @@ async function route(req, res, p, url) {
       fs.writeFileSync(path.join(fdir, 'dirs.json'), JSON.stringify(meta, null, 2))
       const first = dirs[dirKeys[0]][0]
       const size = pngSize(path.join(fdir, String(first).split('/').pop()))
+      /* AN EDIT IS A LIBRARY WRITE, so it goes to the store like every other one.
+       *
+       * All three returns in this route used to end at disk. On a host the disk
+       * is a tmp dir that dies with the request, so a crop, a base-trim, a
+       * pixelate or a palette-match was lost the moment the response was sent
+       * and the library carried on serving the art from before the edit.
+       * Awaited, so the response never says the edit landed before the bytes are
+       * durable, which is the same rule saveStatic and /api/asset-revert keep. */
+      await pushLibrary(id, name)
       return send(res, 200, {
         item: {
           name,
@@ -2162,11 +2175,15 @@ async function route(req, res, p, url) {
         fs.unlinkSync(path.join(fdir, i + '.png'))
       const fps = Number(b.fps) > 0 ? Math.round(Number(b.fps)) : 6
       const size = pngSize(path.join(fdir, '0.png'))
+      // see the push in the views branch above: same reason, same rule
+      await pushLibrary(id, name)
       return send(res, 200, { item: { name, kind: 'animated', frames: rel, fps, w: size.w, h: size.h } })
     }
     const file = name + '.png'
     fs.writeFileSync(path.join(dir, file), Buffer.from(stripDataURL(String(frames[0])), 'base64'))
     const size = pngSize(path.join(dir, file))
+    // see the push in the views branch above: same reason, same rule
+    await pushLibrary(id, name)
     return send(res, 200, {
       item: { name, kind: 'static', src: `/work/${id}/library/${file}`, w: size.w, h: size.h },
     })
@@ -2239,6 +2256,9 @@ async function route(req, res, p, url) {
     const b = await body(req)
     const id = safeId(b.id)
     const dir = path.join(WORK, id)
+    // this route rebuilds dir/assets with fs.rmSync, so the fence goes in front
+    // of the mkdir rather than anywhere later. See insideWork.
+    if (!insideWork(dir)) return send(res, 400, { error: 'bad id' })
     fs.mkdirSync(dir, { recursive: true })
     /* Every source byte within reach of resolveAssetFile before anything tries
      * to resolve one. On this machine that is a no-op; on a host it is what
@@ -2246,6 +2266,23 @@ async function route(req, res, p, url) {
     try {
       const h = await hydrateMap(id, dir)
       if (h.pulled) console.log(`[export] ${id}: pulled ${h.pulled} file(s), ${(h.bytes / 1024).toFixed(0)}kb, from object storage`)
+      /* A FILE THAT DID NOT ARRIVE STOPS THE EXPORT, before a single byte is
+       * written.
+       *
+       * hydrateMap already counts these and already logs them, and the count was
+       * then dropped on the floor: only h.pulled was read. What follows a missing
+       * file is quiet, every step of the way. resolveAssetFile returns null,
+       * packLook returns null, `if (!look0) continue` drops the placement, and
+       * the short bundle publishes as a new immutable version reporting success.
+       * Nobody finds out until a class walks an island with holes in it.
+       *
+       * A version is immutable, so there is no repairing it afterwards. Refusing
+       * costs a retry; publishing costs a version number that can never be
+       * corrected. */
+      if (h.failed > 0)
+        return send(res, 502, {
+          error: `${h.failed} file(s) could not be read from object storage, so nothing was written. Try the export again.`,
+        })
     } catch (e) {
       console.error('[export] could not hydrate from object storage:', e.message)
     }
@@ -2392,8 +2429,8 @@ async function route(req, res, p, url) {
       }
       return null
     }
-    for (const a of Array.isArray(b.assets) ? b.assets : []) {
-      if (!a || typeof a !== 'object') continue
+    const placements = (Array.isArray(b.assets) ? b.assets : []).filter((a) => a && typeof a === 'object')
+    for (const a of placements) {
       const x = Number(a.x)
       const y = Number(a.y)
       const scale = Number(a.scale)
@@ -2444,6 +2481,24 @@ async function route(req, res, p, url) {
         ...(looks.length ? { looks } : {}),
       })
     }
+    /* THE SAME COUNT OUT AS IN, or no bundle at all.
+     *
+     * The two `continue`s above are each correct on their own and together they
+     * are how an island loses people quietly: a placement whose png did not
+     * resolve is simply not in outAssets, and every count the response reports
+     * is counted after the drop, so a bundle missing 19 of 75 placements reads
+     * exactly like one missing none.
+     *
+     * Naming both numbers is the point. "62 of 75" tells a person to look; a
+     * silent 62 does not. It sits here because the count is not knowable any
+     * earlier, and here is still ahead of the two things that cannot be taken
+     * back: the rm and rebuild of assets/, and the publish of a version. The
+     * plane pngs above have already been rewritten with the same pixels the
+     * editor holds, which is what a save does anyway. */
+    if (outAssets.length < placements.length)
+      return send(res, 502, {
+        error: `only ${outAssets.length} of ${placements.length} placements resolved, so nothing was written. The missing art is not on this machine or in the store.`,
+      })
     fs.rmSync(assetsDir, { recursive: true, force: true })
     for (const [rel, buf] of writes) {
       const to = path.join(assetsDir, rel)
@@ -2491,6 +2546,7 @@ async function route(req, res, p, url) {
     const b = await body(req)
     const id = safeId(b.id)
     const dir = path.join(WORK, id)
+    if (!insideWork(dir)) return send(res, 400, { error: 'bad id' })
     fs.mkdirSync(dir, { recursive: true })
     fs.writeFileSync(path.join(dir, 'scene.png'), Buffer.from(stripDataURL(b.image), 'base64'))
     return send(res, 200, { url: `/work/${id}/scene.png` })
@@ -2504,6 +2560,7 @@ async function route(req, res, p, url) {
     if (!b.image) return send(res, 400, { error: 'no image' })
     const id = safeId(b.id)
     const dir = path.join(WORK, id)
+    if (!insideWork(dir)) return send(res, 400, { error: 'bad id' })
     fs.mkdirSync(dir, { recursive: true })
     const files = []
     fs.writeFileSync(path.join(dir, 'scene-cut.png'), Buffer.from(stripDataURL(b.image), 'base64'))
@@ -2548,6 +2605,7 @@ async function route(req, res, p, url) {
     }
     if (!diskAllowed()) return send(res, 503, { error: 'disk is off' })
     const dir = path.join(WORK, id)
+    if (!insideWork(dir)) return send(res, 400, { error: 'bad id' })
     fs.mkdirSync(dir, { recursive: true })
     // written beside and renamed, because a write killed halfway through leaves
     // a truncated doc that reads as valid until the moment it is needed
@@ -2582,7 +2640,8 @@ async function route(req, res, p, url) {
       if (!diskAllowed()) return send(res, 200, { doc: '', savedAt: 0 })
     }
     const f = path.join(WORK, id, 'doc.json')
-    if (!f.startsWith(WORK) || !fs.existsSync(f)) return send(res, 200, { doc: '', savedAt: 0 })
+    // was f.startsWith(WORK), which a sibling like work-old/ satisfies. See insideWork.
+    if (!insideWork(f) || !fs.existsSync(f)) return send(res, 200, { doc: '', savedAt: 0 })
     return send(res, 200, {
       doc: fs.readFileSync(f, 'utf8'),
       savedAt: fs.statSync(f).mtimeMs,
@@ -3259,7 +3318,7 @@ function resolveAssetFile(u, sceneDir) {
  * heading. Shared by the account import and by an eight-direction generation,
  * because both end up holding the same thing: a set of views that has to land
  * on disk the way the library reads it. */
-function saveRotations(id, detail, wantName) {
+async function saveRotations(id, detail, wantName) {
   const rot = detail && detail.rotation_urls && typeof detail.rotation_urls === 'object' ? detail.rotation_urls : null
   const DIRS = ['south', 'north', 'east', 'west', 'south-east', 'north-east', 'north-west', 'south-west']
   const got = rot ? DIRS.filter((k) => typeof rot[k] === 'string' && rot[k]) : []
@@ -3267,10 +3326,20 @@ function saveRotations(id, detail, wantName) {
   const dir = libDirOf(id)
   fs.mkdirSync(dir, { recursive: true })
   const base = cleanName(wantName || detail.name || detail.prompt || 'object')
-  let name = base
-  for (let i = 2; fs.existsSync(path.join(dir, name)) || fs.existsSync(path.join(dir, name + '.png')); i++)
-    name = `${base}-${i}`
-  return { name, dir: path.join(dir, name), urls: got.map((k) => [k, rot[k]]) }
+  /* THE DATABASE ANSWERS TOO, not the disk alone.
+   *
+   * The suffix walk this replaced only ever looked at libDirOf(id). On a host
+   * that folder is a tmp dir that starts empty on every request, so every import
+   * picked the base name and wrote over the library row already sitting under
+   * it, taking that row's objects with it. saveStatic has been going through
+   * freeLibraryName for exactly this reason and these two were left behind. */
+  const name = await freeLibraryName(id, base)
+  const folder = path.join(dir, name)
+  // the folder is claimed the moment the name is picked, the way saveFrames has
+  // always claimed its own. Two of these running at once could otherwise both
+  // look, both find nothing, and both take it.
+  fs.mkdirSync(folder, { recursive: true })
+  return { name, dir: folder, urls: got.map((k) => [k, rot[k]]) }
 }
 
 /* The same plan for a set that has FRAMES INSIDE each heading, which is what a
@@ -3279,15 +3348,16 @@ function saveRotations(id, detail, wantName) {
  * The folder is made here rather than in the writer, so the name is reserved the
  * moment it is picked: two of these running at once could otherwise both look,
  * both see nothing, and both choose it. */
-function saveFrames(id, byDir, wantName, fps, characterId) {
+async function saveFrames(id, byDir, wantName, fps, characterId) {
   const keys = Object.keys(byDir || {}).filter((k) => k && Array.isArray(byDir[k]) && byDir[k].length)
   if (keys.length < 4) return null
   const dir = libDirOf(id)
   fs.mkdirSync(dir, { recursive: true })
   const base = cleanName(wantName || 'someone')
-  let name = base
-  for (let i = 2; fs.existsSync(path.join(dir, name)) || fs.existsSync(path.join(dir, name + '.png')); i++)
-    name = `${base}-${i}`
+  // disk for what is mid-request, the database for what exists at all. See the
+  // note on saveRotations: the disk-only walk overwrote a live library row on a
+  // host, and a character takes its objects down with it.
+  const name = await freeLibraryName(id, base)
   const plan = { name, dir: path.join(dir, name), urls: keys.map((k) => [k, byDir[k]]), frames: true, fps, characterId }
   fs.mkdirSync(plan.dir, { recursive: true })
   return plan
@@ -6593,7 +6663,29 @@ function readBody(req) {
 }
 
 const stripDataURL = (s) => String(s).replace(/^data:[^,]+,/, '')
-const safeId = (s) => (String(s || 'untitled').replace(/[^a-z0-9._-]+/gi, '-') || 'untitled').slice(0, 60)
+/* A DOT-ONLY ID IS NOT AN ID, it is a step up the tree.
+ *
+ * The dot is in the keep-set because real slugs carry one (hub-a2.1), but the
+ * filter alone let ".." through untouched: measured with node, safeId('..')
+ * returned '..' and safeId('.') returned '.'. Every route here builds
+ * path.join(WORK, id), and path.join('<repo>/work', '..') is the repo itself,
+ * so posting {"id":".."} to /api/export wrote scene.png and map.json into the
+ * repo root and then ran fs.rmSync('<repo>/assets', {recursive:true,force:true}).
+ *
+ * Anything that is only dots becomes 'untitled'. That is one fence; the
+ * insideWork assertion below each path is the other, because a fence made of
+ * string rules alone has been wrong before. */
+const safeId = (s) => {
+  const cleaned = (String(s || 'untitled').replace(/[^a-z0-9._-]+/gi, '-') || 'untitled').slice(0, 60)
+  return /^\.+$/.test(cleaned) ? 'untitled' : cleaned
+}
+
+/* The second fence: the built path really does sit under WORK.
+ *
+ * Same assertion serveWork makes before it reads a file, applied to the routes
+ * that WRITE. WORK + path.sep rather than WORK alone, so a sibling directory
+ * that merely starts with the same letters ('work-old') cannot pass. */
+const insideWork = (abs) => path.resolve(abs).startsWith(WORK + path.sep)
 
 function send(res, code, obj) {
   const b = Buffer.from(JSON.stringify(obj))

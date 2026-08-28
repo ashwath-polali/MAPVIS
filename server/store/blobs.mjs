@@ -162,9 +162,31 @@ function memo(b) {
       if (hit) { mem.delete(key); mem.set(key, hit); return hit }
       const buf = await b.get(key)
       if (buf && buf.length <= MEM_ONE) {
+        /* THE SAME DRIFT publish.mjs's hot CACHE HAD, FOR THE SAME REASON.
+         *
+         * held was added to on every insert without refunding whatever was
+         * already under that key. The early return above hides it most of the
+         * time, but two reads of the same key in flight at once both miss and
+         * both land here, and this file is read in parallel by design: hydrateMap
+         * runs twelve lanes and publishBundle now writes in twelve.
+         *
+         * Measured on the equivalent counter in publish.mjs, 60 keys each put
+         * twice: 6.1 MB of a cache's ceiling was held by bytes that were not
+         * there, and it kept 21 of 60 entries instead of all 60. Evicting never
+         * refunds the difference, so the count settles just under the ceiling
+         * and the cache goes quietly useless, which here means every open of a
+         * map goes to the bucket for every png in its library again.
+         *
+         * `mem.size &&` on the loop guards the other end. drop(undefined) finds
+         * nothing and subtracts nothing, so a loop that reaches an empty map
+         * with held still over the ceiling spins forever with no await in it and
+         * the event loop never runs again. The refund above is what keeps it
+         * from getting there; the guard is what makes it unable to. */
+        const prev = mem.get(key)
+        if (prev) held -= prev.length
         mem.set(key, buf)
         held += buf.length
-        while (mem.size > MEM_MAX || held > MEM_BYTES) drop(mem.keys().next().value)
+        while (mem.size && (mem.size > MEM_MAX || held > MEM_BYTES)) drop(mem.keys().next().value)
       }
       return buf
     },

@@ -615,6 +615,171 @@ button.rail-row.on {
   color: #454f5b;
 }
 
+/* ---- a folder as a tile in the grid ---- */
+
+/* The same footprint as a map card, because they stand in the same grid and a
+   different size would leave the top of the page ragged. What is different is
+   the face: a shape and no painting, and no colour on it until something is
+   being dragged onto it. */
+.card.fold {
+  cursor: pointer;
+}
+.card.fold:hover {
+  border-color: #2c3742;
+}
+/* the face is the click target and the whole art area, so opening a folder is
+   the same size of gesture as opening a map */
+.fold-face {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  padding: 0;
+  background: #0b0f14;
+  border: 0;
+  color: #262f39;
+  cursor: pointer;
+  transition:
+    color 220ms ease,
+    background-color 220ms ease;
+}
+.card.fold:hover .fold-face {
+  color: #39434f;
+}
+/* a map is over this folder and letting go files it here. Same green as the
+   rail row, so the two drop targets for one folder say it the same way. */
+.card.fold.over {
+  border-color: #7fb3a3;
+  transform: none;
+}
+.card.fold.over .fold-face {
+  color: #7fb3a3;
+  background: #101a18;
+}
+.fold-in {
+  padding: 0;
+  font: 500 12px var(--font-label);
+  color: #8d97a4;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  transition: color 180ms ease;
+}
+.fold-in:hover {
+  color: #fff;
+}
+/* removing a folder keeps every map in it, so it asks once and it asks here,
+   in the corner the bin is in, rather than opening the dialog a map opens */
+.fold-sure {
+  position: absolute;
+  z-index: 4;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 8px;
+  padding: 6px 8px;
+  background: rgba(8, 11, 15, 0.94);
+  border: 1px solid #2c3742;
+}
+.fold-sure button {
+  padding: 0;
+  font: 400 10px var(--font-mono);
+  color: #5b6470;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.fold-sure button:first-child {
+  color: #ff6b5e;
+}
+.fold-sure button:hover {
+  text-decoration: underline;
+}
+
+/* ---- inside a folder ---- */
+
+/* One line above the grid. The way out is the first thing on it, because the
+   grid underneath is now a subset and nothing else on the page says so. */
+.fold-head {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  margin: 0 2px 18px;
+}
+.fold-back {
+  padding: 0;
+  font: 500 12px var(--font-label);
+  color: #8d97a4;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  transition: color 180ms ease;
+}
+.fold-back:hover {
+  color: #fff;
+}
+.fold-head h2 {
+  margin: 0;
+  font: 500 17px var(--font-label);
+  letter-spacing: -0.01em;
+  color: #e6e9ee;
+}
+.fold-head span {
+  font: 400 10px var(--font-mono);
+  color: #454f5b;
+}
+
+/* ---- making one from the bar ---- */
+
+.bar-fold {
+  position: relative;
+  display: flex;
+}
+.home-icon.on {
+  color: #e6e9ee;
+}
+.fold-new {
+  position: absolute;
+  z-index: 12;
+  top: calc(100% + 10px);
+  right: 0;
+  display: flex;
+  gap: 6px;
+  width: 236px;
+  padding: 8px;
+  background: #0d1116;
+  border: 1px solid #2c3742;
+  box-shadow: 0 18px 40px -18px rgba(0, 0, 0, 0.9);
+}
+.fold-in-name {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  font: 400 12px var(--font-label);
+  color: #e6e9ee;
+  background: #12161b;
+  border: 1px solid #39434f;
+  outline: none;
+}
+.fold-make {
+  flex: none;
+  padding: 0 10px;
+  font: 500 11px var(--font-label);
+  color: #0a0c0f;
+  background: #7fb3a3;
+  border: 0;
+  cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease;
+}
+.fold-make:disabled {
+  color: #5b6470;
+  background: #1a2027;
+  cursor: default;
+}
+
 /* ---- dragging a card ---- */
 
 /* the card in the hand fades rather than moves, because the browser is already

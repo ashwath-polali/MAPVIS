@@ -193,9 +193,41 @@ export function hotGet(key) {
 
 export function hotPut(key, buf) {
   if (buf.length > 512 * 1024) return buf
+  /* THE COUNTER HAS TO FORGET WHAT IT IS REPLACING.
+   *
+   * hotBytes was added to on every put and only subtracted from on eviction, so
+   * a key put twice had its bytes counted twice while the Map held one copy.
+   * The caller guards with hotGet first, but two requests for the same published
+   * file both miss and both put, which is ordinary rather than rare.
+   *
+   * Measured on that shape, 60 files of 100 KB each put twice, comfortably
+   * inside a 200 entry 8 MB cache: the old counter reached 8,294,400 bytes while
+   * really holding 2,150,400, so 6.1 MB of the ceiling was spent on bytes that
+   * were not there, and the cache kept 21 of the 60 files instead of all of
+   * them. The drift never comes back, because evicting an entry only refunds
+   * what the Map is holding under it. So the count pins itself just under the
+   * ceiling and stays there, and from then on almost every put is evicted
+   * immediately and almost every read goes back to the bucket. That is the
+   * 2,500-a-day transaction burn this cache was written to stop, arriving
+   * silently and looking exactly like a working cache. With the subtraction it
+   * holds 60 of 60 with zero drift.
+   *
+   * Deleted before being re-set rather than just adjusted, so a re-put also
+   * counts as a touch and moves the key to the fresh end. */
+  const prev = hot.get(key)
+  if (prev) {
+    hot.delete(key)
+    hotBytes -= prev.length
+  }
   hot.set(key, buf)
   hotBytes += buf.length
-  while (hot.size > HOT_MAX || hotBytes > HOT_BYTES) {
+  /* `hot.size &&` because entries().next().value on an empty Map is undefined
+   * and destructuring undefined throws, which would turn every later read in
+   * this process into a 500 until a cold start. The eviction above happens to
+   * refund enough to stop just short of that, so it is a guard rather than a
+   * fix for something reproduced, but the loop must not be one accounting
+   * change away from taking the process out. */
+  while (hot.size && (hot.size > HOT_MAX || hotBytes > HOT_BYTES)) {
     const [k, v] = hot.entries().next().value
     hot.delete(k)
     hotBytes -= v.length
@@ -363,13 +395,88 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
     ),
   )
 
+  /* WRITTEN IN LANES, BECAUSE 801 OBJECTS ONE AT A TIME DOES NOT FIT THE FUNCTION.
+   *
+   * Every put also awaits a Postgres upsert into blob_shas through the write
+   * hook in blobs.mjs, so publishing the hub sequentially is about 1,600 round
+   * trips inside a function whose maxDuration is 300 seconds. hydrateMap already
+   * measured this exact shape on the read side: 1,383 objects one at a time took
+   * 260 seconds, which is not a margin but a coin toss, and twelve lanes made it
+   * roughly a twentieth of the wall clock for the same number of requests.
+   * Twelve here for the same reason, and it stays well under the ceiling the
+   * meter enforces.
+   *
+   * The manifest is assembled afterwards out of an array indexed by position,
+   * never from inside a lane. That keeps it complete and keeps its key order
+   * equal to the order of `all` however the lanes interleave, so two publishes
+   * of the same bundle produce the same jsonb rather than the same set shuffled. */
+  const entries = [...all]
+  const wrote = new Array(entries.length)
+  const LANES = 12
+  let next = 0
+  await Promise.all(
+    Array.from({ length: Math.min(LANES, entries.length) }, async () => {
+      for (;;) {
+        const i = next++
+        if (i >= entries.length) return
+        const [rel, buf] = entries[i]
+        /* RETRIED, BECAUSE THE CLIENT IS DELIBERATELY MAXATTEMPTS:1.
+         *
+         * That setting is right for its own reason, which is that a capped
+         * bucket's refusal is an answer and retrying it just makes the export
+         * outlive the browser. But hydrateMap measured ten of 1,383 objects
+         * vanishing to transient resets once twelve were in flight at once, and
+         * a put lost that way is a file missing from a bundle that reported
+         * success. The retry therefore lives here, over a bulk copy that can
+         * afford the wait, rather than in the client. */
+        let err = null
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            await s.put(prefix + rel, buf, rel.endsWith('.json') ? 'application/json' : 'image/png')
+            err = null
+            break
+          } catch (e) {
+            err = e
+            if (attempt < 2) await new Promise((r) => setTimeout(r, 150 * (attempt + 1)))
+          }
+        }
+        // rethrown rather than counted, so a publish that lost an object cannot
+        // reach the insert below
+        if (err) throw err
+        wrote[i] = { bytes: buf.length, sha256: sha(buf) }
+      }
+    }),
+  )
   let bytes = 0
   const manifest = {}
-  for (const [rel, buf] of all) {
-    await s.put(prefix + rel, buf, rel.endsWith('.json') ? 'application/json' : 'image/png')
-    manifest[rel] = { bytes: buf.length, sha256: sha(buf) }
-    bytes += buf.length
+  for (let i = 0; i < entries.length; i++) {
+    manifest[entries[i][0]] = wrote[i]
+    bytes += wrote[i].bytes
   }
+
+  /* A PUBLISH ROW MUST NOT OUTLIVE ITS BYTES.
+   *
+   * Measured on 2026-08-27: ten of the thirteen rows in publishes pointed at
+   * prefixes holding nothing at all. hub v1 to v3 and every site-* row were
+   * written against a bucket that has since been left behind, and nothing ever
+   * noticed, because the row is what /api/v1/maps reads. It advertised seven
+   * maps as published and all seven answered 503 when the game went for the
+   * bytes. A row is a claim that a version can be fetched, and the moment before
+   * making the claim is the only honest place to check it.
+   *
+   * Listed back from the bucket rather than counted out of the put loop above,
+   * because the puts are the thing being doubted: an object lost to a reset, a
+   * prefix written one folder off and a bucket quietly refusing all look
+   * identical from this side of the call. One listing costs one class A
+   * operation per thousand keys, against the 801 writes it is checking. */
+  const have = new Set((await s.list(prefix)).map((o) => String(o.key || o)))
+  const missing = Object.keys(manifest).filter((rel) => !have.has(prefix + rel))
+  if (missing.length)
+    throw new Error(
+      `${slug} v${version}: ${missing.length} of ${entries.length} object(s) are not in the bucket after being written, ` +
+        `starting with ${prefix}${missing[0]}. No publish row was recorded, so the game keeps reading the last version ` +
+        `that is really there. The objects that did land are harmless and the next export overwrites them.`,
+    )
 
   await q(
     `insert into publishes (map_id, version, blob_prefix, manifest, bytes, published_by)

@@ -3844,7 +3844,7 @@ export class Editor {
          * sequence switches to, so a look comes back exactly the way the
          * placement does. There used to be two copies of this precedence, one
          * for look 0 and one for the rest, and only one of them was right. */
-        type LookRec = { src?: string; frames?: string[]; fps?: number; dirs?: Record<string, string[]> }
+        type LookRec = { src?: string; frames?: string[]; fps?: number; facing?: string; dirs?: Record<string, string[]> }
         const readLook = (s: LookRec | null | undefined): AssetLook | null => {
           if (!s || typeof s !== 'object') return null
           const fps = Number(s.fps) > 0 ? Number(s.fps) : 0
@@ -3858,7 +3858,28 @@ export class Editor {
               if (set.length) views[k] = set
             }
             const keys = Object.keys(views)
-            if (keys.length) return { kind: 'static', dirs: views, src: (views.south || views[keys[0]])[0], ...(fps ? { fps } : {}) }
+            /* THE HEADING THE AUTHOR PICKED SURVIVES THE REOPEN, and it did not
+             * used to. This line took views.south whenever a south set existed,
+             * which threw away the one field the exporter writes to carry the
+             * choice, and the resting heading is only ever held on src (see
+             * faceAsset above). So a reopen turned every hand-turned figure back
+             * to front and the next export wrote that down as the truth:
+             * measured on work/hub/assets.json, 21 south, 8 south-west and 9
+             * south-east go in and 38 south come out.
+             *
+             * The exporter documents the same contract from its side and calls
+             * out this file by name (server/api.mjs, packLook), which is what
+             * makes the pair worth reading together. restoreFromDisk only runs
+             * when the browser holds nothing, so this is the new-machine
+             * recovery path and the bug landed exactly where it hurt most.
+             *
+             * A bundle from before facing existed has none, and south is still
+             * the right guess for those. A facing naming a heading whose files
+             * did not resolve falls through the same way. */
+            if (keys.length) {
+              const rest = (s.facing && views[s.facing]) || views.south || views[keys[0]]
+              return { kind: 'static', dirs: views, src: rest[0], ...(fps ? { fps } : {}) }
+            }
           }
           if (Array.isArray(s.frames) && s.frames.length) {
             const frames = s.frames.map(workURL).filter(Boolean)
