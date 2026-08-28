@@ -2954,6 +2954,30 @@ async function authApi(req, res, p, url) {
  * other island.
  */
 async function readApi(req, res, p, url) {
+  /* CROSS-ORIGIN, WHICH THIS NEEDED FROM THE DAY IT WAS WRITTEN.
+   *
+   * The whole point of /api/v1 is that something which is NOT MAPVIS calls it,
+   * and something which is not MAPVIS is on another origin. The file route set
+   * this header and the manifest route did not, and the manifest is the FIRST
+   * call the game makes, so the browser refused it before a byte moved and the
+   * game fell back to the hand-copied folder every single time. Found from the
+   * game side on 2026-08-27: fetching /api/v1/maps/hub from localhost was
+   * blocked by CORS, so "the game asks the platform for a map" has never once
+   * actually happened, on any origin but this one.
+   *
+   * `*` is right here and only here. Everything under /api/v1 is read-only,
+   * published, immutable and already public to anyone with the slug; nothing
+   * authenticated is reachable through this function. The editor's own routes
+   * are a different handler and stay same-origin.
+   */
+  res.setHeader('Access-Control-Allow-Origin', '*')
+  res.setHeader('Vary', 'Origin')
+  if (req.method === 'OPTIONS') {
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS')
+    res.setHeader('Access-Control-Max-Age', '86400')
+    res.statusCode = 204
+    return res.end()
+  }
   if (req.method !== 'GET') return send(res, 405, { error: 'read only' })
   // maps / <slug> / <sub> / <version> / <rel...>
   const parts = p
