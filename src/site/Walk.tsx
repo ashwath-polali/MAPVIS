@@ -688,6 +688,8 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
             let alpha = 1
             let face = (v.p as { facing?: string }).facing || 'south'
             let flip = false
+            // something with no life is a stander and never runs a gait
+            let gait = false
             if (v.life) {
               /* canStand is what keeps a walkOnly figure on the ground. Leaving
                * it out is why the fishwives were strolling across the sea wall:
@@ -713,8 +715,11 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
               alpha = s.alpha
               face = s.facing
               flip = s.flip
+              // whether the legs should be going THIS instant, which is not the
+              // same as whether this thing is capable of moving at all
+              gait = s.moving
             }
-            return { v, alpha, face, flip, moves: !!v.life }
+            return { v, alpha, face, flip, gait, moves: !!v.life }
           })
           /* STANDERS AND THE PLAYER ARE BODIES TOO, THE WAY THE EDITOR DOES IT.
            *
@@ -744,8 +749,22 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
             go: () => {
               const v = s.v
               const set = v.dirs[s.face] || v.dirs.south
+              /* A WALK CYCLE IS A GAIT: IT IS WHAT THE LEGS DO WHILE MOVING.
+               *
+               * life.ts says exactly that above its `moving` flag, and this
+               * ignored it and cycled off the wall clock, so a figure that had
+               * stopped at the end of a leg kept striding on the spot. Standing
+               * still is frame 0, which is the resting pose every direction set
+               * is built with, and it is what Thor has always done a few lines
+               * down. lifeAt already knows; it only had to be asked.
+               *
+               * Only DIRECTION sets rest. A frames-only item is an effect, a
+               * waterfall or a plume of smoke, and it has no idle to fall back
+               * to: it plays whether or not it is travelling. */
               const cell = set?.length
-                ? set[Math.floor(t * v.fps) % set.length]
+                ? s.gait
+                  ? set[Math.floor(t * v.fps) % set.length]
+                  : set[0]
                 : v.frames.length
                   ? v.frames[Math.floor(t * v.fps) % v.frames.length]
                   : v.still
