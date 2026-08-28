@@ -33,6 +33,7 @@ type Rect = [number, number, number, number]
 type Placed = {
   x: number
   y: number
+  group?: string
   scale?: number
   scaleX?: number
   scaleY?: number
@@ -47,6 +48,11 @@ type Placed = {
   dirsAt?: Record<string, Rect[]>
   fps?: number
   life?: unknown
+  /* [ox, oy, rx, ry]: the ellipse this thing's base covers, in painting pixels
+   * relative to its anchor, measured off its own art at publish. Optional, and
+   * a bundle published before footprints existed simply has none. See
+   * server/store/publish.mjs for how it is measured and why. */
+  foot?: number[]
 }
 /* one drawable: either a rectangle in the sheet, or its own image */
 type Cell = { img: HTMLImageElement; r: Rect }
@@ -278,16 +284,6 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
          * a pixel, and markHit is the editor painting its refused-move layer,
          * which a published map has nowhere to put. So the whole document
          * interface a published bundle needs is these two. */
-        /* WHERE EVERY BODY IS, READ BY THE FLOOR ITSELF.
-         *
-         * Rebuilt at the end of each frame and read by the next one. The one
-         * frame of lag is 16ms and it is what keeps this acyclic: the floor a
-         * figure walks on cannot depend on where that figure ends up this frame.
-         *
-         * Index 0 is always the player, so `self` is 0 for him and i+1 for the
-         * i-th placement, and nothing has to look itself up to avoid being
-         * blocked by itself. r is the body radius separate() already uses. */
-        const bodies: Body[] = [{ x: 0, y: 0, r: 3 }]
         /* WHO ACTUALLY STOPS YOU: a stander, not a walker.
          *
          * Blocking the player against everybody is real and unplayable: the
@@ -301,8 +297,42 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
          * treats the player as immovable and ejects the crowd from him. Some-
          * thing without life is a statue, a crate, a market stall: it has no way
          * to move and it should stop you dead. So the hard test is against the
-         * still ones only, and the living ones give way. */
+         * still ones only, and the living ones give way.
+         *
+         * Rebuilt at the end of each frame and read by the next one. The one
+         * frame of lag is 16ms and it is what keeps this acyclic: the floor a
+         * figure walks on cannot depend on where that figure ends up this frame. */
         const solids: Body[] = []
+        /* THE BODY OF ONE PLACEMENT, footprint first.
+         *
+         * A published bundle now carries `foot`, the ellipse its base actually
+         * covers, measured off its own art. Where there is one it is the body,
+         * offset from the anchor because the anchor is the front of the base
+         * rather than its middle.
+         *
+         * Where there is none, the circle of radius 3 at the anchor that shipped
+         * before footprints existed. That fallback is not a nicety, it is the
+         * whole of the backward compatibility promise: every bundle published up
+         * to v5 of the hub has no foot and has to walk the way it always did.
+         *
+         * AN EFFECT IS NEVER SOLID, whether or not it carries a footprint. Smoke,
+         * a waterfall, the wash across the sand and the glow over a door are
+         * drawn over the ground rather than standing on it, and there are 19 of
+         * them on the hub. The publisher already writes them a zero footprint,
+         * but the same refusal is here as well and not only there, because the
+         * bundles already published carry no footprint at all and one of those
+         * effects sits on the Panther's Maw door: with only the anchor circle to
+         * go on it put a body in the doorway. This is cheap and it makes an old
+         * bundle better instead of merely no worse. */
+        const bodyOf = (p: Placed, x: number, y: number, r: number): Body | null => {
+          if (p.group === 'effects') return null
+          const f = p.foot
+          if (!f) return { x, y, r }
+          if (!(f[2] > 0) || !(f[3] > 0)) return null
+          // r is kept sane rather than zero so anything that reads it without
+          // knowing about rx and ry still gets a circle roughly the right size
+          return { x: x + f[0], y: y + f[1], r: f[2], rx: f[2], ry: f[3] }
+        }
 
         /* The floor is TERRAIN, for the player and for the mask overlay alike.
          *
@@ -310,7 +340,12 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
          * probes read two pixels either side, so a body blocks a five pixel
          * band, and a crowded quay becomes a fence. Measured, he got 18px along
          * the harbour instead of 235. Bodies are handled after the step instead,
-         * where they can stop him without narrowing the ground. */
+         * where they can stop him without narrowing the ground.
+         *
+         * The 18 and the 235 are from that experiment and from the bundle it ran
+         * against; neither reproduces now. What survives is the reason, which is
+         * geometric and does not depend on a map: whatever goes into lvlAt is
+         * read three times per step, once at the feet and once at each hip. */
         const docLike = { lvlAt: (x: number, y: number) => at(x, y), markHit: () => {} } as unknown as MaskDoc
         const standable = (x: number, y: number) => canStand(docLike, cfg, x, y)
         const bareStand = standable
@@ -553,51 +588,69 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
             held.arrowleft ||
             held.arrowright
           )
-          /* BODIES GIVE WAY; THEY ARE NOT WALLS. MEASURED, ON THIS MAP.
+          /* A WALKER GIVES WAY; A STANDER DOES NOT. TWO CONTACTS, ON PURPOSE.
            *
-           * Hard collision was built here and then taken out. Blocking the
-           * player on contact ends the game at the pier: the standable strip
-           * there is about two pixels across with people standing on it, so the
-           * crowd becomes a fence and he gets 9px along the harbour instead of
-           * 235.
+           * Something with life can step aside and does, because the push below
+           * treats the player as an immovable body and ejects the crowd from
+           * him: walk into a fishwife and she moves. Blocking him against her as
+           * well ends the game at the pier, where the standable strip is about
+           * two pixels across with people standing on it and the crowd becomes a
+           * fence.
            *
-           * The contact is soft instead, the way the editor's walk test has
-           * always done it. He is an immovable body in the push below, so the
-           * crowd is ejected from him rather than him from it: walk into a
-           * fishwife and she steps aside, and nobody is ever drawn inside
-           * anybody. That reads as physical without a two pixel plank being
-           * lethal. Making it hard is a few lines here if a map is ever built
-           * wide enough to want it; this one is not. */
+           * Something with no life has no way to step aside, so it stops him.
+           * That is the test below, and what it measures him against is that
+           * thing's footprint rather than a dot at its anchor. */
           const bx = walker.x
           const by = walker.y
           walker.step(docLike, cfg, held, dt)
-          /* A PERSON IS SOMETHING YOU BUMP INTO, AND SLIDE ALONG.
+          /* A THING IS SOMETHING YOU BUMP INTO, AND SLIDE ALONG.
            *
-           * Terrain first, then the result is tested against everybody else.
+           * Terrain first, then the result is tested against the solids.
            * Refusing the whole move makes a body feel like glue, so each axis is
-           * kept when it alone is clear: walk into someone head on and you stop,
-           * catch them on the shoulder and you slip past. Exactly the slide
-           * Walker.step already does against walls, for the same reason.
+           * kept when it alone is clear: walk into a crate head on and you stop,
+           * catch it on the corner and you slip past. Exactly the slide
+           * Walker.step already does against walls, for the same reason. */
+          /* ON, AND THE REASON IS MEASURED RATHER THAN GUESSED.
            *
-           * skip 0 because index 0 is him, and nothing should be blocked by
-           * where it already is. */
-          /* HELD OFF, AND THE REASON IS MEASURED RATHER THAN GUESSED.
+           * This was held off because the bodies were wrong: 72 of the hub's 94
+           * placements have no life, each was a circle of radius 3 at its own
+           * anchor whatever it was, and on a walkway two or three pixels across
+           * that is a fence. It is off by the same amount in the other
+           * direction, which is the half that was never written down: a market
+           * stall 26 pixels wide blocked a 3 pixel dot and you walked through
+           * the rest of it.
            *
-           * The slide below is correct and it is not switched on, because on
-           * this map it walls the quay. 72 of the hub's 94 placements have no
-           * life: crates, barrels, stalls, the buildings themselves. Each is a
-           * body at its own base, and along a walkway two or three pixels wide
-           * that is a fence. Measured, holding up-left from the spawn: 9px of
-           * travel with this on, 235px with it off.
+           * A placement now carries the footprint its own art measures, so both
+           * halves are answered by the same change. Measured on the hub's
+           * published v5 by flooding the floor from the spawn with the same step
+           * test this walk runs, which is the honest question because it asks
+           * what is CUT OFF rather than how far one held key gets:
            *
-           * The rule is right and the bodies are wrong. A building's collision
-           * is its footprint, not a circle at its anchor, and until a placement
-           * carries a real footprint this test blocks ground that looks and is
-           * walkable. Turning it on is deleting this comment and the `false`.
+           *   bodies                        reachable   under a body   cut off
+           *   none                            21050px              0         0
+           *   r=3 at every anchor, which
+           *     is what was switched off      20724px          326px         0
+           *   the same with effects refused,
+           *     an old bundle on this code    20727px          323px         0
+           *   measured footprints, once the
+           *     map is exported again         20877px          173px         0
+           *
+           * So the footprints stop more of what should stop you while standing
+           * on LESS of the floor than the old dots did, and nothing anywhere on
+           * the map is walled off behind them: every pixel lost is a pixel under
+           * an object, not a pixel stranded behind one.
+           *
+           * Holding up-left from the spawn is 92px with this on and 92px with it
+           * off, in all three rows, because what ends that walk is the top edge
+           * of the quay and not a body at all. The 9px against 235px this
+           * comment used to quote does not reproduce against the published hub
+           * in any of them; it was measured when every body, the moving crowd
+           * included, was folded into lvlAt, where the hip probes widen each one
+           * into a five pixel band.
            *
            * Bodies still push apart in separate() below, so nobody is drawn
            * inside anybody, which is the visible half of what was asked for. */
-          const HARD_BODIES = false
+          const HARD_BODIES = true
           if (HARD_BODIES && occupied(walker.x, walker.y)) {
             if (!occupied(walker.x, by)) walker.y = by
             else if (!occupied(bx, walker.y)) walker.x = bx
@@ -741,8 +794,21 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
             { x: px, y: py, r: Math.max(3, hip) },
           ]
           const crowd = [...pts, ...still, ...still]
-          separate(crowd, yScale, 1, bareStand)
-          for (let i = 0; i < pts.length; i++) if (shown[i].moves) pts[i] = crowd[i]
+          /* separate RETURNS the corrections, it does not apply them.
+           *
+           * This called it and threw the answer away, then reassigned
+           * pts[i] = crowd[i], which is the object it already was. So the push
+           * has been doing precisely nothing on this page, and the comment
+           * above claiming nobody is drawn inside anybody was false the whole
+           * time. editor.ts:4277 has the correct shape: take the deltas, add
+           * them.
+           *
+           * Only the movers take theirs. Immovable rows are listed twice so a
+           * pair's half-correction is paid twice over, which is what makes a
+           * stander stand still while the walker takes the whole gap. */
+          const push = separate(crowd, yScale, 1, bareStand)
+          for (let i = 0; i < pts.length; i++)
+            if (shown[i].moves) pts[i] = { ...pts[i], x: pts[i].x + push[i].dx, y: pts[i].y + push[i].dy }
 
           const order: Array<{ y: number; go: () => void }> = shown.map((s, i) => ({
             y: pts[i].y,
@@ -841,14 +907,18 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
           setAt(`${Math.round(px)},${Math.round(py)} lv ${at(px, py)}${walker.blocked ? ' blocked' : ''}`)
           /* the body list the NEXT frame's floor reads. Written last, after
            * everything has settled, so what a figure walks into is where people
-           * actually ended up rather than where they were heading. */
-          bodies.length = 0
-          bodies.push({ x: px, y: py, r: 3 })
-          for (const p of pts) bodies.push({ x: p.x, y: p.y, r: p.r })
-          // only the ones that cannot step aside stop him
+           * actually ended up rather than where they were heading.
+           *
+           * Only the ones that cannot step aside are in it. There used to be a
+           * second list holding everybody, player included, which was rebuilt
+           * every frame and read by nothing; it is gone rather than kept as a
+           * contract nothing implements. */
           solids.length = 0
-          for (let i = 0; i < live.length; i++)
-            if (!live[i].life) solids.push({ x: pts[i].x, y: pts[i].y, r: pts[i].r })
+          for (let i = 0; i < live.length; i++) {
+            if (live[i].life) continue
+            const b = bodyOf(live[i].p, pts[i].x, pts[i].y, pts[i].r)
+            if (b) solids.push(b)
+          }
           raf = requestAnimationFrame(draw)
         }
         raf = requestAnimationFrame(draw)

@@ -189,6 +189,17 @@ export async function putDoc(mapId, docString) {
 
 // This machine's own copy of a map document, if it has one. Absent on a host,
 // where WORK is a scratch directory, and that is the case the blob covers.
+// when the local copy was last written, so getDoc can tell a genuinely newer
+// file from one that has simply been sitting there since the last import
+function localDocAt(slug) {
+  try {
+    if (!slug || env().MAPVIS_NO_DISK === '1') return 0
+    return fs.statSync(path.join(WORK_DIR, slug, 'doc.json')).mtimeMs
+  } catch {
+    return 0
+  }
+}
+
 function localDoc(slug) {
   try {
     if (!slug || env().MAPVIS_NO_DISK === '1') return null
@@ -220,8 +231,27 @@ export async function getDoc(mapId) {
    * same save that writes the blob, and it means an unreachable bucket degrades
    * to slower rather than to stopped. The blob stays the source of truth for any
    * machine that does not have the file. */
+  /* THE LOCAL COPY IS A FALLBACK. IT USED TO BE THE SOURCE, AND THAT IS A BUG.
+   *
+   * The reason above is right: the day the bucket stopped answering, no map on
+   * this laptop would open, while work/<slug>/doc.json held the identical mask
+   * the whole time. What it gets wrong is "written by the same save". It is
+   * not. With the platform on, POST /api/doc returns before any disk write, so
+   * the only writers of doc.json are the failure fallback and import-work.mjs.
+   *
+   * Measured on the hub: doc.json last written 05:57, map_blobs planes 19:55,
+   * fourteen hours apart, contents identical only because nothing edited the
+   * mask in between. Every mask edit from here would have gone to planes.png
+   * and then been discarded on the next open in favour of a morning-old file.
+   * That is the one thing this codebase says cannot be redrawn, silently
+   * reverting itself.
+   *
+   * So the file is used when the blob cannot be read, or when it is genuinely
+   * newer than the row. Otherwise the store wins, which is what makes it the
+   * source of truth it is called everywhere else. */
   const local = localDoc(m.slug)
-  if (local && typeof local.m === 'string' && local.m.length) {
+  const localNewer = local && localDocAt(m.slug) > +new Date(m.updated_at || 0)
+  if (local && typeof local.m === 'string' && local.m.length && (!blob || localNewer)) {
     mm = local.m
   } else if (blob) {
     mm = packM(...(({ lvl, occ, cut }) => [lvl, occ, cut])(planesFromPNG(await store().get(blob.key))))

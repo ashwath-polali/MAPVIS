@@ -61,6 +61,7 @@ import { newToken, hashToken } from './store/crypto.mjs'
 import { listMaps } from './store/maps.mjs'
 import { ask, plannerReady, NoPlanner } from './store/planner.mjs'
 import { withRequest, request } from './store/ctx.mjs'
+import { foldersApi } from './store/folders.mjs'
 import { keyFor } from './store/auth.mjs'
 import {
   signUp,
@@ -270,6 +271,10 @@ async function route(req, res, p, url) {
   if (p.startsWith('/api/auth/') || p === '/api/me' || p === '/api/my-maps' || p === '/api/maps/delete')
     return authApi(req, res, p, url)
   if (p.startsWith('/api/relay/')) return relayApi(req, res, p)
+  // organising, and only organising. Its own module and its own tables, before
+  // the ownership gate because a folder is a preference about the dashboard
+  // rather than a write to anybody's map.
+  if (p.startsWith('/api/folders') && (await foldersApi(req, res, p))) return
 
   /* OWNERSHIP IS CHECKED HERE, once, rather than in forty routes.
    *

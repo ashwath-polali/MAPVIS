@@ -446,3 +446,291 @@
   font: 400 12px var(--font-label);
   color: #5b6470;
 }
+
+/* ============================= folders =================================
+ *
+ * All of this is absent unless the folders api answered, so nothing below may
+ * be load bearing for reading the page. It is a rail of names down the left, a
+ * marker while a card is being dragged, and a small popover on a card. No
+ * colour: the paintings stay the only bright thing on the screen, and a folder
+ * that shouted would be an organiser competing with the work it organises.
+ */
+
+.home-split {
+  display: grid;
+  grid-template-columns: 164px minmax(0, 1fr);
+  gap: clamp(16px, 1.6vw, 24px);
+  align-items: start;
+}
+/* under a phone width the rail becomes a row of chips above the grid, because
+   164px of names beside a one-column grid is most of the screen */
+@media (max-width: 760px) {
+  .home-split {
+    grid-template-columns: 1fr;
+  }
+  .rail {
+    flex-direction: row;
+    flex-wrap: wrap;
+    position: static;
+  }
+}
+
+.rail {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  position: sticky;
+  top: 76px;
+}
+.rail-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  border-left: 2px solid transparent;
+  transition:
+    border-color 160ms ease,
+    background-color 160ms ease;
+}
+.rail-hit {
+  flex: 1;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+  padding: 7px 8px 7px 9px;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+}
+.rail-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 500 12px var(--font-label);
+  color: #8d97a4;
+  transition: color 160ms ease;
+}
+.rail-n {
+  flex: none;
+  font: 400 10px var(--font-mono);
+  color: #454f5b;
+}
+.rail-row:hover .rail-name,
+.rail-hit:hover .rail-name {
+  color: #e6e9ee;
+}
+/* the one you are looking at, said with a line and not a fill */
+.rail-row.on,
+button.rail-row.on {
+  border-left-color: #7fb3a3;
+  background: #10141a;
+}
+.rail-row.on .rail-name {
+  color: #e6e9ee;
+}
+/* a card is over this folder and letting go puts it in */
+.rail-row.over {
+  border-left-color: #7fb3a3;
+  background: #16211e;
+}
+.rail-row.over .rail-name {
+  color: #9fd0c1;
+}
+.rail-x {
+  flex: none;
+  width: 20px;
+  padding: 0;
+  font: 400 14px var(--font-label);
+  line-height: 1;
+  color: #39434f;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 140ms ease,
+    color 140ms ease;
+}
+.rail-row:hover .rail-x,
+.rail-x:focus-visible {
+  opacity: 1;
+}
+.rail-x:hover {
+  color: #ff6b5e;
+}
+/* removing a folder keeps every map in it, so this asks once, inline, rather
+   than opening the two-step dialog that deleting a map opens */
+.rail-sure {
+  display: flex;
+  gap: 6px;
+  padding-right: 6px;
+}
+.rail-sure button {
+  padding: 0;
+  font: 400 10px var(--font-mono);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  color: #5b6470;
+}
+.rail-sure button:first-child {
+  color: #ff6b5e;
+}
+.rail-sure button:hover {
+  text-decoration: underline;
+}
+.rail-new {
+  margin-top: 6px;
+  padding: 7px 9px;
+  font: 400 11px var(--font-label);
+  color: #4a5563;
+  background: none;
+  border: 1px dashed #1d232b;
+  cursor: pointer;
+  text-align: left;
+  transition:
+    color 160ms ease,
+    border-color 160ms ease;
+}
+.rail-new:hover {
+  color: #e6e9ee;
+  border-color: #3a4652;
+}
+.rail-name-in {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  font: 400 12px var(--font-label);
+  color: #e6e9ee;
+  background: #12161b;
+  border: 1px solid #39434f;
+  outline: none;
+}
+
+.fold-empty {
+  margin: 22px 2px 0;
+  font: 400 11px var(--font-mono);
+  color: #454f5b;
+}
+
+/* ---- dragging a card ---- */
+
+/* the card in the hand fades rather than moves, because the browser is already
+   drawing a copy of it under the pointer */
+.card.lifted {
+  opacity: 0.4;
+}
+/* where it lands. A bar in the gap, not a highlight on the card, so it says
+   between these two rather than onto this one. */
+.card.drop-before::before,
+.card.drop-after::before {
+  content: '';
+  position: absolute;
+  z-index: 4;
+  top: -2px;
+  bottom: -2px;
+  width: 2px;
+  background: #7fb3a3;
+}
+.card.drop-before::before {
+  left: -9px;
+}
+.card.drop-after::before {
+  right: -9px;
+}
+
+/* ---- the folder picker on a card ---- */
+
+.card-do {
+  position: relative;
+}
+.card-fold {
+  display: grid;
+  grid-auto-flow: column;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  padding: 0;
+  color: #5b6470;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  transition: color 180ms ease;
+}
+.card-fold:hover {
+  color: #fff;
+}
+.card-fold.on {
+  color: #7fb3a3;
+}
+.card-foldn {
+  font: 400 9px var(--font-mono);
+}
+.pick {
+  position: absolute;
+  z-index: 6;
+  right: 0;
+  bottom: calc(100% + 8px);
+  width: 168px;
+  padding: 6px;
+  background: #0d1116;
+  border: 1px solid #2c3742;
+  box-shadow: 0 18px 40px -18px rgba(0, 0, 0, 0.9);
+}
+.pick-list {
+  max-height: 190px;
+  overflow: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.pick-list label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 6px;
+  cursor: pointer;
+  font: 400 12px var(--font-label);
+  color: #8d97a4;
+}
+.pick-list label:hover {
+  color: #e6e9ee;
+  background: #141a21;
+}
+.pick-list span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pick-list input {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  accent-color: #7fb3a3;
+}
+.pick-new {
+  width: 100%;
+  margin-top: 4px;
+  padding: 6px;
+  font: 400 11px var(--font-label);
+  color: #5b6470;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  text-align: left;
+}
+.pick-new:hover {
+  color: #e6e9ee;
+}
+.pick-name {
+  width: 100%;
+  margin-top: 4px;
+  padding: 6px;
+  font: 400 12px var(--font-label);
+  color: #e6e9ee;
+  background: #12161b;
+  border: 1px solid #39434f;
+  outline: none;
+}

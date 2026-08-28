@@ -440,16 +440,37 @@ export function facingFrom(dx: number, dy: number, yScale = 1): LifeFacing {
  * y is divided by yScale for the same reason it is in separate(): the ground is
  * squashed, so a circle on screen is an ellipse in the world.
  */
-export type Body = { x: number; y: number; r: number }
+/* rx and ry are the FOOTPRINT, and they are optional because most bodies do not
+ * have one. A figure is a circle on squashed ground and r says all there is to
+ * say about it. A market stall is not: it is 26 painting pixels across and about
+ * 19 deep, and a circle at its anchor either misses most of it or, sized to
+ * cover it, swallows the walkway beside it. So a published placement can carry
+ * the ellipse its own art measures, and when it does, rx and ry are the two
+ * half-axes in painting pixels and r is ignored.
+ *
+ * Given neither, the answer is exactly what it always was: r across and r*yScale
+ * up the screen. That is the same ellipse the old code wrote as dividing dy by
+ * yScale and comparing to r squared, rearranged, so a body with no footprint
+ * cannot behave differently after this than before it.
+ *
+ * separate() does NOT read them. The push apart is circles and stays circles:
+ * its strength, its two passes and its 0.6 body radius were all tuned over
+ * 30000 frames on that geometry, and a footprint answers a different question
+ * anyway. This is where the floor is solid; that is how close two figures stand. */
+export type Body = { x: number; y: number; r: number; rx?: number; ry?: number }
 
 export function bodyAt(bodies: Body[], yScale = 0.72) {
   return (x: number, y: number, skip = -1): boolean => {
     for (let i = 0; i < bodies.length; i++) {
       if (i === skip) continue
       const b = bodies[i]
-      const dx = x - b.x
-      const dy = (y - b.y) / (yScale || 1)
-      if (dx * dx + dy * dy < b.r * b.r) return true
+      const ax = b.rx ?? b.r
+      const ay = b.ry ?? b.r * (yScale || 1)
+      // a body of no width is nothing to walk into, and dividing by it is worse
+      if (!(ax > 0) || !(ay > 0)) continue
+      const dx = (x - b.x) / ax
+      const dy = (y - b.y) / ay
+      if (dx * dx + dy * dy < 1) return true
     }
     return false
   }

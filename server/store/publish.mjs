@@ -15,8 +15,154 @@ import crypto from 'node:crypto'
 import { q, one, many, tx } from '../db/pool.mjs'
 import { store, keys } from './blobs.mjs'
 import { packAtlas, atlasify } from './atlas.mjs'
+import { decodePNG } from '../sheet.mjs'
 
 const sha = (b) => crypto.createHash('sha256').update(b).digest('hex')
+
+/* WHAT A PLACEMENT STANDS ON, MEASURED OFF ITS OWN ART.
+ *
+ * A published placement used to carry no collision shape at all, so the walk
+ * page invented one: a circle of radius 3 at the anchor, the same for a barrel
+ * and for a market stall. That is wrong in both directions at once. A 26px stall
+ * blocked a 3px dot and you walked through the rest of it, while on a quay two
+ * or three pixels across the same dot was a fence. The comment in Walk.tsx that
+ * held the hard test switched off said exactly this: "a building's collision is
+ * its footprint, not a circle at its anchor".
+ *
+ * So the footprint is measured here, once, at publish, where the png bytes are
+ * already in hand and nothing has to be decoded in a game loop. It ships as
+ * `foot: [ox, oy, rx, ry]`, an ellipse in painting pixels relative to the
+ * placement's anchor. Optional on purpose: a bundle published before this
+ * existed has no `foot` and a reader that has never heard of one ignores it, so
+ * both sides stay backward compatible.
+ *
+ * THE CONTACT BAND, NOT THE WHOLE SPRITE. Only the bottom few rows of drawn
+ * pixels touch the ground. That is what makes a tree a trunk you walk into and a
+ * canopy you walk under, and it is why this is not editor.ts's bodyRadius, which
+ * is 0.6 of the WHOLE ink width and belongs to a different job: that number
+ * sizes the keep-out circle two figures shove each other out of, tuned over
+ * 30000 frames for how a crowd looks. This one answers where the ground is
+ * solid. Do not unify them.
+ *
+ * THE ANCHOR IS THE FRONT OF THE BASE, NOT ITS MIDDLE. A placement is drawn with
+ * the bottom edge of its frame on the anchor, so the pixels where the object
+ * meets the floor are the near edge of its base and the base itself runs away
+ * from the camera, up the screen. The ellipse is therefore pushed up by its own
+ * ry so its near rim sits on the drawn feet.
+ *
+ * ry COMES FROM rx, BECAUSE THE GROUND IS SQUASHED. A base that reads 2rx across
+ * the screen is 2*rx*yScale deep up it, which is the same squash bodyAt and
+ * separate already measure distance in. Taking ry from the band's own few rows
+ * instead would give every object a flat sliver you could stand behind while
+ * standing inside it.
+ */
+const FOOT_ALPHA = 40 // the repo-wide alpha threshold, same as Walk.tsx's trimToFeet
+const FOOT_BAND = 4 // how deep the ground contact band is, in painting pixels
+
+/* the frame the placement rests on: whatever a reader would draw for it while it
+ * is standing still. The export already resolves a direction set's resting view
+ * into src, so this order matches what the walk page puts on screen. */
+const restFrame = (a) => a.src || a.frames?.[0] || Object.values(a.dirs || {})[0]?.[0] || null
+
+/* files is keyed by the path inside assets/ and the two callers disagree about
+ * whether the folder is on it, exactly as the atlas packer found. Strip and try
+ * both rather than trust either. */
+function frameBytes(files, url) {
+  if (!url) return null
+  const rel = String(url)
+    .replace(/^\/+/, '')
+    .replace(/^assets\//, '')
+  return files.get(rel) || files.get('assets/' + rel) || null
+}
+
+function measureFoot(img, a, yScale) {
+  const { w, h, data } = img
+  const sx = Number(a.scaleX ?? a.scale) > 0 ? Number(a.scaleX ?? a.scale) : 1
+  const sy = Number(a.scaleY ?? a.scale) > 0 ? Number(a.scaleY ?? a.scale) : 1
+  let top = -1
+  let feet = -1
+  for (let y = 0; y < h; y++) {
+    let hit = false
+    for (let x = 0; x < w && !hit; x++) if (data[(y * w + x) * 4 + 3] > FOOT_ALPHA) hit = true
+    if (hit) {
+      if (top < 0) top = y
+      feet = y
+    }
+  }
+  // a frame with nothing drawn in it is nothing to walk into
+  if (top < 0) return [0, 0, 0, 0]
+  /* a quarter of the object's height at most, so a thing shorter than the band
+   * is not read as being all base, and never less than one row */
+  const drawnH = (feet - top + 1) * sy
+  const rows = Math.max(1, Math.round(Math.min(FOOT_BAND, drawnH * 0.25) / sy))
+  /* flipY draws the sprite upside down, so the rows that end up against the
+   * ground are the ones at the TOP of the source */
+  const upside = !!a.flipY
+  const lo = upside ? top : Math.max(top, feet - rows + 1)
+  const hi = upside ? Math.min(feet, top + rows - 1) : feet
+  let x0 = w
+  let x1 = -1
+  for (let y = lo; y <= hi; y++)
+    for (let x = 0; x < w; x++)
+      if (data[(y * w + x) * 4 + 3] > FOOT_ALPHA) {
+        if (x < x0) x0 = x
+        if (x > x1) x1 = x
+      }
+  if (x1 < x0) return [0, 0, 0, 0]
+  let rx = ((x1 - x0 + 1) / 2) * sx
+  let ry = Math.max(((hi - lo + 1) / 2) * sy, rx * yScale)
+  // the frame is drawn centred on the anchor in x, so an off-centre base carries
+  // an offset, and a mirrored frame carries it the other way
+  let ox = ((x0 + x1 + 1) / 2 - w / 2) * sx
+  if (a.flipX) ox = -ox
+  /* a rotated frame is not measured again, it is covered: the axis-aligned box
+   * around the turned ellipse. 13 of the hub's 94 placements carry a rotation
+   * and all of them are small, so a few tenths of a pixel of slack is cheaper
+   * than a second geometry nobody can check. */
+  if (a.rot) {
+    const c = Math.abs(Math.cos(a.rot))
+    const s = Math.abs(Math.sin(a.rot))
+    const nx = rx * c + ry * s
+    const ny = rx * s + ry * c
+    rx = nx
+    ry = ny
+  }
+  // the transparent rows under the drawn feet are canvas, not object, and they
+  // are what would otherwise float the whole footprint below the ground
+  const lift = (upside ? top : h - 1 - feet) * sy
+  const r2 = (v) => Math.round(v * 100) / 100
+  return [r2(ox), r2(-lift - ry), r2(rx), r2(ry)]
+}
+
+/* Every placement gets its footprint attached, movers included: it is a
+ * measurement of the art rather than a permission to block, and the reader stays
+ * the one that decides who is solid.
+ *
+ * An EFFECT is exempt and gets a zero footprint. Smoke, a waterfall, a water
+ * wash across the sand, a lighthouse sweep and the glow over a door are drawn
+ * over the ground rather than standing on it, and there are 19 of them on the
+ * hub. Reading their contact band would put an 86px wall across the beach. */
+export function footprints(assets, files, yScale) {
+  const seen = new Map()
+  return assets.map((a) => {
+    if (!a || typeof a !== 'object') return a
+    if (a.group === 'effects') return { ...a, foot: [0, 0, 0, 0] }
+    const url = restFrame(a)
+    if (!seen.has(url)) {
+      const buf = frameBytes(files, url)
+      let img = null
+      try {
+        if (buf) img = decodePNG(buf)
+      } catch {
+        /* an unreadable frame simply gets no footprint and the reader falls back */
+      }
+      seen.set(url, img)
+    }
+    const img = seen.get(url)
+    if (!img) return a
+    return { ...a, foot: measureFoot(img, a, yScale) }
+  })
+}
 
 /* A PUBLISHED FILE NEVER CHANGES, SO IT SHOULD BE FETCHED ONCE.
  *
@@ -135,7 +281,25 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
     })),
   }
 
-  const all = new Map(files)
+  /* ONE LAYOUT, DECIDED HERE, NOT BY WHICHEVER CALLER TURNED UP.
+   *
+   * The two publishers disagreed about whether the assets/ folder is part of a
+   * key. publish-work.mjs walks the folder and includes it; the export route
+   * sets bare keys and then writes an assets.json pointing at "assets/...". So
+   * a map published from the export BUTTON wrote its 794 objects one folder
+   * shallower than its own manifest said, and every loose asset fetch 404'd.
+   * Measured: hub v3, published that way, has 0 of 794 png keys prefixed, while
+   * v4 and v5 from the command line have 794 of 794. The atlas hid it, because
+   * an atlas reader never asks for the loose file, so the export reported
+   * success and even logged that the map cost six requests.
+   *
+   * The prefix was already normalised, but only for the atlas index a few lines
+   * down. Doing it once here, at the boundary, makes the caller's convention
+   * irrelevant, which is the only version of this that stays fixed. It also
+   * stops a library item named "scene" writing scene.png and being overwritten
+   * by the map painting. */
+  const inAssets = (k) => 'assets/' + String(k).replace(/^\/+/, '').replace(/^assets\//, '')
+  const all = new Map([...files].map(([k, v]) => [inAssets(k), v]))
 
   /* EVERY FRAME PACKED INTO ONE SHEET.
    *
@@ -166,7 +330,8 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
      * placements shipped loose, and the bundle cost 800 requests to open while
      * reporting success. Stripping first means the caller's convention stops
      * mattering, which is the only version of this that stays fixed. */
-    const inAssets = (k) => 'assets/' + String(k).replace(/^\/+/, '').replace(/^assets\//, '')
+    // the same normalisation `all` was built with above, so the index and the
+    // objects can no longer be keyed differently from one another
     packed = packAtlas(new Map([...files].map(([k, v]) => [inAssets(k), v])))
     if (packed) {
       all.set('atlas.png', packed.png)
@@ -176,13 +341,25 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
 
   for (const [name, buf] of Object.entries(images)) if (buf) all.set(name, buf)
   all.set('map.json', Buffer.from(JSON.stringify(map, null, 2)))
+  /* the collision shape of every placement, measured off the art on the way
+   * through. It happens here rather than in the export route so that all three
+   * publishers get it: the editor's export, publish-work.mjs and reexport.mjs
+   * all end up in this function and none of them has to know footprints exist.
+   * yScale comes off the map because the squash is per map. */
+  const placed = footprints(assetsJson.assets || [], files, Number(mapJson?.yScale) > 0 ? Number(mapJson.yScale) : 0.72)
+  const feet = placed.filter((a) => a && a.foot).length
+  const solid = placed.filter((a) => a && a.foot && a.foot[2] > 0).length
   // kept, because the cost measured at the bottom has to read the array that
   // actually shipped rather than the one it was built from
-  const atlased = packed ? atlasify(assetsJson.assets || [], packed.index) : null
+  const atlased = packed ? atlasify(placed, packed.index) : null
   all.set(
     'assets.json',
     Buffer.from(
-      JSON.stringify(atlased ? { ...assetsJson, atlas: 'atlas.png', assets: atlased } : assetsJson, null, 2),
+      JSON.stringify(
+        { ...assetsJson, ...(packed ? { atlas: 'atlas.png' } : {}), assets: atlased || placed },
+        null,
+        2,
+      ),
     ),
   )
 
@@ -225,13 +402,21 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
    * unreadable: it cried wolf on a good bundle and on a broken one alike. */
   const loose = atlased
     ? atlased.filter((a) => !a.srcAt && !a.framesAt && !a.dirsAt).length
-    : (assetsJson.assets || []).length
+    : placed.length
   const cost = 6 + loose
   if (loose)
     console.warn(
       `[publish] ${slug} v${version}: ${loose} placement(s) missed the atlas, so opening this map costs about ${cost} requests`,
     )
   else console.log(`[publish] ${slug} v${version}: opening this map costs 6 requests`)
+  /* said out loud for the same reason the atlas cost is: a bundle where nothing
+   * measured a footprint still loads and still walks, it just walks the old way,
+   * and that is exactly the kind of silent fallback the atlas hid behind for a
+   * day. If this is 0 on a map with placements, the frames did not come through. */
+  if (placed.length)
+    console.log(
+      `[publish] ${slug} v${version}: ${feet} of ${placed.length} placement(s) measured a footprint, ${solid} of them solid`,
+    )
 
   return {
     version,
