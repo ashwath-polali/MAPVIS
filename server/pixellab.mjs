@@ -86,7 +86,13 @@ async function call(method, route, body) {
 
 export const balance = () => call('GET', '/v1/balance')
 
-export async function submit({ prompt, w, h, seed, styleImage }) {
+/* The style reference's four aspects are INDEPENDENT, and that is the whole
+ * point of exposing them. A new map usually wants the craft of a map that
+ * already works, the crisp outline and the shading structure, while keeping its
+ * own colours: the Maw is black and grey stone and must not inherit the hub's
+ * tropical palette. Sending all four was fine while every map was the same
+ * island; it is wrong the moment two maps are meant to look different. */
+export async function submit({ prompt, w, h, seed, styleImage, styleOptions }) {
   const body = {
     description: prompt,
     image_size: { width: w, height: h },
@@ -95,7 +101,10 @@ export async function submit({ prompt, w, h, seed, styleImage }) {
   if (seed != null) body.seed = seed
   if (styleImage) {
     body.style_image = { image: { type: 'base64', base64: styleImage.base64 }, size: { width: styleImage.w, height: styleImage.h } }
-    body.style_options = { color_palette: true, outline: true, detail: true, shading: true }
+    body.style_options = {
+      color_palette: true, outline: true, detail: true, shading: true,
+      ...(styleOptions || {}),
+    }
   }
   const out = await call('POST', '/v2/generate-image-v2', body)
   return out.background_job_id

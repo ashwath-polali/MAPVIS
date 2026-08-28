@@ -42,6 +42,7 @@ import {
   platformOn,
   diskAllowed,
   saveDocument,
+  savePainting,
   loadDocument,
   libraryOf,
   serveFromStore,
@@ -104,6 +105,32 @@ const SAM_CKPT =
   process.env.MAPVIS_SAM_CKPT || 'C:\\Users\\ashcy\\AdventureGame\\.tmp_extract\\sam_vit_b_01ec64.pth'
 
 const MIME = { '.png': 'image/png', '.jpg': 'image/jpeg', '.json': 'application/json' }
+
+/* A MAP'S OWN PAINTING, AS A STYLE REFERENCE FOR THE NEXT ONE.
+ *
+ * The working scene first, then the published one, so a map being worked on
+ * right now can be referenced before it has ever been exported. Dimensions come
+ * off the PNG header rather than being trusted from the document, because the
+ * generator rejects a size that does not match the bytes.
+ */
+async function styleRef(slug) {
+  const id = safeId(slug)
+  let buf = null
+  const local = path.join(WORK, id, 'scene.png')
+  if (fs.existsSync(local)) buf = fs.readFileSync(local)
+  if (!buf) {
+    const pub = await publishedMap(id, null)
+    if (!pub) throw new Error('no working scene and never published')
+    const key = pub.blob_prefix + 'scene.png'
+    buf = hotGet(key) || hotPut(key, await store().get(key))
+  }
+  if (!buf || buf.length < 24) throw new Error('scene.png is empty')
+  // IHDR sits at a fixed offset in every PNG: 8 signature + 8 length/type
+  const w = buf.readUInt32BE(16)
+  const h = buf.readUInt32BE(20)
+  if (!(w > 0 && h > 0)) throw new Error('scene.png has no readable size')
+  return { base64: buf.toString('base64'), w, h }
+}
 
 /* POSTs that carry an `id` that is not a map anybody owns, so the ownership
  * gate must not stand in front of them. Auth has its own handler and never
@@ -320,16 +347,38 @@ async function route(req, res, p, url) {
     const n = Math.max(1, Math.min(6, b.n || 4))
     const w = b.w || 688
     const h = b.h || 384
+    /* A STYLE REFERENCE, WHICH THIS HAS NEVER SENT.
+     *
+     * generateImage has taken one since it was written and nothing has ever
+     * passed it, so every map ever generated here went out with no reference at
+     * all. That is why a new map comes back reading like a generated picture
+     * while the hub reads like a map: the hub is a thousand-candidate pick, and
+     * a new one is candidate number one with nothing to imitate.
+     *
+     * `style` is a slug whose published painting is the reference. `styleOptions`
+     * picks which of the four aspects to take, and the useful case is craft
+     * without colour: outline, detail and shading on, color_palette OFF, so a
+     * black-stone interior can borrow the hub's hand without its tropical
+     * palette. */
+    let styleImage
+    if (b.style) {
+      try {
+        styleImage = await styleRef(String(b.style))
+      } catch (e) {
+        return send(res, 400, { error: `style "${b.style}": ${String(e.message || e).slice(0, 160)}` })
+      }
+    }
+    const styleOptions = b.styleOptions && typeof b.styleOptions === 'object' ? b.styleOptions : undefined
     const jobs = []
     for (let i = 0; i < n; i++) {
       const seed = Math.floor(Math.random() * 1e9)
       try {
-        jobs.push({ id: await pixellab.submit({ prompt, w, h, seed }), seed })
+        jobs.push({ id: await pixellab.submit({ prompt, w, h, seed, styleImage, styleOptions }), seed })
       } catch (e) {
         jobs.push({ error: String(e.message || e).slice(0, 200) })
       }
     }
-    return send(res, 200, { jobs, w, h })
+    return send(res, 200, { jobs, w, h, style: b.style || null, styleOptions: styleOptions || null })
   }
 
   if (p.startsWith('/api/job/')) {
@@ -2604,9 +2653,26 @@ async function route(req, res, p, url) {
     const id = safeId(b.id)
     const dir = path.join(WORK, id)
     if (!insideWork(dir)) return send(res, 400, { error: 'bad id' })
-    fs.mkdirSync(dir, { recursive: true })
-    fs.writeFileSync(path.join(dir, 'scene.png'), Buffer.from(stripDataURL(b.image), 'base64'))
-    return send(res, 200, { url: `/work/${id}/scene.png` })
+    const buf = Buffer.from(stripDataURL(b.image), 'base64')
+    if (diskAllowed()) {
+      fs.mkdirSync(dir, { recursive: true })
+      fs.writeFileSync(path.join(dir, 'scene.png'), buf)
+    }
+    /* AND INTO OBJECT STORAGE, which this never did. See savePainting: the
+     * painting was the only part of a map that stayed on whichever machine
+     * loaded it, so a map made here opened on the host with no art at all. */
+    let stored = false
+    if (platformOn()) {
+      try {
+        await savePainting(id, buf)
+        stored = true
+      } catch (e) {
+        if (e.name === 'NoOwner') return send(res, 401, { error: 'sign in to create a map' })
+        console.error('[save] painting did not reach storage:', e.message)
+        if (!diskAllowed()) return send(res, 503, { error: `painting could not be stored: ${e.message}` })
+      }
+    }
+    return send(res, 200, { url: `/work/${id}/scene.png`, stored })
   }
 
   // the cut-applied painting alone, staged before any mechanics exist:

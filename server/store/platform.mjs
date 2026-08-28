@@ -98,6 +98,31 @@ export async function saveDocument(slug, docString) {
   return { bytes: docString.length, savedAt: t ? +new Date(t.updated_at) : Date.now(), ...r }
 }
 
+/* THE PAINTING HAS TO LEAVE THE MACHINE THAT LOADED IT.
+ *
+ * /api/save wrote work/<slug>/scene.png and stopped, so the picture a map is
+ * MADE of was the one part of it that never reached the platform until an
+ * export, which is hundreds of edits later. Two ways that bites and both are
+ * real: a map started on the laptop opens on the deployed site saying there is
+ * no painting, and a map started ON the deployed site writes its painting into
+ * a Vercel tmpdir that is gone by the next request.
+ *
+ * Same key serveFromStore already reads, so nothing else changes: the disk copy
+ * stays the fast path and the bucket is the copy that survives. Found from the
+ * game side on 2026-08-28, opening a freshly made panther-maw on the host.
+ */
+export async function savePainting(slug, buf) {
+  const id = await mapIdFor(slug, { create: true })
+  if (!id) {
+    const e = new Error('sign in to create a map')
+    e.name = 'NoOwner'
+    throw e
+  }
+  const key = `maps/${id}/scene.png`
+  await store().put(key, buf, 'image/png')
+  return key
+}
+
 export async function loadDocument(slug) {
   const id = await mapIdFor(slug)
   if (!id) return null
