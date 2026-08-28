@@ -500,7 +500,15 @@ async function route(req, res, p, url) {
     const rotPlan = await saveRotations(id, d, base)
     if (rotPlan) {
       const item = await writeRotations(id, rotPlan)
-      if (item) return send(res, 200, { item })
+      if (item) {
+        // an import is a library write like any other, and both of this route's
+        // returns used to end at disk. On a host that disk is a tmp dir that
+        // dies with the request, so the item vanished and the library carried on
+        // as if the import never happened. Same awaited push character-import
+        // makes one route over.
+        await pushLibrary(id, item.name)
+        return send(res, 200, { item })
+      }
     }
 
     const src = objectImageURL(d)
@@ -508,11 +516,17 @@ async function route(req, res, p, url) {
     const buf = await pixellab.fetchPNG(src)
     const size = pngSizeBuf(buf)
     if (!(size.w > 0 && size.h > 0)) return send(res, 502, { error: 'what came back was not a png' })
-    let file = base + '.png'
-    for (let i = 2; fs.existsSync(path.join(dir, file)); i++) file = `${base}-${i}.png`
+    /* THE DATABASE ANSWERS TOO, not the disk alone. The walk here only looked at
+     * libDirOf(id), which on a host starts empty every request, so every import
+     * would pick the base name and the push below would then overwrite the store
+     * row already sitting under it. Same reason saveRotations and saveFrames
+     * went through this helper. */
+    const file = (await freeLibraryName(id, base)) + '.png'
     fs.writeFileSync(path.join(dir, file), buf)
+    const name = file.replace(/\.png$/i, '')
+    await pushLibrary(id, name)
     return send(res, 200, {
-      item: { name: file.replace(/\.png$/i, ''), kind: 'static', src: `/work/${id}/library/${file}`, w: size.w, h: size.h },
+      item: { name, kind: 'static', src: `/work/${id}/library/${file}`, w: size.w, h: size.h },
     })
   }
 
@@ -1574,6 +1588,11 @@ async function route(req, res, p, url) {
       }
       const size = pngSize(path.join(fdir, '0.png'))
       noteAsk(id, name, prompt, t.thing)
+      // the base object and the 8 frames are both bought, and only disk was
+      // told. On a host WORK is a fresh tmp dir per request, so both spends went
+      // with the instance and the library row never learned the item existed.
+      // Same awaited push asset-gen-here's animated branch and saveStatic make.
+      await pushLibrary(id, name)
       return send(res, 200, {
         item: { name, kind: 'animated', frames: rel, fps: 6, w: size.w, h: size.h },
       })
@@ -1792,8 +1811,11 @@ async function route(req, res, p, url) {
       if (!asDir && fs.existsSync(target + '.png')) wasStill = target + '.png'
       else if (!asDir) return send(res, 404, { error: 'not in the library' })
     } else {
-      for (let i = 2; fs.existsSync(path.join(dir, name)) || fs.existsSync(path.join(dir, name + '.png')); i++)
-        name = `${base}-${i}`
+      /* disk for what is mid-request, the database for what exists at all. The
+       * walk this replaced only looked at libDirOf(id), which on a host starts
+       * empty every request, so every keep would pick the base name and the push
+       * at the end would overwrite the store row already under it. */
+      name = await freeLibraryName(id, base)
     }
     const fdir = path.join(dir, name)
     fs.mkdirSync(fdir, { recursive: true })
@@ -1833,6 +1855,11 @@ async function route(req, res, p, url) {
     // effects record on KEEP, not on every attempt, or one tuning session would
     // bury a week of asset asks under thirty near-identical lines
     if (b.ask && !b.overwrite) noteAsk(id, name, b.ask, rec.type === 'custom' ? 'written' : rec.type, 'effect')
+    // nothing was generated here, but frames and effect.json are still a library
+    // write, and this return used to end at disk. On a host that disk is a tmp
+    // dir that dies with the request, so a kept effect was gone the moment the
+    // response was sent. pushItem carries effect.json across with the frames.
+    await pushLibrary(id, name)
     return send(res, 200, { item: { name, kind: 'animated', effect: true, frames: rel, fps, w: size.w, h: size.h } })
   }
 
@@ -2430,11 +2457,24 @@ async function route(req, res, p, url) {
       return null
     }
     const placements = (Array.isArray(b.assets) ? b.assets : []).filter((a) => a && typeof a === 'object')
+    /* WHICH of the two drops happened, and to whom.
+     *
+     * The guard at the end of this loop fires on a count, and a count cannot say
+     * why. Both `continue`s below reach it, so a placement carrying a bad x, y
+     * or scale was reported as missing art and sent the person hunting for a png
+     * that was sitting right there. Counted apart, with the ids, so the refusal
+     * names the cause it actually hit. */
+    const badNumber = []
+    const noArt = []
     for (const a of placements) {
+      const pid = String(a.id || '(no id)')
       const x = Number(a.x)
       const y = Number(a.y)
       const scale = Number(a.scale)
-      if (!isFinite(x) || !isFinite(y) || !(scale > 0)) continue
+      if (!isFinite(x) || !isFinite(y) || !(scale > 0)) {
+        badNumber.push(pid)
+        continue
+      }
       // the transform contract: scaleX/scaleY/rot/flipX/flipY, with scale
       // kept equal to scaleX so every older reader stays alive. An editor
       // asset that predates the fields exports as the identity transform.
@@ -2456,7 +2496,10 @@ async function route(req, res, p, url) {
        * key, and a reader that has never heard of looks ignores it and draws
        * the thing the way it starts. */
       const look0 = packLook(a)
-      if (!look0) continue
+      if (!look0) {
+        noArt.push(pid)
+        continue
+      }
       /* a look whose png has gone KEEPS ITS SLOT, holding look 0.
        *
        * art is an index, so dropping one here shifts every later look down and
@@ -2494,11 +2537,25 @@ async function route(req, res, p, url) {
      * earlier, and here is still ahead of the two things that cannot be taken
      * back: the rm and rebuild of assets/, and the publish of a version. The
      * plane pngs above have already been rewritten with the same pixels the
-     * editor holds, which is what a save does anyway. */
-    if (outAssets.length < placements.length)
+     * editor holds, which is what a save does anyway.
+     *
+     * The two causes are named separately. This message used to say only that
+     * the art was missing, which is a lie half the time it fires: a bad number
+     * blocks the whole export and the person is then told to go looking for a
+     * png that is on disk. */
+    if (outAssets.length < placements.length) {
+      // enough ids to go and look at, not a wall of them: a big map could drop
+      // hundreds and the message has to stay readable
+      const some = (list) => list.slice(0, 12).join(', ') + (list.length > 12 ? `, and ${list.length - 12} more` : '')
+      const why = []
+      if (noArt.length) why.push(`${noArt.length} whose art did not resolve, so it is not on this machine or in the store: ${some(noArt)}`)
+      if (badNumber.length) why.push(`${badNumber.length} carrying a bad x, y or scale: ${some(badNumber)}`)
       return send(res, 502, {
-        error: `only ${outAssets.length} of ${placements.length} placements resolved, so nothing was written. The missing art is not on this machine or in the store.`,
+        error: `only ${outAssets.length} of ${placements.length} placements resolved, so nothing was written. ${why.join('. ')}`,
+        missingArt: noArt,
+        badNumbers: badNumber,
       })
+    }
     fs.rmSync(assetsDir, { recursive: true, force: true })
     for (const [rel, buf] of writes) {
       const to = path.join(assetsDir, rel)

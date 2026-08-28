@@ -435,10 +435,28 @@ export default function Home() {
                   </div>
                 )}
                 <div className="grid">
-                  {/* folders, then the way to make a map, then the maps. The
-                      dashed card is a control rather than a tile of somebody's
-                      work, and putting it between the two runs is also what
-                      separates them. */}
+                  {/* THE WAY TO MAKE A MAP, THEN THE FOLDERS, THEN THE MAPS.
+                      The dashed card sat between the two runs for a while, as a
+                      divider as much as a button, and that reads as the folders
+                      being the first thing the page hands you. Making a map is,
+                      so it goes first. Nothing separates the two runs now except
+                      that a folder tile does not look like a painting, which was
+                      always the thing actually doing the work.
+
+                      The order is only a paint order. What keeps a folder out of
+                      the map run is that a map card never calls preventDefault
+                      for a folder in the hand and a folder tile never accepts a
+                      map as a neighbour, so no sequence holding both can be
+                      produced no matter where this button sits. */}
+                  {!folder && (
+                    <button className="card new" onClick={() => go('/edit')}>
+                      <span className="new-plus" aria-hidden>
+                        +
+                      </span>
+                      <span className="new-say">new map</span>
+                      <span className="new-sub">start from a painting</span>
+                    </button>
+                  )}
                   {tiles.map((f) => (
                     <FolderTile
                       key={f.id}
@@ -469,15 +487,6 @@ export default function Home() {
                       onDone={drop}
                     />
                   ))}
-                  {!folder && (
-                    <button className="card new" onClick={() => go('/edit')}>
-                      <span className="new-plus" aria-hidden>
-                        +
-                      </span>
-                      <span className="new-say">new map</span>
-                      <span className="new-sub">start from a painting</span>
-                    </button>
-                  )}
                   {shown.map((m) => (
                     <Card key={m.id} m={m} onDelete={() => setDoomed(m)} org={org(m)} />
                   ))}
