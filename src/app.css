@@ -2318,6 +2318,149 @@ input[type='range']:disabled {
   border-color: var(--acc);
   color: var(--acc);
 }
+/* the two fields you point at instead of typing: a label, a wide button saying
+   what is set or what to do next, and an x to put it back. Same row shape as
+   the radius above so the form reads as one column of properties. */
+.anchspot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--dim);
+  font-size: 11.5px;
+}
+.anchspot > span {
+  min-width: 52px;
+}
+.anchspot .mbtn.wide {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 6px;
+  border: 1px solid var(--edge);
+  background: var(--panel);
+  color: var(--ink);
+  font: 11px var(--font-mono);
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: all 160ms ease;
+}
+.anchspot .mbtn.wide:hover {
+  border-color: var(--acc);
+  color: var(--acc);
+}
+/* armed: the map is waiting for a click, so the button says so and looks like
+   every other armed control in the tool rather than merely being pressed */
+.anchspot .mbtn.wide.on {
+  border-color: var(--acc);
+  background: color-mix(in srgb, var(--acc) 16%, var(--panel));
+  color: var(--ink);
+  font-family: var(--font-ui);
+}
+/* nothing set reads as prose, because "the middle of it" is a description of
+   the default and not a value somebody chose */
+.anchspot .mbtn.wide:not(.on) {
+  font-family: var(--font-mono);
+}
+.anchface {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  color: var(--dim);
+  font-size: 11.5px;
+}
+.anchface > span {
+  min-width: 52px;
+  padding-top: 4px;
+}
+/* the six numbers describing the body, in the same auto-fit grid the placement
+   inspector uses for its transform, so the two number blocks in this tool read
+   as the same kind of thing */
+.walkcfg {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+  gap: 4px 6px;
+  min-width: 0;
+  margin: 2px var(--pan-in) 4px;
+}
+/* one row per occluder: the id, its baseline, and an x. The id is small and
+   monospaced because it is the number written into the occluders png. */
+.occrows {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2px;
+  margin: 2px var(--pan-in) 4px;
+}
+.occrow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 4px 6px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: var(--dim);
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: all 160ms ease;
+}
+.occrow:hover {
+  border-color: var(--edge);
+}
+/* the selected one is the one the baseline field and the delete are about, and
+   before there was a selection the answer was always "whichever was last" */
+.occrow.sel {
+  border-color: var(--acc);
+  background: color-mix(in srgb, var(--acc) 10%, transparent);
+}
+.occrow .occ-id {
+  min-width: 16px;
+  font-family: var(--font-mono);
+  color: var(--ink);
+}
+.occrow .occ-base {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+.occrow .occ-base > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.occrow .occ-base input {
+  width: 58px;
+  min-width: 0;
+  padding: 3px 6px;
+  border-radius: 6px;
+  font: 11px var(--font-mono);
+}
+/* the map's own key/values. Two columns, the key in the machine face because
+   a grape reads it by that exact string. */
+.metarows {
+  display: grid;
+  gap: 3px;
+  margin: 2px var(--pan-in) 4px;
+}
+.metarow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  gap: 4px;
+  min-width: 0;
+}
+.metarow input {
+  min-width: 0;
+  padding: 5px 8px;
+  font-size: 11.5px;
+}
+.metarow input:disabled {
+  opacity: 0.4;
+}
 .doorhint {
   color: var(--dim);
   font-size: 11px;

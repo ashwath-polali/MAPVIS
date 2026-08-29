@@ -2744,6 +2744,39 @@ async function route(req, res, p, url) {
     return send(res, 200, { bytes: b.doc.length, wrote: ['disk'] })
   }
 
+  /* RENAMING A MAP, which is the one key everything else addresses.
+   *
+   * A map's id comes from the name of the file somebody dropped, or from ?id=,
+   * and there has never been a way to change it. It is simultaneously the
+   * publish slug, every door's target, the objective's map field, the world
+   * roster key and the save key, so the one string the whole game addresses is
+   * a side effect of what a png was called.
+   *
+   * The doors move with it. A rename that leaves twelve doors pointing at a map
+   * that no longer answers is a rename that breaks the archipelago silently,
+   * and the count is said out loud so an author knows what just happened.
+   * Published versions keep their old prefix on purpose: they are immutable and
+   * keyed by map id, so a class mid-session is untouched. */
+  if (p === '/api/map-rename' && req.method === 'POST') {
+    if (!platformOn()) return send(res, 503, { error: 'renaming needs the platform' })
+    const b = await body(req)
+    const from = safeId(b.from)
+    const to = safeId(b.to)
+    if (!to || !/^[a-z0-9][a-z0-9._-]{0,59}$/.test(to))
+      return send(res, 400, { error: 'an id is lower case letters, digits, dot, dash or underscore, and starts with a letter or a digit' })
+    if (from === to) return send(res, 200, { slug: to, repointed: 0 })
+    const user = await currentUser(req)
+    if (!user) return send(res, 401, { error: 'sign in first' })
+    const mine = await one('select id, owner_id from maps where slug = $1', [from])
+    if (!mine) return send(res, 404, { error: `no map ${from}` })
+    if (mine.owner_id !== user.id) return send(res, 403, { error: 'that is not your map' })
+    const taken = await one('select 1 from maps where slug = $1', [to])
+    if (taken) return send(res, 409, { error: `${to} is taken · slugs are global, because a door names one as a bare string` })
+    await q('update maps set slug = $2, updated_at = now() where id = $1', [mine.id, to])
+    const moved = await many('update anchors set to_slug = $2 where to_slug = $1 returning name', [from, to])
+    return send(res, 200, { slug: to, repointed: moved.length })
+  }
+
   if (p.startsWith('/api/doc/') && req.method === 'GET') {
     const id = safeId(decodeURIComponent(p.slice('/api/doc/'.length)))
     // savedAt travels with the document because the browser also holds a copy,

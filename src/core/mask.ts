@@ -1,4 +1,5 @@
 import type { Life } from './life'
+import { defaultCfg, type WalkCfg } from './walk'
 /* The mask document: the walkable ground, the elevation levels, the occluders.
  *
  * Ported from tools/maskdraw/app.js in the game repo. The pixel operations are
@@ -176,7 +177,25 @@ export interface MapAnchor {
   x: number
   y: number
   r: number
-  /* region only */
+  /* WHERE A BODY ENDS UP WHEN IT USES THIS PLACE, and it is a different pixel
+   * from the one above. x,y is the middle of the thing: the centre of the
+   * interaction ring, the origin of the prompt, what the objective chevron
+   * points at. A chart table's middle is the tabletop, and standing on the
+   * tabletop is not what anybody meant. So the author marks the floor beside
+   * it, once, and walk_to and an arrival through a door both aim there.
+   *
+   * Absolute painting pixels, not an offset, because that is what an author
+   * clicks. A bound anchor carries it along by the same amount the placement
+   * has moved, which is worked out where the following happens rather than
+   * stored. Absent means the body aims at x,y, which is what every anchor did
+   * before this existed. */
+  stand?: [number, number]
+  /* region only. THE FOUR NUMBERS ARE [x0, y0, x1, y1], two opposite corners,
+   * and not [x, y, w, h]. The schema comment said one thing and the game's own
+   * box test did the other, and nothing was authoritative because no rect had
+   * ever been authored. The game is the side that already had running code, so
+   * the game wins and everything else was moved to it. Order does not matter:
+   * both readers take the min and the max. */
   rect?: [number, number, number, number]
   /* door only: the map this leads to */
   to: string
@@ -234,6 +253,14 @@ export function migrateEvent(e: MapAnchor & { type?: string }): MapAnchor {
   if (typeof e.toAnchor !== 'string' || !e.toAnchor) delete e.toAnchor
   if (typeof e.placement !== 'string' || !e.placement) delete e.placement
   if (typeof e.facing !== 'string' || !e.facing) delete e.facing
+  // two numbers or nothing: half a point is not a place to stand
+  if (Array.isArray(e.stand) && e.stand.length === 2 && e.stand.every((n) => isFinite(Number(n))))
+    e.stand = [Math.round(Number(e.stand[0])), Math.round(Number(e.stand[1]))]
+  else delete e.stand
+  // four numbers or nothing, and they are two corners
+  if (Array.isArray(e.rect) && e.rect.length === 4 && e.rect.every((n) => isFinite(Number(n))))
+    e.rect = e.rect.map((n) => Math.round(Number(n))) as [number, number, number, number]
+  else delete e.rect
   if (!isAnchorName(e.name)) {
     e.name = anchorName(e.label || `${e.kind}_${e.id}`)
     e.meta = { ...(e.meta || {}), derived: true }
@@ -253,6 +280,46 @@ export interface StairRegion {
 
 export type Pt = [number, number]
 
+/* WHAT KIND OF PLACE A MAP IS. The engine guessed this from whether the
+ * painting's border was transparent, on every map, because MAPVIS knew the
+ * answer and never wrote it down. `hall` is the third value: a shared space
+ * that is neither a club's own island nor a room inside something, and it is
+ * the shape anything a member builds for other people to use will take. */
+export type MapClass = 'island' | 'room' | 'hall'
+
+export const MAP_CLASSES: MapClass[] = ['island', 'room', 'hall']
+
+/* Everything about the map itself that is not pixels and not a named point.
+ *
+ * All four of these were missing in different ways. `title` was a real postgres
+ * column, machine-filled with the slug, shown on the dashboard and dropped
+ * before the export, so every named place a student reads is a slug or a string
+ * typed into the game's source. `class` was known and never said. `islandId` is
+ * the join between a published map and the school offering behind it, and it
+ * lived in a hardcoded Set in the other repo, so shipping a member's island was
+ * a source edit and a deploy. `meta` is the author's own bag and there was no
+ * map-level one at all, so the only place to hang map-scoped data was a `meta`
+ * on some arbitrarily chosen anchor. */
+export interface MapProps {
+  /* what a player reads. The id is what code addresses, the same split anchors
+   * make between name and label, and for the same reason. */
+  title: string
+  class: MapClass
+  /* the school offering this map is about, joining it to a grape */
+  islandId: string
+  meta: Record<string, unknown>
+}
+
+export const defaultProps = (): MapProps => ({ title: '', class: 'island', islandId: '', meta: {} })
+
+/* only the keys that came back as real numbers, so a corrupt or hand-edited
+ * save cannot put NaN into the walk law and stop a character moving at all */
+const numbersOnly = (o: Partial<WalkCfg>): Partial<WalkCfg> => {
+  const out: Record<string, number> = {}
+  for (const [k, v] of Object.entries(o)) if (isFinite(Number(v))) out[k] = Number(v)
+  return out as Partial<WalkCfg>
+}
+
 export class MaskDoc {
   W: number
   H: number
@@ -266,6 +333,17 @@ export class MaskDoc {
   assetNext = 1
   events: MapEvent[] = []
   eventNext = 1
+  /* THE BODY THIS MAP IS DRAWN FOR: six numbers, and the most demanded shape in
+   * the authoring sweep. bundle() writes all six into map.json, the game
+   * consumes all six, this repo's own walk law reads them and check-anchors
+   * reads two back out. They lived on the editor as `cfg = defaultCfg()` and
+   * were never assigned again anywhere, with no control and no column, so every
+   * map MAPVIS ever produced shipped an 18 px character at 34 px/s on ground
+   * squashed 0.72, whether it was a 688 px island seen from far above or a room
+   * drawn at character scale. They belong to the document because they describe
+   * the map, and living here is what lets one save carry them. */
+  walk: WalkCfg = defaultCfg()
+  props: MapProps = defaultProps()
   spawn: Pt
   // boundary growth: bw/bh is the base painting's own size (set once at
   // construction), ox/oy is how far that base sits inside the grown canvas.
@@ -838,6 +916,19 @@ export class MaskDoc {
       assetNext: this.assetNext,
       events: this.events,
       eventNext: this.eventNext,
+      /* THE OCCLUDER BASELINES, WHICH USED TO BE THROWN AWAY HERE.
+       *
+       * A baseline is the one hand-set number in the whole depth system: it is
+       * the row a character has to be north of before the piece of painting is
+       * drawn over him. It reached map.json and the game read it, and this
+       * method omitted `occs`, so unpack() rebuilt every one of them from the
+       * bottom edge of the polygon on the next open and the typed value was
+       * gone. The author watched the field take the number, which is what makes
+       * it the nastiest of the fourteen. */
+      occs: this.occs,
+      occNext: this.occNext,
+      walk: this.walk,
+      props: this.props,
     })
   }
   private pack(): string {
@@ -860,7 +951,30 @@ export class MaskDoc {
           events?: MapEvent[]
           eventNext?: number
           spawn?: Pt
+          occs?: Occluder[]
+          occNext?: number
+          walk?: Partial<WalkCfg>
+          props?: Partial<MapProps>
         }
+        /* the saved baselines go in FIRST, because unpack() only invents them
+         * when there are none, which is exactly the guard that has to see them
+         * already here. A payload written before they were saved has none and
+         * unpack rebuilds them the way it always did. */
+        if (Array.isArray(d.occs)) {
+          this.occs = d.occs
+            .filter((o) => o && isFinite(Number(o.id)) && isFinite(Number(o.baseline)))
+            .map((o) => ({ id: Math.round(Number(o.id)), baseline: Math.round(Number(o.baseline)) }))
+          this.occNext =
+            Number(d.occNext) > 0 ? Math.round(Number(d.occNext)) : this.occs.reduce((m, o) => Math.max(m, o.id), 0) + 1
+        }
+        if (d.walk) this.walk = { ...defaultCfg(), ...numbersOnly(d.walk) }
+        if (d.props)
+          this.props = {
+            title: typeof d.props.title === 'string' ? d.props.title : '',
+            class: MAP_CLASSES.includes(d.props.class as MapClass) ? (d.props.class as MapClass) : 'island',
+            islandId: typeof d.props.islandId === 'string' ? d.props.islandId : '',
+            meta: d.props.meta && typeof d.props.meta === 'object' ? d.props.meta : {},
+          }
         if (!this.unpack(String(d.m || ''))) return false
         // v2 assets carry only `scale`; the migration fills the transform
         this.assets = Array.isArray(d.assets) ? d.assets.map(migrateAsset) : []

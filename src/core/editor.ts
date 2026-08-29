@@ -18,6 +18,9 @@ import {
   anchorName,
   isAnchorName,
   isPlacementName,
+  MAP_CLASSES,
+  type Occluder,
+  type MapProps,
   type Pt,
   type PlacedAsset,
   type MapEvent,
@@ -25,7 +28,7 @@ import {
   type AnchorKind,
   type AssetLook,
 } from './mask'
-import { Walker, canStand, checkReach, defaultCfg, type WalkCfg, type ReachResult } from './walk'
+import { Walker, canStand, checkReach, type WalkCfg, type ReachResult } from './walk'
 import { savedScene, saveDoc, loadDoc, type LibItem } from '../api'
 
 export type Tool =
@@ -266,6 +269,15 @@ export interface EditorStatus {
   brush: number
   occCount: number
   lastBaseline: number
+  /* every occluder, so the panel can list them and an author can reach the
+   * first one's baseline again after drawing a second */
+  occs: { id: number; baseline: number }[]
+  occSel: number
+  /* the six numbers describing the body this map is drawn for, and what the map
+   * calls itself. Both ride the status so a panel can render them without
+   * reaching into the document. */
+  walk: WalkCfg
+  props: MapProps
   note: string
   noteSeq: number
   busy: string
@@ -327,7 +339,18 @@ const defaultScale = (it: LibItem): number => (it.h >= 120 ? 0.25 : 0.4)
 
 export class Editor {
   doc = new MaskDoc(1, 1)
-  cfg: WalkCfg = defaultCfg()
+  /* THE BODY THIS MAP IS DRAWN FOR, read off the document rather than held here.
+   *
+   * This used to be `cfg: WalkCfg = defaultCfg()` and was never assigned again
+   * anywhere in the file, which is how every map this tool has ever produced
+   * came out describing an 18 px character walking at 34 px/s over ground
+   * squashed 0.72 — an island seen from far above and a room drawn at character
+   * scale alike. Now it belongs to the map, which is the thing it is a fact
+   * about, so it rides the save, the undo and the reopen with everything else,
+   * and a reassigned document takes its own numbers with it. */
+  get cfg(): WalkCfg {
+    return this.doc.walk
+  }
   walker = new Walker([0, 0])
   tool: Tool = 'brush'
   value = 40
@@ -514,6 +537,10 @@ export class Editor {
   private natHits: HTMLCanvasElement | null = null
   private pix: Uint8ClampedArray | null = null
   private cutApplied: HTMLCanvasElement | null = null
+  /* which occluder the baseline field is about. 0 means whichever was drawn
+   * last, which is the right answer the moment after you draw one and the wrong
+   * one from then on, which is the whole bug. */
+  private occSel = 0
   private plates: { cv: HTMLCanvasElement; baseline: number }[] | null = null
   private dirtyMask = true
   private dirty = true
@@ -606,7 +633,7 @@ export class Editor {
   status(): EditorStatus {
     const s = this.doc.stats()
     const c = this.cursor
-    const lastOcc = this.doc.occs[this.doc.occs.length - 1]
+    const lastOcc = this.selectedOcc()
     return {
       x: c ? c[0] : -1,
       y: c ? c[1] : -1,
@@ -625,6 +652,10 @@ export class Editor {
       brush: this.brush,
       occCount: this.doc.occs.length,
       lastBaseline: lastOcc ? lastOcc.baseline : 0,
+      occs: this.doc.occs.map((o) => ({ id: o.id, baseline: o.baseline })),
+      occSel: lastOcc ? lastOcc.id : 0,
+      walk: { ...this.doc.walk },
+      props: { ...this.doc.props },
       note: this.note,
       noteSeq: this.noteSeq,
       busy: this.busy,
@@ -1351,12 +1382,45 @@ export class Editor {
     this.dirty = true
     this.emit()
   }
+  /* THE BASELINE OF THE ONE THAT IS SELECTED, and there is a selection now.
+   *
+   * This reached for occs[occs.length - 1] unconditionally, so drawing a second
+   * occluder made the first one's baseline permanently unreachable: the only
+   * number in the depth system a person sets by hand, on the only shape a
+   * building needs two of. The hub has none, which is why nobody had felt it,
+   * and the Maw is pillars over a pit. */
   setBaseline(y: number) {
-    const o = this.doc.occs[this.doc.occs.length - 1]
+    const o = this.selectedOcc()
     if (!o) return
+    this.doc.snap()
     o.baseline = Math.round(y)
     this.plates = null
+    this.touched()
+  }
+  /* which occluder the baseline field and the delete button are about. The last
+   * one drawn until somebody picks another, which is what the tool already did
+   * and is right the moment after you draw one. */
+  selectedOcc(): Occluder | undefined {
+    return this.doc.occs.find((o) => o.id === this.occSel) || this.doc.occs[this.doc.occs.length - 1]
+  }
+  selectOcc(id: number) {
+    this.occSel = id
+    this.dirty = true
     this.emit()
+  }
+  /* An occluder deleted properly: the id comes out of the list AND its pixels
+   * come out of the plane, or the plane keeps painting a shape nothing has a
+   * baseline for and the export ships it. One undo step for both. */
+  deleteOcc(id: number) {
+    const i = this.doc.occs.findIndex((o) => o.id === id)
+    if (i < 0) return
+    this.doc.snap()
+    this.doc.occs.splice(i, 1)
+    for (let k = 0; k < this.doc.occ.length; k++) if (this.doc.occ[k] === id) this.doc.occ[k] = 0
+    if (this.occSel === id) this.occSel = 0
+    this.plates = null
+    this.touched()
+    this.say(`occluder ${id} removed · z undoes`)
   }
   closePoly() {
     if (this.poly.length < 3) {
@@ -2420,6 +2484,61 @@ export class Editor {
   // ---- typed edits -------------------------------------------------------
   // One call is one undo step, so a number typed into the inspector walks back
   // exactly like a drag. Every field lands in the same clamps the gestures use.
+  /* THE BODY, EDITED. One field at a time, each clamped to a band that is wide
+   * enough for a room at character scale and narrow enough that a typo cannot
+   * make a map unwalkable. speed and yScale are real numbers; the rest are
+   * pixel counts and are whole. Every one of them changes what the game does,
+   * so each is one undo step and each marks the map dirty. */
+  setWalk(patch: Partial<WalkCfg>) {
+    const w = this.doc.walk
+    const n = (v: unknown, lo: number, hi: number, whole = true) => {
+      const x = Math.max(lo, Math.min(hi, Number(v)))
+      return whole ? Math.round(x) : +x.toFixed(2)
+    }
+    const next: WalkCfg = { ...w }
+    if (patch.charH !== undefined && isFinite(Number(patch.charH))) next.charH = n(patch.charH, 4, 128)
+    if (patch.hip !== undefined && isFinite(Number(patch.hip))) next.hip = n(patch.hip, 0, 32)
+    if (patch.hipDY !== undefined && isFinite(Number(patch.hipDY))) next.hipDY = n(patch.hipDY, 0, 32)
+    if (patch.speed !== undefined && isFinite(Number(patch.speed))) next.speed = n(patch.speed, 1, 400, false)
+    if (patch.yScale !== undefined && isFinite(Number(patch.yScale))) next.yScale = n(patch.yScale, 0.2, 1, false)
+    if (patch.near !== undefined && isFinite(Number(patch.near))) next.near = n(patch.near, 0, 100)
+    if ((Object.keys(next) as (keyof WalkCfg)[]).every((k) => next[k] === w[k])) return false
+    this.doc.snap()
+    this.doc.walk = next
+    this.touched()
+    return true
+  }
+
+  /* WHAT THIS MAP IS, as opposed to what is drawn on it. Every field here
+   * either had no home at all or had one that died before the bundle. */
+  setProps(patch: Partial<MapProps>) {
+    const p = this.doc.props
+    const next: MapProps = { ...p }
+    if (patch.title !== undefined) next.title = String(patch.title).slice(0, 120)
+    if (patch.class !== undefined && MAP_CLASSES.includes(patch.class)) next.class = patch.class
+    if (patch.islandId !== undefined) next.islandId = String(patch.islandId).trim().slice(0, 64)
+    if (patch.meta !== undefined && patch.meta && typeof patch.meta === 'object') next.meta = patch.meta
+    if (next.title === p.title && next.class === p.class && next.islandId === p.islandId && next.meta === p.meta)
+      return false
+    this.doc.snap()
+    this.doc.props = next
+    this.touched()
+    return true
+  }
+
+  /* One key in the map's own bag. The bag is the stated extension point and it
+   * had no writer, so it carried only this tool's bookkeeping. A blank value
+   * removes the key rather than storing an empty string, because an author
+   * clearing a box means they no longer want the key. */
+  setMapMeta(key: string, value: string) {
+    const k = String(key || '').trim()
+    if (!k) return false
+    const meta = { ...this.doc.props.meta }
+    if (value === '') delete meta[k]
+    else meta[k] = value
+    return this.setProps({ meta })
+  }
+
   /* A name no other placement on this map has taken. Same suffix walk the
    * library and the anchors already use, so three copies of one thing read the
    * way three anchors named the same way already read. */
@@ -3375,12 +3494,26 @@ export class Editor {
     return { ok: true, name: free, why: free !== clean ? `taken · saved as ${free}` : undefined }
   }
 
+  /* One typed edit to one anchor. null clears a field that is allowed to be
+   * absent, which undefined cannot mean here: undefined is "this patch does not
+   * mention it" and both callers need to say the other thing. */
   updateEvent(
     id: number,
-    patch: Partial<Pick<MapAnchor, 'label' | 'to' | 'r' | 'toAnchor' | 'kind' | 'facing' | 'placement'>>,
+    patch: Partial<Pick<MapAnchor, 'label' | 'to' | 'r' | 'toAnchor' | 'kind' | 'facing' | 'placement'>> & {
+      stand?: [number, number] | null
+      rect?: [number, number, number, number] | null
+    },
   ) {
     const e = this.doc.events.find((q) => q.id === id)
     if (!e) return
+    if (patch.stand !== undefined) {
+      if (patch.stand) e.stand = [Math.round(patch.stand[0]), Math.round(patch.stand[1])]
+      else delete e.stand
+    }
+    if (patch.rect !== undefined) {
+      if (patch.rect) e.rect = patch.rect.map((n) => Math.round(n)) as [number, number, number, number]
+      else delete e.rect
+    }
     if (patch.label !== undefined) e.label = patch.label
     if (patch.to !== undefined) e.to = patch.to
     if (patch.r !== undefined) e.r = Math.max(4, Math.min(64, Math.round(patch.r)))
@@ -3598,6 +3731,15 @@ export class Editor {
         id: this.sceneId,
         w: this.doc.W,
         h: this.doc.H,
+        /* WHAT THIS MAP IS AND WHAT IT CALLS ITSELF. The engine guessed `class`
+         * from whether the border was transparent, on every map, while this
+         * tool knew the answer the whole time; `title` never left the database.
+         * Written only when set, so a bundle from before this stays byte for
+         * byte what it was and the game's guess stays the fallback. */
+        class: this.doc.props.class,
+        ...(this.doc.props.title ? { title: this.doc.props.title } : {}),
+        ...(this.doc.props.islandId ? { islandId: this.doc.props.islandId } : {}),
+        ...(Object.keys(this.doc.props.meta).length ? { meta: this.doc.props.meta } : {}),
         encoding: {
           blocked: 0,
           L0: 40,
@@ -3627,6 +3769,7 @@ export class Editor {
           y: e.y,
           r: e.r,
           ...(e.rect ? { rect: e.rect } : {}),
+          ...(e.stand ? { stand: e.stand } : {}),
           ...(e.to ? { to: e.to } : {}),
           ...(e.toAnchor ? { toAnchor: e.toAnchor } : {}),
           /* the placement this name is on. Dropped here for as long as the
@@ -3771,6 +3914,31 @@ export class Editor {
   // a grown map re-grows on reload; the old sized key still reads.
   private key() {
     return `mapvis:${this.sceneId}`
+  }
+  /* THE SAVE, WAITED FOR. The four-second race, closed.
+   *
+   * The autosave beat writes the document to the platform every four seconds
+   * while it is dirty, and export posts the bundle without waiting for it. The
+   * published anchors come from postgres and the local map.json comes from the
+   * same request, so an anchor created, renamed or moved in the four seconds
+   * before pressing export publishes with its PREVIOUS values while the file
+   * beside it carries the new ones, and nothing says the two disagree. It lands
+   * hardest on exactly the edit somebody makes right before exporting.
+   *
+   * Awaited rather than fired: the whole point is that the row is up to date
+   * before the publisher reads it. */
+  async flush() {
+    if (!this.changed) return
+    const s = this.doc.serialize()
+    try {
+      localStorage.setItem(this.key(), s)
+    } catch {
+      /* said below on the beat; not worth two warnings for one full quota */
+    }
+    const r = await saveDoc(this.sceneId, s)
+    localStorage.setItem(this.key() + ':at', String(r?.savedAt || Date.now()))
+    this.changed = false
+    this.saveT = performance.now()
   }
   private saveLocal() {
     const s = this.doc.serialize()
@@ -4747,10 +4915,27 @@ export class Editor {
   private drawEvents(g: CanvasRenderingContext2D, z: number) {
     g.save()
     for (const ev of this.doc.events) {
-      const px = ev.x * z
-      const py = ev.y * z
+      /* an anchor bound to something that MOVES is drawn where that thing is
+       * right now, so the binding is a thing you can watch working rather than
+       * a field you have to take on trust. Read-only: the document still holds
+       * the home position, which is what the bundle carries. */
+      const home = ev.placement ? this.placementRef(ev.placement) : undefined
+      const spot = home ? this.lifeSpot(home) : { x: ev.x, y: ev.y }
+      const px = spot.x * z
+      const py = spot.y * z
       g.strokeStyle = '#8f93f5'
       g.lineWidth = 1.5
+      /* THE AREA, when one was drawn. A region with a rectangle is that
+       * rectangle and not a circle around its middle, on both sides of the
+       * bundle, so the editor has to show the shape the game will test. */
+      if (ev.rect) {
+        const [x0, y0, x1, y1] = ev.rect
+        const ax = Math.min(x0, x1) * z
+        const ay = Math.min(y0, y1) * z
+        g.setLineDash([6, 4])
+        g.strokeRect(ax, ay, (Math.abs(x1 - x0) + 1) * z, (Math.abs(y1 - y0) + 1) * z)
+        g.setLineDash([])
+      }
       g.setLineDash([4, 3])
       g.beginPath()
       g.arc(px, py, ev.r * z, 0, Math.PI * 2)
@@ -4758,6 +4943,24 @@ export class Editor {
       g.setLineDash([])
       g.fillStyle = '#8f93f5'
       g.fillRect(Math.round(px) - 1, Math.round(py) - 1, 3, 3)
+      /* WHERE A BODY ENDS UP, joined to the thing it is standing at by a line,
+       * because two loose dots near each other say nothing about which one is
+       * the table and which one is the floor beside it. */
+      if (ev.stand) {
+        const sx = ev.stand[0] * z
+        const sy = ev.stand[1] * z
+        g.strokeStyle = '#6fd08c'
+        g.lineWidth = 1
+        g.beginPath()
+        g.moveTo(px, py)
+        g.lineTo(sx, sy)
+        g.stroke()
+        g.beginPath()
+        g.arc(sx, sy, 3.5, 0, Math.PI * 2)
+        g.stroke()
+        g.strokeStyle = '#8f93f5'
+        g.lineWidth = 1.5
+      }
       const label = ev.label || 'door'
       g.font = '11px monospace'
       const tw = g.measureText(label).width

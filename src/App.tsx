@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { CSSProperties, DragEvent, ReactNode } from 'react'
 import { Editor, isCutTool, loadImage, groupFor, type EditorStatus, type Tool } from './core/editor'
-import { PAL, mkCanvas, nameOf, assetLabel, ANCHOR_KINDS, type AnchorKind, type AssetLook, type PlacedAsset } from './core/mask'
+import { PAL, mkCanvas, nameOf, assetLabel, ANCHOR_KINDS, MAP_CLASSES, type AnchorKind, type AssetLook, type MapClass, type PlacedAsset } from './core/mask'
 
 /* What each kind is FOR, in the words an author would use. Shown on the kind
  * buttons and under the form, because "post" and "trigger" mean nothing until
@@ -63,6 +63,29 @@ const STEPS: { id: StepId; n: number; name: string }[] = [
 
 // the groups that exist even when empty, so placing has somewhere to aim
 const SUGGESTED_GROUPS = ['trees', 'people', 'smoke', 'effects', 'props']
+
+/* THE EIGHT HEADINGS, laid out the way a compass is. Used twice: for which way
+ * a standing figure looks, and for which way a body faces once it has walked up
+ * to an anchor. The middle cell is empty here and each caller decides what it
+ * means, because a placement always faces somewhere and an anchor is allowed to
+ * have no opinion. life.ts works out an eight-way facing and four would throw
+ * half of it away. */
+/* what each class of map means, in a sentence, for the tip under the chips. The
+ * engine used to work this out by looking at whether the border was
+ * transparent, which is a guess about a picture standing in for a fact the
+ * author knows. `hall` is the third one: a shared place that is neither a
+ * club's own island nor a room inside something. */
+const MAP_CLASS_WHAT: Record<MapClass, string> = {
+  island: 'seen from above, with sea around it · the engine draws the ocean',
+  room: 'an interior at character scale · you leave it through a door',
+  hall: 'a shared place that is neither · the template for anything members build together',
+}
+
+const FACE_GRID = [
+  ['north-west', 'north', 'north-east'],
+  ['west', '', 'east'],
+  ['south-west', 'south', 'south-east'],
+] as const
 
 // where a tool lives, so a keyboard tool change can never happen off-screen:
 // the workflow follows the key instead of hiding the mode
@@ -702,6 +725,15 @@ export default function App() {
    * them would put half a typed anchor name into the selected sprite. */
   const [pnameDraft, setPnameDraft] = useState<string | null>(null)
   const [pnameSaid, setPnameSaid] = useState<{ id: string; why: string } | null>(null)
+  /* the two anchor fields a person points at rather than types. Both borrow the
+   * one-shot map click "add door" already uses; the rectangle needs two, so it
+   * holds the first corner while it waits for the second. */
+  const [standPick, setStandPick] = useState(0)
+  const [rectPick, setRectPick] = useState<{ id: number; from: [number, number] | null } | null>(null)
+  // the map's own id, held while it is typed, because a rename is a server call
+  // that can be refused and half a slug is not a thing to send
+  const [idDraft, setIdDraft] = useState<string | null>(null)
+  const [idSaid, setIdSaid] = useState('')
   // the effect box: the ask, the armed map click, the plan the click produced
   // and the params a human is tuning. fxFrames is the render, redone locally on
   // every slider move. Nothing here has touched the disk yet.
@@ -2652,6 +2684,67 @@ export default function App() {
     })
   }, [doorPick])
 
+  /* THE STANDING SPOT, pointed at rather than typed. Same one-shot pick as the
+   * door, because a coordinate a person has to read off the status bar and type
+   * into two boxes is a coordinate nobody sets. Pressing it while it is armed
+   * cancels, which is how every armed thing in this tool behaves. */
+  const armStand = useCallback(
+    (id: number) => {
+      const e = edRef.current
+      if (!e) return
+      if (standPick) {
+        setStandPick(0)
+        e.pickPoint(null)
+        return
+      }
+      setStandPick(id)
+      e.pickPoint((p) => {
+        if (!p) {
+          setStandPick(0)
+          return
+        }
+        if (!e.doc.inB(p[0], p[1])) return
+        e.pickPoint(null)
+        setStandPick(0)
+        e.updateEvent(id, { stand: [p[0], p[1]] })
+      })
+    },
+    [standPick],
+  )
+
+  /* THE AREA, two corners, so the second click needs the first one to still be
+   * in hand. Held in state rather than in the editor because it is a gesture
+   * and not a fact about the map until both clicks have happened. */
+  const armRect = useCallback(
+    (id: number) => {
+      const e = edRef.current
+      if (!e) return
+      if (rectPick) {
+        setRectPick(null)
+        e.pickPoint(null)
+        return
+      }
+      let first: [number, number] | null = null
+      setRectPick({ id, from: null })
+      e.pickPoint((p) => {
+        if (!p) {
+          setRectPick(null)
+          return
+        }
+        if (!e.doc.inB(p[0], p[1])) return
+        if (!first) {
+          first = [p[0], p[1]]
+          setRectPick({ id, from: first })
+          return
+        }
+        e.pickPoint(null)
+        setRectPick(null)
+        e.updateEvent(id, { rect: [first[0], first[1], p[0], p[1]] })
+      })
+    },
+    [rectPick],
+  )
+
   // The spend itself, after every confirm has happened. spot is the static
   // path's context: the clicked painting pixel and a crop of the cut painting
   // around it, which the server hands to pixellab as the background, so the
@@ -3448,6 +3541,12 @@ export default function App() {
     exporting.current = true
     e.setBusy('writing')
     try {
+      /* THE DOCUMENT FIRST, AND WAITED FOR. The publisher reads the anchors out
+       * of postgres, and they only get there on the four-second autosave beat,
+       * so an anchor renamed or moved just before pressing this published with
+       * its previous values while work/<id>/map.json from the same request
+       * carried the new ones, with nothing saying the two disagreed. */
+      await e.flush()
       const r = await api.exportBundle(e.bundle())
       e.say(
         r.published
@@ -3459,6 +3558,30 @@ export default function App() {
     }
     exporting.current = false
     e.setBusy('')
+  }, [])
+
+  /* THE RENAME. The document is flushed first for the same reason the export
+   * flushes it: everything after this reads the row, and an autosave arriving
+   * afterwards would be written under the old id.
+   *
+   * The page then goes to the new id rather than patching the editor in place.
+   * The id is baked into the work folder, the browser's own save key and every
+   * url the panel builds, and re-entering by the front door means one thing
+   * knows the id rather than eleven. */
+  const doRename = useCallback(async (want: string) => {
+    const e = edRef.current
+    const from = e?.status().sceneId
+    setIdDraft(null)
+    setIdSaid('')
+    if (!e || !from || !want.trim() || want.trim() === from) return
+    try {
+      await e.flush()
+      const r = await api.renameMap(from, want.trim())
+      if (r.repointed) e.say(`${from} is ${r.slug} now · ${r.repointed} door${r.repointed > 1 ? 's' : ''} followed it`)
+      location.href = `/edit?id=${encodeURIComponent(r.slug)}`
+    } catch (err) {
+      setIdSaid(String(err instanceof Error ? err.message : err))
+    }
   }, [])
 
   const doSaveCut = useCallback(async () => {
@@ -3781,18 +3904,52 @@ export default function App() {
           on={tool === 'occ'}
           onClick={() => ed?.setTool('occ')}
         />
-        {st && st.occCount > 0 && (
-          <label className="field inline">
-            <span>occluder baseline</span>
-            <input
-              type="number"
-              value={st.lastBaseline}
-              onChange={(e) => ed?.setBaseline(Number(e.target.value))}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === 'Escape') e.currentTarget.blur()
-              }}
-            />
-          </label>
+        {/* ONE ROW PER OCCLUDER, because there was no way back to the first one.
+            *
+            * The baseline is the row a character has to be north of before this
+            * piece of the painting is drawn over him, and it is the one number
+            * in the whole depth system a person sets by hand. The field used to
+            * write to whichever occluder was drawn last, unconditionally, so a
+            * second one made the first's baseline unreachable forever. The hub
+            * has none, which is why nobody had felt it. The Maw is pillars. */}
+        {st && st.occs.length > 0 && (
+          <div className="occrows">
+            {st.occs.map((o) => (
+              <div
+                key={o.id}
+                className={'occrow' + (st.occSel === o.id ? ' sel' : '')}
+                onClick={() => ed?.selectOcc(o.id)}
+              >
+                <span className="occ-id">{o.id}</span>
+                <label className="occ-base" onClick={(e) => e.stopPropagation()}>
+                  <span>draws over above</span>
+                  <input
+                    type="number"
+                    value={o.baseline}
+                    onFocus={() => ed?.selectOcc(o.id)}
+                    onChange={(e) => {
+                      ed?.selectOcc(o.id)
+                      ed?.setBaseline(Number(e.target.value))
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === 'Escape') e.currentTarget.blur()
+                    }}
+                  />
+                </label>
+                <button
+                  className={'arow-x' + (armed === 'occ:' + o.id ? ' armed' : '')}
+                  data-tip={armed === 'occ:' + o.id ? undefined : 'remove'}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    if (!arm('occ:' + o.id)) return
+                    ed?.deleteOcc(o.id)
+                  }}
+                >
+                  {armed === 'occ:' + o.id ? 'sure?' : <Icon name="x" />}
+                </button>
+              </div>
+            ))}
+          </div>
         )}
         <Row
           label={armed === 'clear-mask' ? 'clear everything · sure?' : 'clear all levels'}
@@ -3847,6 +4004,56 @@ export default function App() {
         desc="under the cursor, or the walker mid-test"
         onClick={() => ed?.setSpawnHere()}
       />
+      {/* THE BODY THIS MAP IS DRAWN FOR, and it sits under the walk test
+          because the walker on screen is the thing these numbers describe.
+          *
+          * All six ride into map.json, the game reads all six, this tool's own
+          * walk law reads them and the anchor checker reads two back out. They
+          * had no control and no column, so every map MAPVIS ever produced
+          * shipped an 18 px character at 34 px/s on ground squashed 0.72,
+          * whether it was a 688 px island seen from far above or a room drawn
+          * at character scale. The ten-second arithmetic that caps how big a
+          * room can be is 688 divided by twice the speed, so this is the number
+          * under the rest of them. */}
+      <Sec>the body it is drawn for</Sec>
+      <div className="walkcfg">
+        <NumField
+          label="height"
+          value={st?.walk.charH ?? 18}
+          onCommit={(v) => ed?.setWalk({ charH: v })}
+        />
+        <NumField
+          label="speed"
+          value={st?.walk.speed ?? 34}
+          onCommit={(v) => ed?.setWalk({ speed: v })}
+        />
+        <NumField
+          label="hip out"
+          value={st?.walk.hip ?? 2}
+          onCommit={(v) => ed?.setWalk({ hip: v })}
+        />
+        <NumField
+          label="hip up"
+          value={st?.walk.hipDY ?? 1}
+          onCommit={(v) => ed?.setWalk({ hipDY: v })}
+        />
+        <NumField
+          label="squash"
+          value={st?.walk.yScale ?? 0.72}
+          dp={2}
+          step={0.02}
+          onCommit={(v) => ed?.setWalk({ yScale: v })}
+        />
+        <NumField
+          label="step"
+          value={st?.walk.near ?? 10}
+          onCommit={(v) => ed?.setWalk({ near: v })}
+        />
+      </div>
+      <div className="doorhint">
+        how tall a body is, how fast it goes, how far its hips reach, how much the ground is squashed, and how big
+        a level change it can take
+      </div>
       <Sec>check the ground</Sec>
       <Row
         icon="heal"
@@ -4007,6 +4214,104 @@ export default function App() {
           {editingDoor.placement && !bindTargets.has(editingDoor.placement) && (
             <div className="anchwarn">
               nothing on this map is called {editingDoor.placement} any more · show would refuse
+            </div>
+          )}
+
+          {/* WHERE A BODY ENDS UP, which is not the middle of the thing.
+              *
+              * stations.ts in the game repo states the requirement in prose to
+              * somebody who will never open that file: "a table big enough to
+              * spread a paper sheet on, with standing room on one side". One
+              * point was doing four jobs at once, so a table's anchor either
+              * sat on unwalkable pixels or sat on the floor with the prompt
+              * hovering over bare ground. This is the floor beside it, and
+              * walk_to and an arrival through a door both aim at it. */}
+          <div className="anchspot">
+            <span>stand at</span>
+            <button
+              className={'mbtn wide' + (standPick ? ' on' : '')}
+              onClick={() => armStand(editingDoor.id)}
+            >
+              {standPick
+                ? 'click the floor · esc cancels'
+                : editingDoor.stand
+                  ? `${editingDoor.stand[0]}, ${editingDoor.stand[1]}`
+                  : 'the middle of it'}
+            </button>
+            {editingDoor.stand && !standPick && (
+              <button
+                className="arow-x"
+                data-tip="back to the middle"
+                onClick={() => ed?.updateEvent(editingDoor.id, { stand: null })}
+              >
+                <Icon name="x" />
+              </button>
+            )}
+          </div>
+
+          {/* WHICH WAY A BODY LOOKS WHILE IT IS THERE. Laid out as a compass,
+              the same grid the placement facing picker uses, and the middle is
+              the one that clears it because an anchor genuinely can have no
+              opinion. Typed, tabled, exported and read since anchors shipped,
+              with arrival() its only consumer and no way at all to set it. */}
+          <div className="anchface">
+            <span>facing</span>
+            <div className="facegrid">
+              {FACE_GRID.flat().map((k, i) =>
+                k ? (
+                  <button
+                    key={k}
+                    className={'abtn tiny' + (editingDoor.facing === k ? ' on' : '')}
+                    data-tip={k}
+                    onClick={() => ed?.updateEvent(editingDoor.id, { facing: editingDoor.facing === k ? '' : k })}
+                  >
+                    <span className="facearrow">{'↖↑↗←·→↙↓↘'[i]}</span>
+                  </button>
+                ) : (
+                  <button
+                    key="none"
+                    className={'abtn tiny' + (editingDoor.facing ? '' : ' on')}
+                    data-tip="no opinion"
+                    onClick={() => ed?.updateEvent(editingDoor.id, { facing: '' })}
+                  >
+                    <span className="facearrow">·</span>
+                  </button>
+                ),
+              )}
+            </div>
+          </div>
+
+          {/* THE AREA, for a region that is a shape rather than a circle.
+              *
+              * r is clamped 4 to 64 on maps 688 px wide, so the largest named
+              * area the tool could make covered under two percent of the hub and
+              * could not hold a pier, a shop floor, a plaza or a bay. The four
+              * numbers are two opposite corners, matching the game's own box
+              * test, which is the disagreement this settles. */}
+          {editingDoor.kind === 'region' && (
+            <div className="anchspot">
+              <span>area</span>
+              <button
+                className={'mbtn wide' + (rectPick ? ' on' : '')}
+                onClick={() => armRect(editingDoor.id)}
+              >
+                {rectPick
+                  ? rectPick.from
+                    ? 'now the opposite corner'
+                    : 'click one corner · esc cancels'
+                  : editingDoor.rect
+                    ? `${Math.abs(editingDoor.rect[2] - editingDoor.rect[0])} × ${Math.abs(editingDoor.rect[3] - editingDoor.rect[1])}`
+                    : 'a circle of r'}
+              </button>
+              {editingDoor.rect && !rectPick && (
+                <button
+                  className="arow-x"
+                  data-tip="back to the circle"
+                  onClick={() => ed?.updateEvent(editingDoor.id, { rect: null })}
+                >
+                  <Icon name="x" />
+                </button>
+              )}
             </div>
           )}
 
@@ -4310,20 +4615,6 @@ export default function App() {
   const libMoves = (it: api.LibItem) =>
     it.kind === 'animated' ? (it.frames?.length ?? 0) > 1 : (Object.values(it.dirs ?? {})[0]?.length ?? 0) > 1
 
-  /* Which way a standing figure looks, laid out the way a compass is.
-   *
-   * Only for a view set, and only while it stands: a walker faces where it is
-   * going and lifeAt settles that every frame, so a chosen heading would be
-   * overwritten before it was seen. The middle of the grid is empty because
-   * there is no such thing as facing nowhere.
-   *
-   * It rewrites the placement's src, which is where both renderers read the
-   * resting heading from, so nothing else has to be told. */
-  const FACE_GRID = [
-    ['north-west', 'north', 'north-east'],
-    ['west', '', 'east'],
-    ['south-west', 'south', 'south-east'],
-  ] as const
   const faceable = assets.filter((a) => selAll.includes(a.id) && a.dirs && Object.keys(a.dirs).length >= 4 && !a.life)
   const facingNow = faceable.length === 1 ? Object.keys(faceable[0].dirs!).find((k) => faceable[0].dirs![k][0] === faceable[0].src) : ''
   const faceRow = faceable.length > 0 && (
@@ -5845,6 +6136,107 @@ export default function App() {
   ) : (
     <>
       <div className="panel-cap">write the bundle the game loads</div>
+      {/* WHAT THIS MAP IS, and it lives here because these are bundle fields
+          rather than drawing tools.
+          *
+          * `title` is a real database column that has been machine-filled with
+          * the slug since the day it was made, shown on the dashboard, and
+          * dropped before the export, so every named place a student reads is
+          * either a slug or a string typed into the game's own source. `class`
+          * was known here and never written down, so the engine guesses it from
+          * whether the border is transparent, on every map. `island` is the
+          * join to the school offering, which currently lives in a hardcoded
+          * Set in the other repo, so shipping a member's map is a source edit
+          * and a deploy. */}
+      <Sec>this map</Sec>
+      <label className="anchfield">
+        <span>name · what a player reads</span>
+        <input
+          value={st?.props.title ?? ''}
+          placeholder={st?.sceneId}
+          onChange={(e) => ed?.setProps({ title: e.target.value })}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === 'Escape') e.currentTarget.blur()
+          }}
+        />
+      </label>
+      <div className="anchkinds">
+        {MAP_CLASSES.map((k) => (
+          <button
+            key={k}
+            className={'kbtn' + (st?.props.class === k ? ' on' : '')}
+            onClick={() => ed?.setProps({ class: k })}
+            data-tip={MAP_CLASS_WHAT[k]}
+          >
+            {k}
+          </button>
+        ))}
+      </div>
+      {/* THE ID, which everything else addresses, and which came from whatever
+          the dropped file was called. It is the publish slug, every door's
+          target, the objective's map field, the roster key and the save key at
+          once, and there has never been a way to change it. Renaming carries
+          the doors that point here along with it and says how many moved. */}
+      <label className="anchfield">
+        <span>id · what code and every door calls it</span>
+        <input
+          className="anchname"
+          value={idDraft ?? st?.sceneId ?? ''}
+          onChange={(e) => setIdDraft(e.target.value)}
+          onBlur={() => {
+            if (idDraft === null) return
+            void doRename(idDraft)
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === 'Escape') e.currentTarget.blur()
+          }}
+          spellCheck={false}
+        />
+      </label>
+      {idSaid && <div className="anchwarn">{idSaid}</div>}
+      <label className="anchfield">
+        <span>about · the offering it teaches</span>
+        <input
+          className="anchname"
+          value={st?.props.islandId ?? ''}
+          placeholder="blank means it teaches nothing"
+          onChange={(e) => ed?.setProps({ islandId: e.target.value })}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === 'Escape') e.currentTarget.blur()
+          }}
+          spellCheck={false}
+        />
+      </label>
+      {/* THE MAP'S OWN BAG. There was no map-level one anywhere, so the only
+          place to hang map-scoped author data was a meta on some arbitrarily
+          chosen anchor, which is a convention nothing enforces. One row per key
+          and a blank pair at the end, so adding one is typing rather than
+          pressing add first. */}
+      <div className="metarows">
+        {[...Object.entries(st?.props.meta ?? {}), ['', '']].map(([k, v], i) => (
+          <div className="metarow" key={k || 'new' + i}>
+            <input
+              className="anchname"
+              defaultValue={k}
+              placeholder="key"
+              onBlur={(e) => {
+                const nk = e.target.value.trim()
+                if (nk === k) return
+                if (k) ed?.setMapMeta(k, '')
+                if (nk) ed?.setMapMeta(nk, String(v ?? ''))
+              }}
+              spellCheck={false}
+            />
+            <input
+              defaultValue={String(v ?? '')}
+              placeholder="value"
+              disabled={!k}
+              onBlur={(e) => k && ed?.setMapMeta(k, e.target.value)}
+              spellCheck={false}
+            />
+          </div>
+        ))}
+      </div>
       <Sec>what gets written</Sec>
       <div className="manifest">
         <div className="manifest-to">

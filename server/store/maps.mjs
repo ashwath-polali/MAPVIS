@@ -143,9 +143,44 @@ export async function putDoc(mapId, docString) {
   // Everything the row holds, hashed as one thing. Compared against the stored
   // hash rather than against md5(assets::text) in the query, because jsonb
   // renormalises key order on the way in and would never match what we hold.
+  /* THE MAP'S OWN PROPERTIES, which ride the document because they belong to
+   * it and because one save beat is easier to reason about than two. The six
+   * walk numbers describe the body the map is drawn for and had no column at
+   * all until 008, so they could not even be set out of band; title had a
+   * column and no writer but the slug. Defaults are walk.ts defaultCfg(), so a
+   * document saved by an older tab writes back exactly what it already had. */
+  const wk = d.walk && typeof d.walk === 'object' ? d.walk : {}
+  const pr = d.props && typeof d.props === 'object' ? d.props : {}
+  const num = (v, dflt) => (isFinite(Number(v)) ? Number(v) : dflt)
+  const walk = {
+    charH: Math.round(num(wk.charH, 18)),
+    hip: Math.round(num(wk.hip, 2)),
+    hipDY: Math.round(num(wk.hipDY, 1)),
+    speed: num(wk.speed, 34),
+    yScale: num(wk.yScale, 0.72),
+    near: Math.round(num(wk.near, 10)),
+  }
+  const props = {
+    title: typeof pr.title === 'string' ? pr.title : '',
+    class: ['island', 'room', 'hall'].includes(pr.class) ? pr.class : 'island',
+    islandId: typeof pr.islandId === 'string' ? pr.islandId : '',
+    meta: pr.meta && typeof pr.meta === 'object' ? pr.meta : {},
+  }
+  /* the occluder baselines. The polygons ride in the planes png as ids in the
+   * green channel; the number a character has to be north of is per id and had
+   * nowhere to live, so it was rebuilt from the polygon's bottom edge on every
+   * open and the typed value was lost. An older document sends none and keeps
+   * the behaviour it had. */
+  const occs = Array.isArray(d.occs)
+    ? d.occs
+        .filter((o) => o && isFinite(Number(o.id)) && isFinite(Number(o.baseline)))
+        .map((o) => ({ id: Math.round(Number(o.id)), baseline: Math.round(Number(o.baseline)) }))
+    : []
+
   const rowSha = sha(
-    JSON.stringify([w, h, d.base?.w ?? w, d.base?.h ?? h, d.base?.ox ?? 0, d.base?.oy ?? 0, d.spawn, d.assetNext]) +
-      assetsSha,
+    JSON.stringify([
+      w, h, d.base?.w ?? w, d.base?.h ?? h, d.base?.ox ?? 0, d.base?.oy ?? 0, d.spawn, d.assetNext, walk, props, occs,
+    ]) + assetsSha,
   )
   const cur = await one('select doc_sha from maps where id = $1', [mapId])
 
@@ -156,6 +191,10 @@ export async function putDoc(mapId, docString) {
          base_w = $4, base_h = $5, base_ox = $6, base_oy = $7,
          spawn_x = $8, spawn_y = $9,
          assets = $10::jsonb, asset_next = $11,
+         char_h = $13, char_hip = $14, char_hipdy = $15,
+         speed = $16, yscale = $17, step_tol = $18,
+         title = $19, class = $20, island_id = $21, meta = $22::jsonb,
+         occs = $23::jsonb,
          doc_sha = $12, updated_at = now()
        where id = $1`,
       [
@@ -171,6 +210,17 @@ export async function putDoc(mapId, docString) {
         assetsJson,
         d.assetNext ?? assets.length + 1,
         rowSha,
+        walk.charH,
+        walk.hip,
+        walk.hipDY,
+        walk.speed,
+        walk.yScale,
+        walk.near,
+        props.title,
+        props.class,
+        props.islandId,
+        JSON.stringify(props.meta),
+        JSON.stringify(occs),
       ],
     )
     wrote.push(`doc ${(assetsJson.length / 1024).toFixed(1)}kb`)
@@ -270,6 +320,26 @@ export async function getDoc(mapId) {
     assetNext: m.asset_next,
     events,
     eventNext: events.reduce((a, e) => Math.max(a, e.id), 0) + 1,
+    /* The row is the source for these, not the local copy, because they are the
+     * half of the document that has real columns behind it and can be corrected
+     * out of band. A map opened before 008 comes back holding the defaults,
+     * which are the numbers it was already shipping. */
+    walk: {
+      charH: m.char_h ?? 18,
+      hip: m.char_hip ?? 2,
+      hipDY: m.char_hipdy ?? 1,
+      speed: Number(m.speed ?? 34),
+      yScale: Number(m.yscale ?? 0.72),
+      near: m.step_tol ?? 10,
+    },
+    props: {
+      title: m.title || '',
+      class: m.class || 'island',
+      islandId: m.island_id || '',
+      meta: m.meta || {},
+    },
+    occs: Array.isArray(m.occs) ? m.occs : [],
+    occNext: (Array.isArray(m.occs) ? m.occs : []).reduce((a, o) => Math.max(a, Number(o.id) || 0), 0) + 1,
   })
 }
 
@@ -306,17 +376,18 @@ export async function syncEventsToAnchors(mapId, anchors) {
       if (a.id != null) meta.docId = Number(a.id)
 
       const r = await c.query(
-        `insert into anchors (map_id, name, kind, x, y, r, rect, to_slug, to_anchor, placement_id, facing, label, meta)
-         values ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9,$10,$11,$12,$13::jsonb)
+        `insert into anchors (map_id, name, kind, x, y, r, rect, stand, to_slug, to_anchor, placement_id, facing, label, meta)
+         values ($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9,$10,$11,$12,$13,$14::jsonb)
          on conflict (map_id, name) do update set
            kind=excluded.kind, x=excluded.x, y=excluded.y, r=excluded.r, rect=excluded.rect,
+           stand=excluded.stand,
            to_slug=excluded.to_slug, to_anchor=excluded.to_anchor, placement_id=excluded.placement_id,
            facing=excluded.facing, label=excluded.label, meta=excluded.meta
-         where (anchors.kind, anchors.x, anchors.y, anchors.r, anchors.rect,
+         where (anchors.kind, anchors.x, anchors.y, anchors.r, anchors.rect, anchors.stand,
                 anchors.to_slug, anchors.to_anchor, anchors.placement_id,
                 anchors.facing, anchors.label, anchors.meta)
            is distinct from
-               (excluded.kind, excluded.x, excluded.y, excluded.r, excluded.rect,
+               (excluded.kind, excluded.x, excluded.y, excluded.r, excluded.rect, excluded.stand,
                 excluded.to_slug, excluded.to_anchor, excluded.placement_id,
                 excluded.facing, excluded.label, excluded.meta)
          returning id`,
@@ -328,6 +399,7 @@ export async function syncEventsToAnchors(mapId, anchors) {
           Math.round(a.y),
           Math.round(a.r) || 14,
           a.rect ? JSON.stringify(a.rect) : null,
+          a.stand ? JSON.stringify(a.stand) : null,
           a.to || null,
           a.toAnchor || null,
           a.placement || null,
@@ -353,7 +425,7 @@ export async function syncEventsToAnchors(mapId, anchors) {
  * because the editor holds the whole list. */
 export async function eventsFromAnchors(mapId) {
   const rows = await many(
-    `select name, kind, x, y, r, rect, to_slug, to_anchor, placement_id, facing, label, meta
+    `select name, kind, x, y, r, rect, stand, to_slug, to_anchor, placement_id, facing, label, meta
      from anchors where map_id = $1 order by created_at`,
     [mapId],
   )
@@ -365,6 +437,7 @@ export async function eventsFromAnchors(mapId) {
     y: a.y,
     r: a.r,
     ...(a.rect ? { rect: a.rect } : {}),
+    ...(a.stand ? { stand: a.stand } : {}),
     to: a.to_slug || '',
     ...(a.to_anchor ? { toAnchor: a.to_anchor } : {}),
     ...(a.placement_id ? { placement: a.placement_id } : {}),

@@ -15,6 +15,7 @@ import crypto from 'node:crypto'
 import { q, one, many, tx } from '../db/pool.mjs'
 import { store, keys } from './blobs.mjs'
 import { packAtlas, atlasify } from './atlas.mjs'
+import { gateMap } from './gate.mjs'
 import { decodePNG } from '../sheet.mjs'
 
 const sha = (b) => crypto.createHash('sha256').update(b).digest('hex')
@@ -289,8 +290,19 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
   // will read, events[] is what the game reads today, and writing both means no
   // bundle that works now stops working.
   const anchors = await many(
-    `select name, kind, x, y, r, rect, to_slug, to_anchor, placement_id, facing, label, meta
+    `select name, kind, x, y, r, rect, stand, to_slug, to_anchor, placement_id, facing, label, meta
      from anchors where map_id = $1 order by kind, name`,
+    [m.id],
+  )
+  /* WHAT THE MAP CALLS ITSELF AND WHAT IT IS, which the bundle has never
+   * carried. title is a real column, is written as the slug at creation, is
+   * read by the dashboard, and died here: publishBundle never selected it, so
+   * every named place a student reads is a slug or a string hand-typed in the
+   * game repo. class is the same story from the other end, a fact MAPVIS knows
+   * and never said, so the engine guesses it from the border on every map. */
+  const props = await one(
+    `select title, class, island_id, meta, char_h, char_hip, char_hipdy, speed, yscale, step_tol
+     from maps where id = $1`,
     [m.id],
   )
   const map = {
@@ -298,6 +310,18 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
     contract: 2,
     slug,
     version,
+    ...(props?.title ? { title: props.title } : {}),
+    ...(props?.class ? { class: props.class } : {}),
+    ...(props?.island_id ? { islandId: props.island_id } : {}),
+    ...(props?.meta && Object.keys(props.meta).length ? { meta: props.meta } : {}),
+    /* THE WALK CONTRACT FROM THE ROW, not from whatever the browser sent.
+     * Same reason the anchors come from the table: the row is the contract and
+     * it is the one an author can set out of band, and a stale tab must not be
+     * able to publish an 18 px character over a map that was set to 36. */
+    encoding: { ...(mapJson?.encoding || {}), stepTolerance: props?.step_tol ?? 10 },
+    character: { heightPx: props?.char_h ?? 18, hip: props?.char_hip ?? 2, hipDY: props?.char_hipdy ?? 1 },
+    speed: Number(props?.speed ?? 34),
+    yScale: Number(props?.yscale ?? 0.72),
     anchors: anchors.map((a) => ({
       name: a.name,
       kind: a.kind,
@@ -305,6 +329,7 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
       y: a.y,
       ...(a.r ? { r: a.r } : {}),
       ...(a.rect ? { rect: a.rect } : {}),
+      ...(a.stand ? { stand: a.stand } : {}),
       ...(a.to_slug ? { to: a.to_slug } : {}),
       ...(a.to_anchor ? { toAnchor: a.to_anchor } : {}),
       /* the placement this name is on. Selected above and then dropped here,
@@ -318,6 +343,46 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
       ...(a.meta && Object.keys(a.meta).length ? { meta: a.meta } : {}),
     })),
   }
+
+  /* THE GATE, BEFORE A SINGLE OBJECT IS WRITTEN.
+   *
+   * A version is immutable: its bytes live at a version-scoped prefix forever
+   * and nothing rewrites them. So refusing costs a retry and publishing a map
+   * with a dead door costs a version number nobody can correct. Every check
+   * below already existed somewhere — as a CLI nobody remembers to run, as a
+   * button in the editor that writes nothing, or as a hardcoded list in the
+   * game repo — and none of them ran here.
+   *
+   * `to` is checked against the registry, which is one query away and has never
+   * been consulted: the hub's one door has pointed at a map that does not exist
+   * since the day it was placed. `toAnchor` needs the far map's anchor list, so
+   * it is asked for here rather than inside the gate, which has no database. */
+  const slugs = (await many('select slug from maps')).map((r) => r.slug)
+  const problems = gateMap({
+    mapJson: map,
+    anchors,
+    levels: images?.['levels.png'] ? decodePNG(images['levels.png']) : null,
+    slugs,
+  })
+  for (const a of anchors) {
+    if (!a.to_anchor || !a.to_slug) continue
+    const there = await many(
+      'select a.name from anchors a join maps m on m.id = a.map_id where m.slug = $1',
+      [a.to_slug],
+    )
+    if (!there.length) continue // the missing map is already a problem above
+    if (there.some((r) => r.name === a.to_anchor)) continue
+    const names = there.map((r) => r.name)
+    problems.push(
+      `the door "${a.name}" arrives at "${a.to_anchor}" on ${a.to_slug}, and nothing there is called that. ` +
+        `That map has: ${names.slice(0, 8).join(', ')}${names.length > 8 ? `, and ${names.length - 8} more` : ''}.`,
+    )
+  }
+  if (problems.length)
+    throw new Error(
+      `${slug} was not published, and nothing was written. ${problems.length} problem${problems.length === 1 ? '' : 's'}:\n` +
+        problems.map((p) => '  · ' + p).join('\n'),
+    )
 
   /* ONE LAYOUT, DECIDED HERE, NOT BY WHICHEVER CALLER TURNED UP.
    *
@@ -384,7 +449,9 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
    * publishers get it: the editor's export, publish-work.mjs and reexport.mjs
    * all end up in this function and none of them has to know footprints exist.
    * yScale comes off the map because the squash is per map. */
-  const placed = footprints(assetsJson.assets || [], files, Number(mapJson?.yScale) > 0 ? Number(mapJson.yScale) : 0.72)
+  // off the map that is shipping, which is the row, so a footprint is squashed
+  // by the same number the bundle tells the game to squash distance by
+  const placed = footprints(assetsJson.assets || [], files, map.yScale > 0 ? map.yScale : 0.72)
   const feet = placed.filter((a) => a && a.foot).length
   const solid = placed.filter((a) => a && a.foot && a.foot[2] > 0).length
   // kept, because the cost measured at the bottom has to read the array that

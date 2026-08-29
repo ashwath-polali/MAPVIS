@@ -861,3 +861,12 @@ export const saveDoc = (id: string, doc: string) =>
 
 export const loadDoc = (id: string) =>
   jget<{ doc: string; savedAt?: number; from?: string }>('/api/doc/' + encodeURIComponent(id))
+
+/* Give a map a different id. It is the publish slug, every door's target, the
+ * objective's map field and the save key at once, and it came from whatever the
+ * dropped file was called. The server carries the doors that point here over
+ * with it and says how many it moved. It refuses a slug somebody already has,
+ * because a door names one as a bare string with no owner in it, so two people
+ * cannot both own `hub`. */
+export const renameMap = (from: string, to: string) =>
+  jpost<{ slug: string; repointed: number }>('/api/map-rename', { from, to })
