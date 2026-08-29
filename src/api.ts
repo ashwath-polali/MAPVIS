@@ -26,14 +26,36 @@ import type { CustomControl } from './core/customfx'
  * request arrives as a short body, fails at JSON.parse and writes nothing. */
 const KEEPALIVE_MAX = 60 * 1024
 
+/* A REQUEST THAT NEVER ANSWERS HAS TO BECOME AN ERROR, because a promise that
+ * never settles is not a slow export, it is a dead button.
+ *
+ * fetch has no timeout of its own, so killing the server mid-request, or losing
+ * the network, leaves the caller awaiting for ever. doExport holds a flag while
+ * it waits, so one interrupted export left every later press returning without
+ * making a request at all, saying nothing. Publishing the hub takes about
+ * twenty-three seconds of which twenty go to the bucket, so the ceiling is
+ * generous: this is here to catch never, not slow. */
+const POST_TIMEOUT_MS = 180_000
+
 async function jpost<T>(url: string, body: unknown, opts?: { keepalive?: boolean }): Promise<T> {
   const payload = JSON.stringify(body)
-  const r = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: payload,
-    ...(opts?.keepalive && payload.length <= KEEPALIVE_MAX ? { keepalive: true } : {}),
-  })
+  const cut = AbortSignal.timeout(POST_TIMEOUT_MS)
+  let r: Response
+  try {
+    r = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: payload,
+      signal: cut,
+      ...(opts?.keepalive && payload.length <= KEEPALIVE_MAX ? { keepalive: true } : {}),
+    })
+  } catch (e) {
+    // name the wait, because "failed to fetch" sends the next person looking at
+    // the server when the server may never have been asked
+    if (e instanceof DOMException && e.name === 'TimeoutError')
+      throw new Error(`${url} did not answer within ${POST_TIMEOUT_MS / 1000}s`)
+    throw e
+  }
   const j = await r.json()
   if (!r.ok || j.error) throw new Error(j.error || r.statusText)
   return j as T

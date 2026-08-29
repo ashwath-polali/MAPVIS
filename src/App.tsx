@@ -3575,6 +3575,23 @@ export default function App() {
     const e = edRef.current
     if (!e || !e.status().hasPainting) return
     if (exporting.current) return
+    /* THE LATCH THAT KILLS THE BUTTON FOR THE REST OF THE SESSION.
+     *
+     * This flag stops a second press landing on top of a running export, which
+     * is right. What was wrong is that it is only lowered after the await
+     * below, so it is lowered when the request SETTLES, and a request that
+     * never settles never lowers it. Kill the dev server mid-export, drop the
+     * wifi, let a socket stall, and from then on every press of export returns
+     * on this line, silently, with no request made and nothing said. Measured
+     * in the browser: after one interrupted export, pressing the button made no
+     * network call at all.
+     *
+     * That is the same symptom as the keepalive bug and a completely different
+     * cause, which is most of why this took three hours to find: two faults
+     * that both look like "the button does nothing". The fence is the timeout
+     * in jpost, which turns a request that never answers into an error this can
+     * catch, plus lowering the flag in a finally so no future branch can
+     * forget. */
     exporting.current = true
     e.setBusy('writing')
     try {
@@ -3592,9 +3609,10 @@ export default function App() {
       )
     } catch (err) {
       e.say(String(err instanceof Error ? err.message : err))
+    } finally {
+      exporting.current = false
+      e.setBusy('')
     }
-    exporting.current = false
-    e.setBusy('')
   }, [])
 
   /* THE RENAME. The document is flushed first for the same reason the export
