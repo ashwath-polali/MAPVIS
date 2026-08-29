@@ -730,6 +730,17 @@ export default function App() {
    * holds the first corner while it waits for the second. */
   const [standPick, setStandPick] = useState(0)
   const [rectPick, setRectPick] = useState<{ id: number; from: [number, number] | null } | null>(null)
+  /* which route's form and which shot's form are open, and a held name draft
+   * for each. Three separate draft pairs rather than one, for the reason the
+   * placement pair is separate from the anchor pair: all four forms can be open
+   * at once and one draft between them would put half a typed route name into
+   * a shot. */
+  const [pathEdit, setPathEdit] = useState(0)
+  const [rnameDraft, setRnameDraft] = useState<string | null>(null)
+  const [rnameSaid, setRnameSaid] = useState<{ id: number; why: string } | null>(null)
+  const [shotEdit, setShotEdit] = useState(0)
+  const [snameDraft, setSnameDraft] = useState<string | null>(null)
+  const [snameSaid, setSnameSaid] = useState<{ id: number; why: string } | null>(null)
   // the map's own id, held while it is typed, because a rename is a server call
   // that can be refused and half a slug is not a thing to send
   const [idDraft, setIdDraft] = useState<string | null>(null)
@@ -1007,6 +1018,27 @@ export default function App() {
       edRef.current?.pickPoint(null)
     }
   }, [step, doorPick])
+
+  // and a half-laid route the same way, or its clicks would land as waypoints
+  // on a step where the line is not even drawn
+  useEffect(() => {
+    if (step !== 'test') edRef.current?.cancelPath()
+  }, [step])
+
+  /* A KEPT ROUTE OPENS ITS OWN FORM, the way a dropped door does. It has to be
+   * watched rather than returned from a handler, because three different things
+   * end a line (enter, a double click, the panel button) and two of them happen
+   * outside React. The line closing is the signal, and the editor has already
+   * selected whichever route it just made. */
+  const layingPath = (st?.pathDraw ?? -1) >= 0
+  const wasLaying = useRef(false)
+  useEffect(() => {
+    if (wasLaying.current && !layingPath && st?.pathSel) {
+      setPathEdit(st.pathSel)
+      setRnameDraft(null)
+    }
+    wasLaying.current = layingPath
+  }, [layingPath, st?.pathSel])
 
   // and leaving the assets step drops an armed effect click the same way
   useEffect(() => {
@@ -3971,6 +4003,11 @@ export default function App() {
   // the map's anchors. Every named place, not only the doors.
   const doors = st?.events ?? []
   const editingDoor = doors.find((v) => v.id === doorEdit)
+  // the map's routes and its shots, and whichever row of each has its form open
+  const paths = st?.paths ?? []
+  const editingPath = paths.find((p) => p.id === pathEdit)
+  const framings = st?.framings ?? []
+  const editingShot = framings.find((f) => f.id === shotEdit)
   /* What an anchor can be bound to, split the way the picker offers it. The
    * named ones lead because a name is what somebody chose in order to address
    * the thing, and `has` answers whether a stored binding still points at
@@ -4398,7 +4435,394 @@ export default function App() {
           ))}
         </div>
       )}
-      <Keys lines={['space walks, then space hops · wasd or arrows move · esc stops', 'esc drops an armed door click', 'z undoes']} />
+      {/* ROUTES. An anchor is one pixel, so before this the only line a map
+          could describe was a straight run between two of them, and every real
+          route (a ship into a berth, an actor crossing a room on a line
+          somebody chose, a patrol) was hand-typed as numbers in the other repo.
+          It sits under the doors because it is the same act: naming a piece of
+          this map so code somewhere else can address it. */}
+      <Sec>routes</Sec>
+      <Row
+        icon="poly"
+        label={layingPath ? `keep the line · ${st?.pathDraw} points` : 'draw a route'}
+        desc={
+          layingPath
+            ? 'click to add · enter or double click keeps it · esc drops it'
+            : 'a named line something walks or sails'
+        }
+        on={layingPath}
+        onClick={() => {
+          setPathEdit(0)
+          ed?.armPath()
+        }}
+      />
+      {editingPath && (
+        <div className="doorform">
+          <label className="anchfield">
+            <span>name · what code calls it</span>
+            <input
+              className={'anchname' + (rnameSaid?.id === editingPath.id ? ' bad' : '')}
+              value={rnameDraft ?? editingPath.name}
+              placeholder="ship_to_dock"
+              onChange={(e) => setRnameDraft(e.target.value)}
+              onBlur={() => {
+                if (rnameDraft === null) return
+                const r = ed?.renamePath(editingPath.id, rnameDraft)
+                setRnameSaid(r?.why ? { id: editingPath.id, why: r.why } : null)
+                setRnameDraft(null)
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === 'Escape') e.currentTarget.blur()
+              }}
+              spellCheck={false}
+              autoFocus
+            />
+          </label>
+          {rnameSaid?.id === editingPath.id && <div className="anchwarn">{rnameSaid.why}</div>}
+
+          {/* the two facts about the shape of the line, as chips, because both
+              are yes or no and both change what the overlay draws */}
+          <div className="anchkinds">
+            <button
+              className={'kbtn' + (editingPath.closed ? ' on' : '')}
+              onClick={() => ed?.updatePath(editingPath.id, { closed: !editingPath.closed })}
+              data-tip="the last point runs back to the first · a patrol rather than an approach"
+            >
+              closed
+            </button>
+            <button
+              className={'kbtn' + (editingPath.twoWay ? ' on' : '')}
+              onClick={() => ed?.updatePath(editingPath.id, { twoWay: !editingPath.twoWay })}
+              data-tip="it can be walked backwards · a sail line into a berth is not a line out of one"
+            >
+              two-way
+            </button>
+          </div>
+
+          {/* the heading to hold on arrival, the same compass the anchor form
+              uses and the same middle cell meaning no opinion */}
+          <div className="anchface">
+            <span>facing</span>
+            <div className="facegrid">
+              {FACE_GRID.flat().map((k, i) =>
+                k ? (
+                  <button
+                    key={k}
+                    className={'abtn tiny' + (editingPath.facing === k ? ' on' : '')}
+                    data-tip={k}
+                    onClick={() => ed?.updatePath(editingPath.id, { facing: editingPath.facing === k ? null : k })}
+                  >
+                    <span className="facearrow">{'↖↑↗←·→↙↓↘'[i]}</span>
+                  </button>
+                ) : (
+                  <button
+                    key="none"
+                    className={'abtn tiny' + (editingPath.facing ? '' : ' on')}
+                    data-tip="no opinion"
+                    onClick={() => ed?.updatePath(editingPath.id, { facing: null })}
+                  >
+                    <span className="facearrow">·</span>
+                  </button>
+                ),
+              )}
+            </div>
+          </div>
+
+          {/* TIMING MARKS, which are what stop a cutscene being retuned every
+              time a line of text changes. A mark names a waypoint index, so a
+              beat says "be at the doorway by the time this line ends" instead
+              of "walk for 2.4 seconds". The index is stepped rather than typed
+              because there are six of them, not six hundred. */}
+          <div className="anchspot">
+            <span>marks</span>
+            <button className="mbtn wide" onClick={() => ed?.addPathMark(editingPath.id, 0)}>
+              add a mark on a waypoint
+            </button>
+          </div>
+          {(editingPath.marks || []).map((m, i) => (
+            <div className="anchspot" key={i}>
+              <input
+                className="anchname"
+                value={m.name}
+                placeholder="at_the_doorway"
+                onChange={(e) => ed?.updatePathMark(editingPath.id, i, { name: e.target.value })}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === 'Escape') e.currentTarget.blur()
+                }}
+                spellCheck={false}
+              />
+              <div className="doorrad">
+                <button className="mbtn" onClick={() => ed?.updatePathMark(editingPath.id, i, { at: m.at - 1 })}>
+                  −
+                </button>
+                <em>{m.at}</em>
+                <button className="mbtn" onClick={() => ed?.updatePathMark(editingPath.id, i, { at: m.at + 1 })}>
+                  +
+                </button>
+              </div>
+              <button
+                className="arow-x"
+                data-tip="remove this mark"
+                onClick={() => ed?.removePathMark(editingPath.id, i)}
+              >
+                <Icon name="x" />
+              </button>
+            </div>
+          ))}
+
+          <div className="doorhint">
+            {editingPath.points.length} waypoints · the arrowhead on the map is the direction it is walked
+          </div>
+          <div className="dooracts">
+            <button className="abtn" onClick={() => setPathEdit(0)}>
+              done
+            </button>
+            <button
+              className={'abtn danger' + (armed === 'path:' + editingPath.id ? ' armed' : '')}
+              onClick={() => {
+                if (!arm('path:' + editingPath.id)) return
+                ed?.removePath(editingPath.id)
+                setPathEdit(0)
+              }}
+            >
+              {armed === 'path:' + editingPath.id ? 'sure?' : 'remove'}
+            </button>
+          </div>
+        </div>
+      )}
+      {paths.length > 0 && (
+        <div className="evrows">
+          {paths.map((p) => (
+            <div
+              key={p.id}
+              className={'evrow' + (pathEdit === p.id ? ' sel' : '')}
+              onClick={() => {
+                const open = pathEdit === p.id ? 0 : p.id
+                setPathEdit(open)
+                setRnameDraft(null)
+                ed?.selectPath(open)
+              }}
+            >
+              <span className="ev-glyph">⤳</span>
+              <span className="ev-name">
+                <b>{p.name}</b>
+                <i>
+                  {' · '}
+                  {p.points.length} pts
+                  {p.closed ? ' · loop' : ''}
+                  {p.twoWay ? ' · both ways' : ''}
+                </i>
+              </span>
+              <button
+                className={'arow-x' + (armed === 'pathrow:' + p.id ? ' armed' : '')}
+                data-tip={armed === 'pathrow:' + p.id ? undefined : 'remove'}
+                onClick={(e2) => {
+                  e2.stopPropagation()
+                  if (!arm('pathrow:' + p.id)) return
+                  ed?.removePath(p.id)
+                  if (pathEdit === p.id) setPathEdit(0)
+                }}
+              >
+                {armed === 'pathrow:' + p.id ? 'sure?' : <Icon name="x" />}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* SHOTS. Every "point the camera at the thing" beat needs one, and
+          without them every camera move in the game is hand-typed numbers
+          nobody can check without running it. Saving one is pan and zoom until
+          the screen shows what the shot should show, then press. */}
+      <Sec>shots</Sec>
+      <Row
+        icon="eye"
+        label={editingDoor ? `save this view on ${editingDoor.name}` : 'save this view as a shot'}
+        desc={
+          editingDoor
+            ? 'the offset from that anchor, so the shot travels when it does'
+            : 'open an anchor above first, or it stores raw numbers'
+        }
+        onClick={() => {
+          const id = ed?.armFraming(editingDoor?.name ?? '')
+          if (id) {
+            setShotEdit(id)
+            setSnameDraft(null)
+          }
+        }}
+      />
+      {editingShot && (
+        <div className="doorform">
+          <label className="anchfield">
+            <span>name · what code calls it</span>
+            <input
+              className={'anchname' + (snameSaid?.id === editingShot.id ? ' bad' : '')}
+              value={snameDraft ?? editingShot.name}
+              placeholder="over_the_dock"
+              onChange={(e) => setSnameDraft(e.target.value)}
+              onBlur={() => {
+                if (snameDraft === null) return
+                const r = ed?.renameFraming(editingShot.id, snameDraft)
+                setSnameSaid(r?.why ? { id: editingShot.id, why: r.why } : null)
+                setSnameDraft(null)
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === 'Escape') e.currentTarget.blur()
+              }}
+              spellCheck={false}
+              autoFocus
+            />
+          </label>
+          {snameSaid?.id === editingShot.id && <div className="anchwarn">{snameSaid.why}</div>}
+
+          {/* WHAT IT HANGS ON. An anchor by preference: raw numbers re-break
+              every time a painting is re-cut, and every map gets re-cut. The
+              point option is the honest fallback for a shot of somewhere
+              nobody has named. */}
+          <label className="anchfield">
+            <span>hung on · the anchor it follows</span>
+            <select
+              className="anchbind"
+              data-empty={editingShot.anchor ? '0' : '1'}
+              value={editingShot.anchor}
+              onChange={(e) => ed?.updateFraming(editingShot.id, { anchor: e.target.value || null })}
+            >
+              <option value="">no anchor · a point on the map</option>
+              {doors.map((d) => (
+                <option key={d.id} value={d.name}>
+                  {d.name}
+                </option>
+              ))}
+              {/* an anchor that has been renamed or deleted under the shot is
+                  shown rather than silently dropped, or an author fixes a shot
+                  they never knew broke */}
+              {editingShot.anchor && !doors.some((d) => d.name === editingShot.anchor) && (
+                <option value={editingShot.anchor}>{editingShot.anchor} · gone</option>
+              )}
+            </select>
+          </label>
+          {editingShot.anchor && !doors.some((d) => d.name === editingShot.anchor) && (
+            <div className="anchwarn">nothing on this map is called {editingShot.anchor} any more</div>
+          )}
+
+          <div className="walkcfg">
+            {!editingShot.anchor && (
+              <>
+                <NumField
+                  label="x"
+                  value={editingShot.x ?? 0}
+                  onCommit={(v) => ed?.updateFraming(editingShot.id, { x: v })}
+                />
+                <NumField
+                  label="y"
+                  value={editingShot.y ?? 0}
+                  onCommit={(v) => ed?.updateFraming(editingShot.id, { y: v })}
+                />
+              </>
+            )}
+            <NumField
+              label="offset x"
+              value={editingShot.dx}
+              onCommit={(v) => ed?.updateFraming(editingShot.id, { dx: v })}
+            />
+            <NumField
+              label="offset y"
+              value={editingShot.dy}
+              onCommit={(v) => ed?.updateFraming(editingShot.id, { dy: v })}
+            />
+            {/* two decimals on purpose: the pull-out shot cannot exist on the
+                renderer's integer notches, so this field does not round */}
+            <NumField
+              label="zoom"
+              value={editingShot.zoom}
+              dp={2}
+              step={0.1}
+              onCommit={(v) => ed?.updateFraming(editingShot.id, { zoom: v })}
+            />
+          </div>
+
+          <div className="anchkinds">
+            <button
+              className={'kbtn' + (editingShot.entry ? ' on' : '')}
+              onClick={() => ed?.updateFraming(editingShot.id, { entry: !editingShot.entry })}
+              data-tip="the view a player gets on arriving in this map · at most one"
+            >
+              arrival shot
+            </button>
+          </div>
+
+          <div className="anchspot">
+            <span>check it</span>
+            <button className="mbtn wide" onClick={() => ed?.showFraming(editingShot.id)}>
+              put the editor on this shot
+            </button>
+          </div>
+          <div className="doorhint">
+            the editor zooms in whole steps and this number does not, so the check lands on the nearest one
+          </div>
+          <div className="dooracts">
+            <button className="abtn" onClick={() => setShotEdit(0)}>
+              done
+            </button>
+            <button
+              className={'abtn danger' + (armed === 'shot:' + editingShot.id ? ' armed' : '')}
+              onClick={() => {
+                if (!arm('shot:' + editingShot.id)) return
+                ed?.removeFraming(editingShot.id)
+                setShotEdit(0)
+              }}
+            >
+              {armed === 'shot:' + editingShot.id ? 'sure?' : 'remove'}
+            </button>
+          </div>
+        </div>
+      )}
+      {framings.length > 0 && (
+        <div className="evrows">
+          {framings.map((f) => (
+            <div
+              key={f.id}
+              className={'evrow' + (shotEdit === f.id ? ' sel' : '')}
+              onClick={() => {
+                const open = shotEdit === f.id ? 0 : f.id
+                setShotEdit(open)
+                setSnameDraft(null)
+                ed?.selectFraming(open)
+              }}
+            >
+              <span className="ev-glyph">▣</span>
+              <span className="ev-name">
+                <b>{f.name}</b>
+                <i>
+                  {' · '}
+                  {f.anchor || `${f.x}, ${f.y}`}
+                  {f.entry ? ' · arrival' : ''}
+                </i>
+              </span>
+              <button
+                className={'arow-x' + (armed === 'shotrow:' + f.id ? ' armed' : '')}
+                data-tip={armed === 'shotrow:' + f.id ? undefined : 'remove'}
+                onClick={(e2) => {
+                  e2.stopPropagation()
+                  if (!arm('shotrow:' + f.id)) return
+                  ed?.removeFraming(f.id)
+                  if (shotEdit === f.id) setShotEdit(0)
+                }}
+              >
+                {armed === 'shotrow:' + f.id ? 'sure?' : <Icon name="x" />}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <Keys
+        lines={[
+          'space walks, then space hops · wasd or arrows move · esc stops',
+          'esc drops an armed door click',
+          'laying a route: enter or double click keeps it · backspace takes a point back · esc drops it',
+          'z undoes',
+        ]}
+      />
     </>
   )
 

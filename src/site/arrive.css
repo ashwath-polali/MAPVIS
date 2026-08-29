@@ -236,6 +236,16 @@
   align-items: center;
   gap: 6px;
 }
+.home-sea {
+  margin-right: 6px;
+  font: 500 12px var(--font-label);
+  color: #6f7885;
+  text-decoration: none;
+  transition: color 180ms ease;
+}
+.home-sea:hover {
+  color: #e6e9ee;
+}
 .home-find {
   width: 150px;
   padding: 7px 10px;

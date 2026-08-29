@@ -15,6 +15,8 @@ import {
   assetLabel,
   lookOf,
   migrateAnchor,
+  migratePath,
+  migrateFraming,
   anchorName,
   isAnchorName,
   isPlacementName,
@@ -27,6 +29,9 @@ import {
   type MapAnchor,
   type AnchorKind,
   type AssetLook,
+  type MapPath,
+  type MapFraming,
+  type PathMark,
 } from './mask'
 import { Walker, canStand, checkReach, type WalkCfg, type ReachResult } from './walk'
 import { savedScene, saveDoc, loadDoc, type LibItem } from '../api'
@@ -294,6 +299,15 @@ export interface EditorStatus {
   hiddenGroups: string[]
   proposedGroups: string[]
   events: MapEvent[]
+  /* ROUTES AND SHOTS ride the status the way the anchors do, so the panel can
+   * list them without reaching into the document. pathDraw is the live gesture
+   * and is the count of waypoints down so far, -1 when no line is open, which
+   * is how a button knows to say finish instead of draw. */
+  paths: MapPath[]
+  pathSel: number
+  pathDraw: number
+  framings: MapFraming[]
+  framingSel: number
   // the crop gesture: on while a rectangle is being dragged over a placement
   cropping: boolean
   cropKind: '' | 'crop' | 'area'
@@ -336,6 +350,16 @@ export const groupFor = (name: string): string => {
 // carry some) starts at quarter size; a generated 96px asset starts at 0.4
 // so it does not vanish. [ and ] take it from there.
 const defaultScale = (it: LibItem): number => (it.h >= 120 ? 0.25 : 0.4)
+
+/* THE OVERLAY COLOURS FOR ROUTES AND SHOTS, and they have to be their own two.
+ * The chrome already spends iris on anchors, green on the spawn and the
+ * standing spot, yellow on the mask polygon, purple on occluders and magenta on
+ * the cut, and a route drawn in any of those reads as one of those. Amber for a
+ * route, cyan for a shot, brighter for whichever is selected. */
+const PATH_COL = '#f0883e'
+const PATH_SEL = '#ffc27a'
+const SHOT_COL = '#5cc8e0'
+const SHOT_SEL = '#a9e6f5'
 
 export class Editor {
   doc = new MaskDoc(1, 1)
@@ -586,6 +610,19 @@ export class Editor {
     // double click means "work on this one": on a placed asset it opens the
     // crop box the way a slide editor does, everywhere else it closes a polygon
     on(canvas, 'dblclick', (e) => {
+      /* a double click keeps the route, and the second press of it has already
+       * dropped a waypoint on top of the first, so that one comes back off */
+      if (this.newPath) {
+        e.preventDefault()
+        const n = this.newPath.length
+        if (n > 1) {
+          const a = this.newPath[n - 1]
+          const b = this.newPath[n - 2]
+          if (a[0] === b[0] && a[1] === b[1]) this.newPath.pop()
+        }
+        this.finishPath()
+        return
+      }
       if (this.assetMode && !this.cropSt && this.selAsset && this.cropReq) {
         e.preventDefault()
         this.cropReq()
@@ -673,6 +710,11 @@ export class Editor {
       hiddenGroups: [...this.hiddenGroups],
       proposedGroups: [...this.proposedGroups],
       events: this.doc.events,
+      paths: this.doc.paths,
+      pathSel: this.pathSel,
+      pathDraw: this.newPath ? this.newPath.length : -1,
+      framings: this.doc.framings,
+      framingSel: this.framingSel,
       cropping: !!this.cropSt,
       // which of the two it is, so the hint on screen can say the right thing.
       // They are one state and two gestures: a crop takes an existing box in,
@@ -722,6 +764,12 @@ export class Editor {
     this.selAsset = ''
     this.dragAsset = null
     this.nudgeId = ''
+    // a half-drawn route belongs to the map it was being drawn on, and so do
+    // both selections: carrying an id into another document points at whatever
+    // happens to hold that number over there
+    this.newPath = null
+    this.pathSel = 0
+    this.framingSel = 0
     this.cancelPick()
     this.cancelCrop()
     this.hiddenGroups.clear()
@@ -837,6 +885,22 @@ export class Editor {
     const [x, y] = this.toNative(e)
     this.lastPx = [x, y]
     void r
+
+    /* A ROUTE BEING LAID EATS THE CLICK, ahead of everything including the
+     * anchor drag: a waypoint dropped near a door must not grab the door
+     * instead. It sits above the paintable gate below for the reason the anchor
+     * drag does, because routes are drawn on the test step where painting is
+     * off. */
+    if (this.newPath) {
+      if (e.button === 2) this.cancelPath()
+      else {
+        this.newPath.push([x, y])
+        this.dirty = true
+        this.emit()
+      }
+      e.preventDefault()
+      return
+    }
 
     /* A DOOR CAN BE DRAGGED. Grab one by clicking inside its ring.
      *
@@ -1195,6 +1259,34 @@ export class Editor {
     if (k === 'escape' && this.pickCb) {
       this.cancelPick()
       return
+    }
+    /* A ROUTE BEING LAID owns four keys, and it is checked ahead of the crop
+     * and the walk test because both of those would otherwise eat the enter or
+     * the space that was meant for the line. Space is swallowed and does
+     * nothing: starting the walk test under a half-drawn route is the same
+     * class of surprise as painting on the test step. */
+    if (this.newPath) {
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        this.finishPath()
+        return
+      }
+      if (k === 'escape') {
+        e.preventDefault()
+        this.cancelPath()
+        return
+      }
+      if (e.key === 'Backspace') {
+        e.preventDefault()
+        this.newPath.pop()
+        this.dirty = true
+        this.emit()
+        return
+      }
+      if (k === ' ') {
+        e.preventDefault()
+        return
+      }
     }
     // the crop rectangle owns the keyboard while it is up: enter takes it, esc
     // drops it, and nothing else (space would start the walk test under it)
@@ -3429,6 +3521,18 @@ export class Editor {
   /* the door being dragged right now, and where inside its ring it was held */
   private dragEvent: { id: number; dx: number; dy: number } | null = null
 
+  /* THE ROUTE BEING LAID, and null the rest of the time.
+   *
+   * It lives here rather than in React for the reason this.poly does: every
+   * click drops a waypoint and the overlay has to show the line growing under
+   * the cursor, and a state update per click would put a render pass between
+   * the press and the pixel. Which row of the two lists is open is React's
+   * business; which line is drawn brighter is this file's, so the selections
+   * are here too. */
+  private newPath: Pt[] | null = null
+  pathSel = 0
+  framingSel = 0
+
   /* Is there anywhere inside this ring a player could actually stand?
    *
    * The same test the game applies, so the answer here is the answer there.
@@ -3626,6 +3730,391 @@ export class Editor {
     this.touched()
     this.say(`removed ${e.name || e.label || 'anchor'} · z undoes`)
   }
+
+  // ---- routes: a named polyline -----------------------------------------
+  /* Every anchor is one pixel, so the only route this tool could describe was
+   * a straight line between two of them, and every real one (a ship into a
+   * berth, an actor crossing a room, a patrol) was hand-typed as numbers in
+   * the other repo. These are the controls for drawing it here instead.
+   *
+   * Names go through anchorName and are counted per list. Routes, shots and
+   * anchors each keep their own tally because the bundle ships them as three
+   * separate arrays keyed by name, so python asking for a path by path name
+   * can never collide with an anchor called the same thing.
+   *
+   * Z DOES NOT BRING A ROUTE OR A SHOT BACK, and nothing here says it does.
+   * MaskDoc.snap copies the levels, the cut, the occluders, the assets, the
+   * anchors and the spawn, and it was written before either of these lists
+   * existed, so a snapshot has nothing of them to restore. These still call
+   * snap so the stack stays in step and so they start working the day that
+   * function learns the two fields, but the guard on a delete is the two-click
+   * confirm on the button, not the undo. */
+  freePathName(want: string, exceptId = 0): string {
+    const base = anchorName(want)
+    const taken = new Set(this.doc.paths.filter((p) => p.id !== exceptId).map((p) => p.name))
+    if (!taken.has(base)) return base
+    for (let i = 2; ; i++) if (!taken.has(`${base}_${i}`)) return `${base}_${i}`
+  }
+
+  /* Arm the line. From here every map click drops a waypoint, enter or a double
+   * click keeps what is down, esc or a right-click throws it away. Pressing
+   * this while a line is open cancels, which is how every armed thing in this
+   * tool behaves. */
+  armPath() {
+    if (this.newPath) {
+      this.cancelPath()
+      return
+    }
+    this.newPath = []
+    this.pathSel = 0
+    this.dirty = true
+    this.say('click the map to lay the line · enter keeps it · esc drops it')
+    this.emit()
+  }
+
+  cancelPath() {
+    if (!this.newPath) return
+    this.newPath = null
+    this.dirty = true
+    this.say('line dropped · nothing saved')
+    this.emit()
+  }
+
+  /* Two points is the least that means anything, and it is migratePath's rule
+   * rather than a second one invented here: a one-point line has no direction,
+   * so nothing downstream could walk it or point a camera along it. */
+  finishPath(): number {
+    const pts = this.newPath
+    if (!pts) return 0
+    this.newPath = null
+    if (pts.length < 2) {
+      this.dirty = true
+      this.say('a line needs two points · nothing saved')
+      this.emit()
+      return 0
+    }
+    return this.addPath(pts)
+  }
+
+  addPath(points: [number, number][]): number {
+    if (!points || points.length < 2) {
+      this.say('a line needs two points · nothing saved')
+      return 0
+    }
+    this.doc.snap()
+    const id = this.doc.pathNext
+    const p = migratePath({
+      id,
+      name: this.freePathName(`path_${id}`),
+      points,
+      closed: false,
+      twoWay: false,
+    })
+    // migratePath drops anything it cannot make a line of, which is the same
+    // gate a reopened save goes through, so nothing can enter the document
+    // here that would not survive being saved and read back
+    if (!p) {
+      this.say('those points are not a line · nothing saved')
+      return 0
+    }
+    this.doc.pathNext = id + 1
+    this.doc.paths.push(p)
+    this.pathSel = id
+    this.touched()
+    this.say(`${p.name} · ${p.points.length} points · give it a name code can use`)
+    return id
+  }
+
+  /* Renaming refuses rather than corrects, exactly as renameAnchor does and for
+   * the same reason: this string is what a member writes in python, and a name
+   * quietly changed under an author is worse than a name they have to fix. */
+  renamePath(id: number, want: string): { ok: boolean; name?: string; why?: string } {
+    const p = this.doc.paths.find((q) => q.id === id)
+    if (!p) return { ok: false, why: 'gone' }
+    const trimmed = String(want || '').trim()
+    if (!trimmed) return { ok: false, why: 'a name is required · code addresses this' }
+    const clean = anchorName(trimmed)
+    if (!isAnchorName(clean)) return { ok: false, why: 'letters, digits and underscores, starting with a letter' }
+    const free = this.freePathName(clean, id)
+    p.name = free
+    this.touched()
+    return { ok: true, name: free, why: free !== clean ? `taken · saved as ${free}` : undefined }
+  }
+
+  /* One typed edit to one route. null clears a field that is allowed to be
+   * absent, which undefined cannot mean here: undefined is "this patch does not
+   * mention it", the same split updateEvent makes. */
+  updatePath(
+    id: number,
+    patch: {
+      points?: [number, number][]
+      closed?: boolean
+      twoWay?: boolean
+      facing?: string | null
+      marks?: PathMark[] | null
+    },
+  ) {
+    const p = this.doc.paths.find((q) => q.id === id)
+    if (!p) return
+    if (patch.points !== undefined && patch.points.length >= 2)
+      p.points = patch.points.map((q) => [Math.round(q[0]), Math.round(q[1])] as [number, number])
+    if (patch.closed !== undefined) p.closed = !!patch.closed
+    if (patch.twoWay !== undefined) p.twoWay = !!patch.twoWay
+    if (patch.facing !== undefined) {
+      if (patch.facing) p.facing = patch.facing
+      else delete p.facing
+    }
+    if (patch.marks !== undefined) {
+      /* a mark past the end of the line is dropped rather than carried, because
+       * a beat waiting for waypoint nine on a six point path waits for ever.
+       * migratePath states the same rule on load, and shortening a line through
+       * this function has to apply it or a mark survives its own waypoint. */
+      const clean = (patch.marks || [])
+        .filter((m) => m && isAnchorName(m.name) && isFinite(Number(m.at)))
+        .map((m) => ({ at: Math.round(Number(m.at)), name: m.name }))
+        .filter((m) => m.at >= 0 && m.at < p.points.length)
+      if (clean.length) p.marks = clean
+      else delete p.marks
+    }
+    this.touched()
+  }
+
+  removePath(id: number) {
+    const i = this.doc.paths.findIndex((q) => q.id === id)
+    if (i < 0) return
+    this.doc.snap()
+    const [p] = this.doc.paths.splice(i, 1)
+    if (this.pathSel === id) this.pathSel = 0
+    this.touched()
+    this.say(`removed the route ${p.name}`)
+  }
+
+  selectPath(id: number) {
+    if (this.pathSel === id) return
+    this.pathSel = id
+    this.dirty = true
+    this.emit()
+  }
+
+  /* A TIMING MARK: a name hung on a waypoint index, and the part that stops a
+   * cutscene being retuned every time a line of text changes. The beat says
+   * "be at the doorway by the end of this line", not "walk for 2.4 seconds".
+   *
+   * A mark's name COERCES where a route's name refuses, and the difference is
+   * deliberate: a route is addressed from outside the map, a mark is addressed
+   * inside the route that owns it, so there is nothing outside to break. */
+  addPathMark(id: number, at = 0): number {
+    const p = this.doc.paths.find((q) => q.id === id)
+    if (!p) return -1
+    const marks = [...(p.marks || [])]
+    const taken = new Set(marks.map((m) => m.name))
+    let name = `mark_${marks.length + 1}`
+    for (let i = marks.length + 1; taken.has(name); i++) name = `mark_${i + 1}`
+    marks.push({ at: clamp(Math.round(at), 0, p.points.length - 1), name })
+    p.marks = marks
+    this.touched()
+    return marks.length - 1
+  }
+
+  updatePathMark(id: number, i: number, patch: { at?: number; name?: string }) {
+    const p = this.doc.paths.find((q) => q.id === id)
+    if (!p || !p.marks || !p.marks[i]) return
+    const m = p.marks[i]
+    if (patch.at !== undefined) m.at = clamp(Math.round(patch.at), 0, p.points.length - 1)
+    if (patch.name !== undefined) {
+      const clean = anchorName(patch.name)
+      const taken = new Set(p.marks.filter((_, j) => j !== i).map((q) => q.name))
+      let free = clean
+      for (let n = 2; taken.has(free); n++) free = `${clean}_${n}`
+      m.name = free
+    }
+    this.touched()
+  }
+
+  removePathMark(id: number, i: number) {
+    const p = this.doc.paths.find((q) => q.id === id)
+    if (!p || !p.marks || !p.marks[i]) return
+    const marks = p.marks.filter((_, j) => j !== i)
+    if (marks.length) p.marks = marks
+    else delete p.marks
+    this.touched()
+  }
+
+  // ---- shots: a named camera framing -------------------------------------
+  freeFramingName(want: string, exceptId = 0): string {
+    const base = anchorName(want)
+    const taken = new Set(this.doc.framings.filter((f) => f.id !== exceptId).map((f) => f.name))
+    if (!taken.has(base)) return base
+    for (let i = 2; ; i++) if (!taken.has(`${base}_${i}`)) return `${base}_${i}`
+  }
+
+  /* THE PAINTING PIXEL IN THE MIDDLE OF THE SCREEN, which is what a saved shot
+   * is a shot of. Answers the middle of the map when there is no canvas yet, so
+   * a scripted call never puts NaN into a framing. */
+  viewCentre(): Pt {
+    const c = this.canvas
+    if (!c) return [Math.round(this.doc.W / 2), Math.round(this.doc.H / 2)]
+    return [
+      Math.round((c.clientWidth / 2 - this.ox) / this.z),
+      Math.round((c.clientHeight / 2 - this.oy) / this.z),
+    ]
+  }
+
+  /* WHERE A SHOT IS POINTED, resolved the way the game will resolve it: the
+   * thing it hangs on, plus the offset. An anchor bound to a placement answers
+   * where that placement is drawn right now, so a shot on the coach travels
+   * when he does, the same read drawEvents already makes. */
+  framingSpot(f: MapFraming): { x: number; y: number } {
+    const on = f.anchor ? this.doc.events.find((e) => e.name === f.anchor) : undefined
+    if (!on) return { x: (f.x ?? 0) + f.dx, y: (f.y ?? 0) + f.dy }
+    const home = on.placement ? this.placementRef(on.placement) : undefined
+    const at = home ? this.lifeSpot(home) : { x: on.x, y: on.y }
+    return { x: at.x + f.dx, y: at.y + f.dy }
+  }
+
+  /* SAVE THE VIEW AS A SHOT. There is no click to arm: the gesture is pan and
+   * zoom until the screen shows what the shot should show, then press. The name
+   * matches the other arm* controls because it sits in the same row of panel.
+   *
+   * IT HANGS OFF AN ANCHOR WHENEVER THERE IS ONE. Raw numbers re-break every
+   * time a painting is re-cut and every map gets re-cut, so a shot on
+   * coach_post travels when the coach does and a shot on 412, 208 is wrong the
+   * next time the coast is shaved by a pixel. Which anchor is selected belongs
+   * to the panel and not to this file, so the caller names it. */
+  armFraming(anchor = ''): number {
+    const [cx, cy] = this.viewCentre()
+    const on = anchor ? this.doc.events.find((e) => e.name === anchor) : undefined
+    return this.addFraming(
+      on
+        ? { anchor: on.name, dx: cx - on.x, dy: cy - on.y, zoom: this.z }
+        : { x: cx, y: cy, dx: 0, dy: 0, zoom: this.z },
+    )
+  }
+
+  addFraming(from: { anchor?: string; x?: number; y?: number; dx?: number; dy?: number; zoom?: number }): number {
+    /* the anchor is cleaned BEFORE the point is decided, or a caller handing
+     * over an illegal name gets a shot with no anchor and no coordinates, and
+     * migrateFraming quite rightly refuses it. */
+    const anchor = from.anchor && isAnchorName(from.anchor) ? from.anchor : ''
+    this.doc.snap()
+    const id = this.doc.framingNext
+    const f = migrateFraming({
+      id,
+      name: this.freeFramingName(`shot_${id}`),
+      anchor,
+      ...(anchor ? {} : { x: Math.round(from.x ?? 0), y: Math.round(from.y ?? 0) }),
+      dx: Math.round(from.dx ?? 0),
+      dy: Math.round(from.dy ?? 0),
+      zoom: from.zoom ?? 1,
+    } as MapFraming)
+    // a shot that resolves to nowhere is refused on load, so it is refused here
+    if (!f) {
+      this.say('a shot needs an anchor or a point · nothing saved')
+      return 0
+    }
+    this.doc.framingNext = id + 1
+    this.doc.framings.push(f)
+    this.framingSel = id
+    this.touched()
+    this.say(
+      f.anchor ? `${f.name} · hung on ${f.anchor} · give it a name code can use` : `${f.name} · at ${f.x}, ${f.y}`,
+    )
+    return id
+  }
+
+  renameFraming(id: number, want: string): { ok: boolean; name?: string; why?: string } {
+    const f = this.doc.framings.find((q) => q.id === id)
+    if (!f) return { ok: false, why: 'gone' }
+    const trimmed = String(want || '').trim()
+    if (!trimmed) return { ok: false, why: 'a name is required · code addresses this' }
+    const clean = anchorName(trimmed)
+    if (!isAnchorName(clean)) return { ok: false, why: 'letters, digits and underscores, starting with a letter' }
+    const free = this.freeFramingName(clean, id)
+    f.name = free
+    this.touched()
+    return { ok: true, name: free, why: free !== clean ? `taken · saved as ${free}` : undefined }
+  }
+
+  updateFraming(
+    id: number,
+    patch: { anchor?: string | null; x?: number; y?: number; dx?: number; dy?: number; zoom?: number; entry?: boolean },
+  ) {
+    const f = this.doc.framings.find((q) => q.id === id)
+    if (!f) return
+    if (patch.anchor !== undefined) {
+      const want = patch.anchor && isAnchorName(patch.anchor) ? patch.anchor : ''
+      /* COMING OFF AN ANCHOR HAS TO LEAVE A POINT BEHIND. A framing with
+       * neither is dropped by migrateFraming on the next load, so clearing the
+       * anchor without writing x and y is a way to lose a shot by reopening the
+       * map. Where it was pointed is the honest replacement. */
+      if (!want && f.anchor) {
+        const at = this.framingSpot(f)
+        f.x = Math.round(at.x - f.dx)
+        f.y = Math.round(at.y - f.dy)
+      }
+      f.anchor = want
+      // and hanging it back on an anchor drops the stale numbers, or an export
+      // would carry a point nobody can see next to the anchor that overrides it
+      if (want) {
+        delete f.x
+        delete f.y
+      }
+    }
+    if (patch.x !== undefined) f.x = Math.round(patch.x)
+    if (patch.y !== undefined) f.y = Math.round(patch.y)
+    if (patch.dx !== undefined) f.dx = Math.round(patch.dx)
+    if (patch.dy !== undefined) f.dy = Math.round(patch.dy)
+    /* ZOOM IS A REAL NUMBER and is clamped, never rounded. The pull-out shot
+     * cannot exist on the renderer's integer notches, and a renderer that
+     * cannot honour 1.4 is a defect at the renderer rather than a reason to
+     * throw the author's number away here. Same clamp migrateFraming uses. */
+    if (patch.zoom !== undefined && isFinite(patch.zoom)) f.zoom = Math.min(16, Math.max(0.1, patch.zoom))
+    if (patch.entry !== undefined) {
+      if (patch.entry) {
+        // at most one per map: a player arriving twice in one map is not a
+        // thing, so turning one on turns the rest off rather than refusing
+        for (const q of this.doc.framings) delete q.entry
+        f.entry = true
+      } else delete f.entry
+    }
+    this.touched()
+  }
+
+  removeFraming(id: number) {
+    const i = this.doc.framings.findIndex((q) => q.id === id)
+    if (i < 0) return
+    this.doc.snap()
+    const [f] = this.doc.framings.splice(i, 1)
+    if (this.framingSel === id) this.framingSel = 0
+    this.touched()
+    this.say(`removed the shot ${f.name}`)
+  }
+
+  selectFraming(id: number) {
+    if (this.framingSel === id) return
+    this.framingSel = id
+    this.dirty = true
+    this.emit()
+  }
+
+  /* Put the editor's own view where a saved shot is pointed, so a shot can be
+   * checked by looking instead of by reading four numbers. The zoom is the one
+   * part that cannot be honoured: setZoom rounds to the renderer's notches and
+   * the field does not, so this lands on the nearest notch and the number in
+   * the panel stays the authored one. */
+  showFraming(id: number) {
+    const f = this.doc.framings.find((q) => q.id === id)
+    const c = this.canvas
+    if (!f || !c) return
+    const at = this.framingSpot(f)
+    this.z = clamp(Math.round(f.zoom), 1, 8)
+    this.ox = Math.round(c.clientWidth / 2 - at.x * this.z)
+    this.oy = Math.round(c.clientHeight / 2 - at.y * this.z)
+    this.framingSel = id
+    this.dirty = true
+    this.say(`${f.name} · ${at.x}, ${at.y} at ${f.zoom}x`)
+  }
+
   clearMask() {
     this.doc.clear()
     this.plates = null
@@ -4536,6 +5025,26 @@ export class Editor {
       }
     }
     if (this.eventsVisible && this.doc.events.length) this.drawEvents(g, z)
+    if (this.eventsVisible && this.doc.paths.length) this.drawPaths(g, z)
+    if (this.eventsVisible && this.doc.framings.length) this.drawFramings(g, z)
+    /* THE ROUTE BEING LAID, drawn as it grows with the next leg trailing the
+     * cursor. It draws whatever the overlay toggle says, because it only exists
+     * while somebody is holding the gesture, and an author correcting a line
+     * they cannot see is an author guessing. Same shape as the mask polygon
+     * above and deliberately so. It borrows the selected colour, because the
+     * line being laid is by definition the one being worked on. */
+    if (this.newPath) {
+      const pts = this.newPath.map(([px, py]) => [(px + 0.5) * z, (py + 0.5) * z] as Pt)
+      g.strokeStyle = PATH_SEL
+      g.lineWidth = 1.5
+      g.lineJoin = 'round'
+      g.beginPath()
+      pts.forEach((p, i) => (i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])))
+      if (this.cursor) g.lineTo((this.cursor[0] + 0.5) * z, (this.cursor[1] + 0.5) * z)
+      g.stroke()
+      g.fillStyle = PATH_SEL
+      for (const p of pts) g.fillRect(p[0] - 2, p[1] - 2, 4, 4)
+    }
     g.restore()
 
     // frame edge, so the painting's bounds are readable against the backdrop
@@ -5023,6 +5532,164 @@ export class Editor {
       g.textAlign = 'center'
       g.textBaseline = 'middle'
       g.fillText(label, px, ty - 7)
+    }
+    g.restore()
+  }
+
+  // a solid triangle sitting at x,y and pointing along ang. One helper because
+  // a two-way route wants the same head twice, once at each end
+  private arrowHead(g: CanvasRenderingContext2D, x: number, y: number, ang: number, s: number) {
+    g.beginPath()
+    g.moveTo(x, y)
+    g.lineTo(x - Math.cos(ang - 0.42) * s, y - Math.sin(ang - 0.42) * s)
+    g.lineTo(x - Math.cos(ang + 0.42) * s, y - Math.sin(ang + 0.42) * s)
+    g.closePath()
+    g.fill()
+  }
+
+  /* THE ROUTES. A line nobody can see is a line nobody can correct, and until
+   * this drew, a path was six numbers in a list.
+   *
+   * The arrowhead is most of why it is worth drawing at all: a route has a
+   * direction, and the direction is the thing that is wrong when a ship sails
+   * into a berth backwards. A two-way route is dashed and carries a head at
+   * both ends, so which lines can be walked back is readable off the map
+   * without opening one. */
+  private drawPaths(g: CanvasRenderingContext2D, z: number) {
+    g.save()
+    g.lineJoin = 'round'
+    g.lineCap = 'round'
+    g.font = '10px monospace'
+    g.textAlign = 'center'
+    g.textBaseline = 'middle'
+    for (const p of this.doc.paths) {
+      const sel = p.id === this.pathSel
+      const col = sel ? PATH_SEL : PATH_COL
+      const pts = p.points.map(([x, y]) => [(x + 0.5) * z, (y + 0.5) * z] as Pt)
+      if (pts.length < 2) continue
+      g.strokeStyle = col
+      g.lineWidth = sel ? 2.5 : 1.5
+      g.setLineDash(p.twoWay ? [7, 4] : [])
+      g.beginPath()
+      pts.forEach((q, i) => (i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1])))
+      if (p.closed) g.closePath()
+      g.stroke()
+      g.setLineDash([])
+      g.fillStyle = col
+      for (const q of pts) g.fillRect(Math.round(q[0]) - 2, Math.round(q[1]) - 2, 4, 4)
+      /* the head sits on the last leg, and on the leg BACK to the first point
+       * when the route closes, because a loop's direction lives in that leg and
+       * a head on a leg that is not walked points the wrong way round. */
+      const end = p.closed ? pts[0] : pts[pts.length - 1]
+      const before = p.closed ? pts[pts.length - 1] : pts[pts.length - 2]
+      this.arrowHead(g, end[0], end[1], Math.atan2(end[1] - before[1], end[0] - before[0]), sel ? 9 : 7)
+      if (p.twoWay && !p.closed)
+        this.arrowHead(
+          g,
+          pts[0][0],
+          pts[0][1],
+          Math.atan2(pts[0][1] - pts[1][1], pts[0][0] - pts[1][0]),
+          sel ? 9 : 7,
+        )
+      // a marked waypoint wears a ring and its name, because a mark is a thing
+      // an author tunes against the line and reading it out of a table means
+      // counting waypoints on screen by eye
+      for (const m of p.marks || []) {
+        const q = pts[m.at]
+        if (!q) continue
+        g.strokeStyle = col
+        g.lineWidth = 1.2
+        g.beginPath()
+        g.arc(q[0], q[1], 5.5, 0, Math.PI * 2)
+        g.stroke()
+        g.fillStyle = '#16181bd9'
+        const tw = g.measureText(m.name).width
+        g.beginPath()
+        g.roundRect(q[0] - tw / 2 - 4, q[1] + 8, tw + 8, 13, 4)
+        g.fill()
+        g.strokeStyle = col
+        g.lineWidth = 1
+        g.stroke()
+        g.fillStyle = col
+        g.fillText(m.name, q[0], q[1] + 15)
+      }
+      // the name at the head, where the eye already is after following the line
+      const tw = g.measureText(p.name).width
+      g.fillStyle = '#16181bd9'
+      g.beginPath()
+      g.roundRect(end[0] - tw / 2 - 5, end[1] - 22, tw + 10, 15, 5)
+      g.fill()
+      g.strokeStyle = col
+      g.lineWidth = 1
+      g.stroke()
+      g.fillStyle = col
+      g.fillText(p.name, end[0], end[1] - 14)
+    }
+    g.restore()
+  }
+
+  /* THE SHOTS. A camera body with a lens on it, and a dashed tie back to the
+   * anchor it hangs off, because a shot and the thing it is a shot OF are two
+   * marks in different parts of the map and nothing else on screen says which
+   * pairs with which. The lens points down the tie for the same reason. */
+  private drawFramings(g: CanvasRenderingContext2D, z: number) {
+    g.save()
+    g.font = '10px monospace'
+    g.textAlign = 'center'
+    g.textBaseline = 'middle'
+    for (const f of this.doc.framings) {
+      const sel = f.id === this.framingSel
+      const col = sel ? SHOT_SEL : SHOT_COL
+      const at = this.framingSpot(f)
+      const px = at.x * z
+      const py = at.y * z
+      const on = f.anchor ? this.doc.events.find((e) => e.name === f.anchor) : undefined
+      let ang = 0
+      if (on) {
+        const home = on.placement ? this.placementRef(on.placement) : undefined
+        const spot = home ? this.lifeSpot(home) : { x: on.x, y: on.y }
+        const ax = spot.x * z
+        const ay = spot.y * z
+        g.strokeStyle = col
+        g.lineWidth = 1
+        g.setLineDash([4, 3])
+        g.beginPath()
+        g.moveTo(px, py)
+        g.lineTo(ax, ay)
+        g.stroke()
+        g.setLineDash([])
+        if (ax !== px || ay !== py) ang = Math.atan2(ay - py, ax - px)
+      }
+      g.fillStyle = '#16181bd9'
+      g.strokeStyle = col
+      g.lineWidth = sel ? 2 : 1.4
+      g.beginPath()
+      g.roundRect(px - 8, py - 6, 16, 12, 3)
+      g.fill()
+      g.stroke()
+      // the lens, a stub off the body along the tie
+      g.beginPath()
+      g.moveTo(px + Math.cos(ang) * 8, py + Math.sin(ang) * 8)
+      g.lineTo(px + Math.cos(ang) * 13, py + Math.sin(ang) * 13)
+      g.stroke()
+      // the arrival shot wears a filled pip, since one of them being the way a
+      // player comes in is the one thing about a list of shots you read first
+      if (f.entry) {
+        g.fillStyle = col
+        g.beginPath()
+        g.arc(px, py, 2.5, 0, Math.PI * 2)
+        g.fill()
+      }
+      const label = `${f.name} · ${f.zoom}x`
+      const tw = g.measureText(label).width
+      g.fillStyle = '#16181bd9'
+      g.beginPath()
+      g.roundRect(px - tw / 2 - 5, py - 26, tw + 10, 15, 5)
+      g.fill()
+      g.lineWidth = 1
+      g.stroke()
+      g.fillStyle = col
+      g.fillText(label, px, py - 18)
     }
     g.restore()
   }

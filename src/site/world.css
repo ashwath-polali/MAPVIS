@@ -1,0 +1,356 @@
+/* The world composition page: a chart of an ocean with a survey panel beside
+ * it. It borrows the site's palette and the home page's chrome rather than
+ * inventing a third look, and everything that is not the water is small,
+ * narrow and out of the way. The only bright thing on the screen is gold, and
+ * gold only ever means the tool talking.
+ *
+ * Loaded from World.tsx rather than from main.tsx, because this route is one
+ * page and nobody who never opens it should pay for the rules.
+ */
+
+.world {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100svh;
+  background: #070b11;
+  color: #d8e3ee;
+  font-family: var(--font-label);
+}
+
+.world-bar {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 12px clamp(14px, 2vw, 26px);
+  border-bottom: 1px solid #141c26;
+}
+.world-back {
+  font: 500 12px var(--font-label);
+  color: #6f7885;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  transition: color 180ms ease;
+}
+.world-back:hover {
+  color: #d8e3ee;
+}
+.world-name {
+  font: 700 11px var(--font-label);
+  letter-spacing: 0.4em;
+  text-transform: uppercase;
+  color: #d8e3ee;
+}
+.world-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font: 400 10px var(--font-mono);
+  color: #5b6470;
+}
+.world-count {
+  margin-left: 10px;
+}
+.world-num {
+  width: 62px;
+  padding: 4px 6px;
+  font: 400 10px var(--font-mono);
+  color: #d8e3ee;
+  background: #10141a;
+  border: 1px solid #1d232b;
+  outline: none;
+}
+.world-num:focus {
+  border-color: #39434f;
+}
+.world-tools {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+.world-tool {
+  padding: 6px 12px;
+  font: 500 11px var(--font-label);
+  letter-spacing: 0.08em;
+  color: #6f7885;
+  background: none;
+  border: 1px solid #1d232b;
+  cursor: pointer;
+  transition: all 160ms ease;
+}
+.world-tool:hover {
+  color: #d8e3ee;
+  border-color: #39434f;
+}
+.world-tool.on {
+  color: #070b11;
+  background: var(--gold);
+  border-color: var(--gold);
+}
+.world-save {
+  padding: 6px 16px;
+  font: 600 11px var(--font-label);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--gold-lit);
+  background: none;
+  border: 1px solid color-mix(in srgb, var(--gold) 45%, transparent);
+  cursor: pointer;
+  transition: all 180ms ease;
+}
+.world-save:hover:not(:disabled) {
+  color: #070b11;
+  background: var(--gold);
+}
+.world-save:disabled {
+  color: #4a5563;
+  border-color: #1d232b;
+  cursor: default;
+}
+
+.world-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 306px;
+  min-height: 0;
+}
+@media (max-width: 900px) {
+  .world-body {
+    grid-template-columns: 1fr;
+    grid-template-rows: 55svh minmax(0, 1fr);
+  }
+}
+
+/* the chart. The canvas is absolute so that measuring the stage can never be
+   affected by the size the canvas was last given, which is how a fit like this
+   ends up growing by a few pixels on every resize */
+.world-stage {
+  position: relative;
+  overflow: hidden;
+}
+.world-chart {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: block;
+  touch-action: none;
+}
+.world-hint {
+  position: absolute;
+  left: 14px;
+  bottom: 12px;
+  margin: 0;
+  font: 400 11px var(--font-label);
+  color: #5b6470;
+  pointer-events: none;
+}
+
+.world-side {
+  overflow-y: auto;
+  padding: 14px 16px 40px;
+  border-left: 1px solid #141c26;
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+.world-lab {
+  font: 600 9px var(--font-label);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #5b6470;
+}
+.world-note,
+.world-say {
+  margin: 0;
+  font: 400 11.5px var(--font-label);
+  line-height: 1.5;
+  color: #6f7885;
+}
+
+/* what the server said, in its own words. A refusal is sealing wax, a warning
+   is gold: one of them stopped the save and the other did not. */
+.world-refused,
+.world-warns {
+  display: grid;
+  gap: 5px;
+  padding: 10px 12px;
+  border-left: 2px solid var(--wax);
+  background: rgba(176, 74, 47, 0.08);
+}
+.world-warns {
+  border-left-color: var(--gold);
+  background: rgba(212, 165, 60, 0.07);
+}
+.world-refused p,
+.world-warns p {
+  margin: 0;
+  font: 400 11.5px var(--font-label);
+  line-height: 1.45;
+  color: #d8e3ee;
+}
+
+.world-insp {
+  display: grid;
+  gap: 9px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid #141c26;
+}
+.world-f {
+  display: grid;
+  gap: 3px;
+}
+.world-f > span {
+  font: 400 10px var(--font-mono);
+  color: #5b6470;
+}
+.world-in {
+  width: 100%;
+  padding: 6px 8px;
+  font: 400 12px var(--font-label);
+  color: #d8e3ee;
+  background: #10141a;
+  border: 1px solid #1d232b;
+  outline: none;
+  transition: border-color 180ms ease;
+}
+.world-in:focus {
+  border-color: #39434f;
+}
+.world-in.bad {
+  border-color: var(--wax);
+}
+.world-bad {
+  margin: 0;
+  font: 400 11px var(--font-label);
+  color: var(--wax);
+}
+.world-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.world-mark {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 2px;
+}
+.world-mark-t {
+  flex: 1;
+  font: 400 10px var(--font-mono);
+  color: #8fa6bb;
+}
+
+.world-btn {
+  padding: 6px 12px;
+  font: 500 11px var(--font-label);
+  color: #8d97a4;
+  background: none;
+  border: 1px solid #1d232b;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 160ms ease;
+}
+.world-btn:hover {
+  color: #d8e3ee;
+  border-color: #39434f;
+}
+.world-btn.small {
+  padding: 4px 9px;
+  font-size: 10.5px;
+}
+.world-btn.on {
+  color: #070b11;
+  background: var(--gold);
+  border-color: var(--gold);
+}
+.world-btn.danger:hover {
+  color: #ff6b5e;
+  border-color: #6d2b26;
+  background: rgba(40, 12, 10, 0.7);
+}
+
+/* the compass, laid out the way the editor lays it out for a door and a post,
+   with the middle meaning no opinion */
+.world-face {
+  display: grid;
+  grid-template-columns: repeat(3, 30px);
+  gap: 2px;
+}
+.world-fbtn {
+  height: 26px;
+  font: 400 13px var(--font-label);
+  color: #6f7885;
+  background: #10141a;
+  border: 1px solid #1d232b;
+  cursor: pointer;
+  transition: all 140ms ease;
+}
+.world-fbtn:hover {
+  color: #d8e3ee;
+}
+.world-fbtn.on {
+  color: #070b11;
+  background: var(--gold);
+  border-color: var(--gold);
+}
+
+.world-roster {
+  display: grid;
+  gap: 1px;
+  align-content: start;
+}
+.world-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 7px;
+  background: none;
+  border: 0;
+  border-left: 2px solid transparent;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 140ms ease;
+}
+.world-row:hover {
+  background: #10141a;
+}
+.world-row.on {
+  border-left-color: var(--gold);
+  background: #10141a;
+}
+.world-row i {
+  flex: none;
+  width: 7px;
+  height: 7px;
+}
+.world-row-n {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 500 12px var(--font-label);
+  color: #d8e3ee;
+}
+.world-row-m {
+  flex: none;
+  font: 400 9.5px var(--font-mono);
+  color: #5b6470;
+}
+
+.world-gone {
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  gap: 12px;
+  padding: 0 clamp(20px, 6vw, 70px);
+  height: 100svh;
+}
+.world-gone h1 {
+  margin: 0;
+  font: 400 clamp(1.8rem, 4vw, 3rem) var(--font-display);
+}
+.world-gone p {
+  margin: 0;
+  color: #6f7885;
+}

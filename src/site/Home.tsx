@@ -358,6 +358,11 @@ export default function Home() {
             MAPVIS
           </button>
         <div className="home-bar-r">
+          {/* the water between the maps, which is a different document to any
+              of them and has no card in the grid to live on */}
+          <Link to="/world" className="home-sea">
+            the ocean
+          </Link>
           <input
             className="home-find"
             value={q}

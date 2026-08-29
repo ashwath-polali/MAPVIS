@@ -62,6 +62,7 @@ const Editor = lazy(fresh(() => import('../App')))
 const Enter = lazy(fresh(() => import('./Enter')))
 const Home = lazy(fresh(() => import('./Home')))
 const MapPage = lazy(fresh(() => import('./MapPage')))
+const World = lazy(fresh(() => import('./World')))
 
 /* One loading mark for the whole app: four squares walking a ring on the pixel
  * grid. The bleeding ink blot it replaced was slow, soft and the wrong shape for
@@ -146,6 +147,9 @@ export default function Shell() {
   let page: React.ReactNode = null
   if (route.path === '/') page = session.loading ? <Ink /> : session.user ? <Home /> : <Landing />
   else if (route.path === '/enter') page = <Enter />
+  // the one page that is not about a single map: where every map sits on the
+  // one ocean, which is a document the platform holds exactly one of
+  else if (route.path === '/world') page = <World />
   else if (mapMatch) page = <MapPage slug={mapMatch.slug} />
   else page = <Lost path={route.path} />
 
