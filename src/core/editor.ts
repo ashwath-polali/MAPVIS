@@ -32,6 +32,7 @@ import {
   type MapPath,
   type MapFraming,
   type PathMark,
+  type PathKind,
 } from './mask'
 import { Walker, canStand, checkReach, type WalkCfg, type ReachResult } from './walk'
 import { savedScene, saveDoc, loadDoc, type LibItem } from '../api'
@@ -306,6 +307,12 @@ export interface EditorStatus {
   paths: MapPath[]
   pathSel: number
   pathDraw: number
+  /* the legs of the SELECTED route that cross ground no body can stand on, and
+   * how many legs it has. Only the selected one is measured, because the panel
+   * only has room to say it about the route being looked at and the overlay
+   * only reddens that one. Empty for a sail line and for a camera. */
+  pathBad: number[]
+  pathLegs: number
   framings: MapFraming[]
   framingSel: number
   // the crop gesture: on while a rectangle is being dragged over a placement
@@ -360,6 +367,22 @@ const PATH_COL = '#f0883e'
 const PATH_SEL = '#ffc27a'
 const SHOT_COL = '#5cc8e0'
 const SHOT_SEL = '#a9e6f5'
+/* a leg of a walk route that crosses ground nothing can stand on. The same red
+ * check reach paints stranded ground with (255, 40, 40), because it is the same
+ * sentence said about a different mark and an author should not have to learn a
+ * second colour for "the floor is not there". */
+const PATH_BAD = '#ff2828'
+
+/* A ROUTE AS THE PAIRS OF POINTS IT IS ACTUALLY WALKED IN, so the checker and
+ * the overlay count legs the same way. A closed route has one more leg than an
+ * open one, the run back to the first point, and forgetting it is how a patrol
+ * would have been declared clean while its closing leg went through a wall. */
+function legsOf(p: MapPath): [Pt, Pt][] {
+  const out: [Pt, Pt][] = []
+  for (let i = 0; i + 1 < p.points.length; i++) out.push([p.points[i], p.points[i + 1]])
+  if (p.closed && p.points.length > 2) out.push([p.points[p.points.length - 1], p.points[0]])
+  return out
+}
 
 export class Editor {
   doc = new MaskDoc(1, 1)
@@ -671,6 +694,7 @@ export class Editor {
     const s = this.doc.stats()
     const c = this.cursor
     const lastOcc = this.selectedOcc()
+    const selPath = this.pathSel ? this.doc.paths.find((p) => p.id === this.pathSel) : undefined
     return {
       x: c ? c[0] : -1,
       y: c ? c[1] : -1,
@@ -713,6 +737,8 @@ export class Editor {
       paths: this.doc.paths,
       pathSel: this.pathSel,
       pathDraw: this.newPath ? this.newPath.length : -1,
+      pathBad: selPath ? this.crossings(selPath) : [],
+      pathLegs: selPath ? legsOf(selPath).length : 0,
       framings: this.doc.framings,
       framingSel: this.framingSel,
       cropping: !!this.cropSt,
@@ -3806,6 +3832,7 @@ export class Editor {
     const p = migratePath({
       id,
       name: this.freePathName(`path_${id}`),
+      kind: 'walk',
       points,
       closed: false,
       twoWay: false,
@@ -3848,6 +3875,7 @@ export class Editor {
     id: number,
     patch: {
       points?: [number, number][]
+      kind?: PathKind
       closed?: boolean
       twoWay?: boolean
       facing?: string | null
@@ -3858,6 +3886,7 @@ export class Editor {
     if (!p) return
     if (patch.points !== undefined && patch.points.length >= 2)
       p.points = patch.points.map((q) => [Math.round(q[0]), Math.round(q[1])] as [number, number])
+    if (patch.kind !== undefined) p.kind = patch.kind
     if (patch.closed !== undefined) p.closed = !!patch.closed
     if (patch.twoWay !== undefined) p.twoWay = !!patch.twoWay
     if (patch.facing !== undefined) {
@@ -3894,6 +3923,38 @@ export class Editor {
     this.pathSel = id
     this.dirty = true
     this.emit()
+  }
+
+  /* WHICH LEGS OF A WALK ROUTE RUN OVER GROUND NOTHING CAN STAND ON.
+   *
+   * A waypoint is dropped wherever the pointer was, with no ground test at all,
+   * so a route can be laid straight across the sea or over a roof and look
+   * completely correct. The hub's own the_dock_walk does exactly that and
+   * nothing anywhere said so. It is the same silence the anchor ring check was
+   * built to end, one mark later.
+   *
+   * kind is what makes the question answerable. A sail line crossing water is
+   * the point of a sail line and a camera has no feet, so only a walk is asked.
+   *
+   * The probe is standsAt, the same one anchor reach and behaviour fencing go
+   * through. A second copy of the walk law is the way this repo has broken
+   * before, and a checker that disagrees with the fence is worse than no
+   * checker: it would redden ground the editor's own preview walks over.
+   *
+   * Bresenham rather than a fixed number of samples, because a leg has to be
+   * asked about every pixel it touches. A three-sample leg steps clean over a
+   * six pixel gap in a jetty, which is the exact defect this is looking for. */
+  crossings(p: MapPath): number[] {
+    if (p.kind !== 'walk') return []
+    const bad: number[] = []
+    legsOf(p).forEach(([a, b], i) => {
+      let off = false
+      bresenham(a[0], a[1], b[0], b[1], (x, y) => {
+        if (!off && !this.standsAt(x, y)) off = true
+      })
+      if (off) bad.push(i)
+    })
+    return bad
   }
 
   /* A TIMING MARK: a name hung on a waypoint index, and the part that stops a
@@ -4296,6 +4357,11 @@ export class Editor {
           ? {
               paths: this.doc.paths.map((p) => ({
                 name: p.name,
+                /* always written, never omitted when it is walk. The reader on
+                 * the game side has to be able to tell a boat from a body
+                 * without knowing which version of this tool wrote the file,
+                 * and an absent field would make it guess. */
+                kind: p.kind,
                 points: p.points,
                 closed: p.closed,
                 twoWay: p.twoWay,
@@ -5575,6 +5641,22 @@ export class Editor {
       if (p.closed) g.closePath()
       g.stroke()
       g.setLineDash([])
+      /* A LEG THAT CROSSES GROUND NOTHING CAN STAND ON, drawn over the top of
+       * the route in the same red check reach gives stranded ground. Only the
+       * selected route is checked: an author is correcting one line, and
+       * reddening every bad leg on the map at once would paint the hub. */
+      if (sel && p.kind === 'walk')
+        for (const i of this.crossings(p)) {
+          const a = pts[i]
+          const b = pts[(i + 1) % pts.length]
+          g.strokeStyle = PATH_BAD
+          g.lineWidth = 3.5
+          g.beginPath()
+          g.moveTo(a[0], a[1])
+          g.lineTo(b[0], b[1])
+          g.stroke()
+        }
+      g.strokeStyle = col
       g.fillStyle = col
       for (const q of pts) g.fillRect(Math.round(q[0]) - 2, Math.round(q[1]) - 2, 4, 4)
       /* the head sits on the last leg, and on the leg BACK to the first point

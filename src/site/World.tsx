@@ -7,10 +7,20 @@
  * water between the islands was therefore the one place nothing could be
  * placed, and every fact about it lived as a constant in the game repo.
  *
- * This is that surface. It is not a map and it has no painting: a coordinate
- * space with maps placed on it, drawn as a chart of an ocean rather than as a
- * form with numbers in it, because where an island sits relative to every other
- * island is a thing you judge by looking.
+ * This is that surface. It is not a map and it has no painting of its own: a
+ * coordinate space with maps placed on it, drawn as a chart of an ocean rather
+ * than as a form with numbers in it, because where an island sits relative to
+ * every other island is a thing you judge by looking.
+ *
+ * THE ISLANDS ARE DRAWN AS THEMSELVES, and the first pass of this page did not
+ * do that. It drew every place as a featureless rectangle, so the one job the
+ * chart has, putting a berth against the dock a ship ties up at, was impossible:
+ * the dock is painted into the island's own picture and the chart was not
+ * showing the picture. Ash's verdict on that was "i have no idea where
+ * specifically to place the berth". So each place now draws its published
+ * scene.png into its footprint, with the map's own anchors on top of it, and the
+ * chart zooms and pans, because the ocean is 4096 across and an island is 64 and
+ * at full extent it is a speck you cannot aim at.
  *
  * NO AUTOSAVE, unlike a map document. There is one world row shared by every
  * map on the platform, so a half-finished drag is not something to write into
@@ -45,6 +55,12 @@ type Place = {
 type Region = { name: string; kind: string; rect: [number, number, number, number]; label?: string }
 type Doc = { w: number; h: number; places: Place[]; regions: Region[] }
 
+/* What the registry hands back for one map. The x,y on an anchor is in that
+ * map's OWN pixel raster, the same raster scene.png is published at, which is
+ * what makes it drawable on this chart at all. */
+type Anchor = { name: string; kind: string; x: number; y: number; r?: number; to?: string; label?: string }
+type MapRow = { slug: string; w: number; h: number; version: number | null; anchors?: Anchor[] }
+
 type Sel = { kind: 'place' | 'region'; i: number } | null
 type Hit = { kind: 'place' | 'berth' | 'approach' | 'size' | 'region'; i: number } | null
 type Band = { x0: number; y0: number; x1: number; y1: number } | null
@@ -72,20 +88,40 @@ const SEA_INK: Record<string, string> = {
   mist: '#3b4654',
   ambience: '#3a3252',
 }
+/* the six anchor kinds mask.ts allows, each its own ink, because the whole
+ * reason to draw them here is to tell a door apart from a spawn at a glance
+ * while you are aiming a berth at one of them */
+const ANCHOR_INK: Record<string, string> = {
+  door: '#e2734a',
+  post: '#6fc2a6',
+  spawn: '#7fa8d8',
+  trigger: '#b07acc',
+  region: '#d4a53c',
+  point: '#c8d2dd',
+}
 const inkFor = (m: Record<string, string>, k: string) => m[k] || '#5b6470'
 
 const LABEL = '500 11px "Archivo Narrow", sans-serif'
 const MONO = '400 9px "Martian Mono", monospace'
+const TINY = '400 8.5px "Martian Mono", monospace'
 const PAD = 36
 
-/* how far apart the graticule sits, aimed at roughly eight divisions across.
- * Powers of two, because every other number in this project is one and a chart
- * ruled at 437 reads as a rounding error. */
-const grat = (w: number) => {
-  let s = 256
-  while (w / s > 12) s *= 2
-  while (w / s < 4 && s > 16) s /= 2
-  return s
+// as far out as fitting the whole ocean, and as far in as one painted pixel
+// filling a fat screen pixel. Anything past that is not more information.
+const MAX_S = 48
+const SNAP = 11
+
+/* how far apart the graticule sits. It has to follow the ZOOM and not the
+ * ocean's width: ruled off doc.w alone the lines were 512 world units apart,
+ * which at any useful zoom is one line somewhere off the edge of the stage and
+ * a chart that looks unruled exactly when you are trying to place something
+ * precisely. Powers of two by construction, because every other number in this
+ * project is one. */
+const grat = (s: number) => {
+  let v = 4096
+  while (v * s > 130 && v > 1) v /= 2
+  while (v * s < 46) v *= 2
+  return v
 }
 
 const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi : v)
@@ -95,6 +131,58 @@ const freeName = (stem: string, taken: string[]) => {
   return `${stem}_${n}`
 }
 
+/* FIT WHAT IS ON THE WATER, NOT THE WATER.
+ *
+ * This fitted the whole 4096 ocean, which is right arithmetic and the wrong
+ * picture: an island is about sixty units across, so the one thing on the chart
+ * opened as an eleven pixel speck on an empty grid and the page looked exactly
+ * like the featureless grid it was rebuilt to stop being. Nothing in the
+ * default view suggested there were paintings in there at all, and finding out
+ * took a deliberate scroll-zoom nobody would think to perform.
+ *
+ * So the default frames the places, with their berths and approaches, and falls
+ * back to the whole ocean only when there is genuinely nothing placed yet. The
+ * margin is generous rather than tight because an author needs somewhere to
+ * drag a new island to. */
+const contentBox = (doc: Doc) => {
+  let x0 = Infinity
+  let y0 = Infinity
+  let x1 = -Infinity
+  let y1 = -Infinity
+  for (const p of doc.places) {
+    x0 = Math.min(x0, p.x)
+    y0 = Math.min(y0, p.y)
+    x1 = Math.max(x1, p.x + p.w)
+    y1 = Math.max(y1, p.y + p.h)
+    for (const m of [p.berth, p.approach]) {
+      if (!m) continue
+      x0 = Math.min(x0, m.x)
+      y0 = Math.min(y0, m.y)
+      x1 = Math.max(x1, m.x)
+      y1 = Math.max(y1, m.y)
+    }
+  }
+  for (const r of doc.regions) {
+    const [a, b, c, d] = r.rect
+    x0 = Math.min(x0, a, c)
+    y0 = Math.min(y0, b, d)
+    x1 = Math.max(x1, a, c)
+    y1 = Math.max(y1, b, d)
+  }
+  if (!isFinite(x0)) return null
+  // half an island of air on every side, so there is water to drag into
+  const padX = Math.max(48, (x1 - x0) * 0.6)
+  const padY = Math.max(48, (y1 - y0) * 0.6)
+  return { x: x0 - padX, y: y0 - padY, w: x1 - x0 + padX * 2, h: y1 - y0 + padY * 2 }
+}
+
+const fitOf = (doc: Doc, size: { w: number; h: number }): Fit => {
+  if (!size.w || !size.h) return { s: 1, ox: 0, oy: 0 }
+  const box = contentBox(doc) || { x: 0, y: 0, w: doc.w, h: doc.h }
+  const s = Math.min((size.w - PAD * 2) / box.w, (size.h - PAD * 2) / box.h)
+  return { s, ox: size.w / 2 - (box.x + box.w / 2) * s, oy: size.h / 2 - (box.y + box.h / 2) * s }
+}
+
 const FACE_GRID = [
   ['north-west', 'north', 'north-east'],
   ['west', '', 'east'],
@@ -102,11 +190,51 @@ const FACE_GRID = [
 ]
 const FACE_ARROW = '↖↑↗←·→↙↓↘'
 
+/* Where one map's anchor lands on the ocean.
+ *
+ * Through the REGISTRY's w/h and not through the loaded png's natural size,
+ * even though today they are the same 688x640. The registry row is live and the
+ * png is a published version, so a map grown since its last publish would put
+ * the anchors in one space and the picture in another. Mapping both through the
+ * same numbers keeps the dots on the picture whatever happens; when the two
+ * disagree the picture stretches, which is visible, instead of the dots
+ * drifting, which is not. */
+const anchorAt = (p: Place, m: MapRow, a: Anchor) => ({
+  x: p.x + (a.x / Math.max(1, m.w)) * p.w,
+  y: p.y + (a.y / Math.max(1, m.h)) * p.h,
+})
+
 /* ---- the chart ----------------------------------------------------------- */
 
-function paint(c: CanvasRenderingContext2D, size: { w: number; h: number }, doc: Doc, fit: Fit, sel: Sel, hover: Hit, band: Band) {
+type Art = Map<string, HTMLImageElement>
+type Scene = {
+  doc: Doc
+  fit: Fit
+  sel: Sel
+  hover: Hit
+  band: Band
+  reg: Map<string, MapRow>
+  art: Art
+  marks: boolean
+  aim: string
+}
+
+function paint(c: CanvasRenderingContext2D, size: { w: number; h: number }, sc: Scene) {
+  const { doc, fit, sel, hover, band, reg, art, marks, aim } = sc
   const X = (x: number) => fit.ox + x * fit.s
   const Y = (y: number) => fit.oy + y * fit.s
+
+  // a label sitting on a painting was unreadable, so every word on this chart
+  // gets a dark rim first and the fill second
+  const say = (t: string, x: number, y: number, fill: string) => {
+    c.lineJoin = 'round'
+    c.lineWidth = 3
+    c.strokeStyle = 'rgba(7,11,17,0.9)'
+    c.strokeText(t, x, y)
+    c.lineWidth = 1
+    c.fillStyle = fill
+    c.fillText(t, x, y)
+  }
 
   c.fillStyle = '#070b11'
   c.fillRect(0, 0, size.w, size.h)
@@ -114,18 +242,24 @@ function paint(c: CanvasRenderingContext2D, size: { w: number; h: number }, doc:
   c.fillRect(X(0), Y(0), doc.w * fit.s, doc.h * fit.s)
 
   // the graticule, which is the whole reason this reads as a chart and not as
-  // a dark box with rectangles on it
-  const step = grat(doc.w)
+  // a dark box with rectangles on it. Only the part of it the stage can see:
+  // at full zoom the whole ocean is 4096/8 lines and drawing them all is work
+  // thrown away against the clip.
+  const step = grat(fit.s)
+  const gx0 = Math.max(0, Math.floor((0 - fit.ox) / fit.s / step) * step)
+  const gx1 = Math.min(doc.w, (size.w - fit.ox) / fit.s)
+  const gy0 = Math.max(0, Math.floor((0 - fit.oy) / fit.s / step) * step)
+  const gy1 = Math.min(doc.h, (size.h - fit.oy) / fit.s)
   c.strokeStyle = 'rgba(212,165,60,0.075)'
   c.lineWidth = 1
   c.beginPath()
-  for (let x = step; x < doc.w; x += step) {
-    c.moveTo(Math.round(X(x)) + 0.5, Y(0))
-    c.lineTo(Math.round(X(x)) + 0.5, Y(doc.h))
+  for (let x = Math.max(step, gx0); x < gx1; x += step) {
+    c.moveTo(Math.round(X(x)) + 0.5, Math.max(0, Y(0)))
+    c.lineTo(Math.round(X(x)) + 0.5, Math.min(size.h, Y(doc.h)))
   }
-  for (let y = step; y < doc.h; y += step) {
-    c.moveTo(X(0), Math.round(Y(y)) + 0.5)
-    c.lineTo(X(doc.w), Math.round(Y(y)) + 0.5)
+  for (let y = Math.max(step, gy0); y < gy1; y += step) {
+    c.moveTo(Math.max(0, X(0)), Math.round(Y(y)) + 0.5)
+    c.lineTo(Math.min(size.w, X(doc.w)), Math.round(Y(y)) + 0.5)
   }
   c.stroke()
 
@@ -147,17 +281,79 @@ function paint(c: CanvasRenderingContext2D, size: { w: number; h: number }, doc:
     c.strokeRect(rx + 0.5, ry + 0.5, rw, rh)
     c.setLineDash([])
     c.font = MONO
-    c.fillStyle = 'rgba(216,227,238,0.5)'
-    c.fillText(`${r.name} · ${r.kind}`, rx + 6, ry + 13)
+    say(`${r.name} · ${r.kind}`, rx + 6, ry + 13, 'rgba(216,227,238,0.6)')
   }
 
-  for (let i = 0; i < doc.places.length; i++) {
+  /* TWO PASSES OVER THE ISLANDS, and the split is the point.
+   *
+   * Everything painted goes down first and everything you aim with goes on top,
+   * so a neighbouring island's picture can never cover the berth diamond you are
+   * trying to drag. One pass had the rectangle drawn over its own release ring
+   * already; with a whole painting in that rectangle it would have swallowed the
+   * marks outright. */
+  const shot = (i: number) => {
     const p = doc.places[i]
+    const m = p.map ? reg.get(p.map) : undefined
+    const img = m && m.version ? art.get(`${p.map}@${m.version}`) : undefined
+    const px = X(p.x)
+    const py = Y(p.y)
+    const rw = Math.max(3, p.w * fit.s)
+    const rh = Math.max(3, p.h * fit.s)
+    const on = sel?.kind === 'place' && sel.i === i
+    const lit = on || (hover?.i === i && hover.kind !== 'region')
+    const tint = inkFor(STATE_INK, p.state)
+
+    if (img && img.complete && img.naturalWidth) {
+      /* AT CHART SCALE THE PAINTING IS BACKED BY THE STATE INK, and only there.
+       *
+       * A 688 wide island sampled into fourteen screen pixels is a grey smudge
+       * you cannot find, and the whole ocean fitted on a laptop is the view the
+       * page opens in. Under about twenty six pixels the block of state colour
+       * is the more useful drawing and the painting rides on top of it; past
+       * that the tint comes off entirely, because a wash at even a tenth covers
+       * the transparent sea the island is cut out of and turns the hub into a
+       * green box with a coastline you can no longer see the edge of. */
+      const tiny = rw < 26
+      if (tiny) {
+        c.globalAlpha = lit ? 0.75 : 0.55
+        c.fillStyle = tint
+        c.fillRect(px, py, rw, rh)
+        c.globalAlpha = 1
+      }
+      // nearest neighbour on the way up, because it is pixel art and smoothing
+      // it turns a jetty into a smudge. Smoothing on the way down, because a
+      // 688 wide painting sampled into 14 screen pixels with nearest is noise.
+      c.imageSmoothingEnabled = rw < img.naturalWidth
+      c.drawImage(img, px, py, rw, rh)
+      c.imageSmoothingEnabled = true
+    } else {
+      c.fillStyle = tint
+      c.globalAlpha = lit ? 0.3 : 0.18
+      c.fillRect(px, py, rw, rh)
+      c.globalAlpha = 1
+    }
+
+    // an empty slot is drawn as a dashed outline, because it is a position the
+    // chart is holding open and not a coast anybody has painted
+    c.setLineDash(p.map ? [] : [4, 3])
+    c.strokeStyle = on ? '#f0c869' : tint
+    c.lineWidth = on ? 2 : 1
+    c.strokeRect(px + 0.5, py + 0.5, rw, rh)
+    c.lineWidth = 1
+    c.setLineDash([])
+  }
+
+  const rig = (i: number) => {
+    const p = doc.places[i]
+    const m = p.map ? reg.get(p.map) : undefined
+    const drawn = !!(m && m.version && art.get(`${p.map}@${m.version}`)?.naturalWidth)
     const on = sel?.kind === 'place' && sel.i === i
     const lit = on || (hover?.i === i && hover.kind !== 'region')
     const tint = inkFor(STATE_INK, p.state)
     const px = X(p.x)
     const py = Y(p.y)
+    const rw = Math.max(3, p.w * fit.s)
+    const rh = Math.max(3, p.h * fit.s)
 
     /* THE RING IS DRAWN FROM x,y AND NOT FROM THE MIDDLE OF THE RECTANGLE.
      * checkWorld measures the berth distance with hypot(berth - x,y), so a ring
@@ -173,63 +369,6 @@ function paint(c: CanvasRenderingContext2D, size: { w: number; h: number }, doc:
     c.setLineDash([])
     c.globalAlpha = 1
 
-    // a berth and an approach are separate marks tied back to the island they
-    // belong to, so a chart full of them still says which is whose
-    for (const m of [p.approach, p.berth]) {
-      if (!m) continue
-      c.beginPath()
-      c.moveTo(px, py)
-      c.lineTo(X(m.x), Y(m.y))
-      c.strokeStyle = tint
-      c.globalAlpha = 0.35
-      c.stroke()
-      c.globalAlpha = 1
-    }
-    if (p.approach) {
-      c.beginPath()
-      c.arc(X(p.approach.x), Y(p.approach.y), 4.5, 0, Math.PI * 2)
-      c.strokeStyle = '#8fa6bb'
-      c.stroke()
-    }
-    if (p.berth) {
-      const bx = X(p.berth.x)
-      const by = Y(p.berth.y)
-      c.beginPath()
-      c.moveTo(bx, by - 5)
-      c.lineTo(bx + 5, by)
-      c.lineTo(bx, by + 5)
-      c.lineTo(bx - 5, by)
-      c.closePath()
-      c.fillStyle = '#f0c869'
-      c.fill()
-      // the heading a hull holds once it is tied up, as a tick off the diamond
-      const face = p.berth.facing || ''
-      const dx = face.includes('east') ? 1 : face.includes('west') ? -1 : 0
-      const dy = face.includes('south') ? 1 : face.includes('north') ? -1 : 0
-      if (dx || dy) {
-        c.beginPath()
-        c.moveTo(bx, by)
-        c.lineTo(bx + dx * 13, by + dy * 13)
-        c.strokeStyle = '#f0c869'
-        c.stroke()
-      }
-    }
-
-    const rw = Math.max(3, p.w * fit.s)
-    const rh = Math.max(3, p.h * fit.s)
-    c.fillStyle = tint
-    c.globalAlpha = lit ? 0.3 : 0.18
-    c.fillRect(px, py, rw, rh)
-    c.globalAlpha = 1
-    // an empty slot is drawn as a dashed outline, because it is a position the
-    // chart is holding open and not a coast anybody has painted
-    c.setLineDash(p.map ? [] : [4, 3])
-    c.strokeStyle = on ? '#f0c869' : tint
-    c.lineWidth = on ? 2 : 1
-    c.strokeRect(px + 0.5, py + 0.5, rw, rh)
-    c.lineWidth = 1
-    c.setLineDash([])
-
     c.strokeStyle = tint
     c.beginPath()
     c.moveTo(px - 5, py)
@@ -238,22 +377,139 @@ function paint(c: CanvasRenderingContext2D, size: { w: number; h: number }, doc:
     c.lineTo(px, py + 5)
     c.stroke()
 
+    /* THE MARKS THE MAP ITSELF CARRIES, which is the thing a berth is aimed at.
+     *
+     * Held back until the island is wide enough on screen to tell one from
+     * another. Nine dots crowded into fourteen pixels is not a dock you can
+     * point at, it is a smear that hides the coast. */
+    if (m && marks && rw > 54) {
+      const named = rw > 130
+      for (const a of m.anchors || []) {
+        const w = anchorAt(p, m, a)
+        const ax = X(w.x)
+        const ay = Y(w.y)
+        const key = `${p.name}/${a.name}`
+        const hot = aim === key
+        const ink = inkFor(ANCHOR_INK, a.kind)
+        // its reach, when it has one, in the map's own pixels scaled onto the
+        // ocean, so a door with r 14 reads as the area it really covers
+        if (a.r) {
+          c.beginPath()
+          c.arc(ax, ay, (a.r / Math.max(1, m.w)) * p.w * fit.s, 0, Math.PI * 2)
+          c.strokeStyle = ink
+          c.globalAlpha = 0.3
+          c.stroke()
+          c.globalAlpha = 1
+        }
+        c.beginPath()
+        c.arc(ax, ay, hot ? 6 : 3.6, 0, Math.PI * 2)
+        c.lineWidth = 3
+        c.strokeStyle = 'rgba(7,11,17,0.9)'
+        c.stroke()
+        c.lineWidth = hot ? 2 : 1.4
+        c.strokeStyle = hot ? '#f0c869' : ink
+        c.stroke()
+        c.lineWidth = 1
+        if (named || hot) {
+          c.font = TINY
+          say(a.label || a.name, ax + 8, ay + 3, hot ? '#f0c869' : ink)
+        }
+      }
+    }
+
+    // a berth and an approach are separate marks tied back to the island they
+    // belong to, so a chart full of them still says which is whose
+    for (const k of [p.approach, p.berth]) {
+      if (!k) continue
+      c.beginPath()
+      c.moveTo(px, py)
+      c.lineTo(X(k.x), Y(k.y))
+      c.strokeStyle = tint
+      c.globalAlpha = 0.35
+      c.stroke()
+      c.globalAlpha = 1
+    }
+    if (p.approach) {
+      const ax = X(p.approach.x)
+      const ay = Y(p.approach.y)
+      c.beginPath()
+      c.arc(ax, ay, 5, 0, Math.PI * 2)
+      c.lineWidth = 3.4
+      c.strokeStyle = 'rgba(7,11,17,0.9)'
+      c.stroke()
+      c.lineWidth = 1.4
+      c.strokeStyle = '#8fa6bb'
+      c.stroke()
+      c.lineWidth = 1
+    }
+    if (p.berth) {
+      /* DRAWN IN SCREEN PIXELS, WITH A RIM, AT EVERY ZOOM.
+       * The mark exists to be aimed and then found again. Sized in world units
+       * it is a grain of sand fitted out and a dinner plate zoomed in, and laid
+       * flat on a painting with no rim it disappears into whatever colour the
+       * jetty happens to be. */
+      const bx = X(p.berth.x)
+      const by = Y(p.berth.y)
+      const face = p.berth.facing || ''
+      const dx = face.includes('east') ? 1 : face.includes('west') ? -1 : 0
+      const dy = face.includes('south') ? 1 : face.includes('north') ? -1 : 0
+      if (dx || dy) {
+        c.beginPath()
+        c.moveTo(bx, by)
+        c.lineTo(bx + dx * 15, by + dy * 15)
+        c.lineWidth = 4
+        c.strokeStyle = 'rgba(7,11,17,0.9)'
+        c.stroke()
+        c.lineWidth = 1.6
+        c.strokeStyle = '#f0c869'
+        c.stroke()
+        c.lineWidth = 1
+      }
+      c.beginPath()
+      c.moveTo(bx, by - 6)
+      c.lineTo(bx + 6, by)
+      c.lineTo(bx, by + 6)
+      c.lineTo(bx - 6, by)
+      c.closePath()
+      c.lineWidth = 3.4
+      c.lineJoin = 'round'
+      c.strokeStyle = 'rgba(7,11,17,0.9)'
+      c.stroke()
+      c.lineWidth = 1
+      c.fillStyle = '#f0c869'
+      c.fill()
+    }
+
     // the name goes above the rectangle, or below it when the rectangle is
-    // near the top edge and the label would be drawn off the chart
-    const say = p.title || p.name
-    const above = py - 7 > PAD
+    // near the top edge and the label would be drawn off the stage
+    const title = p.title || p.name
+    const above = py - 7 > 22
+    const ly = above ? py - 7 : py + rh + 14
+    // the state, as a chip, once the footprint stopped being a slab of state
+    // ink you could read it off. Only where a painting took that job away.
+    const chip = drawn ? 11 : 0
+    if (chip) {
+      c.fillStyle = 'rgba(7,11,17,0.9)'
+      c.fillRect(px - 1, ly - 9, 9, 9)
+      c.fillStyle = tint
+      c.fillRect(px, ly - 8, 7, 7)
+    }
     c.font = LABEL
-    c.fillStyle = on ? '#f0c869' : '#d8e3ee'
-    c.fillText(say, px, above ? py - 7 : py + rh + 14)
+    say(title, px + chip, ly, on ? '#f0c869' : '#d8e3ee')
     c.font = MONO
-    c.fillStyle = '#6f7885'
-    c.fillText(p.map || 'no map yet', px, above ? py - 20 : py + rh + 25)
+    say(p.map || 'no map yet', px + chip, above ? py - 20 : py + rh + 25, '#8d97a4')
 
     if (on) {
       c.fillStyle = '#f0c869'
       c.fillRect(px + rw - 4, py + rh - 4, 8, 8)
     }
   }
+
+  for (let i = 0; i < doc.places.length; i++) shot(i)
+  // the second pass always runs. Only the map's OWN anchors answer to the marks
+  // toggle, inside rig: a button labelled "marks" that also took away the berth
+  // and the island's name is a button nobody would press twice.
+  for (let i = 0; i < doc.places.length; i++) rig(i)
 
   if (band) {
     c.setLineDash([4, 3])
@@ -267,10 +523,9 @@ function paint(c: CanvasRenderingContext2D, size: { w: number; h: number }, doc:
   c.strokeStyle = 'rgba(212,165,60,0.45)'
   c.strokeRect(X(0) + 0.5, Y(0) + 0.5, doc.w * fit.s, doc.h * fit.s)
   c.font = MONO
-  c.fillStyle = '#6f7885'
-  c.fillText('0,0', X(0), Y(0) - 6)
+  say('0,0', X(0), Y(0) - 6, '#6f7885')
   const end = `${doc.w},${doc.h}`
-  c.fillText(end, X(doc.w) - c.measureText(end).width, Y(doc.h) + 14)
+  say(end, X(doc.w) - c.measureText(end).width, Y(doc.h) + 14, '#6f7885')
 }
 
 /* What is under the pointer, tested in the order things are drawn on top of
@@ -288,8 +543,8 @@ function under(doc: Doc, fit: Fit, sel: Sel, mx: number, my: number): Hit {
   }
   for (let i = doc.places.length - 1; i >= 0; i--) {
     const p = doc.places[i]
-    if (p.berth && near(p.berth.x, p.berth.y, 8)) return { kind: 'berth', i }
-    if (p.approach && near(p.approach.x, p.approach.y, 8)) return { kind: 'approach', i }
+    if (p.berth && near(p.berth.x, p.berth.y, 9)) return { kind: 'berth', i }
+    if (p.approach && near(p.approach.x, p.approach.y, 9)) return { kind: 'approach', i }
   }
   for (let i = doc.places.length - 1; i >= 0; i--) {
     const p = doc.places[i]
@@ -311,7 +566,7 @@ export default function World() {
   const [doc, setDoc] = useState<Doc | null>(null)
   const [states, setStates] = useState<string[]>([])
   const [kinds, setKinds] = useState<string[]>([])
-  const [slugs, setSlugs] = useState<string[]>([])
+  const [reg, setReg] = useState<Map<string, MapRow>>(new Map())
   const [why, setWhy] = useState('')
   const [sel, setSel] = useState<Sel>(null)
   const [tool, setTool] = useState<Tool>('move')
@@ -323,11 +578,17 @@ export default function World() {
   const [problems, setProblems] = useState<string[]>([])
   const [warnings, setWarnings] = useState<string[]>([])
   const [size, setSize] = useState({ w: 0, h: 0 })
-  const [inked, setInked] = useState(false)
+  const [ink, setInk] = useState(0)
+  const [view, setView] = useState<Fit | null>(null)
+  const [marks, setMarks] = useState(true)
+  const [aim, setAim] = useState('')
+  const [lock, setLock] = useState(true)
 
   const box = useRef<HTMLDivElement>(null)
   const cv = useRef<HTMLCanvasElement>(null)
+  const art = useRef<Art>(new Map())
   const drag = useRef<{ kind: 'place' | 'berth' | 'approach' | 'size'; i: number; dx: number; dy: number } | null>(null)
+  const pan = useRef<{ mx: number; my: number; ox: number; oy: number; far: number } | null>(null)
   const bandFrom = useRef<{ x: number; y: number } | null>(null)
 
   useEffect(() => {
@@ -341,16 +602,39 @@ export default function World() {
       .catch((e) => setWhy(String((e as Error).message || e)))
   }, [])
 
-  /* THE DROPDOWN IS FED FROM THE PUBLISHED MAPS SO A TYPO CANNOT NAME AN
-   * ISLAND THAT DOES NOT EXIST. Empty stays offered on purpose: cleanPlace
-   * takes an empty map, and that is the whole of the empty-slot ask, a position
-   * holding no bundle that reads as a rumour. */
+  /* THE REGISTRY FEEDS EVERYTHING ON THIS PAGE, not just the dropdown.
+   *
+   * It is asked with=anchors, which is the one request that carries the whole
+   * door graph. What comes back gives the map list a typo cannot escape, the
+   * published version each painting is fetched at, the real shape of each
+   * painting so a footprint is not a made-up square, and the marks that get
+   * drawn on the island so a berth has something to aim at. Empty stays offered
+   * on purpose: cleanPlace takes an empty map, and that is the whole of the
+   * empty-slot ask, a position holding no bundle that reads as a rumour. */
   useEffect(() => {
-    fetch('/api/v1/maps')
+    fetch('/api/v1/maps?with=anchors')
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((j: { maps?: Array<{ slug: string }> }) => setSlugs((j.maps || []).map((m) => m.slug)))
-      .catch(() => setSlugs([]))
+      .then((j: { maps?: MapRow[] }) => setReg(new Map((j.maps || []).map((m) => [m.slug, m]))))
+      .catch(() => setReg(new Map()))
   }, [])
+
+  /* The paintings, one fetch each, kept by slug AND version so a republish is
+   * a different picture rather than a stale one held forever. A load failure is
+   * left in the map on purpose: deleting the entry would make the next render
+   * ask again, and a 404 would then be re-requested on every repaint. */
+  const places = doc?.places
+  useEffect(() => {
+    for (const p of places || []) {
+      const m = p.map ? reg.get(p.map) : undefined
+      if (!m || !m.version) continue
+      const key = `${p.map}@${m.version}`
+      if (art.current.has(key)) continue
+      const img = new Image()
+      art.current.set(key, img)
+      img.onload = () => setInk((n) => n + 1)
+      img.src = `/api/v1/maps/${encodeURIComponent(p.map)}/file/${m.version}/scene.png`
+    }
+  }, [places, reg])
 
   // the stage is only in the dom once the world has answered, so this has to
   // run again on that transition and not only on mount
@@ -369,14 +653,16 @@ export default function World() {
   // and every name on the chart is drawn in the fallback until you touch
   // something. One redraw when the fonts settle costs nothing.
   useEffect(() => {
-    document.fonts?.ready.then(() => setInked(true)).catch(() => {})
+    document.fonts?.ready.then(() => setInk((n) => n + 1)).catch(() => {})
   }, [])
 
-  const fit: Fit = useMemo(() => {
-    if (!doc || !size.w || !size.h) return { s: 1, ox: 0, oy: 0 }
-    const s = Math.min((size.w - PAD * 2) / doc.w, (size.h - PAD * 2) / doc.h)
-    return { s, ox: (size.w - doc.w * s) / 2, oy: (size.h - doc.h * s) / 2 }
-  }, [doc, size])
+  /* The whole ocean on the stage, which is where the chart starts and what the
+   * fit button goes back to. Held as the FLOOR of the zoom as well, because
+   * further out than the whole ocean is a chart of nothing. */
+  const dw = doc?.w
+  const dh = doc?.h
+  const base: Fit = useMemo(() => (dw && dh ? fitOf({ w: dw, h: dh, places: [], regions: [] }, size) : { s: 1, ox: 0, oy: 0 }), [dw, dh, size])
+  const fit = view ?? base
 
   useEffect(() => {
     const el = cv.current
@@ -387,11 +673,108 @@ export default function World() {
     const c = el.getContext('2d')
     if (!c) return
     c.setTransform(dpr, 0, 0, dpr, 0, 0)
-    paint(c, size, doc, fit, sel, hover, band)
-  }, [doc, size, fit, sel, hover, band, inked])
+    paint(c, size, { doc, fit, sel, hover, band, reg, art: art.current, marks, aim })
+  }, [doc, size, fit, sel, hover, band, reg, marks, aim, ink])
+
+  /* ZOOM ABOUT A POINT, which is the only kind worth having here. Zooming about
+   * the middle of the stage means the island you were looking at slides away
+   * while you scroll, and you spend the zoom chasing it. */
+  const zoomAt = useCallback(
+    (mx: number, my: number, k: number) => {
+      setView((v) => {
+        const f = v || base
+        const s = clamp(f.s * k, base.s, MAX_S)
+        if (Math.abs(s - f.s) < 1e-9) return v
+        return { s, ox: mx - (mx - f.ox) * (s / f.s), oy: my - (my - f.oy) * (s / f.s) }
+      })
+    },
+    [base],
+  )
+
+  /* A NATIVE LISTENER, because React binds wheel passively at the root and
+   * preventDefault inside an onWheel prop does nothing. Without the
+   * preventDefault the page scrolls behind the chart while you zoom. */
+  useEffect(() => {
+    const el = cv.current
+    if (!el) return
+    const spin = (e: WheelEvent) => {
+      e.preventDefault()
+      const r = el.getBoundingClientRect()
+      const d = e.deltaY * (e.deltaMode === 1 ? 16 : 1)
+      zoomAt(e.clientX - r.left, e.clientY - r.top, Math.exp(-d * 0.0018))
+    }
+    el.addEventListener('wheel', spin, { passive: false })
+    return () => el.removeEventListener('wheel', spin)
+  }, [zoomAt, ready])
+
+  /* THE VIEW THAT OPENS, AND WHAT "fit" MEANS.
+   *
+   * `base` is the whole 4096 ocean and stays that way, because it is the zoom
+   * FLOOR and pulling back to the whole water has to remain possible. It is the
+   * wrong thing to OPEN on: an island is about sixty units across, so the chart
+   * opened as an empty grid with the hub an eleven pixel speck, which is the
+   * exact featureless grid this page was rebuilt to stop being. Nothing in that
+   * view suggested there were paintings in it.
+   *
+   * Written as a real view rather than left as null, because a null view would
+   * be recomputed from the document and the stage would jump under the cursor
+   * every time an island was dragged. */
+  const frameAll = useCallback(() => {
+    if (!doc || !size.w || !size.h) return
+    const b = contentBox(doc)
+    if (!b) return setView(null)
+    const s = clamp(Math.min((size.w - PAD * 2) / b.w, (size.h - PAD * 2) / b.h), base.s, MAX_S)
+    setView({ s, ox: size.w / 2 - (b.x + b.w / 2) * s, oy: size.h / 2 - (b.y + b.h / 2) * s })
+  }, [doc, size, base.s])
+
+  // once, when the water first arrives with something on it
+  const opened = useRef(false)
+  useEffect(() => {
+    if (opened.current || !doc || !size.w || !doc.places.length) return
+    opened.current = true
+    frameAll()
+  }, [doc, size, frameAll])
 
   const place = doc && sel?.kind === 'place' ? doc.places[sel.i] : null
   const region = doc && sel?.kind === 'region' ? doc.regions[sel.i] : null
+  const sheet = place && place.map ? reg.get(place.map) : undefined
+
+  // fill the stage with the selected island and everything tied to it, which is
+  // the one move that gets you from the whole ocean to a jetty
+  const frame = useCallback(() => {
+    if (!place || !size.w) return
+    let x0 = place.x
+    let y0 = place.y
+    let x1 = place.x + place.w
+    let y1 = place.y + place.h
+    for (const m of [place.berth, place.approach]) {
+      if (!m) continue
+      x0 = Math.min(x0, m.x)
+      y0 = Math.min(y0, m.y)
+      x1 = Math.max(x1, m.x)
+      y1 = Math.max(y1, m.y)
+    }
+    const mw = Math.max(8, x1 - x0)
+    const mh = Math.max(8, y1 - y0)
+    const s = clamp(Math.min((size.w - PAD * 3) / mw, (size.h - PAD * 3) / mh), base.s, MAX_S)
+    setView({ s, ox: size.w / 2 - (x0 + mw / 2) * s, oy: size.h / 2 - (y0 + mh / 2) * s })
+  }, [place, size, base.s])
+
+  /* the screen point the ± buttons pull toward: the selected island if there is
+   * one, otherwise the middle of everything placed, and only the bare middle of
+   * the stage when the water is genuinely empty */
+  const holdPt = useMemo<[number, number]>(() => {
+    const t = place
+      ? { x: place.x + place.w / 2, y: place.y + place.h / 2 }
+      : doc && doc.places.length
+        ? (() => {
+            const b = contentBox(doc)
+            return b ? { x: b.x + b.w / 2, y: b.y + b.h / 2 } : null
+          })()
+        : null
+    if (!t) return [size.w / 2, size.h / 2]
+    return [t.x * fit.s + fit.ox, t.y * fit.s + fit.oy]
+  }, [place, doc, fit, size])
 
   const edit = useCallback((i: number, patch: Partial<Place>) => {
     setDoc((d) => (d ? { ...d, places: d.places.map((p, k) => (k === i ? { ...p, ...patch } : p)) } : d))
@@ -435,17 +818,56 @@ export default function World() {
   }
   const toWorld = (mx: number, my: number) => ({ x: (mx - fit.ox) / fit.s, y: (my - fit.oy) / fit.s })
 
+  /* THE ANCHOR THE POINTER IS AIMED AT, IF ANY.
+   *
+   * Eleven screen pixels, which is a deliberate aim and not a nudge you can
+   * make by accident. This is what turns "somewhere near the coast" into "at
+   * the dock": a door or a post is a real mark on the painting, so a berth put
+   * exactly on one is a berth against the thing the author drew. It is offered
+   * and never forced, because a mooring usually wants to sit in the water just
+   * off the mark rather than on top of it. */
+  const aimed = useCallback(
+    (p: Place, mx: number, my: number) => {
+      const m = p.map ? reg.get(p.map) : undefined
+      if (!m || !marks || p.w * fit.s <= 54) return null
+      for (const a of m.anchors || []) {
+        const w = anchorAt(p, m, a)
+        if (Math.hypot(mx - (fit.ox + w.x * fit.s), my - (fit.oy + w.y * fit.s)) <= SNAP) return { a, w }
+      }
+      return null
+    },
+    [reg, marks, fit],
+  )
+
   const down = (e: React.PointerEvent<HTMLCanvasElement>) => {
     if (!doc) return
     const { mx, my } = at(e)
     const w = toWorld(mx, my)
-    e.currentTarget.setPointerCapture(e.pointerId)
+    // capture so a drag that leaves the stage keeps reporting, and swallow the
+    // failure rather than letting it take the whole press with it: a pointer id
+    // the browser has already released throws here, and an exception thrown on
+    // the first line of a pointerdown means nothing below it ever runs
+    try {
+      e.currentTarget.setPointerCapture(e.pointerId)
+    } catch {
+      /* the press still works uncaptured */
+    }
+
+    // the middle button pans whatever tool is up, the way it does in every
+    // other canvas anybody has used
+    if (e.button === 1) {
+      pan.current = { mx, my, ox: fit.ox, oy: fit.oy, far: 0 }
+      return
+    }
 
     // setting a mark by clicking the water. It is a mode rather than a drag,
     // because the point being set is usually nowhere near the island and a drag
     // out of the inspector cannot cross the panel edge.
     if (pick && place && sel?.kind === 'place') {
-      const spot = { x: clamp(Math.round(w.x), 0, doc.w), y: clamp(Math.round(w.y), 0, doc.h) }
+      const hitA = aimed(place, mx, my)
+      const spot = hitA
+        ? { x: Math.round(hitA.w.x), y: Math.round(hitA.w.y) }
+        : { x: clamp(Math.round(w.x), 0, doc.w), y: clamp(Math.round(w.y), 0, doc.h) }
       edit(sel.i, pick === 'berth' ? { berth: { ...spot, ...(place.berth?.facing ? { facing: place.berth.facing } : {}) } } : { approach: spot })
       setPick('')
       return
@@ -481,7 +903,11 @@ export default function World() {
 
     const hit = under(doc, fit, sel, mx, my)
     if (!hit) {
-      setSel(null)
+      /* EMPTY WATER DRAGS THE CHART, and only DESELECTS if the pointer did not
+       * really move. Zoomed in, panning is the thing you do most, and reaching
+       * for a scrollbar that is not there was the first thing that made this
+       * page feel broken. */
+      pan.current = { mx, my, ox: fit.ox, oy: fit.oy, far: 0 }
       return
     }
     if (hit.kind === 'region') {
@@ -499,6 +925,12 @@ export default function World() {
     const { mx, my } = at(e)
     const w = toWorld(mx, my)
 
+    const pn = pan.current
+    if (pn) {
+      pn.far = Math.max(pn.far, Math.hypot(mx - pn.mx, my - pn.my))
+      setView({ s: fit.s, ox: pn.ox + (mx - pn.mx), oy: pn.oy + (my - pn.my) })
+      return
+    }
     if (bandFrom.current) {
       setBand({ x0: bandFrom.current.x, y0: bandFrom.current.y, x1: w.x, y1: w.y })
       return
@@ -509,6 +941,9 @@ export default function World() {
       // movement is a new object and a full repaint of the chart
       const h = under(doc, fit, sel, mx, my)
       setHover((v) => (v?.kind === h?.kind && v?.i === h?.i ? v : h))
+      // and the anchor the cursor would snap a berth to, lit while you decide
+      const p = pick && place ? aimed(place, mx, my) : null
+      setAim(p && place ? `${place.name}/${p.a.name}` : '')
       return
     }
     const x = clamp(Math.round(w.x - d.dx), 0, doc.w)
@@ -516,10 +951,25 @@ export default function World() {
     if (d.kind === 'place') shift(d.i, x, y)
     else if (d.kind === 'berth') edit(d.i, { berth: { ...doc.places[d.i].berth, x, y } as Pt })
     else if (d.kind === 'approach') edit(d.i, { approach: { x, y } })
-    else edit(d.i, { w: Math.max(1, x - doc.places[d.i].x), h: Math.max(1, y - doc.places[d.i].y) })
+    else {
+      const p0 = doc.places[d.i]
+      const m = p0.map ? reg.get(p0.map) : undefined
+      const nw = Math.max(1, x - p0.x)
+      // the handle honours the same lock the inspector does, so dragging a
+      // footprint cannot quietly squash the painting inside it
+      edit(d.i, lock && m && m.w && m.h ? { w: nw, h: Math.max(1, Math.round((nw * m.h) / m.w)) } : { w: nw, h: Math.max(1, y - p0.y) })
+    }
   }
 
   const up = () => {
+    const pn = pan.current
+    if (pn) {
+      // a press that went nowhere is a click on open water, which clears the
+      // selection the way it always did
+      if (pn.far < 4) setSel(null)
+      pan.current = null
+      return
+    }
     if (bandFrom.current && band && doc) {
       // held inside the chart, because a drag that ran off the edge names water
       // that is not on the ocean and nothing would ever sail through it
@@ -602,7 +1052,18 @@ export default function World() {
       if (e.key === 'Escape') {
         setPick('')
         setTool('move')
+        setAim('')
+        return
       }
+      /* THE BARE KEYS STOP AT A FIELD, and the one that matters is zero. The
+       * inspector is full of number inputs, so an unguarded shortcut on 0 means
+       * typing a release of 160 throws the chart back out to the whole ocean
+       * halfway through. Ctrl+S and escape are above this on purpose: both are
+       * things you press while your hands are still in a field. */
+      const el = e.target as HTMLElement | null
+      if (el && /^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName)) return
+      if (e.key === 'f') frame()
+      if (e.key === '0') frameAll()
     }
     window.addEventListener('keydown', key)
     return () => window.removeEventListener('keydown', key)
@@ -633,6 +1094,8 @@ export default function World() {
       </div>
     )
   if (!doc) return <div className="world" />
+
+  const scale = fit.s >= 1 ? `${fit.s < 10 ? fit.s.toFixed(1) : Math.round(fit.s)}×` : `1:${Math.round(1 / fit.s)}`
 
   return (
     <div className="world">
@@ -688,21 +1151,60 @@ export default function World() {
           <canvas
             ref={cv}
             className="world-chart"
-            style={{ width: size.w || undefined, height: size.h || undefined, cursor: pick || tool !== 'move' ? 'crosshair' : 'default' }}
+            style={{
+              width: size.w || undefined,
+              height: size.h || undefined,
+              cursor: pick || tool !== 'move' ? 'crosshair' : pan.current ? 'grabbing' : 'default',
+            }}
             onPointerDown={down}
             onPointerMove={move}
             onPointerUp={up}
             onPointerCancel={up}
+            onDoubleClick={frame}
+            onAuxClick={(e) => e.preventDefault()}
           />
           <p className="world-hint">
             {pick
-              ? `click the water to put the ${pick} there · esc cancels`
+              ? aim
+                ? `snaps to ${aim.split('/')[1]} · click to put the ${pick} on it`
+                : `click the water to put the ${pick} there · a mark on the island snaps · esc cancels`
               : tool === 'place'
                 ? 'click open water to hold a position · esc cancels'
                 : tool === 'sea'
                   ? 'drag out the water you are naming · esc cancels'
-                  : 'drag an island to move it · its berth and its approach go with it'}
+                  : 'scroll to zoom · drag the water to pan · an island carries its berth'}
           </p>
+          {/* the chart is 4096 across and an island is 64, so without these the
+              page shows a speck and nothing can be aimed at anything */}
+          <div className="world-zoom">
+            {/* THE BUTTONS ZOOM WHERE THE WHEEL DOES, which is not the middle of
+                an empty screen. Anchoring on the viewport centre marched the one
+                island straight off the top of the stage in two presses, because
+                the island sits wherever it sits and the centre is just water. The
+                wheel was already cursor-anchored and correct, so the discoverable
+                control was the worse of the two. Both now pull toward whatever is
+                selected, or toward everything that is placed. */}
+            <button className="world-zbtn" onClick={() => zoomAt(...holdPt, 1 / 1.6)} aria-label="zoom out" title="zoom out">
+              −
+            </button>
+            <span className="world-zread">{scale}</span>
+            <button className="world-zbtn" onClick={() => zoomAt(...holdPt, 1.6)} aria-label="zoom in" title="zoom in">
+              +
+            </button>
+            <button className="world-zbtn wide" onClick={frameAll} title="everything on the water · 0">
+              fit
+            </button>
+            <button className="world-zbtn wide" onClick={frame} disabled={!place} title="fill the stage with what is selected · f">
+              frame
+            </button>
+            <button
+              className={'world-zbtn wide' + (marks ? ' on' : '')}
+              onClick={() => setMarks((v) => !v)}
+              title="the doors, posts and spawns each island carries"
+            >
+              marks
+            </button>
+          </div>
         </div>
 
         <aside className="world-side">
@@ -729,11 +1231,15 @@ export default function World() {
               p={place}
               i={sel.i}
               states={states}
-              slugs={slugs}
+              reg={reg}
+              sheet={sheet}
               pick={pick}
+              lock={lock}
+              onLock={setLock}
               onPick={setPick}
               onEdit={edit}
               onMove={shift}
+              onFrame={frame}
               onDrop={() => drop(sel.i)}
             />
           ) : region && sel?.kind === 'region' ? (
@@ -748,8 +1254,8 @@ export default function World() {
             />
           ) : (
             <p className="world-note">
-              Nothing selected. Every island on this chart is one map on the platform, plus the positions a ship uses to
-              reach it.
+              Nothing selected. Every island on this chart is one map on the platform, drawn as its own painting, plus the
+              positions a ship uses to reach it.
             </p>
           )}
 
@@ -795,29 +1301,64 @@ function Inspector({
   p,
   i,
   states,
-  slugs,
+  reg,
+  sheet,
   pick,
+  lock,
+  onLock,
   onPick,
   onEdit,
   onMove,
+  onFrame,
   onDrop,
 }: {
   p: Place
   i: number
   states: string[]
-  slugs: string[]
+  reg: Map<string, MapRow>
+  sheet: MapRow | undefined
   pick: Pick
+  lock: boolean
+  onLock: (v: boolean) => void
   onPick: (v: Pick) => void
   onEdit: (i: number, patch: Partial<Place>) => void
   onMove: (i: number, x: number, y: number) => void
+  onFrame: () => void
   onDrop: () => void
 }) {
   const set = (patch: Partial<Place>) => onEdit(i, patch)
   const legal = isAnchorName(p.name)
+  const slugs = [...reg.keys()]
   // a map the listing does not carry is still shown, because it may be the
   // island being painted this week and blanking it would rewrite the document
   // behind somebody's back
   const options = p.map && !slugs.includes(p.map) ? [p.map, ...slugs] : slugs
+  const shape = sheet && sheet.w > 0 && sheet.h > 0 ? sheet.w / sheet.h : 0
+  const marks = sheet?.anchors || []
+
+  /* THE FOOTPRINT FOLLOWS THE PAINTING'S SHAPE unless the author says
+   * otherwise. Every place used to be born 64x64, so the hub, which is 688x640,
+   * was drawn as a square and every anchor on it landed a few percent off the
+   * pixel it belongs to. A wrong shape is worse than a wrong size: a berth
+   * placed against a squashed jetty is against nothing. */
+  const setW = (n: number) => set(lock && shape ? { w: n, h: Math.max(1, Math.round(n / shape)) } : { w: n })
+  const setH = (n: number) => set(lock && shape ? { h: n, w: Math.max(1, Math.round(n * shape)) } : { h: n })
+
+  /* A TICKED CONSTRAINT THAT IS NOT ENFORCED IS A LIE IN THE UI.
+   *
+   * The box said "hold the painting's shape · 688x640" with the tick on, while
+   * the footprint sat at 64x64, and offered a button to straighten it. So the
+   * tool showed a rule, showed the rule being broken, and asked the author to
+   * fix it by hand. The two states this can be in are held and not held; a
+   * third state where it is held but wrong is not one anybody asked for.
+   *
+   * It corrects itself instead, once, when the shape is first known. Only ever
+   * the height, so the size an author chose is the one they keep. */
+  const wantH = shape ? Math.max(1, Math.round(p.w / shape)) : 0
+  useEffect(() => {
+    if (lock && wantH && p.h !== wantH) set({ h: wantH })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lock, wantH, p.h])
 
   return (
     <div className="world-insp">
@@ -836,7 +1377,17 @@ function Inspector({
       {!legal && <p className="world-bad">a name is the only address there is · lower case, digits, underscores</p>}
       <label className="world-f">
         <span>map</span>
-        <select className="world-in" value={p.map} onChange={(e) => set({ map: e.target.value })}>
+        <select
+          className="world-in"
+          value={p.map}
+          onChange={(e) => {
+            const slug = e.target.value
+            const m = reg.get(slug)
+            // taking the painting's shape on the way in, so the island is right
+            // before anybody starts aiming at it
+            set(m && m.w > 0 && m.h > 0 ? { map: slug, h: Math.max(1, Math.round((p.w * m.h) / m.w)) } : { map: slug })
+          }}
+        >
           <option value="">nothing yet · a rumour</option>
           {options.map((s) => (
             <option key={s} value={s}>
@@ -859,10 +1410,14 @@ function Inspector({
         <Num label="y" v={p.y} on={(n) => onMove(i, p.x, n)} />
       </div>
       <div className="world-pair">
-        <Num label="width" v={p.w} min={1} on={(n) => set({ w: n })} />
-        <Num label="height" v={p.h} min={1} on={(n) => set({ h: n })} />
+        <Num label="width" v={p.w} min={1} on={setW} />
+        <Num label="height" v={p.h} min={1} on={setH} />
       </div>
-      <label className="world-f">
+      <label className="world-check">
+        <input type="checkbox" checked={lock} onChange={(e) => onLock(e.target.checked)} />
+        <span>{sheet ? `hold the painting's shape · ${sheet.w}×${sheet.h}` : 'hold the shape of the painting'}</span>
+      </label>
+            <label className="world-f">
         <span>state</span>
         <select className="world-in" value={p.state} onChange={(e) => set({ state: e.target.value })}>
           {states.map((s) => (
@@ -885,6 +1440,19 @@ function Inspector({
       <p className="world-say">how close the hull comes before this counts as discovered, measured from x,y</p>
 
       <span className="world-lab">where a ship stops</span>
+      <button className="world-btn small" onClick={onFrame}>
+        zoom to this island
+      </button>
+      {/* the marks the painting carries, named, so an author knows what is on
+          the island before going looking for it on the chart. This is the list
+          a berth gets aimed at. */}
+      {p.map && (
+        <p className="world-say">
+          {marks.length
+            ? `${marks.length} mark${marks.length === 1 ? '' : 's'} on the painting: ${marks.map((a) => a.name).join(', ')}. Zoom in and the berth snaps to one.`
+            : 'this painting carries no doors or posts yet, so there is nothing on it to snap a berth to'}
+        </p>
+      )}
       <div className="world-mark">
         <span className="world-mark-t">berth</span>
         <button className={'world-btn small' + (pick === 'berth' ? ' on' : '')} onClick={() => onPick(pick === 'berth' ? '' : 'berth')}>

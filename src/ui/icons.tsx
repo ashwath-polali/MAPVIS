@@ -18,6 +18,8 @@ export type IconName =
   | 'export'
   | 'dots'
   | 'wave'
+  | 'ocean'
+  | 'surface'
   | 'eye'
   | 'eyeoff'
   | 'x'
@@ -158,6 +160,25 @@ const D: Record<IconName, ReactNode> = {
       <path d="M2.5 9.6c1.4 0 1.4-1.4 2.8-1.4s1.4 1.4 2.7 1.4 1.4-1.4 2.8-1.4 1.4 1.4 2.7 1.4" />
       <path d="M2.5 12.2c1.4 0 1.4-1.4 2.8-1.4s1.4 1.4 2.7 1.4 1.4-1.4 2.8-1.4 1.4 1.4 2.7 1.4" />
       <path d="M6.5 5.8a3.4 3.4 0 016.6 1" />
+    </>
+  ),
+  /* the ocean page: swell with an island sitting in it. `wave` is water on its
+   * own and already means "the sea is animating here" in the editor, so the
+   * link to the chart needed the land in it to say which of the two it is. */
+  ocean: (
+    <>
+      <path d="M4.1 6.9c1-2.6 2.3-3.9 3.9-3.9s2.9 1.3 3.9 3.9z" />
+      <path d="M2.4 9.7c1.4 0 1.4-1.3 2.8-1.3s1.4 1.3 2.7 1.3 1.4-1.3 2.8-1.3 1.4 1.3 2.7 1.3" />
+      <path d="M2.4 12.5c1.4 0 1.4-1.3 2.8-1.3s1.4 1.3 2.7 1.3 1.4-1.3 2.8-1.3 1.4 1.3 2.7 1.3" />
+    </>
+  ),
+  /* a drawn panel with a line of words in it, which is what a ui surface is:
+   * the frame the game speaks through, not a generic rectangle */
+  surface: (
+    <>
+      <rect x="2.6" y="3.6" width="10.8" height="8.8" rx="0.8" />
+      <path d="M4.8 7.2h6.4" />
+      <path d="M4.8 9.6h3.8" />
     </>
   ),
   eye: (

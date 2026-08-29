@@ -253,6 +253,10 @@ export function migratePath(p: MapPath): MapPath | null {
   return {
     id: Math.round(Number(p.id)) || 0,
     name: p.name,
+    /* every route saved before kind existed was drawn by somebody laying a line
+     * on the ground, so walk is the honest reading of it and not merely the
+     * first entry in the list */
+    kind: (PATH_KINDS as string[]).includes(p.kind) ? p.kind : 'walk',
     points,
     closed: !!p.closed,
     twoWay: !!p.twoWay,
@@ -380,10 +384,25 @@ export interface PathMark {
   name: string
 }
 
+/* WHAT TRAVELS THE LINE, and the thing that decides whether a route crossing
+ * open water is a defect or the whole point of it.
+ *
+ * Until this existed a route was just points, so nothing could be checked: the
+ * hub's own the_dock_walk runs over pixels no body can stand on, and the tool
+ * had no way to know whether that was a mistake or a boat. A walk line is held
+ * to the floor. A sail line is expected to leave it. A camera is a dolly with
+ * no feet and is held to nothing. */
+export type PathKind = 'walk' | 'sail' | 'camera'
+
+export const PATH_KINDS: PathKind[] = ['walk', 'sail', 'camera']
+
 export interface MapPath {
   id: number
   /* author-typed, unique in this map, python-shaped, exactly like an anchor's */
   name: string
+  /* walk unless it says otherwise, because a route drawn by a person clicking
+   * ground is a walk until they say it is a boat */
+  kind: PathKind
   points: [number, number][]
   /* a patrol returns to its first point; an approach does not */
   closed: boolean

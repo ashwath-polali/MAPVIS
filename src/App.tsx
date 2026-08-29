@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { CSSProperties, DragEvent, ReactNode } from 'react'
 import { Editor, isCutTool, loadImage, groupFor, type EditorStatus, type Tool } from './core/editor'
-import { PAL, mkCanvas, nameOf, assetLabel, ANCHOR_KINDS, MAP_CLASSES, type AnchorKind, type AssetLook, type MapClass, type PlacedAsset } from './core/mask'
+import { PAL, mkCanvas, nameOf, assetLabel, ANCHOR_KINDS, MAP_CLASSES, PATH_KINDS, type AnchorKind, type AssetLook, type MapClass, type PlacedAsset } from './core/mask'
 
 /* What each kind is FOR, in the words an author would use. Shown on the kind
  * buttons and under the form, because "post" and "trigger" mean nothing until
@@ -4024,6 +4024,10 @@ export default function App() {
   // the map's routes and its shots, and whichever row of each has its form open
   const paths = st?.paths ?? []
   const editingPath = paths.find((p) => p.id === pathEdit)
+  /* the bad legs of the route being edited, and only when it is the one the
+     editor has selected: the status measures the selection, and opening a form
+     without selecting the same route would report another line's faults */
+  const pathBad = editingPath && st?.pathSel === editingPath.id ? (st?.pathBad ?? []) : []
   const framings = st?.framings ?? []
   const editingShot = framings.find((f) => f.id === shotEdit)
   /* What an anchor can be bound to, split the way the picker offers it. The
@@ -4498,8 +4502,33 @@ export default function App() {
           </label>
           {rnameSaid?.id === editingPath.id && <div className="anchwarn">{rnameSaid.why}</div>}
 
-          {/* the two facts about the shape of the line, as chips, because both
-              are yes or no and both change what the overlay draws */}
+          {/* WHAT TRAVELS IT, on the anchor form's kind row and not mixed in
+              with the two below it. Five chips do not fit on one 208px row and
+              wrapped with two-way hanging alone, and these are two different
+              questions anyway: what the line is, then how it runs.
+
+              Kind decides whether the warning under it applies at all. A line
+              over water is a defect for a body and the whole point for a boat,
+              and until this existed the tool could not tell those apart, so it
+              said nothing about either. */}
+          <div className="anchkinds">
+            {PATH_KINDS.map((k) => (
+              <button
+                key={k}
+                className={'kbtn' + (editingPath.kind === k ? ' on' : '')}
+                onClick={() => ed?.updatePath(editingPath.id, { kind: k })}
+                data-tip={
+                  k === 'walk'
+                    ? 'a body walks it, so every leg is held to ground it can stand on'
+                    : k === 'sail'
+                      ? 'it leaves the floor on purpose · no ground check'
+                      : 'a camera move · no feet, so nothing to check'
+                }
+              >
+                {k}
+              </button>
+            ))}
+          </div>
           <div className="anchkinds">
             <button
               className={'kbtn' + (editingPath.closed ? ' on' : '')}
@@ -4516,6 +4545,17 @@ export default function App() {
               two-way
             </button>
           </div>
+          {/* THE GROUND UNDER THE LINE, said here rather than left to be found by
+              walking it. A waypoint drops wherever the pointer was, with no
+              floor test, so a walk route can run across the sea and read as
+              correct. Silent when the route is clean, and silent for a sail or
+              a camera, which have no floor to be wrong about. */}
+          {pathBad.length > 0 && (
+            <div className="anchwarn">
+              {pathBad.length} of {st?.pathLegs ?? 0} {(st?.pathLegs ?? 0) === 1 ? 'leg' : 'legs'}{' '}
+              {pathBad.length === 1 ? 'crosses' : 'cross'} ground a body cannot walk
+            </div>
+          )}
 
           {/* the heading to hold on arrival, the same compass the anchor form
               uses and the same middle cell meaning no opinion */}
@@ -4551,10 +4591,18 @@ export default function App() {
               beat says "be at the doorway by the time this line ends" instead
               of "walk for 2.4 seconds". The index is stepped rather than typed
               because there are six of them, not six hundred. */}
+          {/* the label is short on purpose. This row is a fixed 52px caption
+              and one nowrap button inside a 228px form, so a sentence here does
+              not wrap, it widens the form and pushes the whole panel sideways.
+              What the control is for belongs in the tip. */}
           <div className="anchspot">
             <span>marks</span>
-            <button className="mbtn wide" onClick={() => ed?.addPathMark(editingPath.id, 0)}>
-              add a mark on a waypoint
+            <button
+              className="mbtn wide"
+              data-tip="names a waypoint, so a cutscene beat can wait for it instead of for a number of seconds"
+              onClick={() => ed?.addPathMark(editingPath.id, 0)}
+            >
+              add a mark
             </button>
           </div>
           {(editingPath.marks || []).map((m, i) => (
@@ -4769,10 +4817,16 @@ export default function App() {
             </button>
           </div>
 
+          {/* short for the same reason the route form's mark button is: this row
+              cannot wrap, so a long label widens the form past the panel */}
           <div className="anchspot">
             <span>check it</span>
-            <button className="mbtn wide" onClick={() => ed?.showFraming(editingShot.id)}>
-              put the editor on this shot
+            <button
+              className="mbtn wide"
+              data-tip="puts the editor's own view on this shot"
+              onClick={() => ed?.showFraming(editingShot.id)}
+            >
+              go to this shot
             </button>
           </div>
           <div className="doorhint">

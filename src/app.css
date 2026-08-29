@@ -899,6 +899,17 @@ input[type='range']:disabled {
   font: 11.5px var(--font-mono);
   text-align: right;
 }
+/* the browser's own up/down arrows, which nobody here designed and which cost
+   13px of every number field in the tool. That is a third of the shot form's
+   zoom box: 1.00 measured 66px of content inside 53px of field and rendered as
+   "1.(" with the last digit sliced in half. The field commits on enter and on
+   blur, so the arrows were never how a number got in. Same un-appearance the
+   range and colour inputs above already take. */
+.numf input[type='number']::-webkit-inner-spin-button,
+.numf input[type='number']::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
 .flips {
   display: flex;
   flex-wrap: wrap;
@@ -2274,8 +2285,18 @@ input[type='range']:disabled {
 }
 
 /* ---- the doors (test step): the inline form and the event rows --------- */
+/* A bare `display: grid` sizes its one column off the widest thing in it, so
+   any row that cannot be squeezed drags the whole form past the panel edge.
+   The route form's "add a mark on a waypoint" button is nowrap, so its
+   min-content is the whole sentence: it made the form 270px inside a 228px
+   box, shoved the panel content 26px left and cut "CHECK THE GROUND" down to
+   "HECK THE GROUND" with a sideways scrollbar under it. Both lines are needed
+   and they stop different things: the track can no longer grow past the form,
+   and a row can no longer grow past the track. Same fix .evrows already
+   carries below, for the same reason. */
 .doorform {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 6px;
   margin: 2px var(--pan-in);
   padding: 10px;
@@ -2283,6 +2304,9 @@ input[type='range']:disabled {
   border-radius: 10px;
   background: var(--raised);
   animation: panel-in 160ms ease;
+}
+.doorform > * {
+  min-width: 0;
 }
 .doorform input {
   padding: 6px 9px;
@@ -2385,6 +2409,12 @@ input[type='range']:disabled {
   gap: 4px 6px;
   min-width: 0;
   margin: 2px var(--pan-in) 4px;
+}
+/* the side margin is the panel's row gutter, and a form has already spent it
+   in its own padding. Kept indoors it was charged twice and took 8px off the
+   two number columns inside the shot form, which is where the digits went. */
+.doorform .walkcfg {
+  margin: 2px 0 0;
 }
 /* one row per occluder: the id, its baseline, and an x. The id is small and
    monospaced because it is the number written into the occluders png. */

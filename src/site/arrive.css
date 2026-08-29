@@ -236,16 +236,6 @@
   align-items: center;
   gap: 6px;
 }
-.home-sea {
-  margin-right: 6px;
-  font: 500 12px var(--font-label);
-  color: #6f7885;
-  text-decoration: none;
-  transition: color 180ms ease;
-}
-.home-sea:hover {
-  color: #e6e9ee;
-}
 .home-find {
   width: 150px;
   padding: 7px 10px;
@@ -259,6 +249,9 @@
 .home-find:focus {
   border-color: #39434f;
 }
+/* every control in this bar, including the two that are links now rather than
+   spelt-out words. text-decoration is here because an <a> brings an underline
+   with it and a 30px square with a line under it is not an icon. */
 .home-icon {
   display: grid;
   place-items: center;
@@ -268,6 +261,7 @@
   background: none;
   border: 0;
   cursor: pointer;
+  text-decoration: none;
   transition: color 180ms ease;
 }
 .home-icon:hover {

@@ -28,6 +28,7 @@ import { createPortal } from 'react-dom'
 import { Link, go } from './router'
 import { useSession, signOut } from './session'
 import { Settings } from './Settings'
+import { Icon } from '../ui/icons'
 
 type MapRow = {
   id: string
@@ -359,14 +360,17 @@ export default function Home() {
           </button>
         <div className="home-bar-r">
           {/* the water between the maps, which is a different document to any
-              of them and has no card in the grid to live on */}
-          <Link to="/world" className="home-sea">
-            the ocean
+              of them and has no card in the grid to live on. A mark rather than
+              a sentence: two spelt-out links sat where every other control in
+              this bar is a 30px icon, and read as leftover text. The words stay
+              as the title and the accessible name. */}
+          <Link to="/world" className="home-icon" aria-label="the ocean" title="the ocean">
+            <Icon name="ocean" />
           </Link>
           {/* and the panels the game draws its words into, which belong to no
               single map for the same reason the water does not */}
-          <Link to="/surfaces" className="home-sea">
-            ui surfaces
+          <Link to="/surfaces" className="home-icon" aria-label="ui surfaces" title="ui surfaces">
+            <Icon name="surface" />
           </Link>
           <input
             className="home-find"

@@ -139,10 +139,63 @@
   position: absolute;
   left: 14px;
   bottom: 12px;
+  max-width: 66ch;
   margin: 0;
   font: 400 11px var(--font-label);
   color: #5b6470;
   pointer-events: none;
+}
+
+/* the zoom cluster. It sits over the water rather than in the top bar because
+   it is about the view and not about the document, and because at 4096 across
+   you reach for it constantly and a trip to the header every time is a trip too
+   far. Top right and not bottom right: the chart writes the far corner of the
+   ocean down there, and the two were printed on top of each other. */
+.world-zoom {
+  position: absolute;
+  right: 12px;
+  top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  padding: 4px;
+  background: rgba(7, 11, 17, 0.82);
+  border: 1px solid #1d232b;
+}
+.world-zbtn {
+  min-width: 24px;
+  height: 22px;
+  padding: 0 4px;
+  font: 500 12px var(--font-label);
+  color: #8d97a4;
+  background: none;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+.world-zbtn.wide {
+  padding: 0 8px;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+}
+.world-zbtn:hover:not(:disabled) {
+  color: #d8e3ee;
+  border-color: #39434f;
+}
+.world-zbtn:disabled {
+  color: #39434f;
+  cursor: default;
+}
+.world-zbtn.on {
+  color: #070b11;
+  background: var(--gold);
+  border-color: var(--gold);
+}
+.world-zread {
+  min-width: 44px;
+  text-align: center;
+  font: 400 9.5px var(--font-mono);
+  color: #6f7885;
 }
 
 .world-side {
@@ -228,6 +281,21 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
+}
+.world-check {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font: 400 10.5px var(--font-label);
+  color: #6f7885;
+  cursor: pointer;
+}
+.world-check input {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  accent-color: var(--gold);
+  cursor: pointer;
 }
 .world-mark {
   display: flex;
