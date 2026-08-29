@@ -260,6 +260,24 @@ function s3Store(E) {
            * lets the caller fall back to disk while the request is still
            * alive. */
           maxAttempts: 1,
+          /* AND A SOCKET THAT NEVER ANSWERS IS NOT AN ANSWER AT ALL.
+           *
+           * One attempt with no clock on it is the other half of a hang. The
+           * sdk ships no timeouts unless it is handed some: measured on this
+           * install, the resolved handler reports connectionTimeout,
+           * requestTimeout and socketTimeout all undefined, and the handler
+           * treats a falsy value as "never give up". A publish writes about
+           * eight hundred objects over twelve lanes, so one stalled socket out
+           * of eight hundred used to be enough to make the whole export wait
+           * for nothing, forever, burning no cpu and writing no version. That
+           * looks exactly like the bug that was actually keepalive, and it is
+           * why three hours went into the wrong half of the system.
+           *
+           * requestTimeout is time between bytes rather than a total, so a
+           * genuinely slow upload is unaffected and only a dead one is cut.
+           * The three-attempt loop in publish.mjs fires on the throw, so a
+           * stall is now a retry instead of a stop. */
+          requestHandler: { connectionTimeout: 10_000, requestTimeout: 60_000 },
         }),
       }
     }
