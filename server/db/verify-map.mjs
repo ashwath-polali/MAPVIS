@@ -25,6 +25,18 @@ const map = await getMapBySlug(slug)
 if (!map) throw new Error(`no map ${slug} in the database`)
 console.log(`${slug}  ${map.id}  ${map.w}x${map.h}`)
 
+/* THE FILE ON DISK IS A SNAPSHOT, NOT THE MAP, and that decides what each
+ * check below is allowed to ask.
+ *
+ * work/<slug>/doc.json is written by the failure fallback and by import-work,
+ * so on a machine where the platform is answering it is however old the last
+ * one of those was. It is the right thing to compare the MASK against, because
+ * the mask is the one thing that cannot be redrawn and a stale copy of it is
+ * still a copy of the same hand-drawn pixels. It is the wrong thing to compare
+ * the placements or the anchors against: name a placement or mark a standing
+ * spot and a comparison against a two-day-old file calls perfectly correct work
+ * a fault. Those are asked of the round trip instead, which is the property
+ * this file is really about. */
 const original = JSON.parse(fs.readFileSync(path.join(WORK, slug, 'doc.json'), 'utf8'))
 const roundTripped = JSON.parse(await getDoc(map.id))
 
@@ -51,9 +63,17 @@ const norm = (v) =>
   JSON.stringify(v, (_, x) =>
     x && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.entries(x).sort()) : x,
   )
-norm(original.assets) === norm(roundTripped.assets)
-  ? ok(`${original.assets.length} placements identical`)
-  : no(`placements differ (${original.assets.length} in, ${roundTripped.assets?.length} out)`)
+/* saved and read back, rather than against the file, because the question is
+ * whether the split into jsonb loses anything and the file cannot answer that
+ * once anybody has authored a placement since it was written */
+await putDoc(map.id, JSON.stringify(roundTripped))
+const again1 = JSON.parse(await getDoc(map.id))
+norm(roundTripped.assets) === norm(again1.assets)
+  ? ok(`${roundTripped.assets.length} placements survive the round trip`)
+  : no(`placements differ (${roundTripped.assets.length} in, ${again1.assets?.length} out)`)
+norm(roundTripped.walk) === norm(again1.walk) && norm(roundTripped.props) === norm(again1.props)
+  ? ok(`the walk contract and the map's properties survive it too`)
+  : no(`walk or props changed: ${norm(again1.walk)} ${norm(again1.props)}`)
 
 // anchors survive the trip through the table. A document written before anchors
 // existed says type:'door'; one written since says kind, and both have to come
@@ -68,20 +88,25 @@ doorsOut.every((d) => /^[a-z][a-z0-9_]*$/.test(d.name || ''))
   ? ok('every anchor came back with a name code can address')
   : no(`an anchor came back unnamed: ${JSON.stringify(doorsOut.map((d) => d.name))}`)
 
-// the whole point: saving the same thing twice must write nothing the second time
-const again = await putDoc(map.id, JSON.stringify(original))
+/* THE WHOLE POINT: saving the same thing twice must write nothing the second
+ * time. Saving what the database just handed back, which is what the editor
+ * does on every four-second beat when nobody has touched anything. Against the
+ * disk file this only tested whether that file happened to be current. */
+const again = await putDoc(map.id, JSON.stringify(again1))
 again.skipped
   ? ok('an unchanged save wrote nothing')
   : no(`an unchanged save still wrote: ${again.wrote.join(', ')}`)
 
 // and a real change must still land
-original.spawn = [original.spawn[0] + 1, original.spawn[1]]
-const moved = await putDoc(map.id, JSON.stringify(original))
+again1.spawn = [again1.spawn[0] + 1, again1.spawn[1]]
+const moved = await putDoc(map.id, JSON.stringify(again1))
 moved.wrote.some((w) => w.startsWith('doc')) && !moved.wrote.some((w) => w.startsWith('planes'))
   ? ok(`moving the spawn wrote only the row: ${moved.wrote.join(', ')}`)
   : no(`moving the spawn wrote: ${moved.wrote.join(', ') || 'nothing'}`)
-original.spawn = [original.spawn[0] - 1, original.spawn[1]]
-await putDoc(map.id, JSON.stringify(original))
+// and put it back, off the document this test has been moving rather than off
+// the file, so the map is left exactly as it was found
+again1.spawn = [again1.spawn[0] - 1, again1.spawn[1]]
+await putDoc(map.id, JSON.stringify(again1))
 
 // ---- a generated asset has to survive the trip too -------------------------
 
