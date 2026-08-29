@@ -150,6 +150,7 @@ export function api(req, res, next) {
     res.setHeader('Retry-After', '2')
     return send(res, 429, { error: 'too many requests' })
   }
+  if (p === '/api/export') console.log(`[export] request arrived, content-length ${req.headers['content-length'] || '?'}`)
   Promise.resolve(serve(req, res, p, url)).catch((e) => {
     // a missing key is a condition, not a crash, and it has to say which one so
     // the ui can put the right wall in front of the right button
@@ -314,7 +315,9 @@ async function route(req, res, p, url) {
    * it always has, and only stops at a map that already has an owner, which is
    * what makes a map yours instead of merely listed under you. */
   if (req.method === 'POST' && !OPEN_POSTS.has(p)) {
+    if (p === '/api/export') console.log('[export] at the ownership gate, reading the body')
     const b = await body(req)
+    if (p === '/api/export') console.log('[export] gate has the body')
     /* THE GATE HAS TO NAME THE MAP THE HANDLER WILL NAME.
      *
      * It read b.id alone, and two things followed. The import routes carry
@@ -2329,8 +2332,18 @@ async function route(req, res, p, url) {
   }
 
   if (p === '/api/export' && req.method === 'POST') {
+    /* AN EXPORT THAT TAKES MINUTES HAS TO SAY WHERE IT IS.
+     *
+     * This route reads a body, pulls missing art out of object storage, copies
+     * eight hundred pngs and publishes a version, and until these lines existed
+     * it said nothing at all until the whole thing finished. When it stopped
+     * finishing there was no way to tell which of the four it was stuck in, and
+     * three hours went into narrowing it down by hand. */
+    const t0 = Date.now()
+    const step = (what) => console.log(`[export] ${what} · ${((Date.now() - t0) / 1000).toFixed(1)}s`)
     const b = await body(req)
     const id = safeId(b.id)
+    step(`${id}: body read, ${(JSON.stringify(b).length / 1024).toFixed(0)}kb`)
     const dir = path.join(WORK, id)
     // this route rebuilds dir/assets with fs.rmSync, so the fence goes in front
     // of the mkdir rather than anywhere later. See insideWork.
@@ -2362,6 +2375,7 @@ async function route(req, res, p, url) {
     } catch (e) {
       console.error('[export] could not hydrate from object storage:', e.message)
     }
+    step('hydrated')
     const files = []
     for (const [name, data] of [
       ['scene.png', b.scene],
@@ -2377,6 +2391,7 @@ async function route(req, res, p, url) {
     if (!b.cut && fs.existsSync(path.join(dir, 'cut.png'))) fs.unlinkSync(path.join(dir, 'cut.png'))
     fs.writeFileSync(path.join(dir, 'map.json'), JSON.stringify(b.map, null, 2))
     files.push('map.json')
+    step('planes and map.json written')
     // the placed assets: assets.json per the loader contract, and every used
     // png copied into assets/ so the bundle stands on its own. Sources can be
     // the per-map library, the old shared library, or a reopened bundle's own
@@ -2611,6 +2626,7 @@ async function route(req, res, p, url) {
         badNumbers: badNumber,
       })
     }
+    step(`${outAssets.length} placement(s) resolved, ${writes.size} png(s) read`)
     fs.rmSync(assetsDir, { recursive: true, force: true })
     for (const [rel, buf] of writes) {
       const to = path.join(assetsDir, rel)
@@ -2627,6 +2643,7 @@ async function route(req, res, p, url) {
     // mid-session, and map.json picks up anchors[] from the database on the way
     // through. work/<id>/ stays exactly as it was, because it is still what a
     // reopened scene reads.
+    step('assets folder rebuilt')
     let published = null
     if (platformOn()) {
       try {
@@ -2651,6 +2668,7 @@ async function route(req, res, p, url) {
         files.push('NOT published · ' + String(e.message).slice(0, 80))
       }
     }
+    step('done')
     return send(res, 200, { dir, files, published })
   }
 

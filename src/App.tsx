@@ -3513,16 +3513,21 @@ export default function App() {
     [prompt],
   )
 
-  /* AN EXPORT MUST SURVIVE YOU LEAVING THE PAGE.
+  /* AN EXPORT MUST SURVIVE YOU LEAVING THE PAGE, AND THIS CONFIRM IS WHAT DOES
+   * IT.
    *
    * It is a single request carrying every png the map uses, so on the hub it is
-   * megabytes and several seconds. Clicking back mid-flight tore the request
-   * down with the document, and a half-written publish is the one thing this
-   * whole system is built to make impossible.
+   * about half a megabyte and several seconds. Clicking back mid-flight tore
+   * the request down with the document, and a half-written publish is the one
+   * thing this whole system is built to make impossible.
    *
-   * keepalive lets the browser finish the request after the page is gone, and
-   * beforeunload asks first, because "your export was cancelled" is a worse
-   * thing to discover later than a confirm dialog is now. */
+   * This asked keepalive to do the job as well, which capped the request at
+   * 64 KiB and stopped the hub publishing at all. See the finding at jpost in
+   * api.ts. Asking first is the part that worked, so it is the part that stays:
+   * "your export was cancelled" is a worse thing to discover later than a
+   * confirm dialog is now. A request torn down anyway arrives short, fails at
+   * the body parse and writes nothing, so there is no half-written version to
+   * come back to. */
   const exporting = useRef(false)
   useEffect(() => {
     const ask = (ev: BeforeUnloadEvent) => {

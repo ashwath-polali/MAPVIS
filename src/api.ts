@@ -1,14 +1,38 @@
 /* Calls to the local node side. Nothing here knows a key. */
 import type { CustomControl } from './core/customfx'
 
+/* KEEPALIVE CANNOT CARRY AN EXPORT, AND ASKING IT TO IS WHY THE HUB WOULD NOT
+ * PUBLISH.
+ *
+ * The comment that used to sit here said keepalive lets a megabyte export
+ * finish after the page is gone. It is the opposite of true. A keepalive
+ * request is capped at 64 KiB of body by the fetch standard, and a browser
+ * does not queue an over-quota one or send it slowly, it refuses it outright.
+ *
+ * Measured in the real browser against this dev server, one request per size,
+ * with and without the flag: at 60 KiB keepalive reaches the server; at 64 KiB
+ * it rejects with `TypeError: Failed to fetch` in FOUR MILLISECONDS, and every
+ * larger size does the same. Without the flag every size answers normally.
+ *
+ * That is the whole of the export hang. A small map's bundle fits under the
+ * cap and publishes in a second or two; the hub's is about half a megabyte, so
+ * five presses over three hours never put a byte on the wire. Nothing reached
+ * the route, nothing burned cpu and nothing was written, which is exactly what
+ * it looked like from the outside and is why it read as a server problem.
+ *
+ * So the flag is honoured only when the payload actually fits, and the request
+ * that matters goes out as an ordinary one. What protects an export in flight
+ * is the beforeunload confirm in App.tsx, plus the fact that a torn-down
+ * request arrives as a short body, fails at JSON.parse and writes nothing. */
+const KEEPALIVE_MAX = 60 * 1024
+
 async function jpost<T>(url: string, body: unknown, opts?: { keepalive?: boolean }): Promise<T> {
+  const payload = JSON.stringify(body)
   const r = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-    // an export is megabytes and several seconds; keepalive lets the browser
-    // finish it after the page it started on is gone
-    ...(opts?.keepalive ? { keepalive: true } : {}),
+    body: payload,
+    ...(opts?.keepalive && payload.length <= KEEPALIVE_MAX ? { keepalive: true } : {}),
   })
   const j = await r.json()
   if (!r.ok || j.error) throw new Error(j.error || r.statusText)
