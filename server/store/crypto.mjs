@@ -110,5 +110,8 @@ export const isAnchorName = (s) => /^[a-z][a-z0-9_]{0,47}$/.test(String(s))
  * keeps working, and `a55` allowed as a name would let one string mean two
  * objects on the same map. Kept in step with isPlacementName in
  * src/core/mask.ts, which is the copy the editor refuses with. */
+/* TYPE FIRST, and that is not pedantry. String(undefined) is "undefined",
+ * which passes the pattern, so an unnamed placement shipped as literally named
+ * `undefined` and two of them collided on one map. Found by exporting one. */
 export const isPlacementName = (s) =>
-  /^[a-z][a-z0-9_]{0,47}$/.test(String(s)) && !/^a[0-9]+$/.test(String(s))
+  typeof s === 'string' && /^[a-z][a-z0-9_]{0,47}$/.test(s) && !/^a[0-9]+$/.test(s)

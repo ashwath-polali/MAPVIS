@@ -114,8 +114,11 @@ export const lookOf = (a: PlacedAsset, i: number): AssetLook =>
  * reference against the names AND the ids, so that a binding made before an
  * author named the thing keeps working. Allowing somebody to name a placement
  * `a55` would let one string mean two different objects on the same map. */
-export const isPlacementName = (s: string) =>
-  /^[a-z][a-z0-9_]{0,47}$/.test(String(s)) && !/^a[0-9]+$/.test(String(s))
+/* TYPE FIRST, and that is not pedantry. String(undefined) is "undefined",
+ * which passes the pattern, so an unnamed placement exported as literally named
+ * `undefined` and two of them collided on one map. Found by exporting one. */
+export const isPlacementName = (s: unknown): s is string =>
+  typeof s === 'string' && /^[a-z][a-z0-9_]{0,47}$/.test(s) && !/^a[0-9]+$/.test(s)
 
 // an asset from an older save or bundle: before the transform fields only
 // `scale` existed, so absent ones fill in as the identity transform. Mutates
