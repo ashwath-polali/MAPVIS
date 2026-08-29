@@ -358,23 +358,27 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
    * since the day it was placed. `toAnchor` needs the far map's anchor list, so
    * it is asked for here rather than inside the gate, which has no database. */
   const slugs = (await many('select slug from maps')).map((r) => r.slug)
-  const problems = gateMap({
+  /* checked against `map.anchors` and not against the rows they came from,
+   * because that array IS what is about to ship. The rows are snake_case and
+   * the bundle is camelCase, and a gate reading the wrong one of those passes
+   * everything by looking at fields that are always undefined. */
+  const { problems, warnings } = gateMap({
     mapJson: map,
-    anchors,
+    anchors: map.anchors,
     levels: images?.['levels.png'] ? decodePNG(images['levels.png']) : null,
     slugs,
   })
-  for (const a of anchors) {
-    if (!a.to_anchor || !a.to_slug) continue
+  for (const a of map.anchors) {
+    if (!a.toAnchor || !a.to) continue
     const there = await many(
       'select a.name from anchors a join maps m on m.id = a.map_id where m.slug = $1',
-      [a.to_slug],
+      [a.to],
     )
     if (!there.length) continue // the missing map is already a problem above
-    if (there.some((r) => r.name === a.to_anchor)) continue
+    if (there.some((r) => r.name === a.toAnchor)) continue
     const names = there.map((r) => r.name)
     problems.push(
-      `the door "${a.name}" arrives at "${a.to_anchor}" on ${a.to_slug}, and nothing there is called that. ` +
+      `the door "${a.name}" arrives at "${a.toAnchor}" on ${a.to}, and nothing there is called that. ` +
         `That map has: ${names.slice(0, 8).join(', ')}${names.length > 8 ? `, and ${names.length - 8} more` : ''}.`,
     )
   }
@@ -383,6 +387,9 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
       `${slug} was not published, and nothing was written. ${problems.length} problem${problems.length === 1 ? '' : 's'}:\n` +
         problems.map((p) => '  · ' + p).join('\n'),
     )
+  // a warning is a fact the author should have, not a reason to refuse: a door
+  // to a room nobody has painted yet is the Maw's own design
+  for (const w of warnings) console.warn(`[publish] ${slug}: ${w}`)
 
   /* ONE LAYOUT, DECIDED HERE, NOT BY WHICHEVER CALLER TURNED UP.
    *

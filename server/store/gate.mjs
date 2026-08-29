@@ -143,26 +143,42 @@ function ringOk(a, t, reached) {
  * standable ground and not for a reachable ring. */
 const INTERACTIVE = new Set(['door', 'post', 'point'])
 
-/* THE GATE. Returns a list of sentences, each naming the thing and what to do
- * about it. Empty means publish. Nothing here throws: the caller decides
- * whether a problem stops a version being written, and it does. */
-export function gateMap({ mapJson, anchors, levels, slugs, barred = [] }) {
+/* THE GATE. Two lists of sentences, each naming the thing and what to do about
+ * it. A PROBLEM is something that can never work and it stops the publish; a
+ * WARNING is a fact the author should know and is said in the log. No problems
+ * means publish. Nothing here throws: the caller decides what a problem costs,
+ * and it costs the version. */
+export function gateMap({ mapJson, anchors, levels, slugs }) {
   const problems = []
+  const warnings = []
   const cls = mapJson.class || 'island'
 
-  // ---- the map graph, checked against the registry that is one query away ---
-  // The hub's one door has pointed at `panther-maw`, a map that does not exist,
-  // since the day it was placed, and nothing anywhere said so.
+  /* ---- the map graph, checked against a registry nothing had ever consulted.
+   *
+   * The hub's one door has pointed at `panther-maw`, a map that does not
+   * exist, since the day it was placed, and nothing anywhere said so.
+   *
+   * BUT A DOOR TO A MAP THAT IS NOT PAINTED YET IS A DESIGN, NOT A MISTAKE.
+   * The Maw's two side tunnels end at real named doors pointing at rooms
+   * nobody has painted, deliberately, so the place reads as having more of
+   * itself past the walls, and the game already renders "<label> · the way is
+   * barred" for exactly that. Refusing it would make the tool refuse the
+   * thing the design asks for.
+   *
+   * So the two cases are told apart by whether there is something close by. A
+   * target one edit away from a real map is a typo and stops the publish; a
+   * target nothing resembles is a room that has not been built and is said out
+   * loud instead. */
   const known = new Set(slugs || [])
-  const bar = new Set(barred)
   for (const a of anchors) {
-    if (!a.to) continue
-    if (known.has(a.to) || bar.has(a.name)) continue
+    if (!a.to || known.has(a.to)) continue
     const guess = near(a.to, [...known])
-    problems.push(
-      `the door "${a.name}" leads to "${a.to}", and no map is published under that id` +
-        (guess ? `. Did you mean "${guess}"?` : '. Publish that map first, or fix the id.'),
-    )
+    if (guess)
+      problems.push(`the door "${a.name}" leads to "${a.to}", and no map has that id. Did you mean "${guess}"?`)
+    else
+      warnings.push(
+        `"${a.name}" leads to "${a.to}", which is not published yet, so the game will say the way is barred.`,
+      )
   }
   // toAnchor is checked by the caller, which is the only side that can ask
   // another map what it is called. Anything it found comes in as a problem.
@@ -179,7 +195,7 @@ export function gateMap({ mapJson, anchors, levels, slugs, barred = [] }) {
   // ---- the ground ----------------------------------------------------------
   if (!levels) {
     problems.push('there is no levels plane in this bundle, so nothing about the ground could be checked.')
-    return problems
+    return { problems, warnings }
   }
   const t = standTest(levels, mapJson)
 
@@ -191,7 +207,7 @@ export function gateMap({ mapJson, anchors, levels, slugs, barred = [] }) {
   const sy = spawnAnchor ? spawnAnchor.y : mapJson.spawn?.[1]
   if (!isFinite(sx) || !isFinite(sy)) {
     problems.push('this map has no start point, so a player arriving has nowhere to stand.')
-    return problems
+    return { problems, warnings }
   }
   if (!t.standable(sx, sy)) {
     // walk out from the start looking for the nearest pixel that does work, so
@@ -211,7 +227,7 @@ export function gateMap({ mapJson, anchors, levels, slugs, barred = [] }) {
       `the start point (${sx},${sy}) is not somewhere a body can stand` +
         (best ? `. The nearest ground is ${bestD.toFixed(0)}px away at (${best[0]},${best[1]}).` : '.'),
     )
-    return problems
+    return { problems, warnings }
   }
 
   const reached = reachableFrom(sx, sy, t)
@@ -237,5 +253,5 @@ export function gateMap({ mapJson, anchors, levels, slugs, barred = [] }) {
         `"${a.name}" is used from (${a.stand[0]},${a.stand[1]}), which is not somewhere a body can stand.`,
       )
   }
-  return problems
+  return { problems, warnings }
 }

@@ -2526,15 +2526,19 @@ export class Editor {
     return true
   }
 
-  /* One key in the map's own bag. The bag is the stated extension point and it
-   * had no writer, so it carried only this tool's bookkeeping. A blank value
-   * removes the key rather than storing an empty string, because an author
-   * clearing a box means they no longer want the key. */
-  setMapMeta(key: string, value: string) {
+  /* One key in the map's own bag, which is the stated extension point and had
+   * no writer at all, so it carried only this tool's own bookkeeping.
+   *
+   * null REMOVES the key and an empty string keeps it holding nothing. Those
+   * have to be different: typing a name into the blank row at the bottom of the
+   * list has to make a key before there is a value to put in it, and treating
+   * blank as delete meant a new key vanished the instant it was named and its
+   * value box stayed switched off forever. */
+  setMapMeta(key: string, value: string | null) {
     const k = String(key || '').trim()
     if (!k) return false
     const meta = { ...this.doc.props.meta }
-    if (value === '') delete meta[k]
+    if (value === null) delete meta[k]
     else meta[k] = value
     return this.setProps({ meta })
   }
@@ -4961,7 +4965,10 @@ export class Editor {
         g.strokeStyle = '#8f93f5'
         g.lineWidth = 1.5
       }
-      const label = ev.label || 'door'
+      // the NAME when there is no label, not the word "door". Every kind is
+      // drawn here and most of them are not doors, and a map of six anchors all
+      // captioned "door" says nothing about which one you are looking at.
+      const label = ev.label || ev.name
       g.font = '11px monospace'
       const tw = g.measureText(label).width
       const ty = py - ev.r * z - 6

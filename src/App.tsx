@@ -6222,16 +6222,22 @@ export default function App() {
               onBlur={(e) => {
                 const nk = e.target.value.trim()
                 if (nk === k) return
-                if (k) ed?.setMapMeta(k, '')
+                // the new name takes the old one's value with it, and clearing
+                // the name is how a key is removed
                 if (nk) ed?.setMapMeta(nk, String(v ?? ''))
+                if (k) ed?.setMapMeta(k, null)
               }}
               spellCheck={false}
             />
             <input
               defaultValue={String(v ?? '')}
               placeholder="value"
-              disabled={!k}
-              onBlur={(e) => k && ed?.setMapMeta(k, e.target.value)}
+              onBlur={(e) => {
+                // the key is whatever is in the box to the left, which on the
+                // blank row at the bottom is a key that was named a moment ago
+                const kk = (e.currentTarget.parentElement?.querySelector('input') as HTMLInputElement)?.value.trim()
+                if (kk) ed?.setMapMeta(kk, e.target.value)
+              }}
               spellCheck={false}
             />
           </div>
