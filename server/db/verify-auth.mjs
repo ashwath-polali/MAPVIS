@@ -98,12 +98,32 @@ try {
     ? ok('an unknown email and a wrong password answer identically, so accounts cannot be enumerated')
     : no(`the two answers differ: "${ghost.json?.error}" vs "${wrong.json?.error}"`)
 
+  /* FROM A KNOWN NUMBER OF STRIKES, because every check above this line spends
+   * one and this check is not about them.
+   *
+   * The two checks above are about REFUSAL, and each wrong password they send
+   * charges the account a strike. The backoff starts at the third. So whether a
+   * correct password signs in depended on how many refusal checks happened to
+   * sit above it, which is a coupling nobody wrote on purpose and which breaks
+   * the moment somebody adds a third refusal check. It had already broken: this
+   * line reported "sign in failed" on every run, and the real answer underneath
+   * was "too many attempts, try again in 1 seconds". A failing check that names
+   * the wrong thing is worse than no check.
+   *
+   * The backoff is not going untested by this: it has its own block below,
+   * which drives the counter deliberately rather than inheriting it. */
+  await q('update users set failed_logins = 0, last_failed_at = null where email = $1', [alice.email])
   const inn = await call('/api/auth/login', { method: 'POST', body: alice })
-  inn.status === 200 && inn.token ? ok('signed in and got a fresh session') : no('sign in failed')
+  inn.status === 200 && inn.token
+    ? ok('signed in and got a fresh session')
+    : no(`sign in failed: ${inn.status} ${JSON.stringify(inn.json)}`)
 
   // ---- guessing gets slower ------------------------------------------------
   // three wrong tries cost nothing a human would notice; the fourth starts
   // charging seconds, and it doubles, so a thousand guesses take a week
+  // from zero for the same reason, so this block drives the counter rather than
+  // inheriting whatever the checks above happened to leave on it
+  await q('update users set failed_logins = 0, last_failed_at = null where email = $1', [alice.email])
   for (let i = 0; i < 3; i++) await call('/api/auth/login', { method: 'POST', body: { email: alice.email, password: 'wrong' } })
   const slowed = await call('/api/auth/login', { method: 'POST', body: { email: alice.email, password: 'wrong' } })
   const isSlow = (r) => /too many attempts/.test(r.json?.error || '')
