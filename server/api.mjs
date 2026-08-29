@@ -54,7 +54,22 @@ import {
   dropItem,
   snapshotVersion,
   restoreVersion,
+  copyLibraryItem,
 } from './store/platform.mjs'
+import {
+  listUi,
+  getUiByName,
+  createUi,
+  setUiSlots,
+  setUiImage,
+  failUi,
+  removeUi,
+  readyUi,
+  readyUiByName,
+  uiImage,
+  SLOT_KINDS,
+  SLOT_ALIGNS,
+} from './store/ui.mjs'
 import { publishBundle, publishedMap, publishHistory, hotGet, hotPut } from './store/publish.mjs'
 import { store } from './store/blobs.mjs'
 import { q, one, many } from './db/pool.mjs'
@@ -145,7 +160,12 @@ async function styleRef(slug) {
  * `untitled`, which is a real map somebody may own. So it is exempt from the
  * MAP ownership gate and guards itself instead: the world is not owned by a
  * map, it is owned by whoever is signed in. */
-const OPEN_POSTS = new Set(['/api/stop', '/api/propose', '/api/world'])
+/* The ui routes are the same case as /api/world. A surface belongs to an
+ * ACCOUNT and not to a map, so its body carries no map id at all, and the gate
+ * resolves a missing one through safeId to 'untitled', which is a real map
+ * somebody may own. Exempt from the MAP gate and guarded by a signed-in check
+ * of their own, exactly the way the world write is. */
+const OPEN_POSTS = new Set(['/api/stop', '/api/propose', '/api/world', '/api/ui/generate', '/api/ui/slots', '/api/ui/remove'])
 
 export function api(req, res, next) {
   const url = new URL(req.url, 'http://local')
@@ -2354,6 +2374,171 @@ async function route(req, res, p, url) {
     }
   }
 
+  /* THE FURNITURE THE GAME DRAWS OVER A MAP, and the marks inside it.
+   *
+   * A picture of a page is not a page. Without slots saying where the number
+   * goes, where the bar fills and where the button is, every drawn surface
+   * arrives with a second half typed by hand into vine source, which is the
+   * same defect as a hand-typed camera number: a fact about a picture kept
+   * somewhere the picture cannot correct it. server/store/ui.mjs holds the
+   * rules; these four routes are the only way in.
+   *
+   * All of them want an account rather than a map, because a dialogue box
+   * belongs to the game and not to the hub. */
+  if (p === '/api/ui' && req.method === 'GET') {
+    const me = await currentUser(req)
+    // signed out is not an error here, it is simply an account with no surfaces
+    return send(res, 200, { ui: me ? await listUi(me.id) : [], kinds: SLOT_KINDS, aligns: SLOT_ALIGNS })
+  }
+
+  if (p === '/api/ui/generate' && req.method === 'POST') {
+    const me = await currentUser(req)
+    if (!me) return send(res, 401, { error: 'sign in to draw a surface' })
+    const b = await body(req)
+    const name = String(b.name || '').trim()
+    const description = String(b.description || '').trim()
+    if (!description) return send(res, 400, { error: 'no description' })
+    /* THE ROW EXISTS BEFORE THE PICTURE DOES, because this call takes a minute
+     * and a half and something has to be poll-able for that minute and a half.
+     * It is also what makes a spend that produced nothing visible afterwards
+     * rather than silently absent. */
+    let row
+    try {
+      row = await createUi({
+        ownerId: me.id,
+        name,
+        title: b.title,
+        description,
+        w: b.width,
+        h: b.height,
+      })
+    } catch (e) {
+      return send(res, 400, { error: String(e.message || e) })
+    }
+    // the same style reference /api/generate takes: a slug whose painting is
+    // the look to match, which is the strongest lever this endpoint has for
+    // making chrome belong to the island under it
+    let styleImageBase64
+    if (b.style) {
+      try {
+        styleImageBase64 = (await styleRef(String(b.style))).base64
+      } catch (e) {
+        return send(res, 400, { error: `style "${b.style}": ${String(e.message || e).slice(0, 160)}` })
+      }
+    }
+    try {
+      const out = await pixellab.uiAsset({
+        description,
+        width: b.width,
+        height: b.height,
+        palette: b.palette,
+        elements: Array.isArray(b.elements) ? b.elements : null,
+        styleImageBase64,
+        name: row.name,
+      })
+      const buf = Buffer.from(out.b64, 'base64')
+      const size = pngSizeBuf(buf.subarray(0, 24))
+      const saved = await setUiImage(me.id, row.name, buf, size.w || out.width, size.h || out.height)
+      return send(res, 200, { ui: { name: saved.name, w: saved.w, h: saved.h, status: saved.status } })
+    } catch (e) {
+      await failUi(me.id, row.name)
+      return send(res, 502, { error: String(e.message || e).slice(0, 300) })
+    }
+  }
+
+  if (p === '/api/ui/slots' && req.method === 'POST') {
+    const me = await currentUser(req)
+    if (!me) return send(res, 401, { error: 'sign in to mark a surface' })
+    const b = await body(req)
+    try {
+      return send(res, 200, await setUiSlots(me.id, String(b.name || ''), b.slots))
+    } catch (e) {
+      // refused where it is written, naming what is wrong, rather than found by
+      // a member whose number prints half off the panel
+      return send(res, 400, { error: String(e.message || e), problems: e.problems || [] })
+    }
+  }
+
+  if (p === '/api/ui/remove' && req.method === 'POST') {
+    const me = await currentUser(req)
+    if (!me) return send(res, 401, { error: 'sign in to remove a surface' })
+    const b = await body(req)
+    return send(res, (await removeUi(me.id, String(b.name || ''))) ? 200 : 404, { removed: String(b.name || '') })
+  }
+
+  /* ---- the shared library, which is a COPY and says so --------------------
+   *
+   * One dock kit usable by twenty maps instead of twenty spends. The bytes are
+   * duplicated: that costs object storage and costs no pixellab generation at
+   * all, and 013_library_kit.sql has the whole of why a genuinely shared row
+   * was not worth its blast radius.
+   *
+   * library-share and library-copy both carry the map in `id`, so the POST
+   * ownership gate at the door already covers the map being written to. The
+   * SOURCE map is checked here, because the gate only ever looks at one. */
+  if (p === '/api/library-share' && req.method === 'POST') {
+    const b = await body(req)
+    const id = safeId(b.id)
+    const name = cleanName(b.name)
+    const r = await one(
+      `update library_items set shared = $3
+       where map_id = (select id from maps where slug = $1) and name = $2 returning name, shared`,
+      [id, name, !!b.shared],
+    )
+    if (!r) return send(res, 404, { error: 'not in the library' })
+    return send(res, 200, { name: r.name, shared: r.shared })
+  }
+
+  if (p === '/api/library-kit' && req.method === 'GET') {
+    const me = await currentUser(req)
+    if (!me) return send(res, 200, { kit: [] })
+    // the source slug travels with every row, because a picker showing eight
+    // barrels has to be able to say which map each one came off
+    const rows = await many(
+      `select m.slug, l.name, l.kind, l.w, l.h, l.fps, l.frame_count, l.is_effect
+       from library_items l join maps m on m.id = l.map_id
+       where l.shared and m.owner_id = $1 order by m.slug, l.name`,
+      [me.id],
+    )
+    return send(res, 200, {
+      kit: rows.map((r) => ({
+        from: r.slug,
+        name: r.name,
+        kind: r.kind,
+        w: r.w,
+        h: r.h,
+        ...(r.fps ? { fps: r.fps } : {}),
+        frames: r.frame_count,
+        ...(r.is_effect ? { effect: true } : {}),
+        src: r.frame_count > 0 ? `/work/${r.slug}/library/${r.name}/0.png` : `/work/${r.slug}/library/${r.name}.png`,
+      })),
+    })
+  }
+
+  if (p === '/api/library-copy' && req.method === 'POST') {
+    const b = await body(req)
+    const to = safeId(b.id)
+    const from = safeId(b.fromSlug)
+    const name = cleanName(b.name)
+    if (!name) return send(res, 400, { error: 'no name' })
+    if (from === to) return send(res, 400, { error: 'that item is already in this map' })
+    /* THE GATE ONLY EVER LOOKS AT ONE MAP, so the other one is checked here.
+     * Without this an account could name somebody else's map as the source and
+     * pull their whole library into a map they do own, which is the same hole
+     * the import routes had when their target lived in sceneId. */
+    if (platformOn()) {
+      const me = await currentUser(req)
+      const owners = await many('select slug, owner_id from maps where slug = any($1)', [[from, to]])
+      for (const o of owners) if (!me || me.id !== o.owner_id) return send(res, 403, { error: `${o.slug} belongs to another account` })
+      if (owners.length < 2) return send(res, 404, { error: 'one of those maps does not exist' })
+    }
+    try {
+      return send(res, 200, { copied: await copyLibraryItem(from, name, to, cleanName(b.as || name)) })
+    } catch (e) {
+      return send(res, 400, { error: String(e.message || e) })
+    }
+  }
+
   if (p === '/api/export' && req.method === 'POST') {
     /* AN EXPORT THAT TAKES MINUTES HAS TO SAY WHERE IT IS.
      *
@@ -3183,6 +3368,40 @@ async function readApi(req, res, p, url) {
    * registry above is live for the same reason, and a composition that lags a
    * republish would place an island that has already moved. */
   if (kind === 'world' && !slugRaw) return send(res, 200, await getWorld())
+
+  /* THE CHROME, and the marks inside it.
+   *
+   * The half of a drawn surface that is not the png. A grape asking where the
+   * speaker's name goes gets an answer from the surface itself rather than from
+   * a number somebody typed into vine source, which is the whole reason slots
+   * exist. Served live rather than from a published version, the same way the
+   * maps registry and the ocean are, because chrome has no publish step.
+   *
+   * A name is unique per ACCOUNT and there is no account in this path, so two
+   * people naming a surface `dialogue_box` collide here and the older row wins.
+   * Survivable because the game reads chrome from one account, and written down
+   * rather than left to whichever row came back first. */
+  if (kind === 'ui') {
+    if (!slugRaw) return send(res, 200, { ui: await readyUi() })
+    const surface = await readyUiByName(slugRaw)
+    if (!surface) return send(res, 404, { error: `no surface ${slugRaw}` })
+    if (!sub) return send(res, 200, surface)
+    if (sub === 'image') {
+      const buf = await uiImage(slugRaw)
+      if (!buf) return notFound(res)
+      res.setHeader('Content-Type', 'image/png')
+      /* IMMUTABLE, WHICH IS A TRADE AND NOT A FREE WIN. There is no version in
+       * this key, so redrawing a surface under the same name will not reach a
+       * browser that already holds the old picture until its year is up. The
+       * thing bought with that is a class of thirty chromebooks fetching the
+       * game's chrome exactly once between them, which is the cost that
+       * actually shows up. Rename the surface to force a redraw through. */
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
+      res.setHeader('Access-Control-Allow-Origin', '*')
+      return res.end(buf)
+    }
+    return send(res, 404, { error: 'no such endpoint' })
+  }
 
   if (kind !== 'maps' || !slugRaw) return send(res, 404, { error: 'no such endpoint' })
   const slug = safeId(slugRaw)

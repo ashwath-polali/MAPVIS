@@ -19,6 +19,8 @@
  *                                         mode template off a named walk, or mode v3 off written motion words
  *   GET  /v2/characters                -> { characters, total }, every character on the account
  *   GET  /v2/characters/{id}           -> status, rotation_urls, and animations carrying frame urls
+ *   POST /v2/ui-assets                 -> { ui_asset_id }, one panel of chrome. Route NOT confirmed, see uiAsset
+ *   GET  /v2/ui-assets/{id}            -> 423 while running, the finished image when done
  *   GET  /v1/balance                   -> { usd }
  */
 import fs from 'node:fs'
@@ -200,6 +202,106 @@ export async function mapObject({ description, w, h, view = 'low top-down', seed
     }
   }
   throw new Error('generation timed out')
+}
+
+/* ---- UI: the furniture the game draws OVER a map -------------------------
+ *
+ * A dialogue box, a meter, a card, a button. Not a map object and not a
+ * character: it has no world position, no camera and no body, and it is the one
+ * class of art this file could not make at all.
+ *
+ * ROUTE NOT CONFIRMED FROM ANYTHING IN THIS REPO. Every other endpoint above
+ * was read off the live v2 openapi document or measured; this one is written
+ * from the shape the ui-asset tooling exposes (create returns ui_asset_id, a
+ * get by that id reports progress then a finished image) and has not been
+ * checked against the schema, because checking a create route means spending
+ * what it costs. If /v2/ui-assets turns out to be named something else, the
+ * poll loop and the download are still right and only the two strings move.
+ *
+ * IT IS EXPENSIVE, and that is the reason nothing calls it speculatively. The
+ * tooling prices a panel at 20 to 40 generations, which is the pro character
+ * bracket rather than the one-generation bracket map objects sit in. One panel
+ * is worth several dozen props.
+ *
+ * The size is aspect-gated and the two maxima DO NOT COMBINE: 688 is only
+ * reachable with a 16:9 partner and 512 only as a square, so 688x512 resolves
+ * to 4:3 and is refused. That refusal arrives after the request has been sent,
+ * which is the same trap the odd-canvas 422 was on map-objects, so the fit
+ * happens here where it costs nothing.
+ */
+const UI_GATES = [
+  [16 / 9, 688, 384],
+  [9 / 16, 384, 688],
+  [4 / 3, 600, 448],
+  [3 / 4, 448, 600],
+  [1, 512, 512],
+]
+
+function fitUi(w, h) {
+  const want = Math.max(1, Number(w) || 256) / Math.max(1, Number(h) || 256)
+  // nearest gate by ratio, because the caller asked for a shape rather than for
+  // one of five names and should get the closest legal one
+  const [, maxW, maxH] = UI_GATES.reduce((best, g) => (Math.abs(Math.log(g[0] / want)) < Math.abs(Math.log(best[0] / want)) ? g : best))
+  const k = Math.min(1, maxW / Math.max(1, w), maxH / Math.max(1, h))
+  return {
+    width: Math.max(192, Math.min(maxW, Math.round(w * k))),
+    height: Math.max(192, Math.min(maxH, Math.round(h * k))),
+  }
+}
+
+export async function uiAsset({ description, width = 256, height = 256, palette, elements, pieces, styleImageBase64, seed, name }) {
+  const say = String(description || '').trim()
+  if (!say) throw new Error('a surface needs a description')
+  const size = fitUi(width, height)
+  const req = {
+    description: say.slice(0, 1000),
+    width: size.width,
+    height: size.height,
+    // chrome sits on top of a map, so it is cut out for the same reason every
+    // map object is: anything opaque behind it is a rectangle of somebody
+    // else's idea of a background painted over the island
+    no_background: true,
+  }
+  if (palette) req.color_palette = String(palette).slice(0, 120)
+  if (Array.isArray(elements) && elements.length) req.elements = elements.map((s) => String(s).slice(0, 40)).filter(Boolean)
+  if (Array.isArray(pieces) && pieces.length) req.pieces = pieces
+  /* THE STRONGEST LEVER THIS ENDPOINT HAS, and the one measured true elsewhere.
+   * A style image transfers palette, outline, detail and shading, which is
+   * exactly what makes a panel look like it belongs to the island under it. It
+   * cannot transfer layout or content, so it does not carry the same risk the
+   * map did on /v2/map-objects: there is no subject for it to continue. */
+  if (styleImageBase64) req.style_image_base64 = String(styleImageBase64)
+  if (seed != null) req.seed = seed
+  if (name) req.name = String(name).slice(0, 60)
+
+  const out = await call('POST', '/v2/ui-assets', req)
+  const id = out.ui_asset_id || out.id
+  if (!id) throw new Error('the surface was queued without an id to collect it from')
+
+  // 30 to 90 seconds typical; the same five minute ceiling and five second tick
+  // mapObject settled on, and 423 read as still running the same way
+  for (let waited = 0; waited < 300000; waited += 5000) {
+    await new Promise((r) => setTimeout(r, 5000))
+    const r = await fetch(BASE + '/v2/ui-assets/' + encodeURIComponent(id), {
+      headers: { Authorization: 'Bearer ' + token() },
+    })
+    if (r.status === 423) continue
+    const text = await r.text()
+    if (r.status === 410) throw new Error('the surface failed: ' + text.slice(0, 200))
+    if (!r.ok) throw new Error(`pixellab ${r.status} ${text.slice(0, 300)}`)
+    const j = text ? JSON.parse(text) : {}
+    if (String(j.status || '').toLowerCase() === 'failed') throw new Error(j.error || 'the surface failed to draw')
+    // the field the finished picture arrives under is not confirmed either, so
+    // the three plausible names are tried rather than one guessed at
+    const url = j.download_url || j.image_url || j.url || ''
+    if (String(j.status || '').toLowerCase() === 'completed' && url) {
+      // fetched the instant it exists, because these urls expire the way the
+      // map-object ones do and a surface that has been paid for must not be
+      // lost to a slow caller
+      return { b64: (await fetchPNG(url)).toString('base64'), uiAssetId: String(id), ...size }
+    }
+  }
+  throw new Error('the surface timed out')
 }
 
 /* ---- STATES: the same thing wearing a different face ---------------------

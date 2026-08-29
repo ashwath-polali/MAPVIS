@@ -1,0 +1,20 @@
+-- One dock kit for twenty maps, and the honest reason it is a copy.
+--
+-- The ask is that a barrel drawn once can stand on every island that has a
+-- harbour, instead of twenty maps each spending a generation on their own
+-- barrel. The obvious shape is a library row that belongs to nobody's map, and
+-- it is the wrong shape to reach for here: library_items.map_id is not null
+-- with unique (map_id, name), every blob key is maps/<mapId>/library/..., and
+-- blobKeyForWorkPath, resolveAssetFile, the export's hydrate, the /work/ url
+-- space and the POST ownership gate all read a map id out of the path. A
+-- nullable map_id would have to be answered for in six places, one of which is
+-- the gate that decides whether a stranger may write to your library.
+--
+-- So this column is the smaller thing that gets the feature: an item its owner
+-- OFFERS to their own other maps. Copying it into a second map duplicates the
+-- bytes, which costs object storage and costs no generation at all, and leaves
+-- every key shape and every ownership rule exactly where it was. The copy is
+-- also what the author usually wants in practice, because a barrel dropped into
+-- the Maw is going to get palette-matched to black stone and a true share would
+-- have changed the barrel on the hub too.
+alter table library_items add column if not exists shared boolean not null default false;

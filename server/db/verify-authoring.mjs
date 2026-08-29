@@ -16,6 +16,8 @@ import { publishBundle, publishedMap } from '../store/publish.mjs'
 import { gateMap } from '../store/gate.mjs'
 import { store } from '../store/blobs.mjs'
 import { getWorld, saveWorld } from '../store/world.mjs'
+import { putLibraryFrames, copyLibraryItem } from '../store/platform.mjs'
+import { createUi, setUiSlots, getUiByName, removeUi } from '../store/ui.mjs'
 import { encodePNG } from '../sheet.mjs'
 import { q, one, closeDb } from './pool.mjs'
 
@@ -329,6 +331,131 @@ try {
   } finally {
     // put the ocean back exactly as it was, because it is one shared row
     await saveWorld(worldBefore)
+  }
+
+  // ---- 6. the chrome, and one kit shared across maps -----------------------
+  /* A PICTURE OF A PAGE IS NOT A PAGE. A generated dialogue box with no slots
+   * is a wallpaper: the vine still has to be told where the name prints and
+   * where the button is, and those numbers end up typed into vine source where
+   * the picture cannot correct them. So the marks are the deliverable, and this
+   * is the fence saying a mark survives being saved and read back.
+   *
+   * Nothing here generates anything. The picture is a solid colour written by
+   * this file, because the only thing being tested is whether an authored value
+   * reaches the other end, and a real surface costs 20 to 40 generations. */
+  const solidPNG = (w, h, r, g, b) => {
+    const rgba = Buffer.alloc(w * h * 4)
+    for (let i = 0; i < w * h; i++) {
+      rgba[i * 4] = r
+      rgba[i * 4 + 1] = g
+      rgba[i * 4 + 2] = b
+      rgba[i * 4 + 3] = 255
+    }
+    return encodePNG(w, h, rgba)
+  }
+
+  const UI = 'zz_verify_panel'
+  await removeUi(owner.id, UI)
+  try {
+    await createUi({ ownerId: owner.id, name: UI, title: 'The Verify Panel', description: 'a plain box', w: 200, h: 80 })
+    const saved = await setUiSlots(owner.id, UI, [
+      { name: 'speaker', kind: 'text', x: 10, y: 6, w: 120, h: 14, align: 'left' },
+      { name: 'stamina', kind: 'bar', x: 10, y: 40, w: 180, h: 12, meta: { fills: 'left' } },
+      { name: 'go_on', kind: 'button', x: 150, y: 60, w: 44, h: 16 },
+    ])
+    eq('the surface keeps every slot it was given', saved.slots.length, 3)
+
+    const read = await getUiByName(owner.id, UI)
+    const bar = read?.slots.find((s) => s.name === 'stamina')
+    eq('a slot comes back by name', [bar?.kind, bar?.x, bar?.y, bar?.w, bar?.h], ['bar', 10, 40, 180, 12])
+    eq('a slot keeps the bag its author filled', bar?.meta, { fills: 'left' })
+    eq('a slot keeps its alignment', read?.slots.find((s) => s.name === 'speaker')?.align, 'left')
+
+    /* A SLOT WITH NO NAME IS REFUSED RATHER THAN NUMBERED. Every other field
+     * has an honest default; a name does not, because the name is the thing a
+     * grape holds, and a mark silently called slot_3 is a promise nobody made. */
+    let nameless = ''
+    try {
+      await setUiSlots(owner.id, UI, [{ kind: 'text', x: 0, y: 0, w: 10, h: 10 }])
+    } catch (e) {
+      nameless = e.message
+    }
+    nameless.includes('no name')
+      ? ok('a nameless slot is refused rather than given a number')
+      : no(`a nameless slot saved anyway: ${nameless || 'no error'}`)
+
+    // and a rect off the edge of the picture, which can never be drawn into,
+    // is refused with the slot's own name in the sentence
+    let offEdge = ''
+    try {
+      await setUiSlots(owner.id, UI, [{ name: 'off_the_edge', kind: 'text', x: 180, y: 70, w: 60, h: 40 }])
+    } catch (e) {
+      offEdge = e.message
+    }
+    offEdge.includes('off_the_edge') && offEdge.includes('200x80')
+      ? ok('a slot off the edge is refused, naming the slot and the surface')
+      : no(`a slot off the picture saved anyway: ${offEdge || 'no error'}`)
+
+    // overlap is legal and usually a mis-drag, so it warns and still saves
+    const over = await setUiSlots(owner.id, UI, [
+      { name: 'the_bar', kind: 'bar', x: 10, y: 10, w: 100, h: 20 },
+      { name: 'the_reading', kind: 'number', x: 40, y: 12, w: 30, h: 14 },
+    ])
+    over.warnings.some((w) => w.includes('overlap'))
+      ? ok('two overlapping slots warn and still save')
+      : no('an overlap passed without a word')
+    eq('the surface still has both after the warning', over.slots.length, 2)
+  } finally {
+    await removeUi(owner.id, UI)
+  }
+
+  /* ONE DOCK KIT, TWENTY MAPS. The bytes are duplicated on purpose: that costs
+   * object storage and no generation at all, and 013_library_kit.sql has the
+   * six places a genuinely shared row would have had to reach. The thing that
+   * matters here is that EVERY frame comes across, because a walking character
+   * copied as one still is a person who faces south forever and nothing
+   * anywhere would say so. */
+  const KIT_A = 'zz-verify-kit-a'
+  const KIT_B = 'zz-verify-kit-b'
+  for (const s of [KIT_A, KIT_B]) {
+    const had = await getMapBySlug(s)
+    if (had) await q('delete from maps where id = $1', [had.id])
+  }
+  const a = await createMap({ slug: KIT_A, ownerId: owner.id, w: 32, h: 32, spawn: [0, 0] })
+  const bmap = await createMap({ slug: KIT_B, ownerId: owner.id, w: 32, h: 32, spawn: [0, 0] })
+  try {
+    const frames = [solidPNG(8, 8, 200, 60, 40), solidPNG(8, 8, 180, 50, 30), solidPNG(8, 8, 160, 40, 20)]
+    await putLibraryFrames(KIT_A, 'dock-barrel', frames, { w: 8, h: 8, fps: 6 })
+    await q(`update library_items set shared = true where map_id = $1 and name = 'dock-barrel'`, [a.id])
+
+    const kit = await q(
+      `select m.slug, l.name from library_items l join maps m on m.id = l.map_id where l.shared and m.owner_id = $1 and m.slug = $2`,
+      [owner.id, KIT_A],
+    )
+    eq('a shared item is offered by its own map', kit.rows[0]?.name, 'dock-barrel')
+
+    const copied = await copyLibraryItem(KIT_A, 'dock-barrel', KIT_B, 'dock-barrel')
+    const there = await one('select * from library_items where map_id = $1 and name = $2', [bmap.id, 'dock-barrel'])
+    eq('the copy lands in the other map', there?.name, 'dock-barrel')
+    eq('the copy carries the same frame count', there?.frame_count, 3)
+    eq('the copy keeps the size and the rate', [there?.w, there?.h, there?.fps], [8, 8, 6])
+    /* THE ROW IS THE CHEAP HALF. A row saying three frames with one png behind
+     * it is exactly the failure a partial copy looks like, so the bucket is
+     * counted rather than trusted. */
+    const bytes = await store().list(`maps/${bmap.id}/library/dock-barrel/`)
+    bytes.length === 3
+      ? ok('all three frames really are in the bucket of the map copied into')
+      : no(`the row says 3 frames and the bucket holds ${bytes.length}`)
+    /* AND IT IS A COPY, NOT A MOVE. The source has to be untouched, or
+     * "offering" a barrel to a second island quietly takes it off the first. */
+    const still = await store().list(`maps/${a.id}/library/dock-barrel/`)
+    still.length === 3 ? ok('the map it came from still has its own') : no(`the source lost frames: ${still.length} left`)
+    eq('the copy reports where it came from', copied?.from, KIT_A)
+  } finally {
+    for (const id of [a.id, bmap.id]) {
+      await store().delPrefix(`maps/${id}/`)
+      await q('delete from maps where id = $1', [id])
+    }
   }
 } finally {
   await q('delete from maps where id = $1', [map.id])

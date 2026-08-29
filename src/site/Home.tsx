@@ -363,6 +363,11 @@ export default function Home() {
           <Link to="/world" className="home-sea">
             the ocean
           </Link>
+          {/* and the panels the game draws its words into, which belong to no
+              single map for the same reason the water does not */}
+          <Link to="/surfaces" className="home-sea">
+            ui surfaces
+          </Link>
           <input
             className="home-find"
             value={q}

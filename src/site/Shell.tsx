@@ -63,6 +63,7 @@ const Enter = lazy(fresh(() => import('./Enter')))
 const Home = lazy(fresh(() => import('./Home')))
 const MapPage = lazy(fresh(() => import('./MapPage')))
 const World = lazy(fresh(() => import('./World')))
+const Surfaces = lazy(fresh(() => import('./Surfaces')))
 
 /* One loading mark for the whole app: four squares walking a ring on the pixel
  * grid. The bleeding ink blot it replaced was slow, soft and the wrong shape for
@@ -150,6 +151,9 @@ export default function Shell() {
   // the one page that is not about a single map: where every map sits on the
   // one ocean, which is a document the platform holds exactly one of
   else if (route.path === '/world') page = <World />
+  // the panels the game draws its text into, which belong to no single map
+  // either: one dialogue box serves every island there is
+  else if (route.path === '/surfaces') page = <Surfaces />
   else if (mapMatch) page = <MapPage slug={mapMatch.slug} />
   else page = <Lost path={route.path} />
 

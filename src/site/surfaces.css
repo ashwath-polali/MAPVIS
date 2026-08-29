@@ -1,0 +1,433 @@
+/* The surface page: a rail of panels, the panel itself in the middle at a whole
+ * number zoom, and what one slot is on the right. It borrows the ocean's rules
+ * rather than inventing a third look, because they are the same act on
+ * different documents: mark a thing, name it, press save.
+ *
+ * Loaded from Surfaces.tsx rather than from main.tsx, so nobody who never marks
+ * a panel pays for the rules.
+ */
+
+.surf {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: 100svh;
+  background: #070b11;
+  color: #d8e3ee;
+  font-family: var(--font-label);
+}
+
+.surf-bar {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  padding: 12px clamp(14px, 2vw, 26px);
+  border-bottom: 1px solid #141c26;
+}
+.surf-back {
+  font: 500 12px var(--font-label);
+  color: #6f7885;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  transition: color 180ms ease;
+}
+.surf-back:hover {
+  color: #d8e3ee;
+}
+.surf-mark {
+  font: 700 11px var(--font-label);
+  letter-spacing: 0.4em;
+  text-transform: uppercase;
+  color: #d8e3ee;
+}
+.surf-meta {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font: 400 10px var(--font-mono);
+  color: #5b6470;
+}
+.surf-zoom {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+.surf-zn {
+  min-width: 26px;
+  text-align: center;
+  font: 400 10px var(--font-mono);
+  color: #6f7885;
+}
+.surf-tool {
+  width: 26px;
+  height: 26px;
+  font: 500 13px var(--font-label);
+  color: #6f7885;
+  background: none;
+  border: 1px solid #1d232b;
+  cursor: pointer;
+  transition: all 160ms ease;
+}
+.surf-tool:hover:not(:disabled) {
+  color: #d8e3ee;
+  border-color: #39434f;
+}
+.surf-tool:disabled {
+  color: #39434f;
+  cursor: default;
+}
+.surf-save {
+  padding: 6px 16px;
+  font: 600 11px var(--font-label);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--gold-lit);
+  background: none;
+  border: 1px solid color-mix(in srgb, var(--gold) 45%, transparent);
+  cursor: pointer;
+  transition: all 180ms ease;
+}
+.surf-save:hover:not(:disabled) {
+  color: #070b11;
+  background: var(--gold);
+}
+.surf-save:disabled {
+  color: #4a5563;
+  border-color: #1d232b;
+  cursor: default;
+}
+
+.surf-body {
+  display: grid;
+  grid-template-columns: 206px minmax(0, 1fr) 306px;
+  min-height: 0;
+}
+@media (max-width: 1100px) {
+  .surf-body {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 55svh minmax(0, 1fr);
+  }
+}
+
+/* the rail: every panel this account has asked for, and the way to ask for
+   another. The dot is the status, so a panel still being drawn says so from
+   across the room. */
+.surf-rail {
+  overflow-y: auto;
+  padding: 12px 10px 30px;
+  border-right: 1px solid #141c26;
+  display: grid;
+  align-content: start;
+  gap: 1px;
+}
+.surf-new {
+  margin-bottom: 8px;
+  padding: 7px 9px;
+  font: 500 11.5px var(--font-label);
+  color: #8d97a4;
+  background: none;
+  border: 1px dashed #232b35;
+  cursor: pointer;
+  text-align: left;
+  transition: all 160ms ease;
+}
+.surf-new:hover {
+  color: #d8e3ee;
+  border-color: #39434f;
+}
+.surf-new.on {
+  color: var(--gold-lit);
+  border-color: color-mix(in srgb, var(--gold) 45%, transparent);
+  border-style: solid;
+}
+
+.surf-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 7px;
+  background: none;
+  border: 0;
+  border-left: 2px solid transparent;
+  cursor: pointer;
+  text-align: left;
+  transition: background-color 140ms ease;
+}
+.surf-row:hover {
+  background: #10141a;
+}
+.surf-row.on {
+  border-left-color: var(--gold);
+  background: #10141a;
+}
+.surf-row i {
+  flex: none;
+  width: 7px;
+  height: 7px;
+}
+.surf-row-n {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 500 12px var(--font-label);
+  color: #d8e3ee;
+}
+.surf-row-m {
+  flex: none;
+  font: 400 9.5px var(--font-mono);
+  color: #5b6470;
+}
+
+/* the panel itself, centred in whatever room is left and scrolled when there is
+   not enough of it. Nothing here scales the canvas: the zoom is a whole number
+   decided in the page, so the art never lands between pixels. */
+.surf-stage {
+  position: relative;
+  overflow: auto;
+  display: flex;
+  padding: 24px;
+}
+/* centred with margins rather than with justify-content, because a flex box
+   that centres a child bigger than itself puts the child's top left off the
+   scrollable area and a panel taller than the window loses its first rows */
+.surf-hold,
+.surf-make,
+.surf-empty {
+  margin: auto;
+}
+.surf-hold {
+  line-height: 0;
+  box-shadow: 0 0 0 1px #141c26;
+}
+.surf-cv {
+  display: block;
+  touch-action: none;
+  image-rendering: pixelated;
+  cursor: crosshair;
+}
+.surf-hint {
+  position: absolute;
+  left: 14px;
+  bottom: 12px;
+  margin: 0;
+  font: 400 11px var(--font-label);
+  color: #5b6470;
+  pointer-events: none;
+}
+
+.surf-side {
+  overflow-y: auto;
+  padding: 14px 16px 40px;
+  border-left: 1px solid #141c26;
+  display: grid;
+  align-content: start;
+  gap: 12px;
+}
+.surf-lab {
+  font: 600 9px var(--font-label);
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: #5b6470;
+}
+.surf-note,
+.surf-say {
+  margin: 0;
+  font: 400 11.5px var(--font-label);
+  line-height: 1.5;
+  color: #6f7885;
+}
+.surf-say b {
+  color: #d8e3ee;
+  font-weight: 600;
+}
+
+/* what the server said, in its own words. A refusal is sealing wax, a warning
+   is gold: one of them stopped the save and the other did not. */
+.surf-refused,
+.surf-warns {
+  display: grid;
+  gap: 5px;
+  padding: 10px 12px;
+  border-left: 2px solid var(--wax);
+  background: rgba(176, 74, 47, 0.08);
+}
+.surf-warns {
+  border-left-color: var(--gold);
+  background: rgba(212, 165, 60, 0.07);
+}
+.surf-refused p,
+.surf-warns p {
+  margin: 0;
+  font: 400 11.5px var(--font-label);
+  line-height: 1.45;
+  color: #d8e3ee;
+}
+
+.surf-insp,
+.surf-make {
+  display: grid;
+  gap: 9px;
+  align-content: start;
+}
+.surf-insp {
+  padding-bottom: 6px;
+  border-bottom: 1px solid #141c26;
+}
+/* the form is the only thing on this page wide enough to read as a document,
+   because it is the one place you are writing rather than pointing */
+.surf-make {
+  width: 440px;
+  max-width: 100%;
+  padding: 18px 20px 22px;
+  border: 1px solid #141c26;
+  background: #090d14;
+}
+.surf-f {
+  display: grid;
+  gap: 3px;
+}
+.surf-f > span {
+  font: 400 10px var(--font-mono);
+  color: #5b6470;
+}
+.surf-in {
+  width: 100%;
+  padding: 6px 8px;
+  font: 400 12px var(--font-label);
+  color: #d8e3ee;
+  background: #10141a;
+  border: 1px solid #1d232b;
+  outline: none;
+  transition: border-color 180ms ease;
+}
+.surf-in:focus {
+  border-color: #39434f;
+}
+.surf-in.bad {
+  border-color: var(--wax);
+}
+.surf-area {
+  resize: vertical;
+  line-height: 1.45;
+}
+.surf-bad {
+  margin: 0;
+  font: 400 11px var(--font-label);
+  line-height: 1.45;
+  color: var(--wax);
+}
+.surf-pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.surf-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.surf-chip {
+  padding: 4px 9px;
+  font: 400 10.5px var(--font-label);
+  color: #6f7885;
+  background: #10141a;
+  border: 1px solid #1d232b;
+  cursor: pointer;
+  transition: all 140ms ease;
+}
+.surf-chip:hover {
+  color: #d8e3ee;
+  border-color: #39434f;
+}
+.surf-chip.on {
+  color: #070b11;
+  background: var(--gold);
+  border-color: var(--gold);
+}
+
+.surf-btn {
+  padding: 6px 12px;
+  font: 500 11px var(--font-label);
+  color: #8d97a4;
+  background: none;
+  border: 1px solid #1d232b;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 160ms ease;
+}
+.surf-btn:hover {
+  color: #d8e3ee;
+  border-color: #39434f;
+}
+.surf-btn.danger:hover {
+  color: #ff6b5e;
+  border-color: #6d2b26;
+  background: rgba(40, 12, 10, 0.7);
+}
+.surf-sure {
+  display: flex;
+  gap: 6px;
+}
+
+/* the one press on this page that spends money, so it is the only thing on it
+   wearing the gold plate and it sits under its own price */
+.surf-fire {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+.surf-go {
+  padding: 9px 18px;
+  font: 600 11px var(--font-label);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #070b11;
+  background: var(--gold);
+  border: 1px solid var(--gold);
+  cursor: pointer;
+  transition: all 180ms ease;
+}
+.surf-go:hover:not(:disabled) {
+  background: var(--gold-lit);
+  border-color: var(--gold-lit);
+}
+.surf-go:disabled {
+  color: #4a5563;
+  background: none;
+  border-color: #1d232b;
+  cursor: default;
+}
+.surf-cost {
+  margin: 0;
+  font: 400 11px var(--font-mono);
+  line-height: 1.5;
+  color: var(--gold-deep);
+}
+
+.surf-roster {
+  display: grid;
+  gap: 1px;
+  align-content: start;
+}
+
+.surf-gone {
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  gap: 12px;
+  padding: 0 clamp(20px, 6vw, 70px);
+  height: 100svh;
+}
+.surf-gone h1 {
+  margin: 0;
+  font: 400 clamp(1.8rem, 4vw, 3rem) var(--font-display);
+}
+.surf-gone p {
+  margin: 0;
+  color: #6f7885;
+}

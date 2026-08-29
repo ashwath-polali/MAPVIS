@@ -684,6 +684,104 @@ export async function pushItem(slug, name, workDir) {
   return { name, frames: n, dirs: Object.keys(dirs).length, faces }
 }
 
+/* ---- ONE DOCK KIT, TWENTY MAPS, AND WHY IT IS A COPY -----------------------
+ *
+ * A barrel drawn once should stand on every island that has a harbour, instead
+ * of twenty maps each spending a generation on their own barrel. The shape that
+ * first looks right is a library row belonging to no map, and it is not worth
+ * what it costs: library_items.map_id is not null with unique (map_id, name),
+ * every key is maps/<mapId>/library/..., and blobKeyForWorkPath,
+ * resolveAssetFile, hydrateMap, the /work/ url space and the POST ownership
+ * gate all read a map id out of a path. A nullable map_id has to be answered
+ * for in all six, and one of them is the gate that decides whether a stranger
+ * may write into your library. That is a lot of blast radius for a convenience.
+ *
+ * So this DUPLICATES THE BYTES. It costs object storage and it costs no
+ * pixellab spend at all, which is the only cost that was ever the point. Inside
+ * the bucket a copy is server-side, so no frame is downloaded and re-uploaded,
+ * and the copy is usually what an author wanted anyway: a barrel dropped into
+ * the Maw gets palette-matched to black stone, and a true share would have
+ * changed the barrel on the hub too.
+ *
+ * Every frame and every state face, not just 0.png. A partial copy is the
+ * failure this is written against: a walking character copied as one still is a
+ * person who faces south forever, and nothing anywhere would say so. */
+export async function copyLibraryItem(fromSlug, name, toSlug, as) {
+  if (!platformOn()) return null
+  const fromId = await mapIdFor(fromSlug)
+  const toId = await mapIdFor(toSlug)
+  if (!fromId || !toId) throw new Error('one of those maps does not exist')
+  const src = await one('select * from library_items where map_id = $1 and name = $2', [fromId, name])
+  if (!src) throw new Error(`"${name}" is not in ${fromSlug}'s library`)
+  const to = await freeName(toSlug, as || name)
+
+  const s = store()
+  // the still, the flat frames, the per-heading folders: everything under the
+  // item's own prefix keeps the relative tail it had, because
+  // blobKeyForWorkPath translates a /work/ url to a key by position
+  const held = [...(await s.list(keys.libPrefix(fromId, name))), ...(await s.list(keys.libStill(fromId, name)))]
+  const lib = `maps/${fromId}/library/`
+  for (const o of held) {
+    // sliced off a prefix that is known exactly rather than matched, because the
+    // item's own name is the only part that changes and everything after it is
+    // the path the loader already knows how to read
+    const tail = String(o.key).slice(lib.length + name.length)
+    await s.copy(o.key, `maps/${toId}/library/${to}${tail}`)
+  }
+
+  // dirs holds blob keys, so it moves with them or the row points at the map it
+  // was copied out of
+  const dirs = src.dirs
+    ? JSON.parse(JSON.stringify(src.dirs).split(`maps/${fromId}/library/${name}/`).join(`maps/${toId}/library/${to}/`))
+    : null
+  await upsertItem(toId, to, src.kind, {
+    w: src.w,
+    h: src.h,
+    fps: src.fps,
+    frame_count: src.frame_count,
+    dirs,
+    effect: src.effect,
+    is_effect: src.is_effect,
+    origin: src.origin,
+    prefix: keys.libPrefix(toId, to),
+  })
+
+  const row = await one('select id from library_items where map_id = $1 and name = $2', [toId, to])
+  let faces = 0
+  for (const f of await many('select * from library_states where item_id = $1', [src.id])) {
+    for (const o of await s.list(keys.statePrefix(fromId, name, f.face))) {
+      const tail = String(o.key).slice(keys.statePrefix(fromId, name, f.face).length)
+      await s.copy(o.key, keys.statePrefix(toId, to, f.face) + tail)
+    }
+    // a face's dirs and src are /work/ urls rather than keys, so both the slug
+    // and the item name in them have to move
+    const swap = (v) =>
+      v == null
+        ? null
+        : JSON.parse(JSON.stringify(v).split(`/work/${fromSlug}/states/${name}/`).join(`/work/${toSlug}/states/${to}/`))
+    await q(
+      `insert into library_states (item_id, face, dirs, frame_count, blob_prefix, fps, w, h, src)
+       values ($1,$2,$3::jsonb,$4,$5,$6,$7,$8,$9)
+       on conflict (item_id, face) do update set
+         dirs=excluded.dirs, frame_count=excluded.frame_count, fps=excluded.fps,
+         w=excluded.w, h=excluded.h, src=excluded.src`,
+      [
+        row.id,
+        f.face,
+        f.dirs ? JSON.stringify(swap(f.dirs)) : null,
+        f.frame_count,
+        keys.statePrefix(toId, to, f.face),
+        f.fps,
+        f.w,
+        f.h,
+        f.src ? swap(f.src) : null,
+      ],
+    )
+    faces++
+  }
+  return { name: to, from: fromSlug, files: held.length, frames: src.frame_count, faces }
+}
+
 /* The same thing wearing another face: a troll's boulder, a character's every
  * heading. A face lives one folder deeper than the library does, because a
  * character state comes back as whole headings and nesting keeps a heading's
