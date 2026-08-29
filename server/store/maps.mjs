@@ -221,8 +221,19 @@ export async function putDoc(mapId, docString) {
         d.base?.h ?? h,
         d.base?.ox ?? 0,
         d.base?.oy ?? 0,
-        d.spawn?.[0] | 0,
-        d.spawn?.[1] | 0,
+        /* ROUNDED, NOT TRUNCATED, because the other side rounds.
+         *
+         * mask.ts reads a spawn back with Math.round and this wrote it with
+         * `| 0`, so the two disagree about any half pixel and the row ends up
+         * one north of the document. Not currently reachable, since every
+         * writer upstream already rounds, which is why changing it did NOT fix
+         * the hub's 557,508-in-557,507-out failure. Left as a consistency fix
+         * and written down so the next person does not read it as the cause of
+         * that one. The real cause is the doc_sha shortcut above: the columns
+         * were edited out of band, the sha still matches the document, and an
+         * unchanged save writes nothing, so the row can never correct itself. */
+        Math.round(Number(d.spawn?.[0]) || 0),
+        Math.round(Number(d.spawn?.[1]) || 0),
         assetsJson,
         d.assetNext ?? assets.length + 1,
         rowSha,
