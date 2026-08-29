@@ -15,6 +15,7 @@ import { getMapBySlug, createMap, getDoc, putDoc } from '../store/maps.mjs'
 import { publishBundle, publishedMap } from '../store/publish.mjs'
 import { gateMap } from '../store/gate.mjs'
 import { store } from '../store/blobs.mjs'
+import { getWorld, saveWorld } from '../store/world.mjs'
 import { encodePNG } from '../sheet.mjs'
 import { q, one, closeDb } from './pool.mjs'
 
@@ -80,6 +81,31 @@ const doc = {
   // the six numbers describing the body, none of them the defaults
   walk: { charH: 36, hip: 3, hipDY: 2, speed: 68, yScale: 0.66, near: 12 },
   props: { title: 'The Verify Yard', class: 'hall', islandId: 'verify_club', meta: { district: 'harbour' } },
+  /* A NAMED ROUTE. Straight lines between two anchors were the only shape a map
+   * could describe, so the ship reaching the dock and an actor crossing a room
+   * were both hand-typed numbers in the other repo. The mark is the part that
+   * stops a cutscene being retuned whenever the text changes. */
+  paths: [
+    {
+      id: 1,
+      name: 'the_approach',
+      points: [
+        [4, 4],
+        [18, 10],
+        [30, 26],
+      ],
+      closed: false,
+      twoWay: false,
+      facing: 'east',
+      marks: [{ at: 1, name: 'the_line_ends' }],
+    },
+  ],
+  pathNext: 2,
+  /* A NAMED SHOT, hung off an anchor rather than off coordinates, so it travels
+   * with the station when the same beat stages somewhere else and does not
+   * re-break every time the painting is re-cut. */
+  framings: [{ id: 1, name: 'over_the_coach', anchor: 'coach_post', dx: -12, dy: -20, zoom: 2.5, entry: true }],
+  framingNext: 2,
 }
 
 const owner = await one('select id from users order by created_at limit 1')
@@ -104,6 +130,16 @@ try {
   eq('the stand-at point survives the save', post?.stand, [20, 26])
   eq('the facing survives the save', post?.facing, 'north')
   eq('the area survives the save', back.events.find((e) => e.name === 'the_yard')?.rect, [4, 4, 36, 30])
+  const bp = back.paths?.find((p) => p.name === 'the_approach')
+  eq('the route survives the save', bp?.points, doc.paths[0].points)
+  eq('the route keeps its direction', [bp?.closed, bp?.twoWay, bp?.facing], [false, false, 'east'])
+  eq('the timing mark survives the save', bp?.marks, [{ at: 1, name: 'the_line_ends' }])
+  const bf = back.framings?.find((f) => f.name === 'over_the_coach')
+  eq('the shot survives the save', [bf?.anchor, bf?.dx, bf?.dy], ['coach_post', -12, -20])
+  /* THE ZOOM IS THE ONE THAT WOULD HAVE DIED QUIETLY. The renderer's zoom is an
+   * integer locked at load, so 2.5 is exactly the value something downstream is
+   * most tempted to round, and a pull-out shot cannot exist on integer notches. */
+  eq('the shot keeps a zoom off the integer notches', bf?.zoom, 2.5)
 
   // ---- 2. the gate, refusing things that can never work -------------------
   const anchors = [
@@ -173,6 +209,18 @@ try {
   eq('published facing', pa?.facing, 'north')
   eq('published rect', (shipped.anchors || []).find((a) => a.name === 'the_yard')?.rect, [4, 4, 36, 30])
 
+  const sp = (shipped.paths || []).find((p) => p.name === 'the_approach')
+  eq('published route', sp?.points, doc.paths[0].points)
+  eq('published timing mark', sp?.marks, [{ at: 1, name: 'the_line_ends' }])
+  const sf = (shipped.framings || []).find((f) => f.name === 'over_the_coach')
+  eq('published shot', [sf?.anchor, sf?.dx, sf?.dy, sf?.zoom], ['coach_post', -12, -20, 2.5])
+  eq('published entry framing', sf?.entry, true)
+  /* THE PAINTING'S OWN SIZE. A discovery radius taken off h instead of base_h is
+   * wrong by about 41 percent on the hub, in the direction that discovers an
+   * island before it is on screen. Four columns that existed from the first
+   * schema and never reached a bundle. */
+  eq('published base extent', shipped.base, { w: W, h: H, ox: 0, oy: 0 })
+
   const shippedAssets = JSON.parse((await store().get(row.blob_prefix + 'assets.json')).toString('utf8'))
   eq('published placement name', shippedAssets.assets?.[0]?.name, 'the_coach')
 
@@ -194,6 +242,89 @@ try {
     : no('an unreachable anchor published anyway')
   const after = await publishedMap(SLUG)
   after.version === pub.version ? ok(`still at v${pub.version}, so nothing was half written`) : no(`version moved to ${after.version}`)
+
+  // ---- 5. the water between the islands -----------------------------------
+  /* The one surface the entire crossing happens on, and until now the one
+   * surface with no author. A berth is off the painting by definition, so no
+   * anchor could ever have expressed one: anchor creation refuses a click
+   * outside the canvas, and growing the canvas to make room zooms the island
+   * out. This saves a composition, reads it back the way the game reads it, and
+   * puts the whole thing back exactly as it was found. */
+  const worldBefore = await getWorld()
+  try {
+    const saved = await saveWorld({
+      w: 4096,
+      h: 4096,
+      places: [
+        {
+          name: 'zz_verify_isle',
+          map: SLUG,
+          title: 'The Verify Yard',
+          x: 800,
+          y: 600,
+          w: 128,
+          h: 96,
+          state: 'available',
+          release: 240,
+          // off the painting, which is the whole point of the category
+          berth: { x: 880, y: 700, facing: 'north' },
+          approach: { x: 940, y: 780 },
+        },
+        // a reserved position holding no map, reading as a rumour, with the
+        // rise happening where the rumour was
+        { name: 'zz_verify_rumour', map: '', title: '', x: 2200, y: 1400, w: 64, h: 64, state: 'rumoured', release: 300 },
+      ],
+      regions: [{ name: 'zz_the_shallows', kind: 'shallow', rect: [700, 500, 1100, 900] }],
+    })
+    const readBack = await getWorld()
+    const isle = readBack.places.find((p) => p.name === 'zz_verify_isle')
+    eq('a berth exists in world space', isle?.berth, { x: 880, y: 700, facing: 'north' })
+    eq('the approach beside it', isle?.approach, { x: 940, y: 780 })
+    eq('the island state', isle?.state, 'available')
+    eq('the release radius', isle?.release, 240)
+    eq('a slot that is empty on purpose', readBack.places.find((p) => p.name === 'zz_verify_rumour')?.map, '')
+    eq('a named sea region', readBack.regions.find((r) => r.name === 'zz_the_shallows')?.kind, 'shallow')
+    saved.warnings.length === 0
+      ? ok('a berth inside its own release radius draws no warning')
+      : no(`unexpected warning: ${saved.warnings[0]}`)
+
+    /* A composition that cannot work is refused where it is written, naming
+     * what is wrong, rather than found by a student sailing into nothing. */
+    let worldRefused = ''
+    try {
+      await saveWorld({
+        w: 4096,
+        h: 4096,
+        places: [
+          { name: 'zz_twice', map: '', x: 10, y: 10, w: 8, h: 8, state: 'rumoured', release: 10 },
+          { name: 'zz_twice', map: '', x: 90, y: 90, w: 8, h: 8, state: 'rumoured', release: 10 },
+        ],
+        regions: [],
+      })
+    } catch (e) {
+      worldRefused = e.message
+    }
+    worldRefused.includes('only address')
+      ? ok('two places with one name are refused, because a name is the only address there is')
+      : no(`a duplicate place name saved anyway: ${worldRefused || 'no error'}`)
+
+    /* A BERTH OUTSIDE ITS OWN RELEASE RADIUS is the quiet one: the ship sails
+     * to a dock that is offered before the island has been discovered. */
+    const far = await saveWorld({
+      w: 4096,
+      h: 4096,
+      places: [
+        { name: 'zz_far', map: '', x: 100, y: 100, w: 8, h: 8, state: 'rumoured', release: 10, berth: { x: 900, y: 900 } },
+      ],
+      regions: [],
+    })
+    far.warnings.some((w) => w.includes('berths'))
+      ? ok('a berth outside its own release radius is warned about')
+      : no('an unreachable berth passed without a word')
+  } finally {
+    // put the ocean back exactly as it was, because it is one shared row
+    await saveWorld(worldBefore)
+  }
 } finally {
   await q('delete from maps where id = $1', [map.id])
 }
