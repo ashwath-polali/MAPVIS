@@ -63,6 +63,7 @@ import { listMaps } from './store/maps.mjs'
 import { ask, plannerReady, NoPlanner } from './store/planner.mjs'
 import { withRequest, request } from './store/ctx.mjs'
 import { foldersApi } from './store/folders.mjs'
+import { getWorld, saveWorld, ISLAND_STATES, SEA_KINDS } from './store/world.mjs'
 import { keyFor } from './store/auth.mjs'
 import {
   signUp,
@@ -140,7 +141,11 @@ async function styleRef(slug) {
  * not: both carry the target map in sceneId, which the gate now reads, and
  * both end in pushLibrary writing rows into that map. Leaving them exempt let
  * a signed-in stranger overwrite another account's library items by name. */
-const OPEN_POSTS = new Set(['/api/stop', '/api/propose'])
+/* /api/world carries no map id at all, and the gate resolves a missing one to
+ * `untitled`, which is a real map somebody may own. So it is exempt from the
+ * MAP ownership gate and guards itself instead: the world is not owned by a
+ * map, it is owned by whoever is signed in. */
+const OPEN_POSTS = new Set(['/api/stop', '/api/propose', '/api/world'])
 
 export function api(req, res, next) {
   const url = new URL(req.url, 'http://local')
@@ -2328,6 +2333,27 @@ async function route(req, res, p, url) {
     return send(res, 200, out)
   }
 
+  /* THE COMPOSITION: where every map sits on the one ocean.
+   *
+   * A GET is open, because the same bytes are open at /api/v1/world and the
+   * editor should not need a second shape to read what the game reads. A write
+   * needs an account, since the world is shared by every map on the platform
+   * and is the one document a stranger could break for everybody at once. */
+  if (p === '/api/world' && req.method === 'GET') {
+    return send(res, 200, { ...(await getWorld()), states: ISLAND_STATES, seaKinds: SEA_KINDS })
+  }
+  if (p === '/api/world' && req.method === 'POST') {
+    if (platformOn() && !(await currentUser(req))) return send(res, 401, { error: 'sign in to place a map on the ocean' })
+    const b = await body(req)
+    try {
+      return send(res, 200, await saveWorld(b))
+    } catch (e) {
+      // a composition that cannot work is refused where it is written, naming
+      // what is wrong, rather than found by a student sailing into nothing
+      return send(res, 400, { error: String(e.message || e), problems: e.problems || [] })
+    }
+  }
+
   if (p === '/api/export' && req.method === 'POST') {
     /* AN EXPORT THAT TAKES MINUTES HAS TO SAY WHERE IT IS.
      *
@@ -3111,13 +3137,52 @@ async function readApi(req, res, p, url) {
   // whether that target exists.
   if (kind === 'maps' && !slugRaw) {
     const rows = await many(
-      `select m.slug, m.title, m.w, m.h, m.updated_at,
+      `select m.slug, m.title, m.w, m.h, m.base_w, m.base_h, m.updated_at,
               (select max(version) from publishes p where p.map_id = m.id) as version,
               (select count(*)::int from anchors a where a.map_id = m.id)  as anchors
        from maps m order by m.updated_at desc`,
     )
-    return send(res, 200, { maps: rows.filter((r) => r.version) })
+    const maps = rows.filter((r) => r.version)
+    /* THE WHOLE DOOR GRAPH IN ONE REQUEST, which is what ?with=anchors is for.
+     *
+     * The listing carried an anchor COUNT and the per-map listing deliberately
+     * carried no x,y, so building a door graph over twelve islands cost
+     * thirteen requests, and the world scene had to fetch a whole published
+     * map.json just to learn where one dock is. That is a whole class arriving
+     * inside one advisory block, on a 4 GB Chromebook, paying it. Opt-in, so
+     * the cheap listing stays cheap for the dashboard that only wants names. */
+    if (url.searchParams.get('with') === 'anchors' && maps.length) {
+      const all = await many(
+        `select m.slug, a.name, a.kind, a.x, a.y, a.r, a.to_slug, a.to_anchor, a.label
+         from anchors a join maps m on m.id = a.map_id
+         where m.slug = any($1) order by m.slug, a.kind, a.name`,
+        [maps.map((m) => m.slug)],
+      )
+      const by = new Map()
+      for (const a of all) {
+        if (!by.has(a.slug)) by.set(a.slug, [])
+        by.get(a.slug).push({
+          name: a.name,
+          kind: a.kind,
+          x: a.x,
+          y: a.y,
+          ...(a.r ? { r: a.r } : {}),
+          ...(a.to_slug ? { to: a.to_slug } : {}),
+          ...(a.to_anchor ? { toAnchor: a.to_anchor } : {}),
+          ...(a.label ? { label: a.label } : {}),
+        })
+      }
+      return send(res, 200, { maps: maps.map((m) => ({ ...m, anchors: by.get(m.slug) || [] })) })
+    }
+    return send(res, 200, { maps })
   }
+
+  /* THE OCEAN, which is the one surface the whole crossing happens on and the
+   * one the game had to hold as a constant because nothing could author it.
+   * Served live from the row rather than from a published version: the maps
+   * registry above is live for the same reason, and a composition that lags a
+   * republish would place an island that has already moved. */
+  if (kind === 'world' && !slugRaw) return send(res, 200, await getWorld())
 
   if (kind !== 'maps' || !slugRaw) return send(res, 404, { error: 'no such endpoint' })
   const slug = safeId(slugRaw)

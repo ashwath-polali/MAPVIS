@@ -1,0 +1,156 @@
+[
+  {
+    "name": "cord-board",
+    "kind": "motion",
+    "ask": "the hanging cords sway gently",
+    "prompt": "hanging cords sway gently side to side, tips trailing a beat behind",
+    "at": "2026-08-28T08:08:30.279Z"
+  },
+  {
+    "name": "cloth-rail",
+    "kind": "motion",
+    "ask": "the hanging cloaks stir in a draught",
+    "prompt": "hanging cloth sways gently, hems lifting and settling, folds rippling",
+    "at": "2026-08-28T08:07:00.346Z"
+  },
+  {
+    "name": "hanging-lamp",
+    "kind": "motion",
+    "ask": "the flame inside breathes and the lamp sways very slightly on its chain",
+    "prompt": "flame inside brightens and dims as it breathes, lamp body tilting a little side to side on its chain",
+    "at": "2026-08-28T08:05:36.482Z"
+  },
+  {
+    "name": "wall-sconce",
+    "kind": "motion",
+    "ask": "the small flame wavers",
+    "prompt": "a small flame wavers and flickers, leaning side to side and tapering as it rises",
+    "at": "2026-08-28T08:03:31.644Z"
+  },
+  {
+    "name": "chart-table-2",
+    "kind": "asset",
+    "ask": "A carved basalt chart table, thick pitted slab of dark volcanic stone with a chipped corner, an archipelago of small landmasses cut deep into its flat face with sunken channels between them, standing on four riveted black iron legs joined by a cross-brace, curling vellum charts held down at each corner by rough stone weights, one chart torn along its edge. Isometric pixel art, chunky pixels, limited palette of slate grey, charcoal, blue-grey and bone white with a thin ember-orange accent, near-b",
+    "prompt": "A carved basalt chart table, thick pitted slab of dark volcanic stone with a chipped corner, an archipelago of small landmasses cut deep into its flat face with sunken channels between them, standing on four riveted black iron legs joined by a cross-brace, curling vellum charts held down at each corner by rough stone weights, one chart torn along its edge. Isometric pixel art, chunky pixels, limited palette of slate grey, charcoal, blue-grey and bone white with a thin ember-orange accent, near-black plum outline, lit from the upper left, shaded lower right, faint warm bounce along the lower edges, muted saturation, the object alone as a cut-out sprite on a fully transparent background, the base of the object is where its own material ends.",
+    "at": "2026-08-28T08:02:04.419Z"
+  },
+  {
+    "name": "brazier",
+    "kind": "motion",
+    "ask": "the coals glow and the flame gutters",
+    "prompt": "coals pulse with a slow glow while the flame flickers and gutters in place",
+    "at": "2026-08-28T08:01:23.762Z"
+  },
+  {
+    "name": "fire-ring",
+    "kind": "motion",
+    "ask": "the fire burns and flickers, embers lifting off it",
+    "prompt": "burns and flickers, flames licking upward and wavering, embers lifting off and fading",
+    "at": "2026-08-28T07:59:48.355Z"
+  },
+  {
+    "name": "banner",
+    "kind": "asset",
+    "ask": "A long banner of heavy black-charcoal cloth hung from a short pitted iron crossbar, deep vertical folds, tarnished bronze rings along the top hem, a pale bone-grey panther head with bared fangs stitched large across the upper field, lower hem torn into a ragged wedge, one corner curled, edges dust-greyed and scorched. Flat pixel art drawn straight on with no foreshortening, chunky pixels, limited palette of charcoal black, slate blue-grey, bone white and dull ember orange, near-black outline, li",
+    "prompt": "A long banner of heavy black-charcoal cloth hung from a short pitted iron crossbar, deep vertical folds, tarnished bronze rings along the top hem, a pale bone-grey panther head with bared fangs stitched large across the upper field, lower hem torn into a ragged wedge, one corner curled, edges dust-greyed and scorched. Flat pixel art drawn straight on with no foreshortening, chunky pixels, limited palette of charcoal black, slate blue-grey, bone white and dull ember orange, near-black outline, lit from the upper left, shaded lower right, muted saturation, the object alone as a cut-out sprite on a fully transparent background, the base of the object is where its own material ends.",
+    "at": "2026-08-28T07:58:49.353Z"
+  },
+  {
+    "name": "chain-hang",
+    "kind": "asset",
+    "ask": "A heavy wrought-iron chain of thick oval forged links, black iron pitted and scale-flaked, orange rust blooming at the pin welds, the topmost link closed around a corroded iron ring, the run twisting a quarter turn partway down, soot and old grease darkening the middle links, a split half-link and a bent hook at the loose lower end. Flat pixel art drawn straight on with no foreshortening, chunky pixels, limited palette of charcoal, cool slate grey, bone white and dull ember orange, near-black ou",
+    "prompt": "A heavy wrought-iron chain of thick oval forged links, black iron pitted and scale-flaked, orange rust blooming at the pin welds, the topmost link closed around a corroded iron ring, the run twisting a quarter turn partway down, soot and old grease darkening the middle links, a split half-link and a bent hook at the loose lower end. Flat pixel art drawn straight on with no foreshortening, chunky pixels, limited palette of charcoal, cool slate grey, bone white and dull ember orange, near-black outline, lit from the upper left, shaded right, muted saturation, the object alone as a cut-out sprite on a fully transparent background, the base of the object is where its own material ends.",
+    "at": "2026-08-28T07:57:53.117Z"
+  },
+  {
+    "name": "seat-block",
+    "kind": "asset",
+    "ask": "A low bench block cut from one piece of dark basalt, columnar hexagonal grain showing along the front face, top slab worn smooth and slightly dished, chiselled fluting down both short ends, one corner chipped off, hairline cracks holding a dull ember glow, pale grey ash dust caught in the seams. Isometric pixel art, chunky pixels, limited palette of cold slate grey, blue-black and dull ember orange, near-black outline, lit from the upper left, shaded on the lower right, muted saturation, the obj",
+    "prompt": "A low bench block cut from one piece of dark basalt, columnar hexagonal grain showing along the front face, top slab worn smooth and slightly dished, chiselled fluting down both short ends, one corner chipped off, hairline cracks holding a dull ember glow, pale grey ash dust caught in the seams. Isometric pixel art, chunky pixels, limited palette of cold slate grey, blue-black and dull ember orange, near-black outline, lit from the upper left, shaded on the lower right, muted saturation, the object alone as a cut-out sprite on a fully transparent background, the base of the object is where its own material ends.",
+    "at": "2026-08-28T07:56:07.541Z"
+  },
+  {
+    "name": "trophy-hooks",
+    "kind": "asset",
+    "ask": "A block of carved grey stone with a chiselled fluted face and one chipped corner, four thick wrought-iron hooks hammered deep into it, the black metal pitted and scaled with rust, and hanging from them a cracked yellowed skull, a curl of tarnished bronze chain, a small notched bone charm and a scrap of stiff dark leather. Isometric pixel art, chunky pixels, limited cold palette of slate grey, blue-grey stone and dull rust orange, near-black outline, lit from the upper left, shaded right, muted s",
+    "prompt": "A block of carved grey stone with a chiselled fluted face and one chipped corner, four thick wrought-iron hooks hammered deep into it, the black metal pitted and scaled with rust, and hanging from them a cracked yellowed skull, a curl of tarnished bronze chain, a small notched bone charm and a scrap of stiff dark leather. Isometric pixel art, chunky pixels, limited cold palette of slate grey, blue-grey stone and dull rust orange, near-black outline, lit from the upper left, shaded right, muted saturation, the object alone as a cut-out sprite on a fully transparent background, the base of the object is where its own material ends.",
+    "at": "2026-08-28T07:55:19.446Z"
+  },
+  {
+    "name": "cloth-rail",
+    "kind": "asset",
+    "ask": "A black wrought-iron rail on two forged posts with splayed feet and a bent brace, the bar pitted and flaking rust, hung with four heavy wool cloaks in charcoal, soot grey and faded oxblood, hoods slumped, hems frayed and stained, one cloak slipped and puddling in folds, an empty hook at the far end. Flat pixel art drawn straight on with no foreshortening, chunky pixels, limited cold palette of slate grey, charcoal blue-black, soot brown and dull ember orange, near-black outline, lit from the upp",
+    "prompt": "A black wrought-iron rail on two forged posts with splayed feet and a bent brace, the bar pitted and flaking rust, hung with four heavy wool cloaks in charcoal, soot grey and faded oxblood, hoods slumped, hems frayed and stained, one cloak slipped and puddling in folds, an empty hook at the far end. Flat pixel art drawn straight on with no foreshortening, chunky pixels, limited cold palette of slate grey, charcoal blue-black, soot brown and dull ember orange, near-black outline, lit from the upper left, shaded right, faint ember underglow along the lower hems, muted saturation, the object alone as a cut-out sprite on a fully transparent background, the base of the object is where its own material ends.",
+    "at": "2026-08-28T07:54:05.774Z"
+  },
+  {
+    "name": "stone-desk",
+    "kind": "asset",
+    "ask": "A heavy desk cut from a single block of basalt, thick chiselled slab top with one chipped front corner, pitted blue-grey and charcoal stone, deep carved grooves running down the panelled sides, blackened iron corner brackets and square bolt heads, a single iron ring pull on a shallow drawer, pale ash settled in the carving. Isometric pixel art, chunky pixels, limited palette of ash grey, blue-black basalt and cold dark iron, near-black outline, lit from the upper left, faint warm ember glow catc",
+    "prompt": "A heavy desk cut from a single block of basalt, thick chiselled slab top with one chipped front corner, pitted blue-grey and charcoal stone, deep carved grooves running down the panelled sides, blackened iron corner brackets and square bolt heads, a single iron ring pull on a shallow drawer, pale ash settled in the carving. Isometric pixel art, chunky pixels, limited palette of ash grey, blue-black basalt and cold dark iron, near-black outline, lit from the upper left, faint warm ember glow catching the lower edges, shaded lower right, muted saturation, the object alone as a cut-out sprite on a fully transparent background, the base of the object is where its own material ends.",
+    "at": "2026-08-28T07:52:54.761Z"
+  },
+  {
+    "name": "cord-board",
+    "kind": "asset",
+    "ask": "An iron rack: a squat forged frame of square black bars with a horizontal crossbar, pitted with rust and scale, feet splayed and bolted; from the bar hang eight braided honour cords of dull crimson, bone-white and old gold, tassels frayed, two cords knotted short, one snapped and dangling, a bare empty hook between them. Flat pixel art drawn straight on with no foreshortening, chunky pixels, limited palette of cold slate grey, charcoal, rust-brown and dull crimson with ember-orange accents, near",
+    "prompt": "An iron rack: a squat forged frame of square black bars with a horizontal crossbar, pitted with rust and scale, feet splayed and bolted; from the bar hang eight braided honour cords of dull crimson, bone-white and old gold, tassels frayed, two cords knotted short, one snapped and dangling, a bare empty hook between them. Flat pixel art drawn straight on with no foreshortening, chunky pixels, limited palette of cold slate grey, charcoal, rust-brown and dull crimson with ember-orange accents, near-black outline, lit from the upper left with a low warm ember glow from below, shaded right, muted saturation, the object alone as a cut-out sprite on a fully transparent background, the base of the object is where its own material ends.",
+    "at": "2026-08-28T07:51:52.061Z"
+  },
+  {
+    "name": "lectern",
+    "kind": "asset",
+    "ask": "A carved basalt lectern, a squat angular pedestal of dark grey-black volcanic stone with a chipped fluted column and a slanted reading top, banded by a heavy dark iron rim along the desk edge with rivets and orange rust bloom, one corner chipped away, fine ash-pale dust in the carved grooves. Isometric pixel art, chunky pixels, limited palette of charcoal grey, slate blue-grey, bone pale stone and rust orange, near-black outline, lit from the upper left with a warm low glow, shaded lower right, ",
+    "prompt": "A carved basalt lectern, a squat angular pedestal of dark grey-black volcanic stone with a chipped fluted column and a slanted reading top, banded by a heavy dark iron rim along the desk edge with rivets and orange rust bloom, one corner chipped away, fine ash-pale dust in the carved grooves. Isometric pixel art, chunky pixels, limited palette of charcoal grey, slate blue-grey, bone pale stone and rust orange, near-black outline, lit from the upper left with a warm low glow, shaded lower right, muted saturation, the object alone as a cut-out sprite on a fully transparent background, the base of the object is where its own material ends.",
+    "at": "2026-08-28T07:50:36.734Z"
+  },
+  {
+    "name": "chart-rolls",
+    "kind": "asset",
+    "ask": "Three rolled charts of cream parchment, ends frayed and yellowed, one bound with a cracked leather thong, one half unfurled showing faint ink lines, leaning together against a squat grey granite block with chipped corners, a hairline crack down one face, pale grit and a fourth rolled chart resting flat on its top. Isometric pixel art, chunky pixels, limited palette of cool grey stone, charcoal and aged parchment cream with a thin ember-orange accent, near-black outline, lit from the upper left w",
+    "prompt": "Three rolled charts of cream parchment, ends frayed and yellowed, one bound with a cracked leather thong, one half unfurled showing faint ink lines, leaning together against a squat grey granite block with chipped corners, a hairline crack down one face, pale grit and a fourth rolled chart resting flat on its top. Isometric pixel art, chunky pixels, limited palette of cool grey stone, charcoal and aged parchment cream with a thin ember-orange accent, near-black outline, lit from the upper left with a faint warm bounce along the lower edges, shaded right, muted saturation, the object alone as a cut-out sprite on a fully transparent background, the base of the object is where its own material ends.",
+    "at": "2026-08-28T07:49:47.400Z"
+  },
+  {
+    "name": "stone-stool",
+    "kind": "asset",
+    "ask": "A low carved basalt stool, one squat block of dark grey-black volcanic stone, round seat dished and worn smooth in the middle, thick tapered pedestal foot, chiselled tool marks and a band of blocky carved notches around the rim, one chipped corner and a hairline crack down the shaft, fine grey ash dust in the grooves. Isometric pixel art, chunky pixels, limited palette of charcoal black, slate grey, pale bone grey and a faint warm ember orange, dark near-black outline, lit from the upper left, s",
+    "prompt": "A low carved basalt stool, one squat block of dark grey-black volcanic stone, round seat dished and worn smooth in the middle, thick tapered pedestal foot, chiselled tool marks and a band of blocky carved notches around the rim, one chipped corner and a hairline crack down the shaft, fine grey ash dust in the grooves. Isometric pixel art, chunky pixels, limited palette of charcoal black, slate grey, pale bone grey and a faint warm ember orange, dark near-black outline, lit from the upper left, shaded lower right, muted saturation, the object alone as a cut-out sprite on a fully transparent background, the base of the object is where its own material ends.",
+    "at": "2026-08-28T07:48:49.137Z"
+  },
+  {
+    "name": "hanging-lamp",
+    "kind": "asset",
+    "ask": "A black wrought-iron lantern hanging from a short length of heavy iron chain, four bent iron ribs framing cracked amber glass panes, one pane missing, a small flame burning inside with a warm glow spilling onto the pitted metal, rust flecks and soot on the cap, a curled hook finial at the base. Flat pixel art drawn straight on with no foreshortening, chunky pixels, limited palette of near-black iron, cool blue-grey, ember orange and dull amber, dark charcoal outline, lit from the flame within an",
+    "prompt": "A black wrought-iron lantern hanging from a short length of heavy iron chain, four bent iron ribs framing cracked amber glass panes, one pane missing, a small flame burning inside with a warm glow spilling onto the pitted metal, rust flecks and soot on the cap, a curled hook finial at the base. Flat pixel art drawn straight on with no foreshortening, chunky pixels, limited palette of near-black iron, cool blue-grey, ember orange and dull amber, dark charcoal outline, lit from the flame within and the upper left, shaded lower right, muted saturation, the object alone as a cut-out sprite on a fully transparent background, the base of the object is where its own material ends.",
+    "at": "2026-08-28T07:48:07.873Z"
+  },
+  {
+    "name": "chart-table",
+    "kind": "asset",
+    "ask": "A carved basalt slab table, one thick rectangular top of near-black volcanic stone resting on two blocky chiselled pedestals, chipped along one corner and hairline-cracked at the far end, its top face incised with shallow cut grooves and pecked dots forming a carved map, pale grey dust settled in the channels and a faint ember-orange glow caught in the deepest cuts, tool-marked facets on every edge. Isometric pixel art, chunky pixels, limited palette of ash grey, cool slate grey, charcoal black-",
+    "prompt": "A carved basalt slab table, one thick rectangular top of near-black volcanic stone resting on two blocky chiselled pedestals, chipped along one corner and hairline-cracked at the far end, its top face incised with shallow cut grooves and pecked dots forming a carved map, pale grey dust settled in the channels and a faint ember-orange glow caught in the deepest cuts, tool-marked facets on every edge. Isometric pixel art, chunky pixels, limited palette of ash grey, cool slate grey, charcoal black-purple and dull ember orange, near-black purple outline, lit from the upper left, shaded on the lower right, muted saturation, the object alone as a cut-out sprite on a fully transparent background, the base of the object is where its own material ends.",
+    "at": "2026-08-28T07:47:26.817Z"
+  },
+  {
+    "name": "fire-ring",
+    "kind": "asset",
+    "ask": "A low circular ring of stacked carved basalt blocks, chisel-faceted grey-black faces with chipped corners, one block cracked and tilted out of line, soot-blackened inner rim, holding a deep bed of charred split logs and glowing embers with a tall ragged flame rising from it, pale ash spilling over the stones. Isometric pixel art, chunky pixels, limited palette of cool slate grey, ash-blue and charcoal with ember orange and dull red, near-black outline, lit from the upper left, shaded right, mute",
+    "prompt": "A low circular ring of stacked carved basalt blocks, chisel-faceted grey-black faces with chipped corners, one block cracked and tilted out of line, soot-blackened inner rim, holding a deep bed of charred split logs and glowing embers with a tall ragged flame rising from it, pale ash spilling over the stones. Isometric pixel art, chunky pixels, limited palette of cool slate grey, ash-blue and charcoal with ember orange and dull red, near-black outline, lit from the upper left, shaded right, muted saturation, the object alone as a cut-out sprite on a fully transparent background, the base of the object is where its own material ends.",
+    "at": "2026-08-28T07:46:34.676Z"
+  },
+  {
+    "name": "wall-sconce",
+    "kind": "asset",
+    "ask": "A black wrought-iron wall sconce: a flat riveted backplate, a short scrolled arm pitted and flaking with rust, one curl of the scroll bent outward, and a shallow soot-blackened iron cup at its end holding a small pale-orange flame, the cup rim crusted with grey ash and a dark smoke stain climbing the plate. Isometric pixel art, chunky pixels, limited palette of soot black, cold slate grey, rust brown and ember orange, near-black outline, lit from the upper left, shaded on the lower right, muted ",
+    "prompt": "A black wrought-iron wall sconce: a flat riveted backplate, a short scrolled arm pitted and flaking with rust, one curl of the scroll bent outward, and a shallow soot-blackened iron cup at its end holding a small pale-orange flame, the cup rim crusted with grey ash and a dark smoke stain climbing the plate. Isometric pixel art, chunky pixels, limited palette of soot black, cold slate grey, rust brown and ember orange, near-black outline, lit from the upper left, shaded on the lower right, muted saturation, the object alone as a cut-out sprite on a fully transparent background, the base of the object is where its own material ends.",
+    "at": "2026-08-28T07:45:32.223Z"
+  },
+  {
+    "name": "brazier",
+    "kind": "asset",
+    "ask": "A tall black wrought-iron brazier, deep soot-blackened bowl heaped with glowing coals and licking orange flame, three curved iron legs pitted with rust, standing on a chipped grey stone foot carved with worn relief bands, iron rim scorched pale, one leg bent, ash spilling over the lip. Isometric pixel art, chunky pixels, limited palette of cold grey stone, near-black iron and hot ember orange, near-black outline, lit from the flame at its own bowl with a cool dim key from the upper left, shaded ",
+    "prompt": "A tall black wrought-iron brazier, deep soot-blackened bowl heaped with glowing coals and licking orange flame, three curved iron legs pitted with rust, standing on a chipped grey stone foot carved with worn relief bands, iron rim scorched pale, one leg bent, ash spilling over the lip. Isometric pixel art, chunky pixels, limited palette of cold grey stone, near-black iron and hot ember orange, near-black outline, lit from the flame at its own bowl with a cool dim key from the upper left, shaded low and outward at the base, muted saturation, the object alone as a cut-out sprite on a fully transparent background, the base of the object is where its own material ends.",
+    "at": "2026-08-28T07:44:24.838Z"
+  }
+]

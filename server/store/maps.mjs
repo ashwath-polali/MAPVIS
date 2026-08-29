@@ -177,9 +177,24 @@ export async function putDoc(mapId, docString) {
         .map((o) => ({ id: Math.round(Number(o.id)), baseline: Math.round(Number(o.baseline)) }))
     : []
 
+  /* routes and shots. Both come off the document already filtered by mask.ts,
+   * so the job here is to store them, not to re-decide what a legal one is; the
+   * one thing repeated is the shape guard, because putDoc is reachable by a
+   * hand-written POST and mask.ts is not in front of it. */
+  const paths = Array.isArray(d.paths)
+    ? d.paths.filter((p) => p && typeof p.name === 'string' && Array.isArray(p.points) && p.points.length > 1)
+    : []
+  const framings = Array.isArray(d.framings)
+    ? d.framings.filter((f) => f && typeof f.name === 'string' && isFinite(Number(f.zoom)))
+    : []
+
+  /* IN THE SHA OR IT NEVER SAVES. A field left out of this list is a field the
+   * four-second autosave decides is unchanged, so drawing a route and nothing
+   * else would write nothing at all and the work would be gone on reload. */
   const rowSha = sha(
     JSON.stringify([
       w, h, d.base?.w ?? w, d.base?.h ?? h, d.base?.ox ?? 0, d.base?.oy ?? 0, d.spawn, d.assetNext, walk, props, occs,
+      paths, framings,
     ]) + assetsSha,
   )
   const cur = await one('select doc_sha from maps where id = $1', [mapId])
@@ -195,6 +210,7 @@ export async function putDoc(mapId, docString) {
          speed = $16, yscale = $17, step_tol = $18,
          title = $19, class = $20, island_id = $21, meta = $22::jsonb,
          occs = $23::jsonb,
+         paths = $24::jsonb, framings = $25::jsonb,
          doc_sha = $12, updated_at = now()
        where id = $1`,
       [
@@ -221,6 +237,8 @@ export async function putDoc(mapId, docString) {
         props.islandId,
         JSON.stringify(props.meta),
         JSON.stringify(occs),
+        JSON.stringify(paths),
+        JSON.stringify(framings),
       ],
     )
     wrote.push(`doc ${(assetsJson.length / 1024).toFixed(1)}kb`)
@@ -340,6 +358,10 @@ export async function getDoc(mapId) {
     },
     occs: Array.isArray(m.occs) ? m.occs : [],
     occNext: (Array.isArray(m.occs) ? m.occs : []).reduce((a, o) => Math.max(a, Number(o.id) || 0), 0) + 1,
+    paths: Array.isArray(m.paths) ? m.paths : [],
+    pathNext: (Array.isArray(m.paths) ? m.paths : []).reduce((a, p) => Math.max(a, Number(p.id) || 0), 0) + 1,
+    framings: Array.isArray(m.framings) ? m.framings : [],
+    framingNext: (Array.isArray(m.framings) ? m.framings : []).reduce((a, f) => Math.max(a, Number(f.id) || 0), 0) + 1,
   })
 }
 

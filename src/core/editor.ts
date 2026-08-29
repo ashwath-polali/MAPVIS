@@ -3735,6 +3735,15 @@ export class Editor {
         id: this.sceneId,
         w: this.doc.W,
         h: this.doc.H,
+        /* THE PAINTING, AS OPPOSED TO THE CANVAS IT SITS IN.
+         *
+         * growCanvas adds transparent margin and never picture, so w/h is the
+         * canvas and says nothing about how big the island actually is. A
+         * discovery radius computed from h is wrong by about 41 percent on the
+         * one real map, in the direction that discovers an island before it is
+         * on screen. The document has carried these four numbers since v3 and
+         * they stopped at the export. */
+        base: { w: this.doc.bw, h: this.doc.bh, ox: this.doc.ox, oy: this.doc.oy },
         /* WHAT THIS MAP IS AND WHAT IT CALLS ITSELF. The engine guessed `class`
          * from whether the border was transparent, on every map, while this
          * tool knew the answer the whole time; `title` never left the database.
@@ -3789,6 +3798,38 @@ export class Editor {
         events: this.doc.events
           .filter((e) => e.kind === 'door')
           .map((e) => ({ id: e.id, type: 'door', x: e.x, y: e.y, r: e.r, label: e.label || e.name, to: e.to })),
+        /* ROUTES AND SHOTS, both keyed by name and both absent when none were
+         * drawn, so a bundle from before they existed stays byte for byte what
+         * it was. The id is deliberately not shipped: across the bundle
+         * boundary a name is the only identity there is, and shipping a counter
+         * beside it invites something to hold the counter. */
+        ...(this.doc.paths.length
+          ? {
+              paths: this.doc.paths.map((p) => ({
+                name: p.name,
+                points: p.points,
+                closed: p.closed,
+                twoWay: p.twoWay,
+                ...(p.facing ? { facing: p.facing } : {}),
+                ...(p.marks && p.marks.length ? { marks: p.marks } : {}),
+                ...(p.meta && Object.keys(p.meta).length ? { meta: p.meta } : {}),
+              })),
+            }
+          : {}),
+        ...(this.doc.framings.length
+          ? {
+              framings: this.doc.framings.map((f) => ({
+                name: f.name,
+                ...(f.anchor ? { anchor: f.anchor } : {}),
+                ...(f.anchor ? {} : { x: f.x, y: f.y }),
+                dx: f.dx,
+                dy: f.dy,
+                zoom: f.zoom,
+                ...(f.entry ? { entry: true } : {}),
+                ...(f.meta && Object.keys(f.meta).length ? { meta: f.meta } : {}),
+              })),
+            }
+          : {}),
       },
     }
   }

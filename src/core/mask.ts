@@ -236,6 +236,54 @@ export function anchorName(s: string): string {
 
 export const isAnchorName = (s: string) => /^[a-z][a-z0-9_]{0,47}$/.test(String(s))
 
+/* A saved route, made safe. Two points is the minimum that means anything, and
+ * a mark pointing past the end of the line is dropped rather than carried,
+ * because a beat that waits for waypoint nine on a six-point path waits for
+ * ever. Returns null for anything that cannot be a path at all. */
+export function migratePath(p: MapPath): MapPath | null {
+  if (!p || !isAnchorName(p.name)) return null
+  const points = (Array.isArray(p.points) ? p.points : [])
+    .filter((q) => Array.isArray(q) && q.length === 2 && isFinite(Number(q[0])) && isFinite(Number(q[1])))
+    .map((q) => [Math.round(Number(q[0])), Math.round(Number(q[1]))] as [number, number])
+  if (points.length < 2) return null
+  const marks = (Array.isArray(p.marks) ? p.marks : [])
+    .filter((m) => m && isAnchorName(m.name) && isFinite(Number(m.at)))
+    .map((m) => ({ at: Math.round(Number(m.at)), name: m.name }))
+    .filter((m) => m.at >= 0 && m.at < points.length)
+  return {
+    id: Math.round(Number(p.id)) || 0,
+    name: p.name,
+    points,
+    closed: !!p.closed,
+    twoWay: !!p.twoWay,
+    ...(p.facing ? { facing: String(p.facing) } : {}),
+    ...(marks.length ? { marks } : {}),
+    ...(p.meta && typeof p.meta === 'object' ? { meta: p.meta } : {}),
+  }
+}
+
+/* A saved shot, made safe. A framing has to resolve to somewhere, so one that
+ * names neither an anchor nor a point is dropped. Zoom is clamped rather than
+ * refused: an author who typed 0 meant "close", not "divide by zero". */
+export function migrateFraming(f: MapFraming): MapFraming | null {
+  if (!f || !isAnchorName(f.name)) return null
+  const anchor = typeof f.anchor === 'string' && isAnchorName(f.anchor) ? f.anchor : ''
+  const hasPt = isFinite(Number(f.x)) && isFinite(Number(f.y))
+  if (!anchor && !hasPt) return null
+  const zoom = isFinite(Number(f.zoom)) ? Math.min(16, Math.max(0.1, Number(f.zoom))) : 1
+  return {
+    id: Math.round(Number(f.id)) || 0,
+    name: f.name,
+    anchor,
+    ...(hasPt ? { x: Math.round(Number(f.x)), y: Math.round(Number(f.y)) } : {}),
+    dx: isFinite(Number(f.dx)) ? Math.round(Number(f.dx)) : 0,
+    dy: isFinite(Number(f.dy)) ? Math.round(Number(f.dy)) : 0,
+    zoom,
+    ...(f.entry ? { entry: true } : {}),
+    ...(f.meta && typeof f.meta === 'object' ? { meta: f.meta } : {}),
+  }
+}
+
 /* An anchor from an older save: absent numbers fill in sane, absent strings
  * empty. Anything saved before anchors existed is a door with no name, so one
  * is derived from its label and marked derived — code written against a
@@ -315,6 +363,68 @@ export interface MapProps {
 
 export const defaultProps = (): MapProps => ({ title: '', class: 'island', islandId: '', meta: {} })
 
+/* A NAMED POLYLINE, WHICH IS THE LARGEST THING THIS TOOL COULD NOT SAY.
+ *
+ * Every anchor is one pixel, so the only route a map could describe was a
+ * straight line between two of them. The ship reaching the dock, an actor
+ * crossing a room on a line somebody chose rather than a lerp, a patrol that
+ * follows a shape, a camera that travels: all of them are this, and all of them
+ * were being hand-typed as numbers in the other repo.
+ *
+ * `marks` is the part that stops a cutscene being retuned every time the text
+ * changes. A mark names a waypoint index, so a beat says "be at the doorway by
+ * the time this line ends" instead of "walk for 2.4 seconds". */
+export interface PathMark {
+  /* index into points, so a mark cannot name a waypoint that is not there */
+  at: number
+  name: string
+}
+
+export interface MapPath {
+  id: number
+  /* author-typed, unique in this map, python-shaped, exactly like an anchor's */
+  name: string
+  points: [number, number][]
+  /* a patrol returns to its first point; an approach does not */
+  closed: boolean
+  /* whether walking it backwards is legal. A one-way route is the default,
+   * because a sail line into a berth is not a line out of one. */
+  twoWay: boolean
+  /* the heading to hold on arrival, same vocabulary as an anchor's facing */
+  facing?: string
+  marks?: PathMark[]
+  meta?: Record<string, unknown>
+}
+
+/* A NAMED SHOT. Every "point the camera at the thing" beat needs one, and
+ * without them every camera move in the game is hand-typed numbers nobody can
+ * check without running it.
+ *
+ * It hangs off an ANCHOR by preference rather than off coordinates, because raw
+ * numbers re-break every time a painting is re-cut, which happens on every map.
+ * A shot on `coach_post` travels when the coach does; a shot on (412, 208) is
+ * wrong the next time the coast is shaved by a pixel.
+ *
+ * zoom is a real number, not one of the renderer's integer notches. The pull-out
+ * shot cannot exist on integer notches, and an authored value the renderer
+ * cannot honour is a defect at the renderer rather than a reason to round here. */
+export interface MapFraming {
+  id: number
+  name: string
+  /* the anchor this shot is hung on. Empty means it stands on x,y instead. */
+  anchor: string
+  x?: number
+  y?: number
+  /* where the camera sits relative to what it is looking at, so the same shot
+   * restages at a different anchor and still frames the same way */
+  dx: number
+  dy: number
+  zoom: number
+  /* the framing a player gets on arriving in this map, at most one per map */
+  entry?: boolean
+  meta?: Record<string, unknown>
+}
+
 /* only the keys that came back as real numbers, so a corrupt or hand-edited
  * save cannot put NaN into the walk law and stop a character moving at all */
 const numbersOnly = (o: Partial<WalkCfg>): Partial<WalkCfg> => {
@@ -347,6 +457,13 @@ export class MaskDoc {
    * the map, and living here is what lets one save carry them. */
   walk: WalkCfg = defaultCfg()
   props: MapProps = defaultProps()
+  /* routes and shots, both addressed by name and both belonging to the map for
+   * the same reason the walk contract does: they describe this painting, so one
+   * save has to carry them or they are retyped on every open */
+  paths: MapPath[] = []
+  pathNext = 1
+  framings: MapFraming[] = []
+  framingNext = 1
   spawn: Pt
   // boundary growth: bw/bh is the base painting's own size (set once at
   // construction), ox/oy is how far that base sits inside the grown canvas.
@@ -932,6 +1049,10 @@ export class MaskDoc {
       occNext: this.occNext,
       walk: this.walk,
       props: this.props,
+      paths: this.paths,
+      pathNext: this.pathNext,
+      framings: this.framings,
+      framingNext: this.framingNext,
     })
   }
   private pack(): string {
@@ -958,6 +1079,10 @@ export class MaskDoc {
           occNext?: number
           walk?: Partial<WalkCfg>
           props?: Partial<MapProps>
+          paths?: MapPath[]
+          pathNext?: number
+          framings?: MapFraming[]
+          framingNext?: number
         }
         /* the saved baselines go in FIRST, because unpack() only invents them
          * when there are none, which is exactly the guard that has to see them
@@ -978,6 +1103,20 @@ export class MaskDoc {
             islandId: typeof d.props.islandId === 'string' ? d.props.islandId : '',
             meta: d.props.meta && typeof d.props.meta === 'object' ? d.props.meta : {},
           }
+        /* A ROUTE OR A SHOT FROM A HAND-EDITED SAVE HAS TO COME BACK AS DATA OR
+         * NOT AT ALL. A path with one point is not a path and a NaN in a zoom
+         * stops a camera dead, so both are filtered on the way in rather than
+         * trusted, the same way occs and walk are. */
+        this.paths = Array.isArray(d.paths) ? d.paths.map(migratePath).filter((p): p is MapPath => !!p) : []
+        this.pathNext =
+          Number(d.pathNext) > 0 ? Math.round(Number(d.pathNext)) : this.paths.reduce((m, p) => Math.max(m, p.id), 0) + 1
+        this.framings = Array.isArray(d.framings)
+          ? d.framings.map(migrateFraming).filter((f): f is MapFraming => !!f)
+          : []
+        this.framingNext =
+          Number(d.framingNext) > 0
+            ? Math.round(Number(d.framingNext))
+            : this.framings.reduce((m, f) => Math.max(m, f.id), 0) + 1
         if (!this.unpack(String(d.m || ''))) return false
         // v2 assets carry only `scale`; the migration fills the transform
         this.assets = Array.isArray(d.assets) ? d.assets.map(migrateAsset) : []
