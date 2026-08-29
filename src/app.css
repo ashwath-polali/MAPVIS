@@ -3051,13 +3051,52 @@ footer [data-tip]:hover::after {
   padding: 6px 9px;
   font-size: 12px;
 }
-/* a name is code, so it is set in the mono face the rest of the tool uses for
-   anything a machine reads */
-.doorform .anchname {
+/* the binding picker, matched to the input above it rather than to the group
+   select in the inspector, because it lives in this form and has to line up
+   with the fields around it */
+.anchfield select {
+  width: 100%;
+  min-width: 0;
+  padding: 6px 9px;
+  border: 1px solid var(--edge);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--ink);
+  font: 12px var(--font-ui);
+  transition: border-color 160ms ease;
+}
+.anchfield select:focus {
+  outline: none;
+  border-color: var(--acc);
+}
+/* what it is bound TO is a name code uses, so the chosen one reads in the mono
+   face like every other machine string in this tool. The options themselves are
+   drawn by the platform and cannot be styled, which is fine: the list is being
+   read, and the closed box is being checked. */
+.anchfield select.anchbind {
   font-family: var(--font-mono);
   color: var(--acc);
 }
-.doorform .anchname.bad {
+/* nothing bound is the ordinary case and must not read as a value */
+.anchfield select.anchbind:invalid,
+.anchfield select.anchbind[data-empty='1'] {
+  font-family: var(--font-ui);
+  color: var(--dim);
+}
+/* a name is code, so it is set in the mono face the rest of the tool uses for
+   anything a machine reads. Not scoped to the door form: a placement's name is
+   the same kind of string in the same kind of field, and it earns the same
+   face. The placeholder stays in the reading face, or an empty box looks like
+   it is already holding a value. */
+.anchname {
+  font-family: var(--font-mono);
+  color: var(--acc);
+}
+.anchname::placeholder {
+  font-family: var(--font-ui);
+  color: var(--dim);
+}
+.anchname.bad {
   border-color: var(--warn, #d08a4a);
 }
 .anchwarn {

@@ -58,7 +58,7 @@ import {
 import { publishBundle, publishedMap, publishHistory, hotGet, hotPut } from './store/publish.mjs'
 import { store } from './store/blobs.mjs'
 import { q, one, many } from './db/pool.mjs'
-import { newToken, hashToken } from './store/crypto.mjs'
+import { newToken, hashToken, isPlacementName } from './store/crypto.mjs'
 import { listMaps } from './store/maps.mjs'
 import { ask, plannerReady, NoPlanner } from './store/planner.mjs'
 import { withRequest, request } from './store/ctx.mjs'
@@ -2565,6 +2565,12 @@ async function route(req, res, p, url) {
       for (const L of Array.isArray(a.looks) ? a.looks.slice(0, STATES_MAX) : []) looks.push(packLook(L) || look0)
       outAssets.push({
         id: String(a.id),
+        /* the author's own name for this thing, when they gave it one. It is
+         * what an anchor binds to and what python addresses, and the id beside
+         * it is a counter nobody chose, so a bundle that dropped this would
+         * hand the game back the machine string it was written to replace.
+         * Absent on scenery, which is nearly everything. */
+        ...(isPlacementName(a.name) ? { name: String(a.name) } : {}),
         group: String(a.group || 'props'),
         ...look0,
         x,

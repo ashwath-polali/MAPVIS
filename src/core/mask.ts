@@ -53,6 +53,18 @@ export interface Occluder {
  * folder. */
 export interface PlacedAsset {
   id: string
+  /* WHAT CODE CALLS THIS THING, typed by a person and unique in this map.
+   * The id above is machine-made: it is 'a' plus a counter, nobody chose it,
+   * and it does not survive being deleted and placed again. So it is not an
+   * address anybody can write python against, and until this field existed the
+   * complete set of addressable things in a bundle was the anchors. Every
+   * speaking figure, every fixture and every trophy slot needs to be one.
+   *
+   * Optional, because almost nothing needs one. Nineteen palms and a gull are
+   * scenery and naming each of them would be noise in the only list that
+   * matters. Absent means nothing outside this map can address it, which is
+   * the honest default. */
+  name?: string
   group: string
   kind: 'static' | 'animated'
   src?: string
@@ -96,10 +108,21 @@ export const lookOf = (a: PlacedAsset, i: number): AssetLook =>
     ? a.looks[i - 1]
     : { kind: a.kind, src: a.src, frames: a.frames, fps: a.fps, dirs: a.dirs }
 
+/* A placement name is legal to type in python, and is never the shape of a
+ * machine id. The second half is not fussiness: the game resolves a placement
+ * reference against the names AND the ids, so that a binding made before an
+ * author named the thing keeps working. Allowing somebody to name a placement
+ * `a55` would let one string mean two different objects on the same map. */
+export const isPlacementName = (s: string) =>
+  /^[a-z][a-z0-9_]{0,47}$/.test(String(s)) && !/^a[0-9]+$/.test(String(s))
+
 // an asset from an older save or bundle: before the transform fields only
 // `scale` existed, so absent ones fill in as the identity transform. Mutates
 // and returns the same object so array.map keeps references stable.
 export function migrateAsset(a: PlacedAsset): PlacedAsset {
+  // a name that is not legal is not a name. Dropped rather than corrected, so
+  // nothing downstream can be handed a string a person did not actually type.
+  if (typeof a.name !== 'string' || !isPlacementName(a.name)) delete a.name
   const s = Number(a.scale) > 0 ? Number(a.scale) : 0.25
   if (!(Number(a.sx) > 0)) a.sx = s
   if (!(Number(a.sy) > 0)) a.sy = s

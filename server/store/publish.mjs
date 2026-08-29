@@ -307,6 +307,12 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
       ...(a.rect ? { rect: a.rect } : {}),
       ...(a.to_slug ? { to: a.to_slug } : {}),
       ...(a.to_anchor ? { toAnchor: a.to_anchor } : {}),
+      /* the placement this name is on. Selected above and then dropped here,
+       * which is the last of the four places the field died between the anchor
+       * form and the game. `show` reads it as its entire body, so until this
+       * line existed one of the fifteen intents could not fire on any bundle
+       * MAPVIS was capable of producing. */
+      ...(a.placement_id ? { placement: a.placement_id } : {}),
       ...(a.facing ? { facing: a.facing } : {}),
       ...(a.label ? { label: a.label } : {}),
       ...(a.meta && Object.keys(a.meta).length ? { meta: a.meta } : {}),

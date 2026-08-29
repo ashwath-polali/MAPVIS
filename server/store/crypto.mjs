@@ -103,3 +103,12 @@ export function anchorName(s) {
 }
 
 export const isAnchorName = (s) => /^[a-z][a-z0-9_]{0,47}$/.test(String(s))
+
+/* The same rule for a PLACEMENT's name, with one extra fence: it may not look
+ * like a machine id. The game resolves a placement reference against the names
+ * and the ids together, so that an anchor bound before the thing was named
+ * keeps working, and `a55` allowed as a name would let one string mean two
+ * objects on the same map. Kept in step with isPlacementName in
+ * src/core/mask.ts, which is the copy the editor refuses with. */
+export const isPlacementName = (s) =>
+  /^[a-z][a-z0-9_]{0,47}$/.test(String(s)) && !/^a[0-9]+$/.test(String(s))

@@ -17,6 +17,7 @@ import {
   migrateAnchor,
   anchorName,
   isAnchorName,
+  isPlacementName,
   type Pt,
   type PlacedAsset,
   type MapEvent,
@@ -2419,6 +2420,65 @@ export class Editor {
   // ---- typed edits -------------------------------------------------------
   // One call is one undo step, so a number typed into the inspector walks back
   // exactly like a drag. Every field lands in the same clamps the gestures use.
+  /* A name no other placement on this map has taken. Same suffix walk the
+   * library and the anchors already use, so three copies of one thing read the
+   * way three anchors named the same way already read. */
+  freePlacementName(want: string, exceptId = ''): string {
+    const base = anchorName(want)
+    const taken = new Set(this.doc.assets.filter((a) => a.id !== exceptId && a.name).map((a) => a.name as string))
+    if (!taken.has(base)) return base
+    for (let i = 2; ; i++) if (!taken.has(`${base}_${i}`)) return `${base}_${i}`
+  }
+
+  /* NAMING A PLACEMENT IS THE SAME EDIT AS RENAMING AN ANCHOR, so it refuses
+   * the same way. An illegal name is rejected rather than quietly corrected,
+   * because a name changed under an author is worse than one they have to fix,
+   * and this string is what a member's python will address. Blank clears it,
+   * which is a real answer: most placements are scenery and should carry no
+   * address at all. */
+  namePlacement(id: string, want: string): { ok: boolean; name?: string; why?: string } {
+    const a = this.doc.assets.find((q) => q.id === id)
+    if (!a) return { ok: false, why: 'gone' }
+    const trimmed = String(want || '').trim()
+    if (!trimmed) {
+      if (a.name) {
+        this.doc.snap()
+        this.repointBindings(a.name, a.id)
+        delete a.name
+        this.touched()
+      }
+      return { ok: true }
+    }
+    const clean = anchorName(trimmed)
+    if (!isPlacementName(clean))
+      return {
+        ok: false,
+        why: /^a[0-9]+$/.test(clean)
+          ? 'a name shaped like a1 is what the tool calls placements itself · pick another'
+          : 'letters, digits and underscores, starting with a letter',
+      }
+    const free = this.freePlacementName(clean, id)
+    if (a.name === free) return { ok: true, name: free }
+    this.doc.snap()
+    /* every anchor pointing at this thing follows the rename, whether it was
+     * holding the old name or the machine id. Renaming is the one direction a
+     * binding can break silently, since the id is the fallback and a fresh name
+     * makes it stale, and it is fixable exactly here because this is where the
+     * old key and the new one are both in hand. */
+    this.repointBindings(a.name || a.id, free)
+    a.name = free
+    this.touched()
+    return { ok: true, name: free, why: free !== clean ? `taken · saved as ${free}` : undefined }
+  }
+
+  /* Move every binding from one placement key to another. Used by naming and by
+   * clearing a name, so an anchor never quietly stops pointing at the thing an
+   * author can see it is on. */
+  private repointBindings(from: string, to: string) {
+    if (from === to) return
+    for (const e of this.doc.events) if (e.placement === from) e.placement = to
+  }
+
   editAsset(id: string, patch: AssetPatch): boolean {
     const a = this.doc.assets.find((q) => q.id === id)
     if (!a) return false
@@ -3341,36 +3401,64 @@ export class Editor {
   }
   updateAnchor = this.updateEvent.bind(this)
 
+  /* THE PLACEMENT A REFERENCE POINTS AT, resolved the way the game resolves it:
+   * by the author's name first, then by the machine id. One function so the
+   * editor, the export and the reader can never disagree about which object a
+   * string means. */
+  placementRef(ref: string | undefined | null): PlacedAsset | undefined {
+    if (!ref) return undefined
+    return this.doc.assets.find((a) => a.name === ref) || this.doc.assets.find((a) => a.id === ref)
+  }
+
   /* Bind an anchor to a placement so it moves with it. This is what "a name
    * survives editing" has to mean in practice: coach_post is where the coach
    * stands, and dragging the coach should take the post along rather than
-   * leaving a name pointing at bare ground. */
-  bindAnchor(id: number, placementId: string | null) {
+   * leaving a name pointing at bare ground.
+   *
+   * THE NAME IS WRITTEN WHEN THERE IS ONE, and the id only when there is not.
+   * An id is a counter that does not survive the thing being deleted and put
+   * back, so a binding held by id goes stale silently. Renaming is the other
+   * direction and is handled where renaming happens: namePlacement carries
+   * every binding over with it. */
+  bindAnchor(id: number, ref: string | null) {
     const e = this.doc.events.find((q) => q.id === id)
     if (!e) return
-    this.doc.snap()
-    if (placementId) {
-      const a = this.doc.assets.find((q) => q.id === placementId)
+    if (ref) {
+      const a = this.placementRef(ref)
       if (!a) return
-      e.placement = placementId
+      const key = a.name || a.id
+      if (e.placement === key) return
+      this.doc.snap()
+      e.placement = key
       e.x = Math.round(a.x)
       e.y = Math.round(a.y)
-      this.say(`${e.name} follows that placement now`)
+      this.say(`${e.name} follows ${key} now`)
     } else {
+      if (!e.placement) return
+      this.doc.snap()
       delete e.placement
       this.say(`${e.name} holds still`)
     }
     this.touched()
   }
 
-  /* Every bound anchor pulled back onto the feet of the thing it follows. Cheap
-   * enough to run on any placement move, and it is what keeps the binding
-   * honest rather than decorative. */
+  /* Every bound anchor pulled back onto the thing it follows. Cheap enough to
+   * run on any placement move, and it is what keeps the binding honest rather
+   * than decorative.
+   *
+   * ONTO THE HOME POSITION, deliberately, and never onto where a wander has
+   * got to. A moving placement's spot is a function of the clock, so writing
+   * the live one would put whatever pixel the export happened to catch into the
+   * bundle, and a second export of an unchanged map would write a different
+   * number. Home is the one position that is a fact about the document. The
+   * live position is a runtime question and is answered at runtime, by the
+   * editor when it draws (see lifeSpot) and by the game when it is asked for a
+   * bound anchor's x and y. */
   syncBoundAnchors() {
     let moved = 0
     for (const e of this.doc.events) {
       if (!e.placement) continue
-      const a = this.doc.assets.find((q) => q.id === e.placement)
+      const a = this.placementRef(e.placement)
       if (!a) continue
       const x = Math.round(a.x)
       const y = Math.round(a.y)
@@ -3381,6 +3469,16 @@ export class Editor {
       }
     }
     return moved
+  }
+
+  /* WHERE A PLACEMENT IS BEING DRAWN RIGHT NOW, for anything that has to point
+   * at it on screen. The live offsets are rebuilt every frame in drawAssets and
+   * keyed by placement id; an empty map means the preview is paused or the
+   * placements are not on screen, and then the honest answer is where the thing
+   * was put. Read-only: nothing here is ever written back into the document. */
+  lifeSpot(a: PlacedAsset): { x: number; y: number } {
+    const at = this.liveAt.get(a.id)
+    return at ? { x: a.x + at.dx, y: a.y + at.dy } : { x: a.x, y: a.y }
   }
 
   deleteEvent(id: number) {
@@ -3531,6 +3629,12 @@ export class Editor {
           ...(e.rect ? { rect: e.rect } : {}),
           ...(e.to ? { to: e.to } : {}),
           ...(e.toAnchor ? { toAnchor: e.toAnchor } : {}),
+          /* the placement this name is on. Dropped here for as long as the
+           * field existed, which is why `show` had never fired on any bundle
+           * this tool could produce. The published bundle takes its anchors
+           * from the database rather than from this array, so both exporters
+           * had to learn it and this one is half of that. */
+          ...(e.placement ? { placement: e.placement } : {}),
           ...(e.facing ? { facing: e.facing } : {}),
           ...(e.label ? { label: e.label } : {}),
           ...(e.meta && Object.keys(e.meta).length ? { meta: e.meta } : {}),
@@ -3547,6 +3651,12 @@ export class Editor {
     this.dirty = true
     this.changed = true
     this.cutApplied = null
+    /* A BOUND ANCHOR FOLLOWS THE THING IT IS BOUND TO, and this is the one hook
+     * every edit already runs through, so no gesture has to remember to drag
+     * the name along with the sprite. Dragging the coach takes coach_post with
+     * him; typing a new x does too. Cheap: almost no anchor carries a binding,
+     * and the loop stops on the first field of each one that does not. */
+    this.syncBoundAnchors()
     // whether a walker can reach a standing placement is a question about the
     // floor and about where the thing was put, and this is the one hook both a
     // brush stroke and a drag already run through

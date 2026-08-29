@@ -697,6 +697,11 @@ export default function App() {
    * neither. nameSaid carries back what the editor did with it. */
   const [nameDraft, setNameDraft] = useState<string | null>(null)
   const [nameSaid, setNameSaid] = useState<{ id: number; why: string } | null>(null)
+  /* The same hold, for the name on a PLACEMENT. Kept apart from the anchor
+   * pair above because both forms can be open at once and one draft between
+   * them would put half a typed anchor name into the selected sprite. */
+  const [pnameDraft, setPnameDraft] = useState<string | null>(null)
+  const [pnameSaid, setPnameSaid] = useState<{ id: string; why: string } | null>(null)
   // the effect box: the ask, the armed map click, the plan the click produced
   // and the params a human is tuning. fxFrames is the render, redone locally on
   // every slider move. Nothing here has touched the disk yet.
@@ -3804,6 +3809,23 @@ export default function App() {
   // the map's anchors. Every named place, not only the doors.
   const doors = st?.events ?? []
   const editingDoor = doors.find((v) => v.id === doorEdit)
+  /* What an anchor can be bound to, split the way the picker offers it. The
+   * named ones lead because a name is what somebody chose in order to address
+   * the thing, and `has` answers whether a stored binding still points at
+   * anything, which is the only way a broken one becomes visible. Resolved by
+   * name first and then by id, exactly as editor.placementRef and the game
+   * both resolve it. */
+  const bindTargets = (() => {
+    const all = st?.assets ?? []
+    const named = all.filter((a) => a.name)
+    const rest = all.filter((a) => !a.name)
+    const keys = new Set<string>()
+    for (const a of all) {
+      keys.add(a.id)
+      if (a.name) keys.add(a.name)
+    }
+    return { named, rest, has: (ref: string) => keys.has(ref) }
+  })()
 
   const testPanel = !has ? (
     needPainting
@@ -3933,6 +3955,59 @@ export default function App() {
                 />
               </label>
             </>
+          )}
+
+          {/* WHICH PAINTED THING THIS NAME IS ON.
+              *
+              * Until this box existed the field was typed, tabled, exported and
+              * read by the game, with nothing anywhere that could put a value in
+              * it, so `show` could not fire on any bundle this tool was capable
+              * of producing. It is the whole mechanism behind the world
+              * reflecting the run: bind a name to a placement and the trophy
+              * wall can fill as the cords are earned.
+              *
+              * Named placements lead, because those are the ones anybody binds
+              * on purpose. The rest are offered by what they are drawn from,
+              * with their machine id after it, since two crates need telling
+              * apart somehow. */}
+          <label className="anchfield">
+            <span>bound to · the placement it follows</span>
+            <select
+              className="anchbind"
+              data-empty={editingDoor.placement ? '0' : '1'}
+              value={editingDoor.placement ?? ''}
+              onChange={(e) => ed?.bindAnchor(editingDoor.id, e.target.value || null)}
+            >
+              <option value="">nothing · it holds still</option>
+              {bindTargets.named.length > 0 && (
+                <optgroup label="named">
+                  {bindTargets.named.map((a) => (
+                    <option key={a.id} value={a.name as string}>
+                      {a.name}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              {bindTargets.rest.length > 0 && (
+                <optgroup label="unnamed">
+                  {bindTargets.rest.map((a) => (
+                    <option key={a.id} value={a.id}>
+                      {assetLabel(a)} · {a.id}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              {/* a binding whose placement is gone is shown rather than silently
+                  dropped, or an author fixes an anchor they never knew broke */}
+              {editingDoor.placement && !bindTargets.has(editingDoor.placement) && (
+                <option value={editingDoor.placement}>{editingDoor.placement} · gone</option>
+              )}
+            </select>
+          </label>
+          {editingDoor.placement && !bindTargets.has(editingDoor.placement) && (
+            <div className="anchwarn">
+              nothing on this map is called {editingDoor.placement} any more · show would refuse
+            </div>
           )}
 
           <div className="doorrad">
@@ -4431,6 +4506,37 @@ export default function App() {
           </button>
         </div>
       )}
+      {/* THE ADDRESS, and it sits above the group because it is the identity
+          and the group is only the set it belongs to. It wears the anchor
+          form's shape rather than the property rows below it, because it is
+          the same kind of thing as an anchor's name and the label has to have
+          room to say so.
+
+          Blank on purpose for almost everything: nineteen palms are scenery,
+          and a name on each of them would bury the six a member's python
+          actually talks to. The id underneath is machine-made and does not
+          survive being placed again, so this is the only string anything
+          outside the map can hold on to. */}
+      <label className="anchfield">
+        <span>name · what code calls it</span>
+        <input
+          className={'anchname' + (pnameSaid?.id === selA.id ? ' bad' : '')}
+          value={pnameDraft ?? selA.name ?? ''}
+          placeholder="unnamed"
+          onChange={(e) => setPnameDraft(e.target.value)}
+          onBlur={() => {
+            if (pnameDraft === null) return
+            const r = ed?.namePlacement(selA.id, pnameDraft)
+            setPnameSaid(r?.why ? { id: selA.id, why: r.why } : null)
+            setPnameDraft(null)
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === 'Escape') e.currentTarget.blur()
+          }}
+          spellCheck={false}
+        />
+      </label>
+      {pnameSaid?.id === selA.id && <div className="anchwarn">{pnameSaid.why}</div>}
       <label className="insp-row">
         <span>group</span>
         <select
