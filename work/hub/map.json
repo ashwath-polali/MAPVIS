@@ -101,5 +101,36 @@
       "label": "Panther's Maw",
       "to": "panther-maw"
     }
+  ],
+  "paths": [
+    {
+      "name": "the_dock_walk",
+      "points": [
+        [
+          103,
+          471
+        ],
+        [
+          256,
+          430
+        ],
+        [
+          398,
+          389
+        ]
+      ],
+      "closed": false,
+      "twoWay": true
+    }
+  ],
+  "framings": [
+    {
+      "name": "the_maw_mouth",
+      "anchor": "panthers_maw",
+      "dx": 0,
+      "dy": 0,
+      "zoom": 1,
+      "entry": true
+    }
   ]
 }
