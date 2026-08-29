@@ -306,9 +306,10 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
    * game repo. class is the same story from the other end, a fact MAPVIS knows
    * and never said, so the engine guesses it from the border on every map. */
   const props = await one(
-    `select title, class, island_id, meta, char_h, char_hip, char_hipdy, speed, yscale, step_tol,
-            base_w, base_h, base_ox, base_oy, paths, framings
-     from maps where id = $1`,
+    `select m.title, m.class, m.island_id, m.meta, m.char_h, m.char_hip, m.char_hipdy, m.speed, m.yscale, m.step_tol,
+            m.base_w, m.base_h, m.base_ox, m.base_oy, m.paths, m.framings, m.cover_fact,
+            u.email as owner_email
+     from maps m join users u on u.id = m.owner_id where m.id = $1`,
     [m.id],
   )
   const map = {
@@ -338,6 +339,17 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
       ox: props?.base_ox ?? 0,
       oy: props?.base_oy ?? 0,
     },
+    /* WHO MADE THIS AND WHEN, inside the bundle rather than only in a row.
+     *
+     * Twelve islands means twelve authors, and a bundle that has left the
+     * platform is a file with no idea where it came from: a member debugging
+     * their own island in the game had nothing on the map that named them, and
+     * a version that turns out to be wrong could not be traced back to the
+     * press that made it without a database query nobody watching the game can
+     * run. The email is the account that owns the map, which is the same thing
+     * the dashboard already shows that person about themselves. */
+    provenance: { owner: props?.owner_email || '', publishedAt: new Date().toISOString(), version },
+    ...(props?.cover_fact ? { coverFact: props.cover_fact } : {}),
     /* ROUTES AND SHOTS FROM THE ROW, for the same reason the walk contract and
      * the anchors come from it: a stale tab must not be able to republish a
      * route somebody moved four seconds ago. Absent when empty, so a bundle

@@ -32,17 +32,37 @@ const server = http.createServer((req, res) =>
 )
 await new Promise((r) => server.listen(PORT, '127.0.0.1', r))
 
-const call = async (path, opts = {}) => {
+/* THE REQUEST LIMITER IS NOT THE THING UNDER TEST, and it was able to fail this
+ * file for the wrong reason.
+ *
+ * Two different refusals here say "too many": the login backoff, which is what
+ * these checks are about, and the api's own token bucket in front of every
+ * route, which is not. They are told apart only by wording, so a 429 arriving
+ * mid-run reads as "the fourth wrong guess was not slowed" and reports a
+ * security regression that has not happened. This file fires roughly a hundred
+ * requests from one address as fast as they will go, so it sits close enough to
+ * the bucket to matter, and it gets closer every time a check is added.
+ *
+ * A 429 is the one answer that means "ask again", so it is the one answer this
+ * helper does not hand back. Retry-After is honoured, and a run that cannot get
+ * past it after a few tries says so plainly rather than blaming a check. */
+const call = async (path, opts = {}, tries = 4) => {
   const r = await fetch(`http://127.0.0.1:${PORT}${path}`, {
     ...opts,
     headers: { 'content-type': 'application/json', ...(opts.headers || {}) },
     body: opts.body ? JSON.stringify(opts.body) : undefined,
   })
+  if (r.status === 429 && tries > 0) {
+    const after = Number(r.headers.get('retry-after') || 1)
+    await new Promise((res) => setTimeout(res, Math.max(250, after * 1000)))
+    return call(path, opts, tries - 1)
+  }
   const cookie = r.headers.get('set-cookie') || ''
   let json = null
   try {
     json = await r.json()
   } catch {}
+  if (r.status === 429) console.log(`  note  the request limiter refused ${path} four times; this run is not a fair test`)
   return { status: r.status, json, cookie, token: (cookie.match(/mapvis_session=([^;]+)/) || [])[1] }
 }
 

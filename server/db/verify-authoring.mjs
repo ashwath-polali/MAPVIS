@@ -220,6 +220,11 @@ try {
    * island before it is on screen. Four columns that existed from the first
    * schema and never reached a bundle. */
   eq('published base extent', shipped.base, { w: W, h: H, ox: 0, oy: 0 })
+  /* a bundle that has left the platform should know where it came from, because
+   * twelve islands means twelve authors and a file on a cdn has no row behind it */
+  shipped.provenance?.owner && shipped.provenance?.publishedAt && shipped.provenance?.version === pub.version
+    ? ok(`published provenance ${shipped.provenance.owner} v${shipped.provenance.version}`)
+    : no(`provenance missing or wrong: ${JSON.stringify(shipped.provenance)}`)
 
   const shippedAssets = JSON.parse((await store().get(row.blob_prefix + 'assets.json')).toString('utf8'))
   eq('published placement name', shippedAssets.assets?.[0]?.name, 'the_coach')
