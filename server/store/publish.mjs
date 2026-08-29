@@ -266,6 +266,11 @@ async function writesThisMonth() {
 }
 
 export async function publishBundle(slug, { mapJson, assetsJson, images, files }) {
+  /* A PUBLISH THAT TAKES MINUTES HAS TO SAY WHERE IT IS. It writes hundreds of
+   * objects and nothing said so until it finished, which is indistinguishable
+   * from hanging and was read as exactly that for hours. */
+  const t0 = Date.now()
+  const step = (what) => console.log(`[publish] ${slug}: ${what} · ${((Date.now() - t0) / 1000).toFixed(1)}s`)
   const m = await one('select id from maps where slug = $1', [slug])
   if (!m) throw new Error(`no map ${slug}`)
 
@@ -301,7 +306,8 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
    * game repo. class is the same story from the other end, a fact MAPVIS knows
    * and never said, so the engine guesses it from the border on every map. */
   const props = await one(
-    `select title, class, island_id, meta, char_h, char_hip, char_hipdy, speed, yscale, step_tol
+    `select title, class, island_id, meta, char_h, char_hip, char_hipdy, speed, yscale, step_tol,
+            base_w, base_h, base_ox, base_oy, paths, framings
      from maps where id = $1`,
     [m.id],
   )
@@ -322,6 +328,47 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
     character: { heightPx: props?.char_h ?? 18, hip: props?.char_hip ?? 2, hipDY: props?.char_hipdy ?? 1 },
     speed: Number(props?.speed ?? 34),
     yScale: Number(props?.yscale ?? 0.72),
+    /* THE PAINTING'S OWN SIZE, which is not the canvas's. growCanvas buys room
+     * in transparent margin, so a discovery radius taken off h is wrong by
+     * about 41 percent on the hub, early rather than late. Four columns that
+     * have existed since the first schema and never left the database. */
+    base: {
+      w: props?.base_w ?? mapJson?.w ?? 0,
+      h: props?.base_h ?? mapJson?.h ?? 0,
+      ox: props?.base_ox ?? 0,
+      oy: props?.base_oy ?? 0,
+    },
+    /* ROUTES AND SHOTS FROM THE ROW, for the same reason the walk contract and
+     * the anchors come from it: a stale tab must not be able to republish a
+     * route somebody moved four seconds ago. Absent when empty, so a bundle
+     * from before they existed does not grow two empty arrays. */
+    ...(Array.isArray(props?.paths) && props.paths.length
+      ? {
+          paths: props.paths.map((p) => ({
+            name: p.name,
+            points: p.points,
+            closed: !!p.closed,
+            twoWay: !!p.twoWay,
+            ...(p.facing ? { facing: p.facing } : {}),
+            ...(Array.isArray(p.marks) && p.marks.length ? { marks: p.marks } : {}),
+            ...(p.meta && Object.keys(p.meta).length ? { meta: p.meta } : {}),
+          })),
+        }
+      : {}),
+    ...(Array.isArray(props?.framings) && props.framings.length
+      ? {
+          framings: props.framings.map((f) => ({
+            name: f.name,
+            ...(f.anchor ? { anchor: f.anchor } : {}),
+            ...(f.anchor ? {} : { x: f.x, y: f.y }),
+            dx: f.dx ?? 0,
+            dy: f.dy ?? 0,
+            zoom: Number(f.zoom ?? 1),
+            ...(f.entry ? { entry: true } : {}),
+            ...(f.meta && Object.keys(f.meta).length ? { meta: f.meta } : {}),
+          })),
+        }
+      : {}),
     anchors: anchors.map((a) => ({
       name: a.name,
       kind: a.kind,
@@ -390,6 +437,7 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
   // a warning is a fact the author should have, not a reason to refuse: a door
   // to a room nobody has painted yet is the Maw's own design
   for (const w of warnings) console.warn(`[publish] ${slug}: ${w}`)
+  step('gate passed')
 
   /* ONE LAYOUT, DECIDED HERE, NOT BY WHICHEVER CALLER TURNED UP.
    *
@@ -447,6 +495,7 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
       all.set('atlas.png', packed.png)
       all.set('atlas.json', Buffer.from(JSON.stringify(packed.index)))
     }
+    step(`atlas packed, ${packed ? packed.count : 0} frames`)
   }
 
   for (const [name, buf] of Object.entries(images)) if (buf) all.set(name, buf)
@@ -491,6 +540,7 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
    * equal to the order of `all` however the lanes interleave, so two publishes
    * of the same bundle produce the same jsonb rather than the same set shuffled. */
   const entries = [...all]
+  step(`${entries.length} object(s) to write`)
   const wrote = new Array(entries.length)
   const LANES = 12
   let next = 0
@@ -527,6 +577,7 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
       }
     }),
   )
+  step('all objects written')
   let bytes = 0
   const manifest = {}
   for (let i = 0; i < entries.length; i++) {
@@ -550,6 +601,7 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
    * identical from this side of the call. One listing costs one class A
    * operation per thousand keys, against the 801 writes it is checking. */
   const have = new Set((await s.list(prefix)).map((o) => String(o.key || o)))
+  step('bucket listed back')
   const missing = Object.keys(manifest).filter((rel) => !have.has(prefix + rel))
   if (missing.length)
     throw new Error(

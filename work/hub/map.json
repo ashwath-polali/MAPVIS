@@ -2,6 +2,13 @@
   "id": "hub",
   "w": 688,
   "h": 640,
+  "base": {
+    "w": 688,
+    "h": 640,
+    "ox": 0,
+    "oy": 0
+  },
+  "class": "island",
   "encoding": {
     "blocked": 0,
     "L0": 40,
@@ -15,7 +22,7 @@
   },
   "spawn": [
     557,
-    508
+    507
   ],
   "character": {
     "heightPx": 18,

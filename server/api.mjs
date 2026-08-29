@@ -150,7 +150,6 @@ export function api(req, res, next) {
     res.setHeader('Retry-After', '2')
     return send(res, 429, { error: 'too many requests' })
   }
-  if (p === '/api/export') console.log(`[export] request arrived, content-length ${req.headers['content-length'] || '?'}`)
   Promise.resolve(serve(req, res, p, url)).catch((e) => {
     // a missing key is a condition, not a crash, and it has to say which one so
     // the ui can put the right wall in front of the right button
@@ -315,9 +314,7 @@ async function route(req, res, p, url) {
    * it always has, and only stops at a map that already has an owner, which is
    * what makes a map yours instead of merely listed under you. */
   if (req.method === 'POST' && !OPEN_POSTS.has(p)) {
-    if (p === '/api/export') console.log('[export] at the ownership gate, reading the body')
     const b = await body(req)
-    if (p === '/api/export') console.log('[export] gate has the body')
     /* THE GATE HAS TO NAME THE MAP THE HANDLER WILL NAME.
      *
      * It read b.id alone, and two things followed. The import routes carry
