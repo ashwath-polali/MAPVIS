@@ -51,12 +51,23 @@ else {
   diff ? no(`planes differ in ${diff} of ${a.length} bytes`) : ok(`planes lossless, ${a.length.toLocaleString()} bytes`)
 }
 
-// geometry
-for (const k of ['w', 'h', 'assetNext'])
+/* GEOMETRY, and only the two numbers the disk file is entitled to be asked
+ * about.
+ *
+ * w and h belong here because the planes above were just compared byte for
+ * byte, and a mask of that length can only describe one size, so a disagreement
+ * is a real fault rather than an old file.
+ *
+ * `spawn` and `assetNext` used to be in this loop and both are authored state
+ * that legitimately changes. That is the hazard this file's own header warns
+ * about for placements and anchors, applied to two fields that were left behind
+ * when the rest moved. It cost a real morning: the hub reported `spawn 557,508
+ * in, 557,507 out` as a FAILURE on every run, and the two numbers were simply a
+ * two-day-old snapshot and today's map, both correct. Nothing was broken and
+ * the suite said something was. They are asked of the round trip below
+ * instead, which is the property this file is actually about. */
+for (const k of ['w', 'h'])
   original[k] === roundTripped[k] ? ok(`${k} ${original[k]}`) : no(`${k}: ${original[k]} in, ${roundTripped[k]} out`)
-String(original.spawn) === String(roundTripped.spawn)
-  ? ok(`spawn ${original.spawn}`)
-  : no(`spawn ${original.spawn} in, ${roundTripped.spawn} out`)
 
 // the placements, compared as data rather than as text, since jsonb reorders keys
 const norm = (v) =>
@@ -74,6 +85,19 @@ norm(roundTripped.assets) === norm(again1.assets)
 norm(roundTripped.walk) === norm(again1.walk) && norm(roundTripped.props) === norm(again1.props)
   ? ok(`the walk contract and the map's properties survive it too`)
   : no(`walk or props changed: ${norm(again1.walk)} ${norm(again1.props)}`)
+// the start point and the placement counter, asked of the live document rather
+// than of the file, because both of them move whenever somebody authors
+String(roundTripped.spawn) === String(again1.spawn)
+  ? ok(`spawn ${roundTripped.spawn} survives the round trip`)
+  : no(`spawn ${roundTripped.spawn} in, ${again1.spawn} out`)
+roundTripped.assetNext === again1.assetNext
+  ? ok(`assetNext ${roundTripped.assetNext}`)
+  : no(`assetNext ${roundTripped.assetNext} in, ${again1.assetNext} out`)
+// the routes and the shots, which are the newest authored lists and travel the
+// same jsonb path the placements do
+norm(roundTripped.paths || []) === norm(again1.paths || []) && norm(roundTripped.framings || []) === norm(again1.framings || [])
+  ? ok(`${(roundTripped.paths || []).length} route(s) and ${(roundTripped.framings || []).length} shot(s) survive it`)
+  : no(`routes or shots changed: ${norm(again1.paths)} ${norm(again1.framings)}`)
 
 // anchors survive the trip through the table. A document written before anchors
 // existed says type:'door'; one written since says kind, and both have to come
