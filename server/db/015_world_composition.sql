@@ -1,0 +1,24 @@
+-- The ocean, said in the words the game already reads.
+--
+-- 010 gave the water an author and 014 gave it waypoints. Both invented their
+-- own spelling for things the running game had already named, and neither side
+-- knew: the game asks for a composition of `slots` and MAPVIS answered with
+-- `places`, so the whole document was discarded by one Array.isArray check and
+-- a hand-written fallback was used instead, silently, with no error anywhere.
+-- The consumer's running shape is canonical, so MAPVIS moves.
+--
+-- Two of the fourteen disagreements need a column rather than a rename.
+--
+--   version  the game stamps a saved position with the world version it was
+--            taken in and refuses to resume a run when the number has changed.
+--            updated_at cannot do that job: it moves when an author drags one
+--            island, which would throw away every saved position on the class's
+--            chromebooks on every save. So this is an integer that only counts
+--            up when the composition itself really changed, and dragging a
+--            waypoint or renaming a title does not touch it.
+--
+--   home     where a run with no vessel record starts, and where a graduate is
+--            handed back to. One slot name for the whole ocean. Nothing in
+--            MAPVIS could say it, so the game had it hard-coded.
+alter table world add column if not exists version integer not null default 1;
+alter table world add column if not exists home    text    not null default '';

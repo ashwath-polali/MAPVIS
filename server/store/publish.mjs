@@ -20,6 +20,62 @@ import { decodePNG } from '../sheet.mjs'
 
 const sha = (b) => crypto.createHash('sha256').update(b).digest('hex')
 
+/* SHOTS, FOLDED ONTO THE ANCHOR THEY NAME.
+ *
+ * A DELIBERATE SECOND COPY of shotZoom and shotsOntoMeta in src/core/mask.ts,
+ * for the same reason life.ts is copied verbatim between the two repos: this
+ * file is node ESM reading postgres and that one is browser TypeScript reading a
+ * document, and neither can import the other without dragging half a build into
+ * the wrong process. The two exporters have diverged before, so if either half
+ * changes, change both, and the fence that catches it is
+ * server/db/verify-authoring.mjs, which publishes a map and reads the projection
+ * back out of the bundle.
+ *
+ * The reason for the projection itself: MAPVIS keeps shots in a list of their
+ * own and the game has never had a reader for it. What the game reads is the
+ * anchor's `meta` bag, `meta.framings[name]` first and `meta.framing` as the
+ * unnamed default, with the fields spelt exactly zoom, dx, dy and name.
+ *
+ * ZOOM CROSSES IN A DIFFERENT UNIT THAN IT IS STORED IN. `zoom` on the row is
+ * the editor's view, screen pixels per painting pixel, an integer notch. The
+ * game multiplies whatever it is handed by the scale the map loaded at, so a
+ * shot armed at notch 3 would arrive as three times the opening view, which is a
+ * face filling the screen. `overFit`, written when the shot was armed, says how
+ * many times tighter than the whole map the view was, and 1.18 is the game's own
+ * pull-out constant from PmapScene.tsx:828-829. MAPVIS carries the consumer's
+ * constant because MAPVIS is the side that moves. */
+const GAME_OPENING_PULL = 1.18
+
+const shotZoom = (f) => {
+  const rel = isFinite(Number(f?.overFit)) && Number(f.overFit) > 0 ? Number(f.overFit) : 0
+  // a shot armed before overFit existed has no canvas behind it any more, so it
+  // becomes the map's opening view. That is a camera somebody can look at and
+  // re-arm; the raw notch is a nose filling the screen with nothing saying why.
+  if (!rel) return 1
+  return Math.round((rel / GAME_OPENING_PULL) * 1000) / 1000
+}
+
+const shotsOntoMeta = (framings, anchor, meta) => {
+  const all = Array.isArray(framings) ? framings : []
+  const mine = all.filter((f) => f && f.anchor === anchor)
+  const had = meta && typeof meta === 'object' && Object.keys(meta).length ? meta : null
+  if (!mine.length) return had || undefined
+  const one = (f) => ({ zoom: shotZoom(f), dx: f.dx ?? 0, dy: f.dy ?? 0 })
+  const set = {}
+  for (const f of mine) set[f.name] = one(f)
+  /* WHICH ONE IS THE DEFAULT matters more than it looks: look_at asks for a shot
+   * with no name at all, and a script naming a shot the map does not carry falls
+   * back to the same slot, so an anchor with named shots and no default has a
+   * dead camera on both paths. The entry shot takes it if one hangs here,
+   * otherwise the oldest, because ids only count upwards and the first shot
+   * somebody armed on a station is the one they framed it with. */
+  const def = mine.find((f) => f.entry) || mine.reduce((a, b) => ((a.id ?? 0) <= (b.id ?? 0) ? a : b))
+  /* MERGED, NEVER SWAPPED IN. panthers_maw on the real hub already carries docId
+   * and derived, and the game writes `derived` itself when it has to invent a
+   * name, so replacing the bag would take both out. */
+  return { ...(had || {}), framings: set, framing: { ...one(def), name: def.name } }
+}
+
 /* WHAT A PLACEMENT STANDS ON, MEASURED OFF ITS OWN ART.
  *
  * A published placement used to carry no collision shape at all, so the walk
@@ -353,11 +409,27 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
     /* ROUTES AND SHOTS FROM THE ROW, for the same reason the walk contract and
      * the anchors come from it: a stale tab must not be able to republish a
      * route somebody moved four seconds ago. Absent when empty, so a bundle
-     * from before they existed does not grow two empty arrays. */
+     * from before they existed does not grow two empty arrays.
+     *
+     * NOTHING IN THE GAME READS `paths` YET, and that is written here rather
+     * than left for the next session to rediscover. The nearest running shape
+     * over there is what findPath returns: `Pt = { x, y }` in painting pixels,
+     * walked forward by index from zero and addressed by `.x` and `.y`
+     * (AdventureGame src/game/pmap/path.ts:32). The pairs below would have to
+     * become objects for a reader to take this as a route with no adapter. Not
+     * converted here, because there is no reader to be right for: movement in
+     * src/vine/intents.ts names an anchor and nothing else, so a grape cannot
+     * even say the word for a route today. */
     ...(Array.isArray(props?.paths) && props.paths.length
       ? {
           paths: props.paths.map((p) => ({
             name: p.name,
+            /* what travels the line, which the local exporter has always
+             * written and this one dropped. A walk is held to the floor, a sail
+             * is expected to leave it and a camera has no feet, so a reader with
+             * no kind has to guess whether a route over open water is a defect.
+             * Defaulted for rows written before PathKind existed. */
+            kind: p.kind || 'walk',
             points: p.points,
             closed: !!p.closed,
             twoWay: !!p.twoWay,
@@ -367,6 +439,14 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
           })),
         }
       : {}),
+    /* THE SHOT LIST IS THE AUTHORING RECORD AND NOT THE CAMERA. Every shot hung
+     * on an anchor is also folded into that anchor's meta bag below, which is
+     * the only place the game looks for one. This array stays because it is what
+     * the panel edits and what the api hands python, and because a shot on raw
+     * coordinates has nowhere else to go: the game's framing is an offset from
+     * an anchor and carries no position of its own. `entry` is here on the same
+     * terms, honestly: the arrival path in the game returns a position and a
+     * facing and never touches zoom, so nothing reads it yet. */
     ...(Array.isArray(props?.framings) && props.framings.length
       ? {
           framings: props.framings.map((f) => ({
@@ -376,6 +456,10 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
             dx: f.dx ?? 0,
             dy: f.dy ?? 0,
             zoom: Number(f.zoom ?? 1),
+            // what the same shot is worth to the game, beside the editor's own
+            // view number, so nothing downstream has to work out which unit the
+            // field above is in
+            gameZoom: shotZoom(f),
             ...(f.entry ? { entry: true } : {}),
             ...(f.meta && Object.keys(f.meta).length ? { meta: f.meta } : {}),
           })),
@@ -399,7 +483,13 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
       ...(a.placement_id ? { placement: a.placement_id } : {}),
       ...(a.facing ? { facing: a.facing } : {}),
       ...(a.label ? { label: a.label } : {}),
-      ...(a.meta && Object.keys(a.meta).length ? { meta: a.meta } : {}),
+      /* the bag, with every shot hung on this name folded in. See shotsOntoMeta
+       * below: the game reads a camera off the anchor and has never had a reader
+       * for the framings array above. */
+      ...(() => {
+        const meta = shotsOntoMeta(props?.framings, a.name, a.meta)
+        return meta ? { meta } : {}
+      })(),
     })),
   }
 

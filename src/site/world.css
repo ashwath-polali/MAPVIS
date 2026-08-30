@@ -1,117 +1,176 @@
 /* The world composition page: a chart of an ocean with a survey panel beside
  * it. It borrows the site's palette and the home page's chrome rather than
  * inventing a third look, and everything that is not the water is small,
- * narrow and out of the way. The only bright thing on the screen is gold, and
- * gold only ever means the tool talking.
+ * narrow and out of the way.
+ *
+ * TWO RULES DO MOST OF THE WORK HERE, and the first pass of this sheet kept
+ * neither.
+ *
+ * GOLD ONLY EVER MEANS THE TOOL SPEAKING. It was on five things at once, three
+ * of them as a filled slab, so the brightest thing on a dark chart was a row of
+ * buttons rather than the island being worked on. It is now a hairline and a
+ * word on whatever is armed, and a fill on nothing but the press you are
+ * actually making.
+ *
+ * FOUR TYPE SIZES AND FOUR SPACINGS, and there were nine of each. A panel with
+ * nine sizes in it does not read as a form, it reads as a document that grew.
+ * Everything below is 9, 10, 11.5 or 12, and 4, 8, 12 or 18 apart.
  *
  * Loaded from World.tsx rather than from main.tsx, because this route is one
  * page and nobody who never opens it should pay for the rules.
  */
 
 .world {
+  /* the page's own line and surface, named once. Ten hard-coded near-identical
+     greys is how a panel edge ends up a shade off the panel edge beside it. */
+  --wl: #141c26;
+  --wl-lit: #29323d;
+  --sunk: #0d1219;
+  --say: #7d8ea1;
+  --quiet: #5b6470;
+
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   height: 100svh;
-  background: #070b11;
-  color: #d8e3ee;
+  background: var(--void);
+  color: var(--ink-on-sea);
   font-family: var(--font-label);
 }
+
+/* scrollbars stop being the one thing on screen that looks like an operating
+   system rather than like this program. The panel had the browser's own light
+   bar down its edge while the editor two clicks away had a thin dark one, which
+   is the same tool disagreeing with itself. Same rule the editor uses. */
+.world *,
+.world {
+  scrollbar-width: thin;
+  scrollbar-color: var(--wl-lit) transparent;
+}
+.world *::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+.world *::-webkit-scrollbar-thumb {
+  background: var(--wl-lit);
+  border: 2px solid var(--void);
+}
+.world *::-webkit-scrollbar-thumb:hover {
+  background: #38434f;
+}
+.world *::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ---- the bar ------------------------------------------------------------- */
 
 .world-bar {
   display: flex;
   align-items: center;
   gap: 18px;
-  padding: 12px clamp(14px, 2vw, 26px);
-  border-bottom: 1px solid #141c26;
+  padding: 10px clamp(12px, 2vw, 22px);
+  border-bottom: 1px solid var(--wl);
 }
 .world-back {
-  font: 500 12px var(--font-label);
-  color: #6f7885;
+  width: 24px;
+  height: 24px;
+  font: 500 14px var(--font-label);
+  color: var(--quiet);
   background: none;
   border: 0;
   padding: 0;
   cursor: pointer;
-  transition: color 180ms ease;
+  transition: color var(--t-fast) var(--ease-out);
 }
 .world-back:hover {
-  color: #d8e3ee;
+  color: var(--ink-on-sea);
 }
 .world-name {
   font: 700 11px var(--font-label);
-  letter-spacing: 0.4em;
+  letter-spacing: 0.32em;
   text-transform: uppercase;
-  color: #d8e3ee;
+  color: var(--ink-on-sea);
 }
 .world-meta {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font: 400 10px var(--font-mono);
-  color: #5b6470;
-}
-.world-count {
-  margin-left: 10px;
-}
-.world-num {
-  width: 62px;
-  padding: 4px 6px;
-  font: 400 10px var(--font-mono);
-  color: #d8e3ee;
-  background: #10141a;
-  border: 1px solid #1d232b;
-  outline: none;
-}
-.world-num:focus {
-  border-color: #39434f;
-}
-.world-tools {
-  display: flex;
   gap: 4px;
   margin-left: auto;
+  font: 400 10px var(--font-mono);
+  color: var(--quiet);
+}
+.world-num {
+  width: 56px;
+  padding: 4px 6px;
+  font: 400 10px var(--font-mono);
+  color: var(--say);
+  background: var(--sunk);
+  border: 1px solid var(--wl);
+  border-radius: 2px;
+  outline: none;
+  transition: border-color var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out);
+}
+.world-num:focus {
+  color: var(--ink-on-sea);
+  border-color: var(--wl-lit);
+}
+
+/* one segmented control, not three buttons that happen to be adjacent. The
+   armed one is a gold word on a gold hairline: a filled gold slab made the tool
+   picker the loudest thing on a page whose subject is the paintings. */
+.world-tools {
+  display: flex;
+  gap: 1px;
+  padding: 1px;
+  background: var(--wl);
+  border-radius: 3px;
 }
 .world-tool {
-  padding: 6px 12px;
-  font: 500 11px var(--font-label);
-  letter-spacing: 0.08em;
-  color: #6f7885;
-  background: none;
-  border: 1px solid #1d232b;
+  padding: 5px 13px;
+  font: 500 11.5px var(--font-label);
+  letter-spacing: 0.06em;
+  color: var(--quiet);
+  background: var(--void);
+  border: 0;
+  border-radius: 2px;
   cursor: pointer;
-  transition: all 160ms ease;
+  transition: color var(--t-fast) var(--ease-out), background-color var(--t-fast) var(--ease-out);
 }
 .world-tool:hover {
-  color: #d8e3ee;
-  border-color: #39434f;
+  color: var(--ink-on-sea);
+  background: var(--sunk);
 }
 .world-tool.on {
-  color: #070b11;
-  background: var(--gold);
-  border-color: var(--gold);
+  color: var(--gold-lit);
+  background: color-mix(in srgb, var(--gold) 12%, var(--void));
 }
 .world-save {
-  padding: 6px 16px;
-  font: 600 11px var(--font-label);
-  letter-spacing: 0.16em;
+  padding: 5px 16px;
+  font: 600 11.5px var(--font-label);
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--gold-lit);
   background: none;
-  border: 1px solid color-mix(in srgb, var(--gold) 45%, transparent);
+  border: 1px solid color-mix(in srgb, var(--gold) 40%, transparent);
+  border-radius: 3px;
   cursor: pointer;
-  transition: all 180ms ease;
+  transition: all var(--t-fast) var(--ease-out);
 }
 .world-save:hover:not(:disabled) {
-  color: #070b11;
+  color: var(--void);
   background: var(--gold);
+  border-color: var(--gold);
 }
 .world-save:disabled {
   color: #4a5563;
-  border-color: #1d232b;
+  border-color: var(--wl);
   cursor: default;
 }
 
+/* ---- the chart ----------------------------------------------------------- */
+
 .world-body {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 306px;
+  grid-template-columns: minmax(0, 1fr) 290px;
   min-height: 0;
 }
 @media (max-width: 900px) {
@@ -121,9 +180,9 @@
   }
 }
 
-/* the chart. The canvas is absolute so that measuring the stage can never be
-   affected by the size the canvas was last given, which is how a fit like this
-   ends up growing by a few pixels on every resize */
+/* the canvas is absolute so that measuring the stage can never be affected by
+   the size the canvas was last given, which is how a fit like this ends up
+   growing by a few pixels on every resize */
 .world-stage {
   position: relative;
   overflow: hidden;
@@ -135,89 +194,103 @@
   display: block;
   touch-action: none;
 }
+
+/* the armed tool's one line, and it only exists while a tool is armed. It is
+   the one place on the chart that speaks, so it is the one place that is
+   gold. */
 .world-hint {
   position: absolute;
-  left: 14px;
-  bottom: 12px;
-  max-width: 66ch;
+  left: 50%;
+  top: 12px;
+  transform: translateX(-50%);
   margin: 0;
-  font: 400 11px var(--font-label);
-  color: #5b6470;
+  padding: 4px 12px;
+  font: 400 11.5px var(--font-label);
+  color: var(--gold-lit);
+  background: color-mix(in srgb, var(--gold) 9%, rgba(7, 11, 17, 0.88));
+  border: 1px solid color-mix(in srgb, var(--gold) 26%, transparent);
+  border-radius: 3px;
   pointer-events: none;
+  animation: world-said 220ms var(--ease-out);
+}
+@keyframes world-said {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -5px);
+  }
 }
 
-/* the zoom cluster. It sits over the water rather than in the top bar because
-   it is about the view and not about the document, and because at 4096 across
-   you reach for it constantly and a trip to the header every time is a trip too
-   far. Top right and not bottom right: the chart writes the far corner of the
-   ocean down there, and the two were printed on top of each other. */
+/* the zoom cluster. It is about the view and not about the document, and at
+   4096 across you reach for it constantly, so it sits over the water rather
+   than up in the bar. Top right and not bottom right: the chart writes the far
+   corner of the ocean and the scale bar down there. */
 .world-zoom {
   position: absolute;
   right: 12px;
   top: 10px;
   display: flex;
   align-items: center;
-  gap: 3px;
-  padding: 4px;
-  background: rgba(7, 11, 17, 0.82);
-  border: 1px solid #1d232b;
+  gap: 2px;
+  padding: 3px;
+  background: rgba(7, 11, 17, 0.84);
+  border: 1px solid var(--wl);
+  border-radius: 3px;
 }
 .world-zbtn {
   min-width: 24px;
   height: 22px;
   padding: 0 4px;
   font: 500 12px var(--font-label);
-  color: #8d97a4;
+  color: var(--say);
   background: none;
-  border: 1px solid transparent;
+  border: 0;
+  border-radius: 2px;
   cursor: pointer;
-  transition: all 150ms ease;
+  transition: color var(--t-fast) var(--ease-out), background-color var(--t-fast) var(--ease-out);
 }
 .world-zbtn.wide {
-  padding: 0 8px;
-  font-size: 10.5px;
-  letter-spacing: 0.06em;
+  padding: 0 9px;
+  font-size: 11.5px;
 }
 .world-zbtn:hover:not(:disabled) {
-  color: #d8e3ee;
-  border-color: #39434f;
+  color: var(--ink-on-sea);
+  background: var(--sunk);
 }
 .world-zbtn:disabled {
-  color: #39434f;
+  color: #333c47;
   cursor: default;
 }
 .world-zbtn.on {
-  color: #070b11;
-  background: var(--gold);
-  border-color: var(--gold);
+  color: var(--gold-lit);
+  background: color-mix(in srgb, var(--gold) 12%, transparent);
 }
 .world-zread {
-  min-width: 44px;
+  min-width: 42px;
   text-align: center;
-  font: 400 9.5px var(--font-mono);
-  color: #6f7885;
+  font: 400 10px var(--font-mono);
+  color: var(--quiet);
 }
+
+/* ---- the panel ----------------------------------------------------------- */
 
 .world-side {
   overflow-y: auto;
-  padding: 14px 16px 40px;
-  border-left: 1px solid #141c26;
+  padding: 14px 14px 40px;
+  border-left: 1px solid var(--wl);
   display: grid;
   align-content: start;
   gap: 12px;
 }
 .world-lab {
   font: 600 9px var(--font-label);
-  letter-spacing: 0.22em;
+  letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: #5b6470;
+  color: var(--quiet);
 }
-.world-note,
-.world-say {
+.world-note {
   margin: 0;
   font: 400 11.5px var(--font-label);
-  line-height: 1.5;
-  color: #6f7885;
+  color: var(--quiet);
 }
 
 /* what the server said, in its own words. A refusal is sealing wax, a warning
@@ -225,8 +298,8 @@
 .world-refused,
 .world-warns {
   display: grid;
-  gap: 5px;
-  padding: 10px 12px;
+  gap: 4px;
+  padding: 8px 12px;
   border-left: 2px solid var(--wax);
   background: rgba(176, 74, 47, 0.08);
 }
@@ -239,14 +312,14 @@
   margin: 0;
   font: 400 11.5px var(--font-label);
   line-height: 1.45;
-  color: #d8e3ee;
+  color: var(--ink-on-sea);
 }
 
 .world-insp {
   display: grid;
-  gap: 9px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid #141c26;
+  gap: 8px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--wl);
 }
 .world-f {
   display: grid;
@@ -254,27 +327,31 @@
 }
 .world-f > span {
   font: 400 10px var(--font-mono);
-  color: #5b6470;
+  color: var(--quiet);
 }
 .world-in {
   width: 100%;
-  padding: 6px 8px;
+  padding: 5px 8px;
   font: 400 12px var(--font-label);
-  color: #d8e3ee;
-  background: #10141a;
-  border: 1px solid #1d232b;
+  color: var(--ink-on-sea);
+  background: var(--sunk);
+  border: 1px solid var(--wl);
+  border-radius: 2px;
   outline: none;
-  transition: border-color 180ms ease;
+  transition: border-color var(--t-fast) var(--ease-out);
+}
+.world-in:hover {
+  border-color: var(--wl-lit);
 }
 .world-in:focus {
-  border-color: #39434f;
+  border-color: color-mix(in srgb, var(--gold) 45%, transparent);
 }
 .world-in.bad {
   border-color: var(--wax);
 }
 .world-bad {
   margin: 0;
-  font: 400 11px var(--font-label);
+  font: 400 10px var(--font-mono);
   color: var(--wax);
 }
 .world-pair {
@@ -285,10 +362,14 @@
 .world-check {
   display: flex;
   align-items: center;
-  gap: 7px;
-  font: 400 10.5px var(--font-label);
-  color: #6f7885;
+  gap: 8px;
+  font: 400 11.5px var(--font-label);
+  color: var(--quiet);
   cursor: pointer;
+  transition: color var(--t-fast) var(--ease-out);
+}
+.world-check:hover {
+  color: var(--say);
 }
 .world-check input {
   flex: none;
@@ -301,41 +382,59 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding-top: 2px;
 }
 .world-mark-t {
   flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font: 400 10px var(--font-mono);
-  color: #8fa6bb;
+  color: var(--say);
 }
 
 .world-btn {
-  padding: 6px 12px;
-  font: 500 11px var(--font-label);
-  color: #8d97a4;
+  padding: 5px 12px;
+  font: 500 11.5px var(--font-label);
+  color: var(--say);
   background: none;
-  border: 1px solid #1d232b;
+  border: 1px solid var(--wl);
+  border-radius: 3px;
   cursor: pointer;
   text-decoration: none;
-  transition: all 160ms ease;
+  transition: all var(--t-fast) var(--ease-out);
 }
-.world-btn:hover {
-  color: #d8e3ee;
-  border-color: #39434f;
+.world-btn:hover:not(:disabled) {
+  color: var(--ink-on-sea);
+  border-color: var(--wl-lit);
+}
+.world-btn:disabled {
+  color: #333c47;
+  cursor: default;
 }
 .world-btn.small {
-  padding: 4px 9px;
-  font-size: 10.5px;
+  padding: 3px 9px;
+  font-size: 11.5px;
 }
 .world-btn.on {
-  color: #070b11;
-  background: var(--gold);
-  border-color: var(--gold);
+  color: var(--gold-lit);
+  border-color: color-mix(in srgb, var(--gold) 45%, transparent);
+  background: color-mix(in srgb, var(--gold) 10%, transparent);
+}
+.world-btn.danger {
+  color: var(--quiet);
 }
 .world-btn.danger:hover {
   color: #ff6b5e;
   border-color: #6d2b26;
-  background: rgba(40, 12, 10, 0.7);
+  background: rgba(40, 12, 10, 0.6);
+}
+/* the second half of removing something. Two buttons, the safe one last, so
+   the hand that was already moving lands on "keep". */
+.world-sure {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
 }
 
 /* the compass, laid out the way the editor lays it out for a door and a post,
@@ -348,19 +447,21 @@
 .world-fbtn {
   height: 26px;
   font: 400 13px var(--font-label);
-  color: #6f7885;
-  background: #10141a;
-  border: 1px solid #1d232b;
+  color: var(--quiet);
+  background: var(--sunk);
+  border: 1px solid var(--wl);
+  border-radius: 2px;
   cursor: pointer;
-  transition: all 140ms ease;
+  transition: all var(--t-fast) var(--ease-out);
 }
 .world-fbtn:hover {
-  color: #d8e3ee;
+  color: var(--ink-on-sea);
+  border-color: var(--wl-lit);
 }
 .world-fbtn.on {
-  color: #070b11;
-  background: var(--gold);
-  border-color: var(--gold);
+  color: var(--gold-lit);
+  border-color: color-mix(in srgb, var(--gold) 45%, transparent);
+  background: color-mix(in srgb, var(--gold) 10%, transparent);
 }
 
 .world-roster {
@@ -368,42 +469,47 @@
   gap: 1px;
   align-content: start;
 }
+.world-roster .world-lab {
+  margin-bottom: 4px;
+}
 .world-row {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 7px;
+  padding: 5px 7px;
   background: none;
   border: 0;
   border-left: 2px solid transparent;
+  border-radius: 0 2px 2px 0;
   cursor: pointer;
   text-align: left;
-  transition: background-color 140ms ease;
+  transition: background-color var(--t-fast) var(--ease-out), border-color var(--t-fast) var(--ease-out);
 }
 .world-row:hover {
-  background: #10141a;
+  background: var(--sunk);
 }
 .world-row.on {
   border-left-color: var(--gold);
-  background: #10141a;
+  background: var(--sunk);
 }
 .world-row i {
   flex: none;
   width: 7px;
   height: 7px;
+  border-radius: 1px;
 }
 .world-row-n {
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font: 500 12px var(--font-label);
-  color: #d8e3ee;
+  font: 500 11.5px var(--font-label);
+  color: var(--ink-on-sea);
 }
 .world-row-m {
   flex: none;
-  font: 400 9.5px var(--font-mono);
-  color: #5b6470;
+  font: 400 10px var(--font-mono);
+  color: var(--quiet);
 }
 
 .world-gone {
@@ -420,5 +526,17 @@
 }
 .world-gone p {
   margin: 0;
-  color: #6f7885;
+  max-width: 44ch;
+  color: var(--quiet);
+}
+
+/* the same answer the rest of the site gives. The chart's own easing is turned
+   off in World.tsx, which is the half of this a stylesheet cannot reach. */
+@media (prefers-reduced-motion: reduce) {
+  .world *,
+  .world *::before,
+  .world *::after {
+    animation: none !important;
+    transition: none !important;
+  }
 }

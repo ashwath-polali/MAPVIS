@@ -78,7 +78,8 @@ import { listMaps } from './store/maps.mjs'
 import { ask, plannerReady, NoPlanner } from './store/planner.mjs'
 import { withRequest, request } from './store/ctx.mjs'
 import { foldersApi } from './store/folders.mjs'
-import { getWorld, saveWorld, ISLAND_STATES, SEA_KINDS } from './store/world.mjs'
+import { getWorld, saveWorld, composition, ISLAND_STATES, SEA_KINDS, MARK_KINDS } from './store/world.mjs'
+import { env } from './db/env.mjs'
 import { keyFor } from './store/auth.mjs'
 import {
   signUp,
@@ -158,14 +159,52 @@ async function styleRef(slug) {
  * a signed-in stranger overwrite another account's library items by name. */
 /* /api/world carries no map id at all, and the gate resolves a missing one to
  * `untitled`, which is a real map somebody may own. So it is exempt from the
- * MAP ownership gate and guards itself instead: the world is not owned by a
- * map, it is owned by whoever is signed in. */
+ * MAP ownership gate and guards itself instead, against the one account the
+ * ocean belongs to rather than against a map. */
 /* The ui routes are the same case as /api/world. A surface belongs to an
  * ACCOUNT and not to a map, so its body carries no map id at all, and the gate
  * resolves a missing one through safeId to 'untitled', which is a real map
  * somebody may own. Exempt from the MAP gate and guarded by a signed-in check
  * of their own, exactly the way the world write is. */
 const OPEN_POSTS = new Set(['/api/stop', '/api/propose', '/api/world', '/api/ui/generate', '/api/ui/slots', '/api/ui/remove'])
+
+/* THE OCEAN BELONGS TO ONE ACCOUNT, because there is one ocean.
+ *
+ * MAPVIS is for anybody: sign up, draw an island, publish it, and nothing you
+ * did touched anyone else's work. The world is the single exception and the
+ * exception is structural. It is ONE ROW on purpose, so the composition a
+ * stranger opens is not a copy of the game's ocean, it IS the game's ocean, and
+ * any signed-in visitor dragging an island was moving where the real crossing
+ * goes for everybody. Confusing to them and destructive to the game, which is
+ * not a thing a general-purpose tool should allow by default.
+ *
+ * The address is configuration and never source: OCEAN_OWNER in .env, falling
+ * back to BOOTSTRAP_EMAIL, which is already the account every import and every
+ * map on this install belongs to. With neither set there is nobody to be, so
+ * the gate opens and the tool works the way it always has on one laptop with no
+ * login screen in front of it.
+ */
+const oceanOwner = () => {
+  const E = env()
+  return String(E.OCEAN_OWNER || E.BOOTSTRAP_EMAIL || '')
+    .trim()
+    .toLowerCase()
+}
+const ownedBy = (user) => {
+  const owner = oceanOwner()
+  if (!owner) return true
+  return !!user && String(user.email || '').toLowerCase() === owner
+}
+const ownsOcean = async (req) => ownedBy(await currentUser(req))
+
+/* Said in full rather than as "forbidden", because the person reading it did
+ * nothing wrong and the reason is not obvious from the outside. */
+const NOT_YOUR_OCEAN = {
+  error:
+    'the ocean belongs to one account, because there is only one of it. Every map on MAPVIS is yours to draw, ' +
+    'but the world is a single shared row saying where every island sits, so one account composes it and everybody else reads it.',
+  mine: false,
+}
 
 export function api(req, res, next) {
   const url = new URL(req.url, 'http://local')
@@ -2355,15 +2394,28 @@ async function route(req, res, p, url) {
 
   /* THE COMPOSITION: where every map sits on the one ocean.
    *
-   * A GET is open, because the same bytes are open at /api/v1/world and the
-   * editor should not need a second shape to read what the game reads. A write
-   * needs an account, since the world is shared by every map on the platform
-   * and is the one document a stranger could break for everybody at once. */
+   * Both halves are the AUTHORING view and both are gated on the one account
+   * the ocean belongs to. The read is gated as well as the write, which reads
+   * strict and is the point: a stranger who can see the composition has a page
+   * that offers to edit it and then refuses, and a wall you were invited to
+   * walk into is worse than a door that was never drawn. `mine` comes back
+   * either way so the page can be hidden instead.
+   *
+   * The published read at /api/v1/world stays open to everybody and is not
+   * touched by any of this. That is what the game fetches with no account. */
   if (p === '/api/world' && req.method === 'GET') {
-    return send(res, 200, { ...(await getWorld()), states: ISLAND_STATES, seaKinds: SEA_KINDS })
+    if (!(await ownsOcean(req))) return send(res, 403, NOT_YOUR_OCEAN)
+    return send(res, 200, { ...(await getWorld()), states: ISLAND_STATES, seaKinds: SEA_KINDS, markKinds: MARK_KINDS, mine: true })
+  }
+  /* One boolean, so the home page can decide whether to offer the ocean at all
+   * without firing a 403 into the console of everybody who is not us. */
+  if (p === '/api/world/mine' && req.method === 'GET') {
+    return send(res, 200, { mine: await ownsOcean(req) })
   }
   if (p === '/api/world' && req.method === 'POST') {
-    if (platformOn() && !(await currentUser(req))) return send(res, 401, { error: 'sign in to place a map on the ocean' })
+    const me = await currentUser(req)
+    if (platformOn() && !me) return send(res, 401, { error: 'sign in to place a map on the ocean' })
+    if (!ownedBy(me)) return send(res, 403, NOT_YOUR_OCEAN)
     const b = await body(req)
     try {
       return send(res, 200, await saveWorld(b))
@@ -3366,8 +3418,53 @@ async function readApi(req, res, p, url) {
    * one the game had to hold as a constant because nothing could author it.
    * Served live from the row rather than from a published version: the maps
    * registry above is live for the same reason, and a composition that lags a
-   * republish would place an island that has already moved. */
-  if (kind === 'world' && !slugRaw) return send(res, 200, await getWorld())
+   * republish would place an island that has already moved.
+   *
+   * PUBLIC, AND IT HAS TO STAY PUBLIC. The authoring pair at /api/world is now
+   * gated on the account the ocean belongs to, and the temptation is to gate
+   * this the same way. It would break the game outright: a freshman on a
+   * chromebook has no MAPVIS account, has never heard of one, and this is the
+   * request that tells the ship where the islands are. Read-only, published,
+   * already reachable by anyone with the URL.
+   *
+   * AND IN THE GAME'S OWN WORDS, not in this tool's. The row is the authoring
+   * document and its shape belongs to the chart page; what leaves here is the
+   * composition the game asks for, which it gates on Array.isArray(slots).
+   * Answering with `places` meant a real composition was discarded and a
+   * hand-written fallback used in its place, silently, on both sides.
+   * composition() in store/world.mjs is where every one of those renames is. */
+  if (kind === 'world' && !slugRaw) return send(res, 200, await composition())
+
+  /* THE WAYPOINTS, FLAT, WHICH IS THE SHAPE A GRAPE ACTUALLY WANTS.
+   *
+   * A member writing sail_to("north_passage") holds a name and nothing else.
+   * Handing them the whole composition means walking a list and matching a
+   * field before they can move a ship, in a language running on MicroPython in
+   * a worker, which is a loop written slightly differently in every island.
+   * So the lookup is done here, once, and what comes back is a dictionary keyed
+   * by the name the author typed in MAPVIS.
+   *
+   * This is the project's dividing line in one route: MAPVIS authors WHERE, and
+   * python authors WHAT HAPPENS and WHEN. The mark says the corner of the
+   * crossing is at (2100, 880) facing north; whether the ship pauses there,
+   * whether somebody speaks, and what it costs are the grape's business and
+   * this endpoint has no opinion about any of it.
+   *
+   * Berths and approaches that belong to a PLACE are folded in under the
+   * place's own name, because a grape asking to sail to `panther_isle` should
+   * not have to know whether the author drew that as a place or as a mark. */
+  if (kind === 'world' && slugRaw === 'marks') {
+    const w = await getWorld()
+    const out = {}
+    for (const p of w.places) {
+      if (p.berth) out[p.name] = { kind: 'berth', x: p.berth.x, y: p.berth.y, facing: p.berth.facing || '' }
+    }
+    // marks last, so a free-standing mark wins a name a place also carries.
+    // checkWorld refuses that collision at the save, so this only decides what
+    // an older row that predates the check does.
+    for (const m of w.marks) out[m.name] = { kind: m.kind, x: m.x, y: m.y, facing: m.facing || '' }
+    return send(res, 200, { marks: out })
+  }
 
   /* THE CHROME, and the marks inside it.
    *

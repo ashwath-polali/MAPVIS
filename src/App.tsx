@@ -4427,18 +4427,29 @@ export default function App() {
               }}
             >
               <span className="ev-glyph">⏻</span>
-              {/* the NAME leads, because that is what a member types. The label
-                  and the target trail behind it in dimmer text. */}
-              <span className="ev-name">
+              {/* the NAME leads, because that is what a member types. Where it
+                  goes sits on the line under it, not behind it: trailing it in
+                  the same 162px box cut "→ panther-maw" down to "→ pan…" and
+                  hovering answered nothing, so the title carries the whole
+                  string as well. */}
+              <span
+                className="ev-name"
+                title={
+                  ev.name +
+                  (ev.kind === 'door'
+                    ? ` → ${ev.to || '?'}${ev.toAnchor ? ` · ${ev.toAnchor}` : ''}`
+                    : ` · ${ev.kind}`)
+                }
+              >
                 <b className={ev.meta?.derived === true ? 'guessed' : undefined}>{ev.name}</b>
                 {ev.kind === 'door' ? (
                   <i>
-                    {' → '}
+                    {'→ '}
                     {ev.to || '?'}
                     {ev.toAnchor ? ` · ${ev.toAnchor}` : ''}
                   </i>
                 ) : (
-                  <i> · {ev.kind}</i>
+                  <i>{ev.kind}</i>
                 )}
               </span>
               <button
@@ -4667,13 +4678,20 @@ export default function App() {
                 setPathEdit(open)
                 setRnameDraft(null)
                 ed?.selectPath(open)
+                // one inspector at a time. Picking a route while a shot form
+                // was open stacked both, and the panel grew until neither the
+                // route nor the shot was on screen at the same moment.
+                setShotEdit(0)
+                ed?.selectFraming(0)
               }}
             >
               <span className="ev-glyph">⤳</span>
-              <span className="ev-name">
+              <span
+                className="ev-name"
+                title={`${p.name} · ${p.points.length} pts${p.closed ? ' · loop' : ''}${p.twoWay ? ' · both ways' : ''}`}
+              >
                 <b>{p.name}</b>
                 <i>
-                  {' · '}
                   {p.points.length} pts
                   {p.closed ? ' · loop' : ''}
                   {p.twoWay ? ' · both ways' : ''}
@@ -4860,13 +4878,19 @@ export default function App() {
                 setShotEdit(open)
                 setSnameDraft(null)
                 ed?.selectFraming(open)
+                // the other half of the same law, so a shot picked under an
+                // open route form closes that form instead of piling onto it
+                setPathEdit(0)
+                ed?.selectPath(0)
               }}
             >
               <span className="ev-glyph">▣</span>
-              <span className="ev-name">
+              <span
+                className="ev-name"
+                title={`${f.name} · ${f.anchor || `${f.x}, ${f.y}`}${f.entry ? ' · arrival' : ''}`}
+              >
                 <b>{f.name}</b>
                 <i>
-                  {' · '}
                   {f.anchor || `${f.x}, ${f.y}`}
                   {f.entry ? ' · arrival' : ''}
                 </i>

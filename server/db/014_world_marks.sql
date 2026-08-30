@@ -1,0 +1,23 @@
+-- Waypoints, for the part of the journey that is not an island.
+--
+-- 010 gave the water an author and gave every island a berth and an approach.
+-- Both of those hang off a place, so the only points that could exist were
+-- points about arriving somewhere. A sail leg between two islands has no island
+-- to hang off: the corner the route turns at halfway across belongs to neither
+-- end of it, and nor does the spot a storm cuts in, or the position a cutscene
+-- holds the ship at while somebody talks. Every one of those was a constant
+-- typed into the game repo, which is the same defect this whole table exists to
+-- close.
+--
+-- So a mark is free standing. Each entry: name, kind, x, y, and optionally
+-- facing, r, label, meta. `kind` is one of berth, approach, waypoint, anchorage,
+-- landmark or spawn, kept apart so a grape can ask for the anchorages without
+-- being handed every landmark as well.
+--
+-- The NAME is the whole interface, because python holds a name and never a
+-- coordinate, and it is unique against the place names in the same row: one
+-- namespace, because sail_to("north_passage") does not say which list to look
+-- in. server/store/world.mjs refuses a save where two things share a name.
+--
+-- Defaults to empty, which is what the one existing row already is.
+alter table world add column if not exists marks jsonb not null default '[]'::jsonb;

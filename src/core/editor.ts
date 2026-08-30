@@ -17,6 +17,8 @@ import {
   migrateAnchor,
   migratePath,
   migrateFraming,
+  shotZoom,
+  shotsOntoMeta,
   anchorName,
   isAnchorName,
   isPlacementName,
@@ -830,11 +832,21 @@ export class Editor {
     return c.toDataURL('image/png')
   }
 
+  /* THE NOTCH THE WHOLE PAINTING FITS AT, lifted out of fit() so a saved shot
+   * can be expressed against it. Neither side knows the other's window, but both
+   * know what "the whole map on screen" means, so that is the only yardstick a
+   * camera can cross the bundle boundary on. */
+  fitNotch(): number {
+    if (!this.canvas || !this.painting) return 0
+    const z = clamp(Math.floor(Math.min(this.canvas.clientWidth / this.doc.W, this.canvas.clientHeight / this.doc.H)), 1, 8)
+    return z || 1
+  }
+
   fit() {
     if (!this.canvas || !this.painting) return
     const cw = this.canvas.clientWidth
     const ch = this.canvas.clientHeight
-    const z = clamp(Math.floor(Math.min(cw / this.doc.W, ch / this.doc.H)), 1, 8)
+    const z = this.fitNotch()
     this.z = z || 1
     this.ox = Math.round((cw - this.doc.W * this.z) / 2)
     this.oy = Math.round((ch - this.doc.H * this.z) / 2)
@@ -4041,18 +4053,34 @@ export class Editor {
    * time a painting is re-cut and every map gets re-cut, so a shot on
    * coach_post travels when the coach does and a shot on 412, 208 is wrong the
    * next time the coast is shaved by a pixel. Which anchor is selected belongs
-   * to the panel and not to this file, so the caller names it. */
+   * to the panel and not to this file, so the caller names it.
+   *
+   * THE RATIO IS TAKEN NOW AND NEVER AT EXPORT. `this.z` on its own is screen
+   * pixels per painting pixel, which means nothing without the canvas it was
+   * measured against, and the server exporter has no canvas at all. So how many
+   * times tighter than the whole map this view is gets written down here, while
+   * there is still a window to measure it against, and that is the number the
+   * game ends up reading. */
   armFraming(anchor = ''): number {
     const [cx, cy] = this.viewCentre()
     const on = anchor ? this.doc.events.find((e) => e.name === anchor) : undefined
+    const overFit = this.z / (this.fitNotch() || this.z || 1)
     return this.addFraming(
       on
-        ? { anchor: on.name, dx: cx - on.x, dy: cy - on.y, zoom: this.z }
-        : { x: cx, y: cy, dx: 0, dy: 0, zoom: this.z },
+        ? { anchor: on.name, dx: cx - on.x, dy: cy - on.y, zoom: this.z, overFit }
+        : { x: cx, y: cy, dx: 0, dy: 0, zoom: this.z, overFit },
     )
   }
 
-  addFraming(from: { anchor?: string; x?: number; y?: number; dx?: number; dy?: number; zoom?: number }): number {
+  addFraming(from: {
+    anchor?: string
+    x?: number
+    y?: number
+    dx?: number
+    dy?: number
+    zoom?: number
+    overFit?: number
+  }): number {
     /* the anchor is cleaned BEFORE the point is decided, or a caller handing
      * over an illegal name gets a shot with no anchor and no coordinates, and
      * migrateFraming quite rightly refuses it. */
@@ -4067,6 +4095,7 @@ export class Editor {
       dx: Math.round(from.dx ?? 0),
       dy: Math.round(from.dy ?? 0),
       zoom: from.zoom ?? 1,
+      overFit: from.overFit,
     } as MapFraming)
     // a shot that resolves to nowhere is refused on load, so it is refused here
     if (!f) {
@@ -4077,8 +4106,16 @@ export class Editor {
     this.doc.framings.push(f)
     this.framingSel = id
     this.touched()
+    /* A POINT SHOT IS SAVED AND SAID OUT LOUD, not refused. The game's framing
+     * is an OFFSET from an anchor and has no position of its own, so a shot on
+     * raw coordinates is unreadable there in any form: the export below skips
+     * it rather than inventing an anchor for it. It still has a job inside this
+     * tool, as a bookmark on a big painting, so it stays and the panel says
+     * what it is instead of quietly shipping nothing. */
     this.say(
-      f.anchor ? `${f.name} · hung on ${f.anchor} · give it a name code can use` : `${f.name} · at ${f.x}, ${f.y}`,
+      f.anchor
+        ? `${f.name} · hung on ${f.anchor} · give it a name code can use`
+        : `${f.name} · at ${f.x}, ${f.y} · the game reads shots off an anchor, so this one stays in the tool`,
     )
     return id
   }
@@ -4129,7 +4166,15 @@ export class Editor {
      * cannot exist on the renderer's integer notches, and a renderer that
      * cannot honour 1.4 is a defect at the renderer rather than a reason to
      * throw the author's number away here. Same clamp migrateFraming uses. */
-    if (patch.zoom !== undefined && isFinite(patch.zoom)) f.zoom = Math.min(16, Math.max(0.1, patch.zoom))
+    if (patch.zoom !== undefined && isFinite(patch.zoom)) {
+      f.zoom = Math.min(16, Math.max(0.1, patch.zoom))
+      /* and the crossing ratio moves with it, or the panel shows one camera and
+       * the bundle carries the one that was armed an hour ago. Only when there
+       * is a canvas to measure against: on a headless load the old ratio is
+       * still the honest one. */
+      const fit = this.fitNotch()
+      if (fit) f.overFit = f.zoom / fit
+    }
     if (patch.entry !== undefined) {
       if (patch.entry) {
         // at most one per map: a player arriving twice in one map is not a
@@ -4343,7 +4388,13 @@ export class Editor {
           ...(e.placement ? { placement: e.placement } : {}),
           ...(e.facing ? { facing: e.facing } : {}),
           ...(e.label ? { label: e.label } : {}),
-          ...(e.meta && Object.keys(e.meta).length ? { meta: e.meta } : {}),
+          /* the bag, with every shot hung on this name folded into it. See
+           * shotsOntoMeta in mask.ts: the game reads a camera off the anchor and
+           * has never had a reader for the framings list below. */
+          ...(() => {
+            const m = shotsOntoMeta(this.doc.framings, e.name, e.meta)
+            return m ? { meta: m } : {}
+          })(),
         })),
         events: this.doc.events
           .filter((e) => e.kind === 'door')
@@ -4353,6 +4404,19 @@ export class Editor {
          * it was. The id is deliberately not shipped: across the bundle
          * boundary a name is the only identity there is, and shipping a counter
          * beside it invites something to hold the counter. */
+        /* NOTHING IN THE GAME READS `paths` YET, and this is written down so the
+         * next session does not guess at a shape and then have to unpick it.
+         *
+         * The nearest running shape over there is the one findPath returns:
+         * `Pt = { x: number; y: number }` in painting pixels, walked forward by
+         * index from 0, addressed by `.x` and `.y` (AdventureGame's
+         * src/game/pmap/path.ts:32 and the walk loop in PmapScene). The pairs
+         * below would have to become objects for a reader to drop this straight
+         * into a route with no adapter. That conversion is NOT made here,
+         * because there is no reader to be right for and no intent that takes a
+         * route: movement in src/vine/intents.ts names an anchor and nothing
+         * else, so a grape cannot say the word for a path today. Convert on the
+         * day something reads it, against what that reader actually wants. */
         ...(this.doc.paths.length
           ? {
               paths: this.doc.paths.map((p) => ({
@@ -4371,6 +4435,17 @@ export class Editor {
               })),
             }
           : {}),
+        /* THE SHOT LIST IS THE AUTHORING RECORD AND NOT THE CAMERA.
+         *
+         * Every shot that hangs on an anchor is also written into that anchor's
+         * meta bag above, which is the only place the game looks. This array
+         * stays because it is what the panel edits, what the api hands python
+         * and what reloads, and because a shot on raw coordinates has nowhere
+         * else to live: the game's framing is an offset from an anchor and has
+         * no position of its own, so a point shot appears here and in no meta
+         * bag anywhere. `entry` is in the same position, honestly: the game's
+         * arrival path returns a position and a facing and never touches zoom,
+         * so nothing reads it yet and it is here waiting for a reader. */
         ...(this.doc.framings.length
           ? {
               framings: this.doc.framings.map((f) => ({
@@ -4380,6 +4455,10 @@ export class Editor {
                 dx: f.dx,
                 dy: f.dy,
                 zoom: f.zoom,
+                // what the same shot is worth to the game, beside the editor's
+                // own view number, so nothing downstream has to guess which
+                // unit the field above is in
+                gameZoom: shotZoom(f),
                 ...(f.entry ? { entry: true } : {}),
                 ...(f.meta && Object.keys(f.meta).length ? { meta: f.meta } : {}),
               })),

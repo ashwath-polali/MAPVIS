@@ -2532,12 +2532,18 @@ input[type='range']:disabled {
   color: var(--acc);
   font-size: 12px;
 }
+/* the row is two lines because one line could not hold both. At 162px the
+   metadata was eaten on the right and nothing gave it back: "the_maw_mouth ·
+   pa…" does not say which anchor the shot hangs on, and the only way to find
+   out was to click every row. The name owns the top line, the detail sits
+   under it smaller, and each line ellipsises on its own. */
 .ev-name {
   flex: 1;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  line-height: 1.35;
   font-size: 12px;
   font-family: var(--font-mono);
 }
@@ -3302,6 +3308,10 @@ footer [data-tip]:hover::after {
   color: var(--ink);
 }
 .evrow .ev-name b {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-family: var(--font-mono);
   font-weight: 500;
   color: var(--ink);
@@ -3314,7 +3324,12 @@ footer [data-tip]:hover::after {
   color: var(--warn, #d08a4a);
 }
 .evrow .ev-name i {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-style: normal;
+  font-size: 10.5px;
   color: var(--dim);
 }
 

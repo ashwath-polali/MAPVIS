@@ -283,6 +283,12 @@ export function migrateFraming(f: MapFraming): MapFraming | null {
     dx: isFinite(Number(f.dx)) ? Math.round(Number(f.dx)) : 0,
     dy: isFinite(Number(f.dy)) ? Math.round(Number(f.dy)) : 0,
     zoom,
+    // carried, never invented: a shot from before this field existed has no
+    // canvas behind it any more, and guessing one would ship a wrong camera
+    // that looks authored
+    ...(isFinite(Number(f.overFit)) && Number(f.overFit) > 0
+      ? { overFit: Math.min(16, Math.max(0.05, Number(f.overFit))) }
+      : {}),
     ...(f.entry ? { entry: true } : {}),
     ...(f.meta && typeof f.meta === 'object' ? { meta: f.meta } : {}),
   }
@@ -439,9 +445,75 @@ export interface MapFraming {
   dx: number
   dy: number
   zoom: number
+  /* HOW MANY TIMES TIGHTER THAN THE WHOLE MAP THIS SHOT IS, recorded when it
+   * was armed. `zoom` above is the editor's own view: screen pixels per
+   * painting pixel, which only means anything next to the canvas that was open
+   * at the time. The game has no such number. It multiplies whatever it is
+   * given by the scale the map loaded at, so handing it a 3 asks for a face
+   * filling the screen. This is the ratio that survives the crossing, and
+   * shotZoom below turns it into the multiple the game reads. */
+  overFit?: number
   /* the framing a player gets on arriving in this map, at most one per map */
   entry?: boolean
   meta?: Record<string, unknown>
+}
+
+/* THE GAME'S OWN PULL-OUT CONSTANT, and MAPVIS carries it because MAPVIS is the
+ * one that moves. The consumer computes its opening scale as
+ * `max(1, floor(min(sw / W, sh / H))) * 1.18` and then multiplies a framing's
+ * zoom by that, so a shot exported as 1 is the map's opening view and 1.9 is
+ * pushed in. Nothing here can change what the game does with the number, so the
+ * conversion happens on the way out and this constant lives at the emit.
+ * AdventureGame/src/game/pmap/PmapScene.tsx:828-829 is where it comes from. */
+export const GAME_OPENING_PULL = 1.18
+
+/* What a shot is worth to the game. A framing armed before overFit existed has
+ * no honest answer, so it becomes the map's opening view rather than the raw
+ * editor notch: an opening view is a shot somebody can look at and re-arm, and
+ * a notch shipped straight through is a nose filling the screen with nothing
+ * anywhere saying why. */
+export function shotZoom(f: { zoom?: number; overFit?: number }): number {
+  const rel = isFinite(Number(f.overFit)) && Number(f.overFit) > 0 ? Number(f.overFit) : 0
+  if (!rel) return 1
+  return Math.round((rel / GAME_OPENING_PULL) * 1000) / 1000
+}
+
+/* SHOTS FOLDED ONTO THE ANCHOR THEY NAME, which is where the consumer looks.
+ *
+ * MAPVIS keeps its shots in a list of their own, and that list is the authoring
+ * record: it is what the panel edits, what reloads, and what the api hands to
+ * python. The game has never had a reader for it. What the game reads is the
+ * anchor's own `meta` bag, `meta.framings[name]` first and `meta.framing` as the
+ * unnamed default, with the fields spelt exactly zoom, dx, dy and name. So the
+ * list stays and this writes the same shots into the place they are read from.
+ *
+ * WHICH ONE IS THE DEFAULT matters more than it looks. look_at asks for a shot
+ * with no name at all, and a script naming a shot the map does not carry falls
+ * back to the same slot, so an anchor with named shots and no default has a
+ * silently dead camera on both paths. The entry shot takes it if there is one
+ * on this anchor, otherwise the oldest, because ids only ever count upwards and
+ * the first shot somebody armed on a station is the one they framed it with.
+ *
+ * MERGED, NEVER SWAPPED IN. panthers_maw on the real hub already carries
+ * docId and derived, and the game writes `derived` itself when it has to invent
+ * a name, so replacing the bag would take both out. `framing` and `framings` are
+ * the only two keys touched, and only when a shot actually hangs here.
+ *
+ * A name of `(default)` cannot happen: framing names go through isAnchorName,
+ * and that is the literal string the game's own refusal listing prints for the
+ * unnamed slot. */
+export function shotsOntoMeta(
+  framings: MapFraming[],
+  anchor: string,
+  meta?: Record<string, unknown>,
+): Record<string, unknown> | undefined {
+  const mine = framings.filter((f) => f.anchor === anchor)
+  if (!mine.length) return meta && Object.keys(meta).length ? meta : undefined
+  const one = (f: MapFraming) => ({ zoom: shotZoom(f), dx: f.dx, dy: f.dy })
+  const set: Record<string, unknown> = {}
+  for (const f of mine) set[f.name] = one(f)
+  const def = mine.find((f) => f.entry) || mine.reduce((a, b) => (a.id <= b.id ? a : b))
+  return { ...(meta || {}), framings: set, framing: { ...one(def), name: def.name } }
 }
 
 /* only the keys that came back as real numbers, so a corrupt or hand-edited

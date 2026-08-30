@@ -15,11 +15,13 @@ import { getMapBySlug, createMap, getDoc, putDoc } from '../store/maps.mjs'
 import { publishBundle, publishedMap } from '../store/publish.mjs'
 import { gateMap } from '../store/gate.mjs'
 import { store } from '../store/blobs.mjs'
-import { getWorld, saveWorld } from '../store/world.mjs'
+import { getWorld, saveWorld, composition } from '../store/world.mjs'
 import { putLibraryFrames, copyLibraryItem } from '../store/platform.mjs'
 import { createUi, setUiSlots, getUiByName, removeUi } from '../store/ui.mjs'
 import { encodePNG } from '../sheet.mjs'
+import { api } from '../api.mjs'
 import { q, one, closeDb } from './pool.mjs'
+import http from 'node:http'
 
 let bad = 0
 const ok = (m) => console.log(`  ok    ${m}`)
@@ -33,6 +35,9 @@ const eq = (what, got, want) =>
 const W = 64
 const H = 48
 const SLUG = 'zz-verify-authoring'
+// a port of its own, so running this beside the dev server or beside
+// verify-api.mjs does not collide with either
+const PORT = 5399
 
 /* a floor with a wall down the right-hand quarter, so there is somewhere legal
  * to stand, somewhere illegal, and somewhere fenced off from the start point */
@@ -106,7 +111,15 @@ const doc = {
   /* A NAMED SHOT, hung off an anchor rather than off coordinates, so it travels
    * with the station when the same beat stages somewhere else and does not
    * re-break every time the painting is re-cut. */
-  framings: [{ id: 1, name: 'over_the_coach', anchor: 'coach_post', dx: -12, dy: -20, zoom: 2.5, entry: true }],
+  framings: [
+    /* `zoom` is the editor's own view, screen pixels per painting pixel, and it
+     * means nothing on its own. `overFit` is the number that crosses: how many
+     * times tighter than the whole map that view was, recorded when the shot was
+     * armed, because the server exporter has no canvas to work it out from.
+     * 2.36 over the game's 1.18 pull-out is exactly twice the opening view. */
+    { id: 1, name: 'over_the_coach', anchor: 'coach_post', dx: -12, dy: -20, zoom: 2.5, overFit: 2.36, entry: true },
+    { id: 2, name: 'wide_on_the_coach', anchor: 'coach_post', dx: 0, dy: 0, zoom: 1, overFit: 1.18 },
+  ],
   framingNext: 2,
 }
 
@@ -138,6 +151,7 @@ try {
   eq('the timing mark survives the save', bp?.marks, [{ at: 1, name: 'the_line_ends' }])
   const bf = back.framings?.find((f) => f.name === 'over_the_coach')
   eq('the shot survives the save', [bf?.anchor, bf?.dx, bf?.dy], ['coach_post', -12, -20])
+  eq('the shot remembers how tight it was framed', bf?.overFit, 2.36)
   /* THE ZOOM IS THE ONE THAT WOULD HAVE DIED QUIETLY. The renderer's zoom is an
    * integer locked at load, so 2.5 is exactly the value something downstream is
    * most tempted to round, and a pull-out shot cannot exist on integer notches. */
@@ -217,6 +231,32 @@ try {
   const sf = (shipped.framings || []).find((f) => f.name === 'over_the_coach')
   eq('published shot', [sf?.anchor, sf?.dx, sf?.dy, sf?.zoom], ['coach_post', -12, -20, 2.5])
   eq('published entry framing', sf?.entry, true)
+
+  /* THE SHOT WHERE THE CAMERA ACTUALLY LOOKS FOR IT, which is the fence this
+   * whole check was missing. The array above is MAPVIS's authoring record and
+   * the game has never had a reader for it: what the game reads is the anchor's
+   * own meta bag, meta.framings[name] first and meta.framing as the unnamed
+   * default that look_at and every miss fall back to. A published bundle where
+   * the array is perfect and the bag is empty is a map whose only authored
+   * camera has zero readers, and that is exactly what shipped. */
+  eq('the shot is on the anchor the camera reads it off', pa?.meta?.framings?.over_the_coach, {
+    zoom: 2,
+    dx: -12,
+    dy: -20,
+  })
+  eq('a second shot on the same anchor sits beside it', pa?.meta?.framings?.wide_on_the_coach, { zoom: 1, dx: 0, dy: 0 })
+  /* WITHOUT A DEFAULT EVERY UNNAMED SHOT IS NULL. look_at asks with no name at
+   * all and a script naming a shot the map does not carry falls back here, so an
+   * anchor with named shots and no default has a dead camera on both paths. The
+   * entry shot takes it. */
+  eq('the entry shot is the anchor default', pa?.meta?.framing, { zoom: 2, dx: -12, dy: -20, name: 'over_the_coach' })
+  /* MERGED, NOT SWAPPED IN. The real hub's panthers_maw already carries docId
+   * and derived, and the game writes derived itself, so a projection that
+   * replaced the bag would take both out. */
+  eq('the bag that was already there is still under it', pa?.meta?.docId, 1)
+  /* AND AN ANCHOR NOBODY POINTED A CAMERA AT GROWS NOTHING, so a bundle with no
+   * shots on it stays what it was. */
+  eq('an anchor with no shot on it stays as it was', (shipped.anchors || []).find((a) => a.name === 'the_yard')?.meta, { docId: 2 })
   /* THE PAINTING'S OWN SIZE. A discovery radius taken off h instead of base_h is
    * wrong by about 41 percent on the hub, in the direction that discovers an
    * island before it is on screen. Four columns that existed from the first
@@ -262,9 +302,16 @@ try {
     const saved = await saveWorld({
       w: 4096,
       h: 4096,
+      home: 'zz_verify_isle',
       places: [
         {
           name: 'zz_verify_isle',
+          // the roster id, which is a DIFFERENT string from the address above
+          // and cannot be spelt by it: this is kebab-case and a name is a python
+          // identifier. The game looks a slot up by this and counts a visit
+          // under it, so a composition carrying none has every island stuck at
+          // misty for the whole run with nothing saying why.
+          place: 'verify-yard',
           map: SLUG,
           title: 'The Verify Yard',
           x: 800,
@@ -272,28 +319,100 @@ try {
           w: 128,
           h: 96,
           state: 'available',
-          release: 240,
-          // off the painting, which is the whole point of the category
-          berth: { x: 880, y: 700, facing: 'north' },
+          // two radii, and this tool had one under the other one's name
+          discover: 240,
+          release: 900,
+          // off the painting, which is the whole point of the category. `at` is
+          // the anchor inside the island the hull puts somebody down on.
+          berth: { x: 880, y: 700, facing: 'north', at: 'coach_post' },
           approach: { x: 940, y: 780 },
         },
         // a reserved position holding no map, reading as a rumour, with the
-        // rise happening where the rumour was
-        { name: 'zz_verify_rumour', map: '', title: '', x: 2200, y: 1400, w: 64, h: 64, state: 'rumoured', release: 300 },
+        // rise happening where the rumour was. Negative on purpose: the sea the
+        // game sails is the hub's own pixels extended, centred on the hub, so
+        // half of it is negative and every one of those was unstorable here.
+        { name: 'zz_verify_rumour', map: '', title: '', x: 2200, y: -1400, w: 64, h: 64, state: 'rumour', discover: 300 },
       ],
       regions: [{ name: 'zz_the_shallows', kind: 'shallow', rect: [700, 500, 1100, 900] }],
     })
     const readBack = await getWorld()
     const isle = readBack.places.find((p) => p.name === 'zz_verify_isle')
-    eq('a berth exists in world space', isle?.berth, { x: 880, y: 700, facing: 'north' })
+    // field by field rather than whole, because this one came back out of jsonb
+    // and postgres does not keep the key order an object went in with
+    eq(
+      'a berth exists in world space',
+      [isle?.berth?.x, isle?.berth?.y, isle?.berth?.facing, isle?.berth?.at],
+      [880, 700, 'north', 'coach_post'],
+    )
     eq('the approach beside it', isle?.approach, { x: 940, y: 780 })
     eq('the island state', isle?.state, 'available')
-    eq('the release radius', isle?.release, 240)
+    eq('the discovery radius', isle?.discover, 240)
+    eq('and the radius it stays in memory to, which is a different number', isle?.release, 900)
+    eq('the roster id the game addresses it by', isle?.place, 'verify-yard')
     eq('a slot that is empty on purpose', readBack.places.find((p) => p.name === 'zz_verify_rumour')?.map, '')
+    eq('a rumour out in negative water', readBack.places.find((p) => p.name === 'zz_verify_rumour')?.y, -1400)
     eq('a named sea region', readBack.regions.find((r) => r.name === 'zz_the_shallows')?.kind, 'shallow')
+    eq('where a run with no ship begins', readBack.home, 'zz_verify_isle')
     saved.warnings.length === 0
-      ? ok('a berth inside its own release radius draws no warning')
+      ? ok('a berth inside its own discovery radius draws no warning')
       : no(`unexpected warning: ${saved.warnings[0]}`)
+
+    /* THE OCEAN IN THE GAME'S OWN WORDS, which is the shape that actually
+     * crosses. The game gates the whole fetch on Array.isArray(slots), so
+     * answering with `places` meant a real composition was discarded and a
+     * hand-written fallback used in its place, silently, on both sides. */
+    const comp = await composition()
+    Array.isArray(comp.slots) && !comp.places
+      ? ok('the ocean leaves as slots, the key the game gates the whole fetch on')
+      : no('the composition still answers with places')
+    const slot = comp.slots.find((s) => s.place === 'verify-yard')
+    eq('the slot position is a point, not two loose numbers', slot?.at, { x: 800, y: 600 })
+    /* THE PAINTED EXTENT, NOT THE CANVAS. A radius measured off the canvas is 41
+     * percent too generous on the hub, in the direction that discovers an island
+     * before it is on screen. Asked of the maps table, which has known all three
+     * numbers since the first schema and never said any of them. */
+    eq('the footprint is the painting', slot?.footprint, { w: W, h: H })
+    eq('the canvas beside it', slot?.canvas, { w: W, h: H })
+    eq('and what it really costs to hold', slot?.placements, 2)
+    /* THE APPROACH SITS INSIDE THE BERTH over there. The chart drags them as two
+     * independent marks, which is right for a pointer; the game reads
+     * berth.approach and berth.at, and the game is the consumer. */
+    eq('the approach folded into the berth', slot?.berth, {
+      x: 880,
+      y: 700,
+      facing: 'north',
+      at: 'coach_post',
+      approach: { x: 940, y: 780 },
+    })
+    /* FOUR NUMBERS AGAINST A READER THAT WANTS FOUR KEYS is the quietest failure
+     * on this endpoint: every comparison is against undefined and false, so no
+     * region ever matches and nothing anywhere is raised. */
+    eq('a sea region crosses as a box', comp.regions.find((r) => r.name === 'zz_the_shallows')?.rect, {
+      x: 700,
+      y: 500,
+      w: 400,
+      h: 400,
+    })
+    eq('and the run knows where it starts', comp.home, { slot: 'zz_verify_isle' })
+
+    /* THE VERSION HAS TO BE QUIET. The game stamps a saved position with it and
+     * refuses to resume when the number has changed, so one that moved on every
+     * press would throw away every position on a class of chromebooks each time
+     * an author saved. updated_at could never have done this job. */
+    const v1 = (await getWorld()).version
+    await saveWorld({ w: 4096, h: 4096, home: 'zz_verify_isle', places: saved.places, regions: saved.regions })
+    eq('a save that changed nothing leaves the world version alone', (await getWorld()).version, v1)
+    await saveWorld({
+      w: 4096,
+      h: 4096,
+      home: 'zz_verify_isle',
+      places: saved.places.map((q) => (q.name === 'zz_verify_isle' ? { ...q, x: 810 } : q)),
+      regions: saved.regions,
+    })
+    const v2 = (await getWorld()).version
+    v2 === v1 + 1
+      ? ok('and moving an island counts it up, which is what refuses a stale position')
+      : no(`the version did not move: ${v1} then ${v2}`)
 
     /* A composition that cannot work is refused where it is written, naming
      * what is wrong, rather than found by a student sailing into nothing. */
@@ -303,8 +422,8 @@ try {
         w: 4096,
         h: 4096,
         places: [
-          { name: 'zz_twice', map: '', x: 10, y: 10, w: 8, h: 8, state: 'rumoured', release: 10 },
-          { name: 'zz_twice', map: '', x: 90, y: 90, w: 8, h: 8, state: 'rumoured', release: 10 },
+          { name: 'zz_twice', map: '', x: 10, y: 10, w: 8, h: 8, state: 'rumour', release: 10 },
+          { name: 'zz_twice', map: '', x: 90, y: 90, w: 8, h: 8, state: 'rumour', release: 10 },
         ],
         regions: [],
       })
@@ -321,13 +440,96 @@ try {
       w: 4096,
       h: 4096,
       places: [
-        { name: 'zz_far', map: '', x: 100, y: 100, w: 8, h: 8, state: 'rumoured', release: 10, berth: { x: 900, y: 900 } },
+        { name: 'zz_far', map: '', x: 100, y: 100, w: 8, h: 8, state: 'rumour', discover: 10, berth: { x: 900, y: 900 } },
       ],
       regions: [],
     })
     far.warnings.some((w) => w.includes('berths'))
-      ? ok('a berth outside its own release radius is warned about')
+      ? ok('a berth outside its own discovery radius is warned about')
       : no('an unreachable berth passed without a word')
+
+    /* A WAYPOINT, WHICH BELONGS TO NEITHER ISLAND IT SITS BETWEEN.
+     *
+     * A berth and an approach hang off a place, so the only points that could
+     * exist were points about arriving somewhere. The corner a sail leg turns
+     * at halfway across has no place to hang off and was a constant typed into
+     * the game repo. This is the fence saying it survives the save and comes
+     * back out of the read api in the shape python asks for it in. */
+    const marked = await saveWorld({
+      w: 4096,
+      h: 4096,
+      places: [{ name: 'zz_verify_isle', map: '', x: 800, y: 600, w: 128, h: 96, state: 'rumour', release: 240 }],
+      regions: [],
+      marks: [
+        { name: 'zz_north_passage', kind: 'waypoint', x: 1200, y: 400, facing: 'north', r: 60, label: 'the north passage' },
+        { name: 'zz_deep_water', kind: 'anchorage', x: 900, y: 1500 },
+        // dropped rather than corrected, because bending it invents an address
+        // the author never wrote and nothing in their python calls
+        { name: 'North Passage', kind: 'waypoint', x: 10, y: 10 },
+      ],
+    })
+    eq('a bad mark name is dropped rather than tidied into one', marked.marks.length, 2)
+    const readMarks = (await getWorld()).marks
+    const wp = readMarks.find((m) => m.name === 'zz_north_passage')
+    eq('the waypoint survives the save', [wp?.kind, wp?.x, wp?.y, wp?.facing, wp?.r], ['waypoint', 1200, 400, 'north', 60])
+    eq('a mark with no kind of its own is a waypoint', readMarks.find((m) => m.name === 'zz_deep_water')?.kind, 'anchorage')
+
+    /* ONE NAMESPACE, because python has one. A grape calls sail_to("x") and
+     * never says which list to look in, so a mark sharing a name with an island
+     * is a call whose answer depends on which lookup runs first. */
+    let clash = ''
+    try {
+      await saveWorld({
+        w: 4096,
+        h: 4096,
+        places: [{ name: 'zz_both', map: '', x: 10, y: 10, w: 8, h: 8, state: 'rumour', release: 10 }],
+        regions: [],
+        marks: [{ name: 'zz_both', kind: 'waypoint', x: 90, y: 90 }],
+      })
+    } catch (e) {
+      clash = e.message
+    }
+    clash.includes('one namespace')
+      ? ok('a mark taking an island name is refused, because python addresses both in one namespace')
+      : no(`a mark and a place shared a name: ${clash || 'no error'}`)
+
+    /* AND THE MARKS ARE ABSENT RATHER THAN EMPTY when nobody mentions them. The
+     * world page posts w, h, places and regions and says nothing about marks, so
+     * treating that silence as an empty list means one drag of an island wipes
+     * every waypoint the crossing is made of. */
+    await saveWorld({ w: 4096, h: 4096, places: [], regions: [] })
+    eq('a save that never mentions marks keeps them', (await getWorld()).marks.length, 2)
+
+    /* THE PUBLISHED READ HAS NO ACCOUNT AND MUST NOT NEED ONE.
+     *
+     * /api/world is now refused to anybody but the account the ocean belongs
+     * to. /api/v1 is the other half of that decision: a freshman on a chromebook
+     * has never heard of MAPVIS and this is the request that tells the ship
+     * where the islands are. Booted in this process, the way verify-api does,
+     * so it tests the working tree and needs nothing else to be up. */
+    const server = http.createServer((req, res) =>
+      api(req, res, () => {
+        res.statusCode = 404
+        res.end('not found')
+      }),
+    )
+    await new Promise((r) => server.listen(PORT, '127.0.0.1', r))
+    try {
+      const pub = await fetch(`http://127.0.0.1:${PORT}/api/v1/world`)
+      const body = await pub.json()
+      pub.ok && Array.isArray(body.marks)
+        ? ok('the published ocean still answers with no account behind the request')
+        : no(`/api/v1/world answered ${pub.status} to a request with no cookie`)
+      const flat = await (await fetch(`http://127.0.0.1:${PORT}/api/v1/world/marks`)).json()
+      eq('a grape looks a waypoint up by the name its author typed', flat.marks?.zz_north_passage, {
+        kind: 'waypoint',
+        x: 1200,
+        y: 400,
+        facing: 'north',
+      })
+    } finally {
+      await new Promise((r) => server.close(r))
+    }
   } finally {
     // put the ocean back exactly as it was, because it is one shared row
     await saveWorld(worldBefore)

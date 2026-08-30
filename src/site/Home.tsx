@@ -148,6 +148,18 @@ export default function Home() {
   // the drag in progress. A map and a folder are different things to be holding
   // and only one of them can be in the hand, so they are separate: it is what
   // decides which targets light up and what a drop means when it lands.
+  /* THE OCEAN IS ONE ACCOUNT'S, so the way to it is one account's too.
+   *
+   * There is a single world row for the whole platform and every map on it sits
+   * on that one water, so a second account following this link gets a chart it
+   * can drag but cannot save. The mark comes off the bar instead of the page
+   * apologising after the click.
+   *
+   * It stays on when the request does not answer: the route is new, an older
+   * deploy has no answer for it, and taking a working link away from its own
+   * owner because a 404 came back is the worse of the two failures. */
+  const [sea, setSea] = useState(true)
+
   const [lift, setLift] = useState('')
   const [liftF, setLiftF] = useState('')
   const [overR, setOverR] = useState('')
@@ -220,6 +232,10 @@ export default function Home() {
   useEffect(() => {
     if (loading || !user) return
     void pull()
+    fetch('/api/world/mine')
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((j: { mine?: boolean }) => setSea(j.mine !== false))
+      .catch(() => setSea(true))
   }, [user, loading])
 
   const memberOf = (slug: string) => (folders || []).filter((f) => f.maps.includes(slug)).map((f) => f.id)
@@ -364,9 +380,11 @@ export default function Home() {
               a sentence: two spelt-out links sat where every other control in
               this bar is a 30px icon, and read as leftover text. The words stay
               as the title and the accessible name. */}
-          <Link to="/world" className="home-icon" aria-label="the ocean" title="the ocean">
-            <Icon name="ocean" />
-          </Link>
+          {sea && (
+            <Link to="/world" className="home-icon" aria-label="the ocean" title="the ocean">
+              <Icon name="ocean" />
+            </Link>
+          )}
           {/* and the panels the game draws its words into, which belong to no
               single map for the same reason the water does not */}
           <Link to="/surfaces" className="home-icon" aria-label="ui surfaces" title="ui surfaces">

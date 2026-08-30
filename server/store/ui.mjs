@@ -104,6 +104,38 @@ export function checkUi(asset) {
 
 // ---- reading ---------------------------------------------------------------
 
+/* NOTHING IN THE GAME READS A SURFACE OFF THIS API, and that is written down
+ * here rather than left for the next session to work out from a grep.
+ *
+ * What the running game has instead is four CSS custom properties in
+ * src/game/ui/tokens.css pointing at four static files under public/art/ui:
+ * panel-square, dialogue-box, plank-button, chart-cover. Four surfaces, and the
+ * NAME is a css property rather than a string in any data file. A test pins each
+ * token to its path and its consumer, which is the closest thing to a contract
+ * that side has.
+ *
+ * THE SHAPE MISMATCH THAT MATTERS IS THE SLOT RECT, and it is not a rename. A
+ * slot here is four rounded pixels measured against the png. Over there the
+ * surface is drawn with `center / 100% 100% no-repeat` into a box sized in vw
+ * and vh, so the png's own pixel size is never used for anything and every mark
+ * inside the frame is a percentage: `padding: 5% 8.5% 6% 8.5%` is that side's
+ * version of a slot. An absolute pixel rect handed to that layout is correct at
+ * exactly one window width.
+ *
+ * So a normalized rect (x/w, y/h, w/w, h/h off the same w and h setUiImage takes
+ * from the real bytes) is what a reader would want. NOT emitted here, because
+ * there is no reader to be right for and the four names on that side are fixed
+ * where these are free-form, so a member's `dialogue_box` and the game's
+ * `dialogue` would be two names for one job with nothing to join them. Build the
+ * projection the day a surface is actually consumed, against the four reserved
+ * names and whatever that reader asks for.
+ *
+ * Two more things that side already settled, so they are not rediscovered:
+ * `status` of pending or failed is the study's plain arm, a legal answer and not
+ * an error, because tokens.css blanks all four surfaces under the plain skin.
+ * And `src` below is a path that only resolves on the MAPVIS origin, where the
+ * game's four are same-origin files, which is the same cross-origin defect
+ * already logged against reading a map from the platform. */
 const shape = (r) => ({
   name: r.name,
   title: r.title,
