@@ -1649,6 +1649,10 @@ try {
   const SHEET = 'zz_verify_sheet'
   const CORE = 'zz_verify_core'
   for (const n of [GROUND, SHEET, CORE]) await removeUi(owner.id, n, { core: true })
+  /* snapshotted OUTSIDE the try, because the finally puts it back and a const
+   * declared in the try body is not in scope there. */
+  const realDlg = await getUiByName(owner.id, 'dialogue_box').catch(() => null)
+  const realDlgArt = realDlg ? await ownedUiImage(owner.id, 'dialogue_box').catch(() => null) : null
   try {
     /* A GROUND ROUND-TRIPS WITH ITS SLICES. The unit is SOURCE pixels because
      * that is the only thing CSS border-image and Pixi NineSliceSprite agree
@@ -1814,6 +1818,18 @@ try {
      * nowhere in the game. dialogue_box is order 1, the FIRST piece Ash
      * generates, so the very first paste produced a selector matching no element
      * and a var() nothing defines. Bug pattern one, reproduced verbatim. */
+    /* THIS BLOCK USES A REAL PIECE'S NAME, SO IT HAS TO PUT IT BACK.
+     *
+     * `dialogue_box` is a reserved core name and it is also the name of a piece
+     * Ash has actually drawn. This test needs that exact name, because what it
+     * checks is the handle translation for that one name. So it was creating a
+     * row called dialogue_box, writing a flat grey placeholder over it, and
+     * deleting it at the end. Every verify run therefore destroyed the real
+     * dialogue box and nobody noticed until the library came back holding one
+     * row. Same shape as the world row this file already learned to lock: a
+     * test tidying up by a name it does not own.
+     *
+     * The art is snapshotted here and written back at the end of the block. */
     await createUi({ ownerId: owner.id, name: 'dialogue_box', type: 'dialogue_box', description: 'the real one', w: 688, h: 384, core: true })
     await setUiImage(owner.id, 'dialogue_box', solidPNG(688, 384, 60, 50, 40), 688, 384)
     const dlg = await setUiRegions(owner.id, 'dialogue_box', [{ name: 'caption', kind: 'text', x: 40, y: 40, w: 200, h: 40 }], {
@@ -1830,7 +1846,22 @@ try {
     !dlg.css.includes('--kit-slice-dialogue_box')
       ? ok('the core dialogue box emits the handle the game mounts and not the kit name')
       : no(`the css still names dialogue_box, which the game has no class or token for: ${dlg.css.split('\n')[5] || ''}`)
-    await removeUi(owner.id, 'dialogue_box', { core: true })
+    /* put the author's piece back, art and all. A row that existed before this
+     * file started must exist after it stops. */
+    if (realDlg && realDlgArt) {
+      await createUi({
+        ownerId: owner.id, name: 'dialogue_box', type: realDlg.type || 'dialogue_box',
+        title: realDlg.title || '', description: realDlg.description || '',
+        w: realDlg.w, h: realDlg.h, core: true,
+      })
+      await setUiImage(owner.id, 'dialogue_box', realDlgArt, realDlg.w, realDlg.h)
+      const kept = await getUiByName(owner.id, 'dialogue_box').catch(() => null)
+      kept && kept.status === 'ready'
+        ? ok('a piece the author drew survives a verifier run')
+        : no("the verifier ate the author's dialogue box again")
+    } else {
+      await removeUi(owner.id, 'dialogue_box', { core: true })
+    }
 
     /* A REDRAW THAT CHANGED SIZE LOSES THE EDGE NUMBERS. createUi keeps regions
      * and slices through a redraw on purpose, and the promise it makes is only
@@ -1867,7 +1898,23 @@ try {
     await removeUi(owner.id, STUCK, { core: true })
   } finally {
     for (const n of [GROUND, SHEET, CORE]) await removeUi(owner.id, n, { core: true })
-    await removeUi(owner.id, 'dialogue_box', { core: true })
+    /* THE ONE NAME IN THIS FILE THAT BELONGS TO SOMEBODY. Everything else here
+     * is prefixed zz_verify_ and is ours to delete. `dialogue_box` is a piece
+     * Ash drew, and this line deleted it on every run: the library came back
+     * holding one row and the art only survived because a copy sat on disk.
+     * Restored from the snapshot taken before the block, or removed only if
+     * there was nothing there to begin with. */
+    if (realDlg && realDlgArt) {
+      await removeUi(owner.id, 'dialogue_box', { core: true }).catch(() => {})
+      await createUi({
+        ownerId: owner.id, name: 'dialogue_box', type: realDlg.type || 'dialogue_box',
+        title: realDlg.title || '', description: realDlg.description || '',
+        w: realDlg.w, h: realDlg.h, core: true,
+      })
+      await setUiImage(owner.id, 'dialogue_box', realDlgArt, realDlg.w, realDlg.h)
+    } else {
+      await removeUi(owner.id, 'dialogue_box', { core: true })
+    }
   }
 
   /* CORE WINS THE TIE ON EVERY ROUTE, AND THE LIST ROUTE WAS THE ONE THAT LOST IT.
