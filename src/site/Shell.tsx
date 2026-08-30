@@ -64,6 +64,7 @@ const Home = lazy(fresh(() => import('./Home')))
 const MapPage = lazy(fresh(() => import('./MapPage')))
 const World = lazy(fresh(() => import('./World')))
 const Surfaces = lazy(fresh(() => import('./Surfaces')))
+const Kit = lazy(fresh(() => import('./Kit')))
 
 /* One loading mark for the whole app: four squares walking a ring on the pixel
  * grid. The bleeding ink blot it replaced was slow, soft and the wrong shape for
@@ -154,6 +155,11 @@ export default function Shell() {
   // the panels the game draws its text into, which belong to no single map
   // either: one dialogue box serves every island there is
   else if (route.path === '/surfaces') page = <Surfaces />
+  /* THE UI LIBRARY: the shelf of drawn pieces the game's interface is made of,
+     and the replacement for /surfaces. "Surfaces" names nothing a person can
+     guess, and Ash could not tell what the page was; this one opens with the
+     twenty-one types the game's own record already describes. */
+  else if (route.path === '/kit') page = <Kit />
   else if (mapMatch) page = <MapPage slug={mapMatch.slug} />
   else page = <Lost path={route.path} />
 

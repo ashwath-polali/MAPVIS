@@ -564,10 +564,6 @@ export function cleanRegion(s) {
   return out
 }
 
-// the name the old code called it by. One implementation, because a second set
-// of refusals drifts away from the first.
-export const cleanSlot = cleanRegion
-
 // ---- the nine-slice record -------------------------------------------------
 
 /* FOUR NUMBERS PLUS THREE QUALIFIERS, and the shape is decided by what has to
@@ -979,9 +975,10 @@ export async function saveUi(ownerId, name, regions, slices) {
 }
 
 // the name the routes call it by. One implementation, because a second one is a
-// second set of refusals that drift apart.
+// second set of refusals that drift apart. The old `/api/ui/slots` path is kept
+// alive at the route only, so the page that still calls it does not break on
+// the day this lands, and there is no second function behind it.
 export const setUiRegions = saveUi
-export const setUiSlots = saveUi
 
 /* SAYING A PIECE IS FINISHED, which is a different fact from the picture having
  * arrived.

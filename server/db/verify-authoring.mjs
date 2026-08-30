@@ -816,59 +816,217 @@ try {
     return encodePNG(w, h, rgba)
   }
 
+  const thrown = async (fn) => {
+    try {
+      await fn()
+      return ''
+    } catch (e) {
+      return String(e.message || e)
+    }
+  }
+
   const UI = 'zz_verify_panel'
-  await removeUi(owner.id, UI)
+  await removeUi(owner.id, UI, { core: true })
   try {
     await createUi({ ownerId: owner.id, name: UI, title: 'The Verify Panel', description: 'a plain box', w: 200, h: 80 })
-    const saved = await setUiSlots(owner.id, UI, [
-      { name: 'speaker', kind: 'text', x: 10, y: 6, w: 120, h: 14, align: 'left' },
-      { name: 'stamina', kind: 'bar', x: 10, y: 40, w: 180, h: 12, meta: { fills: 'left' } },
-      { name: 'go_on', kind: 'button', x: 150, y: 60, w: 44, h: 16 },
+    const saved = await setUiRegions(owner.id, UI, [
+      { name: 'speaker', kind: 'text', x: 10, y: 6, w: 120, h: 14, align: 'left', wrap: 'nowrap', overflow: 'ellipsis' },
+      { name: 'stamina', kind: 'fill', x: 10, y: 40, w: 180, h: 12, axis: 'right', mode: 'tile', meta: { fills: 'left' } },
+      { name: 'go_on', kind: 'press', x: 150, y: 60, w: 44, h: 16 },
     ])
-    eq('the surface keeps every slot it was given', saved.slots.length, 3)
+    eq('the piece keeps every region it was given', saved.regions.length, 3)
 
     const read = await getUiByName(owner.id, UI)
-    const bar = read?.slots.find((s) => s.name === 'stamina')
-    eq('a slot comes back by name', [bar?.kind, bar?.x, bar?.y, bar?.w, bar?.h], ['bar', 10, 40, 180, 12])
-    eq('a slot keeps the bag its author filled', bar?.meta, { fills: 'left' })
-    eq('a slot keeps its alignment', read?.slots.find((s) => s.name === 'speaker')?.align, 'left')
+    const bar = read?.regions.find((s) => s.name === 'stamina')
+    eq('a region comes back by name', [bar?.kind, bar?.x, bar?.y, bar?.w, bar?.h], ['fill', 10, 40, 180, 12])
+    /* A ROPE THAT STRETCHES IS A SMEAR AND A ROPE THAT TILES IS A ROPE, which
+     * is the whole reason `bar` became `fill`: the old kind carried neither a
+     * direction nor a tile rule, so the reader had to guess both. */
+    eq('a fill says which way it grows and whether it tiles', [bar?.axis, bar?.mode], ['right', 'tile'])
+    eq('a region keeps the bag its author filled', bar?.meta, { fills: 'left' })
+    eq('a region keeps its alignment', read?.regions.find((s) => s.name === 'speaker')?.align, 'left')
+    eq('text says what a long option does', read?.regions.find((s) => s.name === 'speaker')?.overflow, 'ellipsis')
 
-    /* A SLOT WITH NO NAME IS REFUSED RATHER THAN NUMBERED. Every other field
+    /* A REGION WITH NO NAME IS REFUSED RATHER THAN NUMBERED. Every other field
      * has an honest default; a name does not, because the name is the thing a
-     * grape holds, and a mark silently called slot_3 is a promise nobody made. */
-    let nameless = ''
-    try {
-      await setUiSlots(owner.id, UI, [{ kind: 'text', x: 0, y: 0, w: 10, h: 10 }])
-    } catch (e) {
-      nameless = e.message
-    }
+     * grape holds, and a mark silently called region_3 is a promise nobody
+     * made. */
+    const nameless = await thrown(() => setUiRegions(owner.id, UI, [{ kind: 'text', x: 0, y: 0, w: 10, h: 10 }]))
     nameless.includes('no name')
-      ? ok('a nameless slot is refused rather than given a number')
-      : no(`a nameless slot saved anyway: ${nameless || 'no error'}`)
+      ? ok('a nameless region is refused rather than given a number')
+      : no(`a nameless region saved anyway: ${nameless || 'no error'}`)
 
     // and a rect off the edge of the picture, which can never be drawn into,
-    // is refused with the slot's own name in the sentence
-    let offEdge = ''
-    try {
-      await setUiSlots(owner.id, UI, [{ name: 'off_the_edge', kind: 'text', x: 180, y: 70, w: 60, h: 40 }])
-    } catch (e) {
-      offEdge = e.message
-    }
+    // is refused with the region's own name in the sentence
+    const offEdge = await thrown(() => setUiRegions(owner.id, UI, [{ name: 'off_the_edge', kind: 'text', x: 180, y: 70, w: 60, h: 40 }]))
     offEdge.includes('off_the_edge') && offEdge.includes('200x80')
-      ? ok('a slot off the edge is refused, naming the slot and the surface')
-      : no(`a slot off the picture saved anyway: ${offEdge || 'no error'}`)
+      ? ok('a region off the edge is refused, naming the region and the picture')
+      : no(`a region off the picture saved anyway: ${offEdge || 'no error'}`)
+
+    /* THE VERTICAL IS REQUIRED ON A PICTURE AND THERE IS NO DEFAULT. The
+     * shipped portrait is bottom-anchored because a person stands on the bottom
+     * of their box, and a frame that centres its content leaves every character
+     * in the game floating with nothing anywhere saying so. */
+    const floating = await thrown(() => setUiRegions(owner.id, UI, [{ name: 'their_face', kind: 'picture', x: 4, y: 4, w: 40, h: 60 }]))
+    floating.includes('floating')
+      ? ok('a picture with no vertical is refused rather than quietly centred')
+      : no(`a picture region saved with no vertical: ${floating || 'no error'}`)
 
     // overlap is legal and usually a mis-drag, so it warns and still saves
-    const over = await setUiSlots(owner.id, UI, [
-      { name: 'the_bar', kind: 'bar', x: 10, y: 10, w: 100, h: 20 },
+    const over = await setUiRegions(owner.id, UI, [
+      { name: 'the_bar', kind: 'fill', x: 10, y: 10, w: 100, h: 20 },
       { name: 'the_reading', kind: 'number', x: 40, y: 12, w: 30, h: 14 },
     ])
     over.warnings.some((w) => w.includes('overlap'))
-      ? ok('two overlapping slots warn and still save')
+      ? ok('two overlapping regions warn and still save')
       : no('an overlap passed without a word')
-    eq('the surface still has both after the warning', over.slots.length, 2)
+    eq('the piece still has both after the warning', over.regions.length, 2)
   } finally {
-    await removeUi(owner.id, UI)
+    await removeUi(owner.id, UI, { core: true })
+  }
+
+  /* ---- the twenty-one types, and the four numbers a ground piece owes -----
+   *
+   * docs/UI-KIT.md read the game's own record and found twenty-one distinct
+   * kinds of drawn surface. The reason to have types at all is that twenty
+   * islands built by twenty people end up speaking one dialect rather than
+   * twenty, and the reason to have the edge numbers is that every UI image in
+   * the game today is drawn with `center / 100% 100% no-repeat`, which squashes
+   * one whole painting into whatever box the element happens to be. */
+  eq('the kit names twenty-one types', PIECE_TYPES.length, 21)
+  eq('a type nobody named does not resolve', pieceType('wobble_box'), null)
+
+  const GROUND = 'zz_verify_ground'
+  const SHEET = 'zz_verify_sheet'
+  const CORE = 'zz_verify_core'
+  for (const n of [GROUND, SHEET, CORE]) await removeUi(owner.id, n, { core: true })
+  try {
+    /* A GROUND ROUND-TRIPS WITH ITS SLICES. The unit is SOURCE pixels because
+     * that is the only thing CSS border-image and Pixi NineSliceSprite agree
+     * on, and `scale` rides along because border-image-width is a separate
+     * number: with only four insets the game has to invent the draw thickness
+     * and will get it wrong. */
+    await createUi({ ownerId: owner.id, name: GROUND, type: 'panel', description: 'a plain paper panel', w: 96, h: 96 })
+    await setUiImage(owner.id, GROUND, solidPNG(96, 96, 190, 170, 130), 96, 96)
+    const g = await setUiRegions(
+      owner.id,
+      GROUND,
+      [{ name: 'body', kind: 'text', x: 14, y: 14, w: 68, h: 68 }],
+      { slice: { top: 12, right: 14, bottom: 13, left: 14 }, scale: 2, fill: true, repeat: { x: 'round', y: 'round' } },
+    )
+    /* READ IN CSS ORDER RATHER THAN COMPARED AS AN OBJECT, because jsonb does
+     * not keep the key order it was handed: these come back top, left, right,
+     * bottom. Nothing reads them positionally, so it costs nothing, but a test
+     * comparing two stringified objects fails on it and looks like data loss. */
+    const four = (s) => [s.top, s.right, s.bottom, s.left]
+    eq('a ground keeps its four edge numbers', four(g.slice), [12, 14, 13, 14])
+    eq('and the draw thickness beside them', [g.scale, g.fill, g.repeat.x, g.repeat.y], [2, true, 'round', 'round'])
+    const back = await getUiByName(owner.id, GROUND)
+    eq('the slices survive being read back', four(back.slice), [12, 14, 13, 14])
+    /* THE FORM HE CAN PASTE. Section 3's smallest change on the game side is
+     * three tokens plus one rule per image, and border-width is slice * scale
+     * so nothing is guessed on that side. */
+    back?.css.includes('--kit-slice-zz_verify_ground: 12 14 13 14;') && back?.css.includes('--kit-slice-w-zz_verify_ground: 24px 28px 26px 28px;')
+      ? ok('the measurement comes out as css that can be pasted, with the thickness worked out')
+      : no(`the css is not the shape the game takes: ${(back?.css || '').split('\n')[0] || 'nothing'}`)
+
+    /* THE CONSTRAINT THAT BREAKS SILENTLY. If the top and bottom insets do not
+     * leave a middle, CSS drops to no border image at all and says nothing, and
+     * the author spends an hour in the wrong stylesheet. */
+    const crossed = await thrown(() =>
+      setUiRegions(owner.id, GROUND, [{ name: 'body', kind: 'text', x: 14, y: 14, w: 68, h: 68 }], {
+        slice: { top: 60, right: 14, bottom: 50, left: 14 },
+      }),
+    )
+    crossed.includes('no middle') && crossed.includes('saying nothing')
+      ? ok('edges that cross leave no middle and are refused, naming what CSS does about it')
+      : no(`crossed edges saved anyway: ${crossed || 'no error'}`)
+
+    /* AND A PANEL WITHOUT fill RENDERS AS A RING AROUND A HOLE, because
+     * border-image defaults it off. Only the highlight edge wants that. */
+    const ring = await thrown(() =>
+      setUiRegions(owner.id, GROUND, [{ name: 'body', kind: 'text', x: 14, y: 14, w: 68, h: 68 }], {
+        slice: { top: 12, right: 14, bottom: 13, left: 14 },
+        fill: false,
+      }),
+    )
+    ring.includes('ring around a hole') ? ok('a panel that would draw as a ring around a hole is refused') : no(`fill:false saved on a panel: ${ring || 'no error'}`)
+
+    /* A SHEET CARRIES NAMED FACES CUT FROM ONE CANVAS. Both sides of a
+     * generation start at 192 and a season token is about 24 across, so a
+     * family of small marks is one job cut by marked rectangles, which is also
+     * the only way the five faces come back the same weight. */
+    await createUi({ ownerId: owner.id, name: SHEET, type: 'pip', description: 'five season tokens', w: 100, h: 100 })
+    await setUiImage(owner.id, SHEET, solidPNG(100, 100, 120, 150, 190), 100, 100)
+    const s = await setUiRegions(owner.id, SHEET, [
+      { name: 'fall', kind: 'face', x: 0, y: 0, w: 20, h: 20 },
+      { name: 'winter', kind: 'face', x: 20, y: 0, w: 20, h: 20 },
+      { name: 'spring', kind: 'face', x: 40, y: 0, w: 20, h: 20 },
+      { name: 'spent', kind: 'face', x: 60, y: 0, w: 20, h: 20 },
+      { name: 'ghost', kind: 'face', x: 80, y: 0, w: 20, h: 20 },
+    ])
+    eq('a sheet reports its faces as a list of cuts', s.faces.map((f) => f.name), ['fall', 'winter', 'spring', 'spent', 'ghost'])
+    eq('and each cut keeps its rectangle', s.faces[3], { name: 'spent', x: 60, y: 0, w: 20, h: 20 })
+    /* TWO CUTS SHARING PIXELS IS NOT A MIS-DRAG THE WAY TWO REGIONS ARE. One of
+     * the two comes out with a corner of its neighbour in it, so it is refused
+     * where two overlapping text wells only warn. */
+    const shared = await thrown(() =>
+      setUiRegions(owner.id, SHEET, [
+        { name: 'fall', kind: 'face', x: 0, y: 0, w: 30, h: 20 },
+        { name: 'winter', kind: 'face', x: 20, y: 0, w: 20, h: 20 },
+      ]),
+    )
+    shared.includes('share pixels') ? ok('two cuts that share pixels are refused') : no(`overlapping faces saved: ${shared || 'no error'}`)
+    // and a sheet does not stretch, so four edge numbers on one are a
+    // measurement nothing will ever read
+    const wrongTier = await thrown(() => setUiRegions(owner.id, SHEET, [], { slice: { top: 4, right: 4, bottom: 4, left: 4 } }))
+    wrongTier.includes('does not stretch') ? ok('edge numbers on a sheet are refused as a field nothing reads') : no(`slices saved on a sheet: ${wrongTier || 'no error'}`)
+
+    /* A PIECE WITHOUT SLICES IS REFUSED AT PUBLISH, because those four numbers
+     * are the entire thing the game can consume: without them the consumer
+     * falls back to squashing the whole painting into the box. */
+    const NOSLICE = 'zz_verify_unmeasured'
+    await removeUi(owner.id, NOSLICE, { core: true })
+    await createUi({ ownerId: owner.id, name: NOSLICE, type: 'panel', description: 'never measured', w: 96, h: 96 })
+    await setUiImage(owner.id, NOSLICE, solidPNG(96, 96, 200, 200, 200), 96, 96)
+    await setUiRegions(owner.id, NOSLICE, [{ name: 'body', kind: 'text', x: 14, y: 14, w: 68, h: 68 }])
+    const unmeasured = await thrown(() => publishUi(owner.id, NOSLICE))
+    unmeasured.includes('four edge numbers')
+      ? ok('a ground piece with no measurement cannot be published')
+      : no(`an unmeasured ground published anyway: ${unmeasured || 'no error'}`)
+    await removeUi(owner.id, NOSLICE, { core: true })
+
+    // the measured one goes through, which is the other half of the same fence
+    await setUiRegions(
+      owner.id,
+      GROUND,
+      [{ name: 'body', kind: 'text', x: 14, y: 14, w: 68, h: 68 }],
+      { slice: { top: 12, right: 14, bottom: 13, left: 14 }, scale: 2, fill: true, repeat: { x: 'round', y: 'round' } },
+    )
+    eq('a measured ground publishes', (await publishUi(owner.id, GROUND)).published, true)
+
+    /* ONE KIT, ADDITIVE ONLY (Ash, 2026-08-30). Core chrome is never
+     * overridable and a member piece may only add. Two fences, because the flag
+     * on a row cannot hold on an empty shelf: the first member to generate
+     * something called `dialogue_box` would otherwise own the name every island
+     * in the game speaks through. */
+    const reserved = await thrown(() => createUi({ ownerId: owner.id, name: 'dialogue_box', description: 'mine now', w: 96, h: 96 }))
+    reserved.includes('core chrome') ? ok('a reserved core name is refused to a member piece') : no(`a member took a core name: ${reserved || 'no error'}`)
+
+    await createUi({ ownerId: owner.id, name: CORE, type: 'plaque', description: 'the real one', w: 96, h: 96, core: true })
+    const replaced = await thrown(() => createUi({ ownerId: owner.id, name: CORE, description: 'my version', w: 96, h: 96 }))
+    replaced.includes('never overridable')
+      ? ok('a member piece cannot replace a core one, and the refusal says why')
+      : no(`a core piece was replaced: ${replaced || 'no error'}`)
+    const deleted = await thrown(() => removeUi(owner.id, CORE))
+    deleted.includes('never overridable') ? ok('and it cannot be deleted from a member\'s side either') : no(`a core piece was deleted: ${deleted || 'no error'}`)
+    eq('the core piece is still there afterwards', (await getUiByName(owner.id, CORE))?.core, true)
+
+    // the two named so nobody generates them, refused before anything is spent
+    const notArt = await thrown(() => createUi({ ownerId: owner.id, name: 'zz_verify_signpost', type: 'sign', description: 'a signpost', w: 96, h: 96 }))
+    notArt.includes('not generated') ? ok('a sign is refused here rather than costing a spend to find out') : no(`a sign was accepted: ${notArt || 'no error'}`)
+  } finally {
+    for (const n of [GROUND, SHEET, CORE]) await removeUi(owner.id, n, { core: true })
   }
 
   /* ONE DOCK KIT, TWENTY MAPS. The bytes are duplicated on purpose: that costs

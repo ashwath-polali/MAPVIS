@@ -1,0 +1,1121 @@
+/* The UI library.
+ *
+ * Every colour, size, radius, border and cursor in this file is a token. There
+ * is no raw hex below and there is not meant to be: a competing hex is exactly
+ * how the app ended up with three golds that nearly match and two whites both
+ * called "the text colour".
+ *
+ * THE PAGE IT REPLACES was judged ugly, and the specific complaints were a
+ * boxy grey panel, walls of helper text and rules made of dashes. So the rule
+ * here is art large, words few, air between things, and gold only on the one
+ * thing the tool is currently saying. A section is separated by space rather
+ * than by a line, because a page full of rules reads as a form.
+ */
+
+.kit {
+  min-height: 100svh;
+  background: var(--void);
+  color: var(--ink);
+  font-family: var(--font-label);
+}
+.kit-body {
+  padding: 8px clamp(18px, 3vw, 40px) 80px;
+}
+.kit-wait {
+  height: 40vh;
+}
+.kit-back {
+  font: 500 var(--fs-small) var(--font-label);
+  color: var(--ink-3);
+  background: none;
+  border: 0;
+  padding: 4px 2px;
+  transition: color var(--t-fast) var(--ease-out);
+}
+.kit-back:hover {
+  color: var(--ink);
+}
+
+/* ---- the opening ---------------------------------------------------------- */
+
+.kit-lede {
+  max-width: 62ch;
+  padding: clamp(18px, 4vh, 44px) 0 clamp(24px, 5vh, 52px);
+}
+.kit-lede h1 {
+  margin: 0 0 12px;
+  color: var(--ink);
+}
+.kit-sub {
+  margin: 0;
+  font-size: var(--fs-read);
+  line-height: var(--lh-read);
+  color: var(--ink-2);
+}
+
+.kit-sec {
+  padding-bottom: clamp(30px, 5vh, 62px);
+}
+.kit-sec > h2 {
+  margin: 0 0 6px;
+}
+/* the one line under a heading that says what the section is for. It is not a
+   paragraph of help; if it needs a second sentence the section is wrong. */
+.kit-why {
+  margin: 0 0 20px;
+  max-width: 66ch;
+  font-size: var(--fs-small);
+  line-height: var(--lh);
+  color: var(--ink-3);
+}
+
+/* the shared empty state, opened out. Its 30ch measure is written for a rail
+   290 pixels wide, and on a full page it drew a five-line ribbon down the left
+   margin that read as a layout that had collapsed. */
+.kit-blank {
+  margin-bottom: clamp(20px, 3vh, 40px);
+  min-height: 0;
+  padding: 0 0 8px;
+  justify-items: start;
+  text-align: left;
+}
+.kit-blank .nothing-say {
+  max-width: 58ch;
+  font-size: var(--fs-body);
+}
+
+/* something is drawing. Gold, because this is the tool speaking, and one line
+   rather than a progress bar, because a bar that cannot report a fraction is a
+   bar that lies about one. */
+.kit-live {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 24px;
+  font-size: var(--fs-small);
+  color: var(--acc-tool);
+}
+.kit-pulse {
+  width: 7px;
+  height: 7px;
+  border-radius: var(--r-round);
+  background: var(--acc-tool);
+  animation: kit-beat 1.4s var(--ease-paper) infinite;
+  flex: none;
+}
+@keyframes kit-beat {
+  50% {
+    opacity: 0.25;
+    transform: scale(0.7);
+  }
+}
+
+/* ---- the shelf ------------------------------------------------------------
+ *
+ * Art first. A card is mostly its own picture, and everything written on it is
+ * under the picture at label size, because the fastest way to find a dialogue
+ * box is to see one.
+ */
+
+.kit-shelf {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: clamp(14px, 1.6vw, 22px);
+}
+.kit-piece {
+  display: grid;
+  gap: 0;
+  padding: 0;
+  text-align: left;
+  background: var(--shoal);
+  border: var(--hair) solid var(--edge);
+  border-radius: var(--r-soft);
+  overflow: hidden;
+  transition: border-color var(--t-fast) var(--ease-out), transform var(--t) var(--ease-out);
+}
+.kit-piece:hover {
+  border-color: var(--edge-lit);
+  transform: translateY(-2px);
+}
+/* CORE CHROME IS THE WHOLE GAME'S and a member's piece is added beside it. That
+   is a fact about who owns the thing, so it is a mark on the card. */
+.kit-piece.core {
+  border-color: color-mix(in srgb, var(--acc-tool) 34%, var(--edge));
+}
+
+/* the checker is what makes transparency read as transparency rather than as
+   black, and every piece of chrome in this game is drawn on transparency */
+/* ONE HEIGHT FOR EVERY CARD, and the picture is fitted inside it. Sized by
+   its own aspect ratio instead, a 448 square sat a hundred pixels taller than a
+   512 by 192 beside it, so no two cards on a row lined up and the shelf read as
+   a broken grid rather than as a shelf. */
+.kit-art {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 176px;
+  padding: 10px;
+  background-color: var(--depth);
+  background-image:
+    linear-gradient(45deg, var(--void) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--void) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--void) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--void) 75%);
+  background-size: 14px 14px;
+  background-position: 0 0, 0 7px, 7px -7px, -7px 0;
+  overflow: hidden;
+}
+.kit-art img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  image-rendering: pixelated;
+  display: block;
+}
+.kit-void {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  min-height: 96px;
+  font: 400 var(--fs-fine) var(--font-mono);
+  color: var(--ink-off);
+}
+.kit-void::after {
+  content: attr(data-say);
+}
+
+.kit-piece-say {
+  display: grid;
+  gap: 4px;
+  padding: 12px 14px 14px;
+}
+.kit-piece-name {
+  font-size: var(--fs-lead);
+  color: var(--ink);
+}
+.kit-piece-meta {
+  color: var(--ink-3);
+  font-size: var(--fs-micro);
+}
+.kit-piece-state {
+  display: flex;
+  gap: 10px;
+  margin-top: 2px;
+  font-size: var(--fs-micro);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+}
+.kit-owner {
+  color: var(--ink-off);
+}
+.kit-piece.core .kit-owner {
+  color: var(--acc-tool);
+}
+.kit-done {
+  color: var(--acc-live);
+}
+.kit-todo {
+  color: var(--ink-3);
+}
+
+/* ---- the twenty-one types -------------------------------------------------
+ *
+ * Shown as canvases rather than as a list of names, because both sides of a
+ * generation start at 192 and a season token is about 24 across, which is why
+ * six of these are sheets of faces. Nobody feels that from a number; they feel
+ * it from a 384 square sitting next to a 688 by 384.
+ */
+
+.kit-types {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(186px, 1fr));
+  gap: clamp(12px, 1.4vw, 18px);
+}
+.kit-type {
+  display: grid;
+  justify-items: start;
+  gap: 3px;
+  padding: 14px 14px 13px;
+  text-align: left;
+  background: none;
+  border: var(--hair) solid var(--line);
+  border-radius: var(--r-soft);
+  transition: border-color var(--t-fast) var(--ease-out), background-color var(--t-fast) var(--ease-out);
+}
+.kit-type:hover {
+  border-color: var(--edge-lit);
+  background: var(--shoal);
+}
+.kit-type-pic {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 146px;
+  margin-bottom: 8px;
+}
+.kit-type-name {
+  font-size: var(--fs-body);
+  color: var(--ink);
+}
+.kit-type-size {
+  font-size: var(--fs-micro);
+  color: var(--ink-3);
+}
+/* a type this account already has a piece of. Green, because this is the tool
+   reporting a state rather than pointing at anything. */
+.kit-type.owned .kit-type-name::after {
+  content: '';
+  display: inline-block;
+  width: 5px;
+  height: 5px;
+  margin-left: 7px;
+  border-radius: var(--r-round);
+  background: var(--acc-live);
+  vertical-align: middle;
+}
+/* THE TWO NAMED SO NOBODY GENERATES THEM. A sign is world art at map scale out
+   of the asset stage and a row is typography, so both come back a picture that
+   cannot do the job. They are on the shelf precisely so the spend is not made. */
+.kit-type.refused {
+  cursor: var(--cur-do);
+  opacity: 0.62;
+}
+.kit-type.refused .kit-type-name {
+  color: var(--ink-3);
+}
+.kit-nope {
+  font: 400 var(--fs-fine) var(--font-mono);
+  color: var(--ink-off);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+}
+
+/* the canvas itself: an empty rectangle at true relative size, with a mark
+   saying which way it grows */
+.kit-canvaspic {
+  position: relative;
+  display: block;
+  border: var(--hair) solid var(--edge-ctl);
+  border-radius: var(--r-tight);
+  background: var(--depth);
+}
+.kit-canvaspic[data-stretch='both']::after,
+.kit-canvaspic[data-stretch='x']::after,
+.kit-canvaspic[data-stretch='y']::after {
+  content: '';
+  position: absolute;
+  inset: 22%;
+  border: var(--hair) dashed color-mix(in srgb, var(--acc-tool) 40%, transparent);
+  border-radius: var(--r-tight);
+}
+.kit-canvaspic[data-stretch='x']::after {
+  inset: 34% 22%;
+}
+.kit-canvaspic[data-stretch='y']::after {
+  inset: 22% 34%;
+}
+.kit-facegrid {
+  position: absolute;
+  inset: 5px;
+  display: grid;
+  gap: 3px;
+}
+.kit-facegrid i {
+  border: var(--hair) solid var(--line);
+  border-radius: 1px;
+}
+.kit-facegrid i.on {
+  border-color: color-mix(in srgb, var(--acc-tool) 45%, transparent);
+  background: color-mix(in srgb, var(--acc-tool) 10%, transparent);
+}
+
+/* ---- making a piece ------------------------------------------------------- */
+
+.kit-make {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 420px);
+  gap: clamp(28px, 5vw, 76px);
+  padding-top: clamp(18px, 4vh, 44px);
+  align-items: start;
+}
+@media (max-width: 900px) {
+  .kit-make {
+    grid-template-columns: 1fr;
+  }
+}
+.kit-make-say {
+  max-width: 640px;
+}
+.kit-make-say h1 {
+  margin: 8px 0 14px;
+  color: var(--ink);
+}
+
+/* a press that cannot be made yet still has to read as a press. The engraved
+   plate keeps its shape and loses its gold, rather than going half-opaque,
+   because an opacity fade takes the notched corners with it. */
+.kit .plate:disabled {
+  --plate-ink: var(--ink-off);
+  border-color: var(--line);
+}
+.kit .plate:disabled::before {
+  display: none;
+}
+.kit-what {
+  margin: 0 0 14px;
+  max-width: 52ch;
+  font-size: var(--fs-read);
+  line-height: var(--lh-read);
+  color: var(--ink);
+}
+.kit-whyline {
+  margin: 0 0 14px;
+  max-width: 62ch;
+  font-size: var(--fs-body);
+  line-height: var(--lh-read);
+  color: var(--ink-2);
+}
+/* the one thing to be careful of, in the tool's own voice */
+.kit-care {
+  margin: 0;
+  max-width: 62ch;
+  padding-left: 14px;
+  border-left: 2px solid var(--acc-tool-deep);
+  font-size: var(--fs-body);
+  line-height: var(--lh-read);
+  color: var(--acc-tool);
+}
+
+.kit-canvasbig {
+  display: flex;
+  align-items: flex-end;
+  gap: clamp(18px, 3vw, 34px);
+  margin-top: clamp(26px, 5vh, 48px);
+  flex-wrap: wrap;
+}
+.kit-canvasfacts {
+  display: grid;
+  gap: 7px;
+  max-width: 34ch;
+  padding-bottom: 4px;
+  font-size: var(--fs-small);
+  line-height: var(--lh);
+  color: var(--ink-2);
+}
+.kit-canvasfacts .mono {
+  font-size: var(--fs-lead);
+  color: var(--ink);
+}
+.kit-willmark {
+  color: var(--ink-3);
+}
+
+/* ---- the form ------------------------------------------------------------- */
+
+.kit-form {
+  display: grid;
+  gap: 22px;
+}
+.kit-field {
+  display: grid;
+  gap: 7px;
+}
+.kit-field > .label {
+  color: var(--ink-3);
+}
+.kit-in {
+  width: 100%;
+  padding: 9px 11px;
+  font: 400 var(--fs-body) var(--font-label);
+  color: var(--ink);
+  background: var(--depth);
+  border: var(--hair) solid var(--edge-ctl);
+  border-radius: var(--r);
+  outline: none;
+  transition: border-color var(--t-fast) var(--ease-out);
+}
+.kit-in:hover {
+  border-color: var(--edge-lit);
+}
+.kit-in:focus {
+  border-color: var(--acc-tool);
+}
+.kit-in.mono {
+  font-family: var(--font-mono);
+  font-size: var(--fs-small);
+}
+.kit-in.tiny {
+  width: auto;
+  padding: 3px 6px;
+  font-size: var(--fs-micro);
+}
+/* the arrow is drawn in the padding, so a select that gives the padding back
+   draws its arrow through its own last letter */
+select.kit-in.tiny {
+  padding-right: 20px;
+  background-position: right 9px top 56%, right 5px top 56%;
+  background-size: 4px 4px, 4px 4px;
+}
+.kit-area {
+  resize: vertical;
+  line-height: var(--lh);
+}
+select.kit-in {
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--ink-3) 50%),
+    linear-gradient(135deg, var(--ink-3) 50%, transparent 50%);
+  background-position: right 13px top 55%, right 8px top 55%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  padding-right: 28px;
+}
+.kit-hint {
+  font-size: var(--fs-fine);
+  line-height: var(--lh);
+  color: var(--ink-3);
+}
+
+.kit-seg {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: var(--hair) solid var(--edge-ctl);
+  border-radius: var(--r);
+}
+.kit-seg button {
+  padding: 5px 12px;
+  font: 400 var(--fs-small) var(--font-label);
+  color: var(--ink-3);
+  background: none;
+  border: 0;
+  border-radius: var(--r-tight);
+  transition: color var(--t-fast) var(--ease-out), background-color var(--t-fast) var(--ease-out);
+}
+.kit-seg.small button {
+  padding: 3px 9px;
+  font-size: var(--fs-fine);
+}
+.kit-seg button:hover {
+  color: var(--ink);
+}
+/* gold, because the selected thing is the tool saying which one you are on */
+.kit-seg button.on {
+  color: var(--acc-tool-ink);
+  background: var(--acc-tool);
+}
+
+.kit-acts {
+  display: grid;
+  gap: 12px;
+  justify-items: start;
+  padding-top: 4px;
+}
+/* WHAT COMES BACK, AND NOT WHAT IT COST. The old page put the price under the
+   button as the last thing an author read, which is why it read as a bill. */
+.kit-comeback {
+  font-size: var(--fs-fine);
+  color: var(--ink-3);
+}
+.kit-refused {
+  display: grid;
+  gap: 16px;
+  justify-items: start;
+  margin: 0;
+  max-width: 48ch;
+  font-size: var(--fs-body);
+  line-height: var(--lh-read);
+  color: var(--ink-2);
+}
+
+.kit-err {
+  margin: 0;
+  font-size: var(--fs-small);
+  line-height: var(--lh);
+  color: var(--acc-stop-lit);
+}
+.kit-warn {
+  margin: 0;
+  padding-left: 12px;
+  border-left: 2px solid var(--acc-tool-deep);
+  font-size: var(--fs-small);
+  line-height: var(--lh);
+  color: var(--ink-2);
+}
+
+.kit-quiet {
+  padding: 7px 14px;
+  font: 400 var(--fs-small) var(--font-label);
+  color: var(--ink-2);
+  background: none;
+  border: var(--hair) solid var(--edge-ctl);
+  border-radius: var(--r);
+  transition: color var(--t-fast) var(--ease-out), border-color var(--t-fast) var(--ease-out);
+}
+.kit-quiet:hover:not(:disabled) {
+  color: var(--ink);
+  border-color: var(--edge-lit);
+}
+.kit-quiet:disabled {
+  color: var(--ink-off);
+  border-color: var(--line);
+}
+.kit-do {
+  padding: 7px 14px;
+  font: 400 var(--fs-small) var(--font-label);
+  color: var(--acc-tool-ink);
+  background: var(--acc-tool);
+  border: var(--hair) solid var(--acc-tool);
+  border-radius: var(--r);
+}
+.kit-do:disabled {
+  color: var(--ink-off);
+  background: none;
+  border-color: var(--line);
+}
+.kit-stop {
+  padding: 7px 14px;
+  font: 400 var(--fs-small) var(--font-label);
+  color: var(--acc-stop-lit);
+  background: none;
+  border: var(--hair) solid var(--acc-stop-edge);
+  border-radius: var(--r);
+}
+.kit-stop:hover {
+  background: var(--acc-stop);
+  color: var(--ink);
+}
+
+/* ---- marking a piece ------------------------------------------------------ */
+
+.kit-mark {
+  padding-top: clamp(14px, 3vh, 30px);
+}
+.kit-mark-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 22px;
+  flex-wrap: wrap;
+  padding-bottom: clamp(16px, 3vh, 28px);
+}
+.kit-mark-head h1 {
+  margin: 0 0 5px;
+  color: var(--ink);
+}
+.kit-mark-meta {
+  margin: 0;
+  font-size: var(--fs-micro);
+  color: var(--ink-3);
+}
+.kit-mark-acts {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.kit-mark-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 400px);
+  gap: clamp(22px, 3vw, 46px);
+  align-items: start;
+}
+@media (max-width: 1080px) {
+  .kit-mark-body {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* THE ART IS THE PAGE. Everything else is a rail beside it, and the column
+   sticks so the picture stays on screen while the rail is worked down. */
+.kit-stagecol {
+  position: sticky;
+  top: 18px;
+  display: grid;
+  gap: 18px;
+  align-content: start;
+}
+.kit-stage {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 260px;
+  padding: 14px;
+  background-color: var(--depth);
+  background-image:
+    linear-gradient(45deg, var(--void) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--void) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--void) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--void) 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+  border: var(--hair) solid var(--edge);
+  border-radius: var(--r-soft);
+  overflow: hidden;
+}
+.kit-artwrap {
+  position: relative;
+  touch-action: none;
+  user-select: none;
+}
+.kit-artwrap[data-mode='marks'] {
+  cursor: var(--cur-draw);
+}
+.kit-artimg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  pointer-events: none;
+  display: block;
+}
+/* A PIECE THAT IS NOT DRAWN YET STILL TAKES ITS MARKS, over a frame of the
+   right size, so the marking can happen before the art exists. */
+.kit-artvoid {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  text-align: center;
+  border: var(--hair) dashed var(--edge-ctl);
+  font: 400 var(--fs-fine) var(--font-mono);
+  color: var(--ink-off);
+  pointer-events: none;
+}
+
+/* the nine, shading as the four lines move. The corners never scale, the edges
+   repeat along one axis, and the middle is the paper. */
+.kit-nine {
+  position: absolute;
+  pointer-events: none;
+}
+.kit-nine[data-part='corner'] {
+  background: color-mix(in srgb, var(--acc-tool) 22%, transparent);
+}
+.kit-nine[data-part='edge'] {
+  background: color-mix(in srgb, var(--acc-tool) 9%, transparent);
+}
+/* the middle is the only one of the nine that has to stay readable, because it
+   is where the drawn paper is and a heavy veil over it hides the very thing the
+   edges are being measured against */
+.kit-nine[data-part='mid'] {
+  background: color-mix(in srgb, var(--void) 18%, transparent);
+}
+.kit-guide {
+  position: absolute;
+  background: var(--acc-tool);
+  pointer-events: none;
+}
+.kit-guide.h {
+  left: 0;
+  right: 0;
+  height: 1px;
+}
+.kit-guide.v {
+  top: 0;
+  bottom: 0;
+  width: 1px;
+}
+
+/* the four things the hand actually grabs. Wider than the line they carry,
+   because a one pixel target is not a target. */
+.kit-grip {
+  position: absolute;
+  display: grid;
+  place-items: center;
+}
+.kit-grip.h {
+  left: 0;
+  right: 0;
+  height: 15px;
+  transform: translateY(-50%);
+  cursor: ns-resize;
+}
+.kit-grip.v {
+  top: 0;
+  bottom: 0;
+  width: 15px;
+  transform: translateX(-50%);
+  cursor: ew-resize;
+}
+.kit-grip i {
+  padding: 1px 5px;
+  font-size: var(--fs-micro);
+  font-style: normal;
+  color: var(--acc-tool-ink);
+  background: var(--acc-tool);
+  border-radius: var(--r-tight);
+  opacity: 0.85;
+  pointer-events: none;
+}
+.kit-grip:hover i {
+  opacity: 1;
+  background: var(--acc-tool-lit);
+}
+.kit-grip.h i {
+  margin-left: auto;
+  margin-right: 6px;
+}
+.kit-grip.v i {
+  margin-top: 6px;
+  margin-bottom: auto;
+}
+
+/* a marked rectangle. One colour for every kind except the two that are not
+   drawn things: a face is a CUT, so it wears the cut layer's own magenta, and a
+   press is a hit area rather than a picture, so it is dashed. */
+/* A MARK HAS TO BE VISIBLE ON ANY PAINTING, and a one pixel salmon line on a
+   brown plaque is not. Every rectangle carries a dark halo outside it and a
+   dark line inside it, so the hue only has to beat the halo rather than beat
+   whatever art happens to be under it. */
+.kit-rect {
+  position: absolute;
+  border: var(--hair) solid var(--acc-mark);
+  background: color-mix(in srgb, var(--acc-mark) 12%, transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--void) 78%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--void) 55%, transparent);
+  cursor: var(--cur-grab);
+}
+.kit-rect[data-kind='face'] {
+  border-color: var(--mask-cut);
+  background: color-mix(in srgb, var(--mask-cut) 12%, transparent);
+}
+.kit-rect[data-kind='press'] {
+  border-style: dashed;
+  border-color: var(--mask-occ);
+  background: none;
+}
+.kit-rect[data-kind='fill'] {
+  border-color: var(--acc-live);
+  background: color-mix(in srgb, var(--acc-live) 12%, transparent);
+}
+.kit-rect.on {
+  border-color: var(--acc-tool);
+  background: color-mix(in srgb, var(--acc-tool) 16%, transparent);
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--void) 78%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--void) 55%, transparent);
+}
+.kit-rect.draft {
+  border-style: dashed;
+  border-color: var(--acc-tool);
+  background: color-mix(in srgb, var(--acc-tool) 12%, transparent);
+  pointer-events: none;
+}
+.kit-rect-name {
+  position: absolute;
+  left: 0;
+  bottom: 100%;
+  padding: 0 4px;
+  font-size: var(--fs-micro);
+  font-style: normal;
+  color: var(--void);
+  background: var(--acc-mark);
+  white-space: nowrap;
+  pointer-events: none;
+}
+.kit-rect.on .kit-rect-name {
+  background: var(--acc-tool);
+}
+.kit-rect[data-kind='face'] .kit-rect-name {
+  background: var(--mask-cut);
+}
+.kit-rect[data-kind='press'] .kit-rect-name {
+  background: var(--mask-occ);
+}
+.kit-rect-grip {
+  position: absolute;
+  right: -5px;
+  bottom: -5px;
+  width: 11px;
+  height: 11px;
+  background: var(--ink);
+  border-radius: var(--r-tight);
+  cursor: nwse-resize;
+}
+
+/* naming a rectangle that has just been dragged. It is not a region until it
+   has a name, because the name is the address a grape holds and `region_3` is a
+   promise nobody made. */
+.kit-naming {
+  position: absolute;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  display: grid;
+  gap: 10px;
+  width: min(360px, 90%);
+  padding: 16px 18px;
+  background: var(--shoal);
+  border: var(--hair) solid var(--acc-tool);
+  border-radius: var(--r-soft);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.5);
+}
+.kit-naming-acts {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.kit-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.kit-chips button {
+  padding: 3px 9px;
+  font: 400 var(--fs-fine) var(--font-mono);
+  color: var(--ink-3);
+  background: none;
+  border: var(--hair) solid var(--line);
+  border-radius: var(--r-round);
+  transition: color var(--t-fast) var(--ease-out), border-color var(--t-fast) var(--ease-out);
+}
+.kit-chips button:hover {
+  color: var(--ink);
+  border-color: var(--edge-ctl);
+}
+.kit-chips button.on {
+  color: var(--acc-tool-ink);
+  background: var(--acc-tool);
+  border-color: var(--acc-tool);
+}
+.kit-chips.add {
+  margin-bottom: 14px;
+}
+.kit-chips.add button {
+  font-family: var(--font-label);
+  font-size: var(--fs-small);
+}
+/* a mark the type says it normally carries and does not read right without */
+.kit-chips.add button i {
+  display: inline-block;
+  width: 4px;
+  height: 4px;
+  margin-left: 6px;
+  border-radius: var(--r-round);
+  background: var(--acc-tool);
+  vertical-align: middle;
+}
+
+/* ---- the rail beside the art ---------------------------------------------- */
+
+.kit-rail {
+  display: grid;
+  gap: clamp(22px, 3.5vh, 38px);
+  align-content: start;
+}
+.kit-rail section {
+  display: grid;
+  gap: 12px;
+  justify-items: start;
+}
+.kit-rail section > h2 {
+  margin: 0;
+}
+.kit-rail section > .kit-why {
+  margin: -6px 0 0;
+}
+
+/* THE SLICE, WORKING. Three aspect ratios, because one preview at one size
+   cannot show a corner deforming, and a deformed corner is the entire failure
+   this library exists to end. */
+.kit-prevwrap {
+  display: grid;
+  gap: 10px;
+}
+.kit-prevwrap > .label {
+  color: var(--ink-3);
+}
+.kit-prev {
+  display: flex;
+  align-items: flex-end;
+  gap: 22px;
+  flex-wrap: wrap;
+  width: 100%;
+  padding: 20px;
+  background: var(--depth);
+  border: var(--hair) solid var(--line);
+  border-radius: var(--r-soft);
+}
+.kit-prev-one {
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+}
+.kit-prev-one .mono {
+  font-size: var(--fs-micro);
+  color: var(--ink-3);
+}
+.kit-prev-box {
+  border-radius: var(--r-tight);
+  background: color-mix(in srgb, var(--void) 60%, transparent);
+}
+
+.kit-nums {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  width: 100%;
+}
+.kit-nums label {
+  display: grid;
+  gap: 4px;
+}
+.kit-nums .label {
+  color: var(--ink-3);
+}
+.kit-nums input {
+  padding: 6px 8px;
+}
+/* the browser's own steppers are two grey chevrons in a box and they are the
+   one control on this page nobody chose */
+.kit-nums input::-webkit-outer-spin-button,
+.kit-nums input::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
+}
+.kit-nums input {
+  -moz-appearance: textfield;
+}
+
+.kit-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  width: 100%;
+}
+.kit-line .label {
+  color: var(--ink-3);
+}
+.kit-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  border: var(--hair) solid var(--edge-ctl);
+  border-radius: var(--r);
+}
+.kit-step button {
+  width: 24px;
+  height: 24px;
+  color: var(--ink-3);
+  background: none;
+  border: 0;
+  font-size: var(--fs-body);
+  line-height: 1;
+}
+.kit-step button:hover {
+  color: var(--ink);
+}
+.kit-step b {
+  min-width: 20px;
+  text-align: center;
+  font-weight: 400;
+  font-size: var(--fs-small);
+  color: var(--ink);
+}
+
+.kit-regions {
+  list-style: none;
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+}
+.kit-region {
+  display: grid;
+  gap: 6px;
+  padding: 9px 11px;
+  background: var(--shoal);
+  border: var(--hair) solid transparent;
+  border-left: 2px solid var(--acc-mark);
+  border-radius: var(--r);
+}
+.kit-region[data-kind='face'] {
+  border-left-color: var(--mask-cut);
+}
+.kit-region[data-kind='press'] {
+  border-left-color: var(--mask-occ);
+}
+.kit-region[data-kind='fill'] {
+  border-left-color: var(--acc-live);
+}
+.kit-region.on {
+  border-color: var(--acc-tool);
+  border-left-color: var(--acc-tool);
+}
+.kit-region-top {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 0;
+  background: none;
+  border: 0;
+  text-align: left;
+}
+.kit-region-name {
+  font-size: var(--fs-body);
+  color: var(--ink);
+}
+/* the identifier beside the words, because the words are for a person and the
+   identifier is what a member's python actually holds */
+.kit-region-id {
+  font-size: var(--fs-micro);
+  color: var(--ink-3);
+}
+.kit-region-body {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.kit-region-rect {
+  margin-left: auto;
+  font-size: var(--fs-micro);
+  color: var(--ink-off);
+}
+.kit-region-x {
+  width: 20px;
+  height: 20px;
+  color: var(--ink-off);
+  background: none;
+  border: 0;
+  font-size: var(--fs-body);
+  line-height: 1;
+}
+.kit-region-x:hover {
+  color: var(--acc-stop-lit);
+}
+
+.kit-save {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.kit-css {
+  width: 100%;
+  margin: 0;
+  padding: 14px 16px;
+  overflow-x: auto;
+  font-size: var(--fs-micro);
+  line-height: 1.7;
+  color: var(--acc-live);
+  background: var(--depth);
+  border: var(--hair) solid var(--line);
+  border-radius: var(--r);
+}
+
+.kit-scrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding-top: 8px;
+}

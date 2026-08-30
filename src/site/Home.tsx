@@ -395,6 +395,12 @@ export default function Home() {
           <Link to="/surfaces" className="home-icon" aria-label="ui surfaces" title="ui surfaces">
             <Icon name="surface" />
           </Link>
+          {/* the shelf of drawn pieces the interface is made of: panels,
+              plaques, buttons and marks. One kit for the whole game, so it
+              belongs to no single map either. */}
+          <Link to="/kit" className="home-icon" aria-label="the ui library" title="the ui library">
+            <KitIcon />
+          </Link>
           <input
             className="home-find"
             value={q}
@@ -1222,6 +1228,30 @@ function Trash() {
         fill="currentColor"
         d="M6 1h4v1H6zM3 3h10v1H3zM4 5h1v9H4zM11 5h1v9h-1zM5 14h6v1H5zM6 6h1v7H6zM9 6h1v7H9z"
       />
+    </svg>
+  )
+}
+
+/* THE UI LIBRARY: pieces of three different shapes on one shelf. Deliberately
+ * not the nine-slice mark, which the link two along already wears: a nine-slice
+ * is one thing in the library and this link is the whole set. Stroked rather
+ * than filled, to sit beside the ocean and the surface marks. */
+function KitIcon() {
+  return (
+    <svg
+      viewBox="0 0 16 16"
+      width="16"
+      height="16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.3"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <rect x="2.2" y="2.8" width="5.4" height="4.4" rx="0.8" />
+      <rect x="9.2" y="2.8" width="4.6" height="4.4" rx="0.8" />
+      <rect x="2.2" y="9.2" width="11.6" height="3.8" rx="0.8" />
     </svg>
   )
 }
