@@ -15,6 +15,40 @@
  * no block of running text on the screen, on purpose.
  */
 
+/* ---- the few metrics this page needs and the editor does not ---------------
+ *
+ * Scoped under .uikit, which /ui puts beside .app. Both pages are one .app, so
+ * an unscoped rule here would follow a reader from /ui to /edit and stay for
+ * the rest of the session: ui.css is loaded once and never unloaded. Metrics
+ * only. A colour under this selector would be the second look this whole file
+ * is written to prevent. */
+
+/* A BUTTON THAT WILL NOT FIT THREE ACROSS TAKES ITS OWN LINE.
+   .abtn is flex 1 1 76px so three sit in the editor's 272 px rail, and "call it
+   measured" is the widest label on this page: it wrapped to two lines and stood
+   a row taller than the two beside it. Basis 100% wraps the rest under it
+   instead of squeezing all three. */
+.uikit .abtn.own-line {
+  flex: 1 1 100%;
+}
+
+/* the move that fills an empty panel, under the fact that it is empty. Same
+   pairing .nothing makes on the ocean: what is missing, then what press fixes
+   it, the second one quieter than the first. */
+.uikit .ui-empty-do {
+  color: var(--ink-off);
+  /* 30ch of a narrow face is about 170 px, which broke "the art" onto a fourth
+     line inside a rail 215 px wide. The panel's own padding is the measure. */
+  max-width: none;
+}
+.uikit .panel-empty {
+  gap: 4px;
+  padding: 26px var(--pan-in);
+}
+.uikit .panel-empty p:first-of-type {
+  color: var(--ink-2);
+}
+
 /* ---- one gallery, one card ------------------------------------------------
  *
  * Two grids of pickable things live on this page: what the account has drawn,
@@ -122,6 +156,48 @@
   font-size: var(--fs-micro);
   color: var(--ink-3);
 }
+/* HOW FAR ALONG THE PIECE IS, ON THE CARD AND ON THE RAIL ROW.
+   Below the name rather than beside it, because it is a sentence and the meta
+   line beside the name is a measurement. Quiet by default: on a finished shelf
+   the ordinary case is "measured", and a shelf that shouts about every piece
+   being fine is a shelf nobody reads. */
+.ui-made {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 2px;
+  font: 400 var(--fs-fine) var(--font-label);
+  color: var(--ink-3);
+}
+.ui-made i {
+  flex: none;
+  width: 5px;
+  height: 5px;
+  border-radius: var(--r-round);
+  /* unmeasured is the DEFAULT state, so it gets a hollow dot rather than a
+     colour that reads as an alarm. A piece nobody has marked yet is normal. */
+  border: var(--hair) solid var(--ink-off);
+}
+.ui-made.done {
+  color: var(--ink-2);
+}
+.ui-made.done i {
+  background: var(--acc-live);
+  border-color: var(--acc-live);
+}
+.ui-made.part i {
+  background: var(--acc);
+  border-color: var(--acc);
+}
+.ui-made.bad {
+  color: var(--acc-stop-lit);
+}
+/* the rail row stacks its lines, so the state sits under them and takes the
+   row's own left edge rather than the card's inner padding */
+.row-tx .ui-made {
+  padding: 1px 0 0;
+}
+
 /* a spend that produced nothing, or one still in flight. The card stays either
    way, because a generation that vanished is worse than one that says so. */
 .ui-void {

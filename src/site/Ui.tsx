@@ -272,8 +272,13 @@ export default function Ui() {
     setStep('draw')
   }
 
+  /* THE WORDS AND NOT THE ADDRESS. This printed `dialogue_box · 688×384` at the
+   * top of the screen for a piece whose title is "Dialogue Box", which is the
+   * one rule src/core/naming.ts exists to stop being broken: a human reads a
+   * label, code reads a name. The type line beside it was already doing it
+   * right, so the same header said it both ways one gap apart. */
   const subject = piece && step === 'mark'
-    ? `${piece.name} · ${piece.w}×${piece.h}`
+    ? `${displayName({ name: piece.name, label: piece.title }).text} · ${piece.w}×${piece.h}`
     : type && step === 'draw'
       ? // 0×0 is what the record holds for a type nobody ever generates, and
         // printing it reads as a bug rather than as the rule it is
@@ -282,8 +287,17 @@ export default function Ui() {
         ? `${v.ui.length} drawn · ${types.length} types`
         : ''
 
+  /* `uikit` BESIDE `app`, AND IT IS A FENCE RATHER THAN A THEME.
+   *
+   * This page deliberately wears the editor's stylesheet: /ui was drawn twice
+   * as a landing page with its own greys, and the cure was for it to have no
+   * stylesheet of its own to invent a second look in. The cost is that the few
+   * places where /ui genuinely needs different metrics, because its rail holds
+   * three word buttons where the editor's holds one, have nowhere to say so
+   * without moving the editor too. This class is that somewhere, and every rule
+   * under it in ui.css is a metric and never a colour. */
   return (
-    <div className="app">
+    <div className="app uikit">
       <header>
         {/* the same wordmark, the same size and face as the editor's and the
             home page's. One product should not have three logos. */}
@@ -470,6 +484,10 @@ function Pieces({
                       {p.w}×{p.h}
                       {t ? ' · ' + displayName({ name: t.name, label: t.label }).text.toLowerCase() : ''}
                     </span>
+                    {/* the same sentence the card carries, because the rail is
+                        what somebody scans when they are looking for the piece
+                        that still needs work */}
+                    <Made p={p} />
                   </span>
                 </button>
               )
@@ -518,6 +536,14 @@ function Pieces({
                         {p.w}×{p.h}
                       </span>
                     </span>
+                    {/* HALF A PIECE LOOKS EXACTLY LIKE A WHOLE ONE, and that is
+                        the whole reason this line is here. A picture with no
+                        marks on it and no edges measured is a png the game
+                        cannot consume: nineteen call sites want to know where
+                        the text goes and how deep the frame runs, and none of
+                        that is visible in the art. The footer said "0 of 4
+                        measured" and no card said which nought it was. */}
+                    <Made p={p} />
                   </button>
                 )
               })}
@@ -526,6 +552,50 @@ function Pieces({
         )}
       </div>
     </>
+  )
+}
+
+/* HOW FAR ALONG A PIECE IS, IN ONE LINE, WHEREVER IT IS LISTED.
+ *
+ * docs/UI-KIT.md is explicit that a picture of a page is not a page: without
+ * the edges and the named rectangles, every drawn surface arrives with a second
+ * half typed by hand into game source. So a piece that has been generated and
+ * never marked is HALF DONE, and until now it looked identical on the shelf to
+ * one that was finished. The footer counted them, in aggregate, at the far
+ * bottom right of the screen.
+ *
+ * THREE STATES AND NOT TWO, because "not measured" hides the difference between
+ * a piece nobody has touched and one somebody is halfway through. The middle
+ * one is the one worth naming: it has marks and has not been called finished,
+ * which is a piece to go back to rather than a piece to start.
+ *
+ * A dot and a phrase, the same pairing the settings sheet uses for what does
+ * and does not work, so a state on this page and a state on that one are read
+ * the same way. */
+function Made({ p }: { p: Piece }) {
+  if (p.status === 'pending') return <span className="ui-made">drawing</span>
+  if (p.status === 'failed') return <span className="ui-made bad">nothing came back</span>
+  const n = p.regions?.length || 0
+  const edged = !!p.slice && !!(p.slice.top || p.slice.right || p.slice.bottom || p.slice.left)
+  if (p.published)
+    return (
+      <span className="ui-made done">
+        <i />
+        measured · {n} mark{n === 1 ? '' : 's'}
+      </span>
+    )
+  if (n || edged)
+    return (
+      <span className="ui-made part">
+        <i />
+        {n ? `${n} mark${n === 1 ? '' : 's'}` : 'edges set'}, not called measured
+      </span>
+    )
+  return (
+    <span className="ui-made">
+      <i />
+      no marks yet, so the game cannot use it
+    </span>
   )
 }
 
@@ -1555,8 +1625,15 @@ function Marking({
         ) : null}
 
         {regions.length === 0 ? (
+          /* TWO LINES, AND THE SECOND ONE IS THE MOVE.
+             One sentence carrying a fact and a definition wrapped to three
+             ragged centred lines and told nobody what to do next. Everywhere
+             else in this product an empty panel says what is missing and then
+             what press fills it, which is the shape `.nothing` was written for
+             out on the ocean. The buttons that fill it are directly above. */
           <div className="panel-empty">
-            <p>nothing marked yet, and a mark is the address a member&rsquo;s python holds</p>
+            <p>nothing marked yet</p>
+            <p className="ui-empty-do">add one above, then drag it over the art</p>
           </div>
         ) : (
           regions.map((r, i) => {
@@ -1746,8 +1823,13 @@ function Marking({
           {busy ? 'saving…' : 'save the marks'}
         </button>
         <div className="actrow">
+          {/* ITS OWN LINE. Three buttons sharing a 272 px rail gave each of them
+              76 px, and "call it measured" is the widest label on the page, so
+              it wrapped to two lines and stood a row taller than the two beside
+              it. It is also not the same kind of act as the other two: it says
+              the measurement is finished, where they redraw and destroy. */}
           <button
-            className="abtn"
+            className="abtn own-line"
             disabled={busy || dirty || piece.published}
             data-tip="says the measurement was made and survives its own check, which is a different fact from the picture having arrived"
             onClick={() => void publish()}

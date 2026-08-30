@@ -25,20 +25,30 @@ import {
   setUiImage,
   getUiByName,
   ownedUiImage,
+  ownedUiFull,
+  uncropUi,
+  cropHero,
+  cropsToHero,
   removeUi,
   publishUi,
   readyUi,
+  sliceCss,
   pieceType,
   chromeRef,
   legalCanvas,
   PIECE_TYPES,
 } from '../store/ui.mjs'
 import { uiAsset, uiAssetBody, UI_ELEMENTS } from '../pixellab.mjs'
-import { encodePNG } from '../sheet.mjs'
+import { encodePNG, decodePNG } from '../sheet.mjs'
 import { api, chromePrompt, chromePlan, chromeStyle, chromeFinal } from '../api.mjs'
 import { NoPlanner } from '../store/planner.mjs'
+import { openSession } from '../store/auth.mjs'
 import { q, one, closeDb } from './pool.mjs'
 import http from 'node:http'
+import fs from 'node:fs'
+import path from 'node:path'
+import crypto from 'node:crypto'
+import { fileURLToPath } from 'node:url'
 
 let bad = 0
 const ok = (m) => console.log(`  ok    ${m}`)
@@ -1820,10 +1830,52 @@ try {
   const SHEET = 'zz_verify_sheet'
   const CORE = 'zz_verify_core'
   for (const n of [GROUND, SHEET, CORE]) await removeUi(owner.id, n, { core: true })
-  /* snapshotted OUTSIDE the try, because the finally puts it back and a const
+  /* EVERY COLUMN AND BOTH PICTURES, NOT THE FOUR FIELDS THAT USED TO BE ENOUGH.
+   *
+   * The snapshot was `getUiByName` plus the hero bytes, and the restore was
+   * createUi plus setUiImage. That was already only most of a restore, and 023
+   * made it less: setUiImage with no crop clears full_key, clears crop, clears
+   * crop_note AND DELETES THE FAMILY FROM OBJECT STORAGE, so a verify run would
+   * have thrown away the picture Ash's dialogue box was cut out of and left the
+   * undo pointing at nothing. This is the same lesson the block below already
+   * records, one layer down: a test tidying up by a name it does not own has to
+   * put back everything it found, not the parts it happens to know about.
+   *
+   * Snapshotted OUTSIDE the try, because the finally puts it back and a const
    * declared in the try body is not in scope there. */
-  const realDlg = await getUiByName(owner.id, 'dialogue_box').catch(() => null)
-  const realDlgArt = realDlg ? await ownedUiImage(owner.id, 'dialogue_box').catch(() => null) : null
+  const snapUi = async (name) => {
+    const row = await one('select * from ui_assets where owner_id = $1 and name = $2', [owner.id, name])
+    if (!row) return null
+    const img = row.blob_key ? await store().get(row.blob_key).catch(() => null) : null
+    const full = row.full_key ? await store().get(row.full_key).catch(() => null) : null
+    return { row, img, full }
+  }
+  const putUiBack = async (snap) => {
+    if (!snap) return
+    const { row, img, full } = snap
+    if (img && row.blob_key) await store().put(row.blob_key, img, 'image/png')
+    if (full && row.full_key) await store().put(row.full_key, full, 'image/png')
+    await q(
+      `insert into ui_assets
+         (owner_id, name, type, title, description, w, h, blob_key, pixellab_id, regions, slices,
+          status, core, published, published_at, full_key, crop, crop_note, img_sha)
+       values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10::jsonb,$11::jsonb,$12,$13,$14,$15,$16,$17::jsonb,$18,$19)
+       on conflict (owner_id, name) do update set
+         type = excluded.type, title = excluded.title, description = excluded.description,
+         w = excluded.w, h = excluded.h, blob_key = excluded.blob_key,
+         pixellab_id = excluded.pixellab_id, regions = excluded.regions, slices = excluded.slices,
+         status = excluded.status, core = excluded.core, published = excluded.published,
+         published_at = excluded.published_at, full_key = excluded.full_key,
+         crop = excluded.crop, crop_note = excluded.crop_note, img_sha = excluded.img_sha`,
+      [
+        owner.id, row.name, row.type, row.title, row.description, row.w, row.h, row.blob_key,
+        row.pixellab_id, JSON.stringify(row.regions || []), JSON.stringify(row.slices || {}),
+        row.status, row.core, row.published, row.published_at, row.full_key,
+        JSON.stringify(row.crop || {}), row.crop_note, row.img_sha,
+      ],
+    )
+  }
+  const realDlgSnap = await snapUi('dialogue_box')
   try {
     /* A GROUND ROUND-TRIPS WITH ITS SLICES. The unit is SOURCE pixels because
      * that is the only thing CSS border-image and Pixi NineSliceSprite agree
@@ -1880,8 +1932,13 @@ try {
      * nothing anywhere defining it, so the whole border-image was invalid at
      * computed-value time and dropped to none, and the export gave a consumer no
      * way to discover which token it was supposed to mean. */
-    back?.css.includes("var(--kit-art-zz_verify_ground, url('/api/v1/ui/zz_verify_ground/image'))")
-      ? ok('and it falls back to the piece own bytes, so an undefined token is not a blank panel')
+    /* THE URL CARRIES THE CONTENT HASH. That route answers `immutable` for a
+     * year, and the note on it used to say the way to force a redraw through
+     * was to rename the piece. Renaming a piece to make new art appear is not a
+     * workaround, it is a broken address, so the sha of the bytes is in the url
+     * and a changed picture is a changed one. */
+    back?.css.includes(`var(--kit-art-zz_verify_ground, url('/api/v1/ui/zz_verify_ground/image?v=${(back.sha || '').slice(0, 12)}'))`) && !!back?.sha
+      ? ok('and it falls back to the piece own bytes at a versioned url, so an undefined token is not a blank panel')
       : no('the border image still depends on a token nothing defines')
 
     /* THE CONSTRAINT THAT BREAKS SILENTLY. If the top and bottom insets do not
@@ -2017,19 +2074,20 @@ try {
     !dlg.css.includes('--kit-slice-dialogue_box')
       ? ok('the core dialogue box emits the handle the game mounts and not the kit name')
       : no(`the css still names dialogue_box, which the game has no class or token for: ${dlg.css.split('\n')[5] || ''}`)
-    /* put the author's piece back, art and all. A row that existed before this
-     * file started must exist after it stops. */
-    if (realDlg && realDlgArt) {
-      await createUi({
-        ownerId: owner.id, name: 'dialogue_box', type: realDlg.type || 'dialogue_box',
-        title: realDlg.title || '', description: realDlg.description || '',
-        w: realDlg.w, h: realDlg.h, core: true,
-      })
-      await setUiImage(owner.id, 'dialogue_box', realDlgArt, realDlg.w, realDlg.h)
+    /* put the author's piece back, every column and both pictures. A row that
+     * existed before this file started must exist after it stops, and it must
+     * still be cut the way it was cut. */
+    if (realDlgSnap) {
+      await putUiBack(realDlgSnap)
       const kept = await getUiByName(owner.id, 'dialogue_box').catch(() => null)
       kept && kept.status === 'ready'
         ? ok('a piece the author drew survives a verifier run')
         : no("the verifier ate the author's dialogue box again")
+      const family = realDlgSnap.row.full_key ? await ownedUiFull(owner.id, 'dialogue_box') : null
+      if (realDlgSnap.full)
+        family && family.equals(realDlgSnap.full)
+          ? ok('and so does the family it was cut out of, which is the rest of the kit')
+          : no('the verifier threw away the picture the dialogue box was cut out of')
     } else {
       await removeUi(owner.id, 'dialogue_box', { core: true })
     }
@@ -2074,18 +2132,11 @@ try {
      * Ash drew, and this line deleted it on every run: the library came back
      * holding one row and the art only survived because a copy sat on disk.
      * Restored from the snapshot taken before the block, or removed only if
-     * there was nothing there to begin with. */
-    if (realDlg && realDlgArt) {
-      await removeUi(owner.id, 'dialogue_box', { core: true }).catch(() => {})
-      await createUi({
-        ownerId: owner.id, name: 'dialogue_box', type: realDlg.type || 'dialogue_box',
-        title: realDlg.title || '', description: realDlg.description || '',
-        w: realDlg.w, h: realDlg.h, core: true,
-      })
-      await setUiImage(owner.id, 'dialogue_box', realDlgArt, realDlg.w, realDlg.h)
-    } else {
-      await removeUi(owner.id, 'dialogue_box', { core: true })
-    }
+     * there was nothing there to begin with. removeUi is NOT called first any
+     * more: it deletes both blobs, and the family is one of the things being
+     * put back. The upsert covers every column on its own. */
+    if (realDlgSnap) await putUiBack(realDlgSnap)
+    else await removeUi(owner.id, 'dialogue_box', { core: true })
   }
 
   /* CORE WINS THE TIE ON EVERY ROUTE, AND THE LIST ROUTE WAS THE ONE THAT LOST IT.
@@ -2149,6 +2200,400 @@ try {
     await removeUi(owner.id, TWIN, { core: true })
     await removeUi(other.id, TWIN, { core: true })
     await q('delete from users where id = $1', [other.id])
+  }
+
+  /* ---- 6b. the hero, cut out of the family, by arithmetic ------------------
+   *
+   * PixelLab answers a ground piece with a FAMILY: the hero at the top and a
+   * tray of matching buttons, chips and rules under it. The slice record is
+   * `{src, w, h, slice, scale, fill, repeat}` and the four numbers are insets
+   * from the edges of the WHOLE image, with no source rect anywhere in the
+   * shape, because neither CSS border-image-slice nor Pixi NineSliceSprite has
+   * one. So with a family in one png the four numbers point at the tray and the
+   * piece cannot be sliced at all. That was the blocker under the whole kit.
+   *
+   * Ash's condition on the fix, and the reason for every refusal below: "if its
+   * AI or something just guessing, cropping can have problems". So this is a
+   * scan of the alpha channel and arithmetic on what it finds, and it refuses
+   * rather than guesses. These checks are the fence on the refusals.
+   *
+   * The pictures are built by this file out of flat rectangles, so the answers
+   * are known in advance and nothing here costs a generation. */
+  const familyPNG = (w, h, boxes) => {
+    // transparent everywhere it is not drawn, which is what the scan reads
+    const rgba = Buffer.alloc(w * h * 4)
+    for (const [bx, by, bw, bh, r, g, b] of boxes)
+      for (let y = by; y < by + bh; y++)
+        for (let x = bx; x < bx + bw; x++) {
+          const i = (y * w + x) * 4
+          rgba[i] = r
+          rgba[i + 1] = g
+          rgba[i + 2] = b
+          rgba[i + 3] = 255
+        }
+    return encodePNG(w, h, rgba)
+  }
+  // a rectangle drawn as an outline, so something can sit inside its box
+  // without touching its pixels, which is the highlight edge's real shape
+  const ringBoxes = (x, y, w, h, t, c) => [
+    [x, y, w, t, ...c],
+    [x, y + h - t, w, t, ...c],
+    [x, y, t, h, ...c],
+    [x + w - t, y, t, h, ...c],
+  ]
+
+  const dlgType = pieceType('dialogue_box')
+  {
+    /* THE ORDINARY CASE. A hero of 520x180 at 60,20 on a 688x384 canvas is 35%
+     * of it, and three tray buttons sit well below with nothing overlapping. */
+    const good = familyPNG(688, 384, [
+      [60, 20, 520, 180, 120, 90, 60],
+      [60, 260, 150, 40, 120, 90, 60],
+      [240, 260, 150, 40, 120, 90, 60],
+      [420, 260, 150, 40, 120, 90, 60],
+    ])
+    const cut = cropHero(good, dlgType)
+    eq('the scan finds the hero and every tray piece beside it', cut.regions, 4)
+    eq('and cuts the hero out at the pixel', cut.box, { x: 60, y: 20, w: 520, h: 180 })
+    const back = decodePNG(cut.png)
+    eq('the bytes it hands over really are that size', [back.w, back.h], [520, 180])
+    /* AND THE CUT IS THE PIECE AND NOT A WINDOW ONTO IT. Every corner of the
+     * returned picture has to be the hero's own paint, or the box was off by
+     * enough to carry canvas. */
+    const corner = (x, y) => [back.data[(y * back.w + x) * 4], back.data[(y * back.w + x) * 4 + 3]]
+    JSON.stringify([corner(0, 0), corner(519, 0), corner(0, 179), corner(519, 179)]) === JSON.stringify([[120, 255], [120, 255], [120, 255], [120, 255]])
+      ? ok('all four corners of the cut are the hero, so the box is tight rather than near')
+      : no('the cut has transparent corners, which means the box is bigger than the piece')
+  }
+
+  {
+    // A SHAPE INSIDE THE HERO'S BOX. A ring with a chip in its hole: the two
+    // never touch, so they are two regions, and a cut on the outer one would
+    // carry the inner one with it.
+    const overlap = familyPNG(688, 384, [
+      ...ringBoxes(60, 20, 520, 180, 12, [120, 90, 60]),
+      [200, 80, 40, 40, 200, 40, 40],
+    ])
+    const cut = cropHero(overlap, dlgType)
+    !cut.box && cut.why.includes('carry part of its neighbour')
+      ? ok('a shape sitting inside the hero box refuses the crop rather than swallowing it')
+      : no(`a crop went ahead with something inside it: ${cut.why || JSON.stringify(cut.box)}`)
+  }
+
+  {
+    // TOO SMALL TO BE THE PIECE. 200x100 is 7% of a 688x384 canvas, which is a
+    // tray button, and crowning one would cut the kit down to a button.
+    const small = familyPNG(688, 384, [
+      [40, 40, 200, 100, 120, 90, 60],
+      [300, 40, 120, 60, 120, 90, 60],
+    ])
+    const cut = cropHero(small, dlgType)
+    !cut.box && cut.why.includes('never that small a part of its own canvas')
+      ? ok(`a largest shape that is a twelfth of the canvas is refused · ${cut.why}`)
+      : no(`a tray-sized shape was taken for the hero: ${cut.why || JSON.stringify(cut.box)}`)
+  }
+
+  {
+    // THE RIGHT SIZE AND THE WRONG SHAPE. 260x380 is 37% of the canvas, so it
+    // clears the area check, and its ratio is 0.68 against the 1.79 a dialogue
+    // box is drawn at, which is outside the band.
+    const wrong = familyPNG(688, 384, [[10, 2, 260, 380, 120, 90, 60]])
+    const cut = cropHero(wrong, dlgType)
+    !cut.box && cut.why.includes('too far off to be the piece')
+      ? ok('a shape the wrong way round for its type is refused on its ratio')
+      : no(`a portrait shape passed as a dialogue box: ${cut.why || JSON.stringify(cut.box)}`)
+  }
+
+  {
+    const empty = familyPNG(688, 384, [])
+    const cut = cropHero(empty, dlgType)
+    !cut.box && cut.why.includes('transparent')
+      ? ok('a picture with nothing in it says so rather than cutting a zero-sized piece')
+      : no('an empty picture produced a crop')
+  }
+
+  /* A SHEET IS A GRID OF CUTS AND CROPPING IT THROWS THE OTHER CUTS AWAY. So a
+   * sheet is never scanned, and neither is a cover plate, whose canvas IS the
+   * painting. Only a ground piece is one piece. */
+  eq('a ground piece is cropped to its hero', cropsToHero(pieceType('panel')), true)
+  eq('a sheet is left whole, because every cut on it is wanted', cropsToHero(pieceType('pip')), false)
+  eq('and so is a cover plate, whose canvas is the painting', cropsToHero(pieceType('cover_plate')), false)
+  eq('a piece with no type is left alone rather than guessed at', cropsToHero(null), false)
+
+  /* THE TWO REAL FAMILIES, WHEN THEY ARE ON DISK. work/ is not in git, so this
+   * is skipped rather than failed on a clean checkout. The numbers are the ones
+   * measured on 2026-08-30 and they are what the arithmetic has to keep
+   * answering. */
+  {
+    const KIT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'work', '.kit')
+    const real = [
+      ['dialogue_box_v4.png', 'dialogue_box', { x: 85, y: 17, w: 518, h: 182 }],
+      ['panel.png', 'panel', { x: 22, y: 22, w: 403, h: 150 }],
+    ]
+    for (const [file, type, want] of real) {
+      const at = path.join(KIT, file)
+      if (!fs.existsSync(at)) {
+        ok(`${file} is not on this machine, so its measurement is skipped rather than guessed`)
+        continue
+      }
+      eq(`the hero of the real ${file}`, cropHero(fs.readFileSync(at), pieceType(type)).box, want)
+    }
+  }
+
+  /* ---- 6c. the crop lands on the row, and can be taken back ---------------- */
+  const CROPPED = 'zz_verify_cropped'
+  await removeUi(owner.id, CROPPED, { core: true })
+  try {
+    const family = familyPNG(688, 384, [
+      [60, 20, 520, 180, 120, 90, 60],
+      [60, 260, 150, 40, 120, 90, 60],
+      [240, 260, 150, 40, 120, 90, 60],
+    ])
+    await createUi({ ownerId: owner.id, name: CROPPED, type: 'dialogue_box', description: 'a family', w: 688, h: 384, core: true })
+    const saved = await setUiImage(owner.id, CROPPED, family, 688, 384)
+    eq('importing a family stores the hero size and not the canvas size', [saved.w, saved.h], [520, 180])
+    const row = await getUiByName(owner.id, CROPPED)
+    // read field by field: jsonb does not keep the key order it was given, so
+    // comparing the whole object as a string compares postgres's ordering
+    eq('and the row says where in the family the hero was', [row?.crop?.x, row?.crop?.y, row?.crop?.w, row?.crop?.h], [60, 20, 520, 180])
+    eq('and offers the family it came out of', row?.full, `/api/ui/${CROPPED}/full`)
+    row?.cropNote ? no(`a clean crop still left a note: ${row.cropNote}`) : ok('a clean crop leaves no hand-crop note on the row')
+    /* THE FAMILY IS KEPT WHOLE. It is the rest of the kit, drawn in the same job
+     * and paid for in the same spend, so throwing it away to keep the blob
+     * store tidy would mean paying for those buttons again. */
+    const kept = await ownedUiFull(owner.id, CROPPED)
+    kept && kept.equals(family)
+      ? ok('the family is kept exactly as it was drawn, tray and all')
+      : no('the family was not stored, so a bad crop could not be undone')
+    const hero = await ownedUiImage(owner.id, CROPPED)
+    const heroSize = hero ? decodePNG(hero) : null
+    eq('and the piece itself serves the hero', [heroSize?.w, heroSize?.h], [520, 180])
+
+    /* A REFUSAL KEEPS THE WHOLE PICTURE AND SAYS WHY ON THE ROW, because the
+     * author has to be told a hand crop is owed rather than discovering it when
+     * their four numbers draw the wrong band. */
+    const bad = familyPNG(688, 384, [
+      [40, 40, 200, 100, 120, 90, 60],
+      [300, 40, 120, 60, 120, 90, 60],
+    ])
+    const refused = await setUiImage(owner.id, CROPPED, bad, 688, 384)
+    eq('a refused crop keeps the whole picture', [refused.w, refused.h], [688, 384])
+    const note = await getUiByName(owner.id, CROPPED)
+    note?.needsCrop && note.cropNote.includes('never that small a part of its own canvas')
+      ? ok('and the row says a hand crop is owed, naming the check that stopped it')
+      : no(`a refused crop said nothing on the row: ${JSON.stringify(note?.cropNote)}`)
+    note?.crop ? no('a refused crop still claimed a box') : ok('and it claims no box, because none was cut')
+    /* AND THE LAST IMPORT'S FAMILY IS GONE WITH IT. A `.full` left behind from
+     * a crop that has been replaced is a picture of something else sitting under
+     * the undo button. */
+    ;(await ownedUiFull(owner.id, CROPPED)) === null
+      ? ok('a redraw that does not crop takes the old family away with it')
+      : no('the previous import`s family is still under the undo route')
+
+    // and putting a crop back, which is the other half of Ash's condition: a
+    // crop that passed every check and is still wrong has to be one press to
+    // undo rather than a spend to draw again
+    await setUiImage(owner.id, CROPPED, family, 688, 384)
+    const put = await uncropUi(owner.id, CROPPED)
+    eq('undoing a crop puts the whole family back as the piece', [put.w, put.h], [688, 384])
+    put.crop ? no('the row still claims a crop after an undo') : ok('and the row stops claiming a crop')
+    const whole = await ownedUiImage(owner.id, CROPPED)
+    whole && whole.equals(family) ? ok('and the bytes are the family, byte for byte') : no('the undo produced something other than the family')
+    const nothingLeft = await thrown(() => uncropUi(owner.id, CROPPED))
+    nothingLeft.includes('nothing to put back')
+      ? ok('undoing a piece that was never cropped says so rather than half-doing it')
+      : no(`a second undo did something: ${nothingLeft || 'no error'}`)
+  } finally {
+    await removeUi(owner.id, CROPPED, { core: true })
+  }
+
+  /* ---- 6d. a redraw must not keep showing the old picture ------------------
+   *
+   * MEASURED 2026-08-30, AND IT WAS SILENT. setUiImage wrote 67035 bytes for
+   * `panel`; the row and the bucket both took them; /api/ui/panel/image and
+   * /api/v1/ui/panel/image both went on serving the 56644 bytes from before,
+   * until the dev server was restarted.
+   *
+   * The cause is the read-through cache in server/store/blobs.mjs. It evicts a
+   * key when a write goes through the SAME process, and it cannot hear about a
+   * write from any other one, so a CLI script's write was invisible to the dev
+   * server for the whole life of that process. An author redrawing a piece was
+   * shown the old art with nothing anywhere saying why, which is the engine
+   * lying to the one person whose job is measuring the picture.
+   *
+   * The fix is that the row carries the sha of the bytes it points at, and both
+   * image reads hash what the cache handed them and drop the key if it
+   * disagrees. These two checks are the fence on that, and both run in ONE
+   * process with no restart, because a restart is what used to hide it. */
+  const FRESH = 'zz_verify_fresh'
+  await removeUi(owner.id, FRESH, { core: true })
+  const freshServer = http.createServer((req, res) =>
+    api(req, res, () => {
+      res.statusCode = 404
+      res.end('not found')
+    }),
+  )
+  await new Promise((r) => freshServer.listen(PORT, '127.0.0.1', r))
+  const token = await openSession(owner.id, 'verify-authoring')
+  const asOwner = { headers: { cookie: `mapvis_session=${token}` } }
+  const bytesAt = async (u, o) => Buffer.from(await (await fetch(`http://127.0.0.1:${PORT}${u}`, o)).arrayBuffer())
+  try {
+    await createUi({ ownerId: owner.id, name: FRESH, type: 'panel', description: 'redrawn twice', w: 96, h: 96 })
+    const first = solidPNG(96, 96, 10, 20, 30)
+    await setUiImage(owner.id, FRESH, first, 96, 96)
+    const gotFirst = await bytesAt(`/api/ui/${FRESH}/image`, asOwner)
+    gotFirst.equals(first) ? ok('the first picture reaches the route it is served on') : no('the first picture did not come back')
+
+    // the same size and different bytes, which is the case that has no other
+    // tell: nothing about the row changes except the picture
+    const second = solidPNG(96, 96, 200, 190, 180)
+    await setUiImage(owner.id, FRESH, second, 96, 96)
+    const gotSecond = await bytesAt(`/api/ui/${FRESH}/image`, asOwner)
+    gotSecond.equals(second)
+      ? ok('a redraw shows through on the authoring route in the same process, with no restart')
+      : no(`the authoring route served the old picture again: ${gotSecond.length} bytes instead of ${second.length}`)
+    const v1Second = await bytesAt(`/api/v1/ui/${FRESH}/image`)
+    v1Second.equals(second)
+      ? ok('and on the published route, which was serving the stale copy too')
+      : no(`the published route served the old picture: ${v1Second.length} bytes instead of ${second.length}`)
+
+    /* AND A WRITE THIS PROCESS NEVER SAW, WHICH IS THE SHAPE THE BUG HAD.
+     *
+     * A second instance of blobs.mjs under a different specifier is a genuinely
+     * separate cache with its own map, which is what another node process is.
+     * It writes the bytes and the row's sha, exactly as a CLI script does, and
+     * this process is left holding a cache entry that is now wrong and no way
+     * to have been told. */
+    const { store: foreign } = await import('../store/blobs.mjs?foreign-writer')
+    const third = solidPNG(96, 96, 3, 4, 5)
+    await foreign().put(`ui/${owner.id}/${FRESH}.png`, third, 'image/png')
+    await q('update ui_assets set img_sha = $3 where owner_id = $1 and name = $2', [
+      owner.id,
+      FRESH,
+      crypto.createHash('sha1').update(third).digest('base64url'),
+    ])
+    const gotThird = await bytesAt(`/api/ui/${FRESH}/image`, asOwner)
+    gotThird.equals(third)
+      ? ok('a write from another process shows through too, because the row is what says which bytes are the picture')
+      : no(`another process wrote the picture and this one kept serving its cached copy: ${gotThird.length} bytes instead of ${third.length}`)
+  } finally {
+    await new Promise((r) => freshServer.close(r))
+    await removeUi(owner.id, FRESH, { core: true })
+    await q('delete from sessions where user_id = $1 and user_agent = $2', [owner.id, 'verify-authoring'])
+  }
+
+  /* ---- 6e. a slice, end to end, on the real dialogue box -------------------
+   *
+   * A PICTURE OF A PAGE IS NOT A PAGE, and this is the first time that has been
+   * proven on art rather than on a flat colour. The real family goes in, the
+   * hero comes out, four edge numbers and a named rectangle are measured on the
+   * hero, the piece is published, and the whole thing is read back off the
+   * route the game asks on. Then the CSS is checked as a consumer would mount
+   * it, because every correct number in that string arrived dead once already.
+   *
+   * The row is snapshotted and put back whole, both pictures and every column.
+   * `dialogue_box` is a piece Ash drew and this file has eaten it before. */
+  const dlgSnap = await snapUi('dialogue_box')
+  try {
+    const KIT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'work', '.kit')
+    /* THE REAL ART, in the order it is most likely to be the family: the
+     * picture a crop already came out of, then the row's own bytes, then the
+     * file on disk. Nothing is generated and nothing is invented. */
+    const onDisk = ['dialogue_box_v4.png', 'dialogue_box.png']
+      .map((f) => path.join(KIT, f))
+      .find((f) => fs.existsSync(f))
+    const art =
+      (dlgSnap?.row.full_key ? await ownedUiFull(owner.id, 'dialogue_box') : null) ||
+      (onDisk ? fs.readFileSync(onDisk) : null) ||
+      dlgSnap?.img ||
+      null
+    if (!art) {
+      ok('there is no real dialogue box on this machine, so the end-to-end slice is skipped rather than faked')
+    } else {
+      const size = decodePNG(art)
+      const want = cropHero(art, dlgType)
+      await createUi({
+        ownerId: owner.id, name: 'dialogue_box', type: 'dialogue_box',
+        title: 'The Dialogue Box', description: 'the real one', w: size.w, h: size.h, core: true,
+      })
+      const put = await setUiImage(owner.id, 'dialogue_box', art, size.w, size.h)
+      const piece = { w: put.w, h: put.h }
+      want.box
+        ? eq('the real art is cut down to its hero on import', [piece.w, piece.h], [want.box.w, want.box.h])
+        : ok(`this copy of the real art refuses its crop and keeps the whole picture · ${want.why}`)
+
+      /* THE FOUR NUMBERS, MEASURED ON WHATEVER THE PIECE ENDED UP BEING. Taken
+       * as a fraction of the piece rather than typed, so this holds whether the
+       * art was cropped or refused, and so it can never store the `top + bottom
+       * >= h` that CSS answers by silently drawing nothing. */
+      const edge = { top: Math.round(piece.h * 0.17), bottom: Math.round(piece.h * 0.17), left: Math.round(piece.w * 0.07), right: Math.round(piece.w * 0.07) }
+      const marks = [
+        { name: 'speaker', kind: 'text', x: edge.left + 4, y: edge.top + 2, w: 120, h: 16, align: 'left', overflow: 'ellipsis' },
+        { name: 'body', kind: 'text', x: edge.left + 4, y: edge.top + 24, w: piece.w - edge.left - edge.right - 8, h: piece.h - edge.top - edge.bottom - 30, wrap: 'wrap' },
+        { name: 'go_on', kind: 'press', x: piece.w - edge.right - 40, y: piece.h - edge.bottom - 20, w: 36, h: 16 },
+      ]
+      const measured = await setUiRegions(owner.id, 'dialogue_box', marks, {
+        slice: edge, scale: 2, fill: true, repeat: { x: 'round', y: 'round' },
+      })
+      // in the order border-image-slice takes them, and field by field, because
+      // jsonb hands the object back in whatever key order it chose
+      const four = (s) => [s?.top, s?.right, s?.bottom, s?.left]
+      eq('the measurement survives being saved', four(measured.slice), four(edge))
+      eq('a published dialogue box says it is published', (await publishUi(owner.id, 'dialogue_box')).published, true)
+
+      const server = http.createServer((req, res) =>
+        api(req, res, () => {
+          res.statusCode = 404
+          res.end('not found')
+        }),
+      )
+      await new Promise((r) => server.listen(PORT, '127.0.0.1', r))
+      try {
+        const read = await (await fetch(`http://127.0.0.1:${PORT}/api/v1/ui/dialogue_box`)).json()
+        eq('the four edge numbers come back off the route the game asks on', four(read.slice), four(edge))
+        eq('and the three qualifiers beside them', [read.scale, read.fill, read.repeat], [2, true, { x: 'round', y: 'round' }])
+        eq('and the picture is the size the numbers were measured against', [read.w, read.h], [piece.w, piece.h])
+        eq('and every rectangle keeps its name', read.regions?.map((r) => r.name), ['speaker', 'body', 'go_on'])
+        eq('and a text region keeps what a long line does', read.regions?.find((r) => r.name === 'speaker')?.overflow, 'ellipsis')
+        eq('and the piece answers on the route its own src names', read.src, '/api/v1/ui/dialogue_box/image')
+
+        /* AND THE BYTES BEHIND THAT SRC ARE THE PIECE, NOT THE FAMILY. This is
+         * the whole point of the crop: the four numbers above are insets from
+         * the edge of THIS picture, and if the route were still handing over the
+         * canvas the tray was drawn on then every one of them would be
+         * measuring the wrong thing. */
+        const shown = decodePNG(await bytesAt('/api/v1/ui/dialogue_box/image'))
+        eq('the bytes the slice is measured against are the piece itself', [shown.w, shown.h], [piece.w, piece.h])
+
+        /* WHAT A CONSUMER MOUNTS. The handle is `dialogue` and not
+         * `dialogue_box`, because that is what the game's tokens.css and
+         * DialogueBox already carry, and the numbers are drawn at slice times
+         * scale because border-image-width is a separate number from the slice.
+         * The url carries the sha so a changed picture is a changed address:
+         * that route answers immutable for a year, and the note on it used to
+         * say the way to force a redraw through was to rename the piece. */
+        const css = read.css || ''
+        const drawn = [edge.top, edge.right, edge.bottom, edge.left].map((n) => `${n * 2}px`).join(' ')
+        css === sliceCss('dialogue_box', { slice: edge, scale: 2, fill: true, repeat: { x: 'round', y: 'round' } }, read.sha)
+          ? ok('the css on the wire is exactly what sliceCss emits for those numbers')
+          : no('the css on the wire and sliceCss disagree, which is two truths about one measurement')
+        css.includes(`--kit-slice-dialogue: ${edge.top} ${edge.right} ${edge.bottom} ${edge.left};`) &&
+        css.includes(`--kit-slice-w-dialogue: ${drawn};`) &&
+        css.includes('.kit-surface-dialogue {') &&
+        css.includes('border-image: var(--kit-art-dialogue,') &&
+        css.includes(' fill /')
+          ? ok('and it is a mountable rule: the handle the game has, the numbers, the drawn width and a filled middle')
+          : no(`the css is not what a consumer would mount:\n${css}`)
+        read.sha && css.includes(`/api/v1/ui/dialogue_box/image?v=${read.sha.slice(0, 12)}`)
+          ? ok('and its url carries the content hash, so a redraw is a new address rather than a rename')
+          : no('the css url has no version on it, so a browser holding the old art keeps it for a year')
+      } finally {
+        await new Promise((r) => server.close(r))
+      }
+    }
+  } finally {
+    if (dlgSnap) await putUiBack(dlgSnap)
+    else await removeUi(owner.id, 'dialogue_box', { core: true })
   }
 
   /* ONE DOCK KIT, TWENTY MAPS. The bytes are duplicated on purpose: that costs

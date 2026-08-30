@@ -57,6 +57,20 @@ export interface WorldMark {
      voyage lands on that map's default spawn and the dock somebody drew is
      walked past with nothing saying so. */
   at?: string
+  /* THE RUN-IN, AND IT IS THE ONE FIELD ON A BERTH THAT IS NOT A BERTH.
+     The game aims here first and swings onto the berth's own heading only once
+     it is astern, which is the difference between coming alongside and nosing
+     straight into a jetty: PmapScene reads `s.berth.approach` and sail.ts runs
+     a whole stage off it. 019 lifted the old nested one out as a second
+     free-standing point and 021 folded it back, and the browser still had no
+     name for it, so a field with a live consumer in the other repo was
+     authorable over the wire and by nothing a person could touch.
+
+     NESTED AND NOT FREE, which is not a retreat from 019. Nothing sails to a
+     run-in and no grape ever addresses one; it only means anything relative to
+     this berth, so it moves when this berth moves. That is the welding that was
+     wrong for a destination and is right here. */
+  approach?: { x: number; y: number }
   meta?: Record<string, unknown>
 }
 

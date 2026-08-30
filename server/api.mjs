@@ -70,6 +70,8 @@ import {
   readyUiByName,
   uiImage,
   ownedUiImage,
+  ownedUiFull,
+  uncropUi,
   legalCanvas,
   pieceType,
   PIECE_TYPES,
@@ -192,6 +194,7 @@ const OPEN_POSTS = new Set([
   '/api/ui/generate',
   '/api/ui/regions',
   '/api/ui/publish',
+  '/api/ui/uncrop',
   '/api/ui/remove',
 ])
 
@@ -2826,6 +2829,30 @@ async function route(req, res, p, url) {
     }
   }
 
+  /* PUTTING A BAD CROP BACK.
+   *
+   * The generator answers a ground piece with a family: the hero at the top and
+   * a tray of matching buttons under it. The four edge numbers are insets from
+   * the edge of the WHOLE image with no source rect anywhere in the shape, so a
+   * family cannot be sliced at all, and the hero is cut out at import by an
+   * alpha scan that refuses rather than guesses.
+   *
+   * This is the other half of that promise. Ash's concern about a crop was that
+   * something guessing will sometimes be wrong, and the scan answers half of it
+   * by refusing when it cannot prove which shape is the piece. The rest is that
+   * a crop which passed all three checks and is still wrong must be one press
+   * to undo, rather than a spend to draw again. */
+  if (p === '/api/ui/uncrop' && req.method === 'POST') {
+    const me = await currentUser(req)
+    if (!me) return send(res, 401, { error: 'sign in to put a piece back' })
+    const b = await body(req)
+    try {
+      return send(res, 200, await uncropUi(me.id, String(b.name || '')))
+    } catch (e) {
+      return send(res, 400, { error: String(e.message || e) })
+    }
+  }
+
   if (p === '/api/ui/remove' && req.method === 'POST') {
     const me = await currentUser(req)
     if (!me) return send(res, 401, { error: 'sign in to remove a piece' })
@@ -2856,6 +2883,26 @@ async function route(req, res, p, url) {
     res.setHeader('Content-Type', 'image/png')
     // never cached, unlike the published route: this is the picture being marked
     // up, and a redraw under the same name has to show through immediately
+    res.setHeader('Cache-Control', 'no-store')
+    return res.end(buf)
+  }
+
+  /* THE FAMILY THE HERO WAS CUT OUT OF.
+   *
+   * Kept rather than thrown away for two reasons and only one of them is the
+   * undo. The other is that the tray under the hero is the rest of the kit,
+   * drawn in the same job and paid for in the same spend: the buttons, the
+   * chips and the rules that match this frame. Discarding it to keep a tidy
+   * blob store would mean paying for them again.
+   *
+   * Owner-scoped and offered nowhere else. The game consumes the piece, not the
+   * sheet it arrived on. */
+  if (p.startsWith('/api/ui/') && p.endsWith('/full') && req.method === 'GET') {
+    const me = await currentUser(req)
+    if (!me) return send(res, 401, { error: 'sign in to see a piece' })
+    const buf = await ownedUiFull(me.id, p.slice('/api/ui/'.length, -'/full'.length))
+    if (!buf) return notFound(res)
+    res.setHeader('Content-Type', 'image/png')
     res.setHeader('Cache-Control', 'no-store')
     return res.end(buf)
   }

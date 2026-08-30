@@ -24,8 +24,10 @@
  * because a dialogue box belongs to the game rather than to the hub, and
  * 013_library_kit.sql says why the map-scoped library could not hold it.
  */
+import crypto from 'node:crypto'
 import { q, one, many } from '../db/pool.mjs'
 import { store } from './blobs.mjs'
+import { decodePNG, encodePNG } from '../sheet.mjs'
 import { UI_GATES, fitUi } from '../pixellab.mjs'
 
 // ---- the vocabulary --------------------------------------------------------
@@ -301,7 +303,14 @@ export const PIECE_TYPES = [
     h: 384,
     // the one type the endpoint has an exact name for, so the name wins over the
     // measured default: this piece IS a button
-    elements: ['button'],
+    /* WINDOW, NOT THE WIDGET'S OWN NAME. Measured: elements:['button'] came back as a
+     * small button with the word BUTTON painted into it, straight through the
+     * code-appended no-lettering clause, one face instead of three, parked in a
+     * corner of an otherwise empty canvas. The named widgets carry their own idea
+     * of what that control looks like, lettering included, and a lever beats every
+     * adjective in the prompt. 'window' is the only value that means draw me one
+     * clean framed thing and let the words say what it is. */
+    elements: ['window'],
     elementsWhy: 'the endpoint has a name for this exact piece',
     // its own shipped art. button-wood.png carries painted lettering, which the
     // prompt refuses in words and nothing refuses in pixels, so a plank that
@@ -378,7 +387,14 @@ export const PIECE_TYPES = [
     stretch: 'x',
     w: 688,
     h: 192,
-    elements: ['health_bar'],
+    /* WINDOW, NOT THE WIDGET'S OWN NAME. Measured: elements:['button'] came back as a
+     * small button with the word BUTTON painted into it, straight through the
+     * code-appended no-lettering clause, one face instead of three, parked in a
+     * corner of an otherwise empty canvas. The named widgets carry their own idea
+     * of what that control looks like, lettering included, and a lever beats every
+     * adjective in the prompt. 'window' is the only value that means draw me one
+     * clean framed thing and let the words say what it is. */
+    elements: ['window'],
     elementsWhy: 'the endpoint has a name for this exact piece',
     // the walnut and brass of panel-square.png, which is the only shipped
     // material with rivets and a rope line on it. No bar art ships, so this is
@@ -406,7 +422,14 @@ export const PIECE_TYPES = [
     stretch: 'y',
     w: 384,
     h: 688,
-    elements: ['toolbar'],
+    /* WINDOW, NOT THE WIDGET'S OWN NAME. Measured: elements:['button'] came back as a
+     * small button with the word BUTTON painted into it, straight through the
+     * code-appended no-lettering clause, one face instead of three, parked in a
+     * corner of an otherwise empty canvas. The named widgets carry their own idea
+     * of what that control looks like, lettering included, and a lever beats every
+     * adjective in the prompt. 'window' is the only value that means draw me one
+     * clean framed thing and let the words say what it is. */
+    elements: ['window'],
     elementsWhy: 'a toolbar is the endpoint\'s word for a track holding a run of entries',
     styleRef: 'panel-square.png',
     // a rail's middle is where entries mount, so it stays bare wood
@@ -428,7 +451,14 @@ export const PIECE_TYPES = [
     stretch: 'x',
     w: 512,
     h: 192,
-    elements: ['tab'],
+    /* WINDOW, NOT THE WIDGET'S OWN NAME. Measured: elements:['button'] came back as a
+     * small button with the word BUTTON painted into it, straight through the
+     * code-appended no-lettering clause, one face instead of three, parked in a
+     * corner of an otherwise empty canvas. The named widgets carry their own idea
+     * of what that control looks like, lettering included, and a lever beats every
+     * adjective in the prompt. 'window' is the only value that means draw me one
+     * clean framed thing and let the words say what it is. */
+    elements: ['window'],
     elementsWhy: 'the endpoint has a name for this exact piece',
     // same family and same scale as the plank, and a tab that does not match the
     // plank beside it in the Handbook is the thing a shelf exists to prevent
@@ -451,7 +481,14 @@ export const PIECE_TYPES = [
     stretch: 'none',
     w: 448,
     h: 600,
-    elements: ['avatar'],
+    /* WINDOW, NOT THE WIDGET'S OWN NAME. Measured: elements:['button'] came back as a
+     * small button with the word BUTTON painted into it, straight through the
+     * code-appended no-lettering clause, one face instead of three, parked in a
+     * corner of an otherwise empty canvas. The named widgets carry their own idea
+     * of what that control looks like, lettering included, and a lever beats every
+     * adjective in the prompt. 'window' is the only value that means draw me one
+     * clean framed thing and let the words say what it is. */
+    elements: ['window'],
     elementsWhy: 'the endpoint has a name for this exact piece',
     styleRef: 'panel-square.png',
     /* NO INTERIOR PHRASE, and this one would actively hurt. The middle is an
@@ -1079,9 +1116,19 @@ export function checkSlices(rec, w, h, type) {
  * the emitted name is the one the game would create. */
 const CSS_HANDLE = { dialogue_box: 'dialogue' }
 
-export function sliceCss(name, rec) {
+export function sliceCss(name, rec, ver = '') {
   if (!hasSlices(rec)) return ''
   const h = CSS_HANDLE[name] || name
+  /* A CHANGED PICTURE HAS TO BE A CHANGED URL, because the route under it
+   * answers `public, max-age=31536000, immutable`. That header is deliberate
+   * and it is worth its trade, but it means a browser that already holds the
+   * old art will not see a redraw for a year, and the note on that route says
+   * the workaround is to rename the piece. Renaming a piece to force art
+   * through is not a workaround, it is a broken address. The sha of the bytes
+   * in the url means the address changes exactly when the picture does, and
+   * this string is re-emitted on every save, so the author's paste is always
+   * pointing at what they are looking at. */
+  const url = `/api/v1/ui/${name}/image${ver ? `?v=${String(ver).slice(0, 12)}` : ''}`
   const { top, right, bottom, left } = rec.slice
   const k = rec.scale
   const px = [top, right, bottom, left].map((n) => `${n * k}px`).join(' ')
@@ -1122,7 +1169,7 @@ export function sliceCss(name, rec) {
     `  border-style: solid;`,
     `  border-color: transparent;`,
     `  border-width: var(--kit-slice-w-${h});`,
-    `  border-image: var(--kit-art-${h}, url('/api/v1/ui/${name}/image')) var(--kit-slice-${h})${rec.fill ? ' fill' : ''} / 1 / 0 var(--kit-repeat-${h});`,
+    `  border-image: var(--kit-art-${h}, url('${url}')) var(--kit-slice-${h})${rec.fill ? ' fill' : ''} / 1 / 0 var(--kit-repeat-${h});`,
     `}`,
   ].join('\n')
 }
@@ -1200,6 +1247,186 @@ export function checkUi(asset) {
   return { problems: problems.concat(sl.problems), warnings: warnings.concat(sl.warnings) }
 }
 
+// ---- cutting the hero out of a family --------------------------------------
+
+/* PIXELLAB ANSWERS WITH A FAMILY AND A FAMILY CANNOT BE SLICED.
+ *
+ * /v2/create-ui-asset returns one png holding the hero piece at the top and a
+ * tray of matching buttons, chips and rules underneath it. The slice record is
+ * `{src, w, h, slice, scale, fill, repeat}` and the four numbers in `slice` are
+ * insets measured from the edges of the WHOLE image. There is no source rect
+ * anywhere in that shape, because CSS border-image-slice has none and Pixi
+ * NineSliceSprite has none, so with a family in one png those four numbers
+ * point at the tray and the piece cannot be sliced at all. That is the blocker
+ * and cutting the hero out at import is the whole of the fix.
+ *
+ * THIS IS A SCAN AND ARITHMETIC. IT IS NOT A JUDGEMENT.
+ *
+ * Ash's concern, which is the reason everything below refuses instead of trying
+ * harder: "if its AI or something just guessing, cropping can have problems".
+ * Nothing here looks at what the picture is of, asks a model anything, or
+ * scores a candidate. It reads the alpha channel, groups touching opaque pixels
+ * into regions, takes the bounding box of the region with the most pixels, and
+ * then puts that box through three checks that can each fail. When one fails
+ * the whole image is kept, the row records which check failed in the sentence
+ * the author reads, and the card says the piece needs a hand crop. A silently
+ * wrong crop is the one outcome that must not happen: the four numbers measured
+ * against it would then be wrong everywhere the piece is mounted, and nothing
+ * anywhere would say a word.
+ */
+
+/* THE ALPHA THRESHOLD IS THE REPO'S AND NOT A NEW ONE.
+ *
+ * publish.mjs's FOOT_ALPHA is 40 and Walk.tsx's trimToFeet uses the same 40.
+ * World.tsx's opaque-extent scan uses 8 instead, and says why: generated
+ * coastline has a soft edge that a high threshold would eat. Chrome is neither
+ * case. Measured on both families on disk, every pixel is either alpha 0 or
+ * alpha 224 and up, with nothing at all in between, so any threshold between
+ * those gives the identical answer and 40 is the one already written down. */
+const PIECE_ALPHA = 40
+
+/* ONLY A GROUND PIECE IS ONE PIECE.
+ *
+ * A sheet is a grid of cuts and cropping it to its largest cut throws the other
+ * twenty away. A cover plate is one whole painting keyed to a destination, so
+ * its canvas IS the picture. Neither is a nine-slice and neither has a hero, so
+ * neither is scanned, and the row says nothing about a crop rather than
+ * recording a refusal for a question that was never asked. */
+export const cropsToHero = (type) => !!type && type.tier === 'ground'
+
+/* EVERY GROUP OF TOUCHING OPAQUE PIXELS, WITH ITS BOX AND ITS COUNT.
+ *
+ * An iterative flood fill with an explicit stack, because a family is up to
+ * 264,192 pixels and recursion at that depth is a stack overflow rather than an
+ * answer. Eight-connected rather than four: two parts of one drawn frame that
+ * meet only at a corner must not come back as two pieces. Measured on both
+ * families on disk, four and eight agree exactly, twelve regions for
+ * dialogue_box_v4 and sixteen for panel, so the choice costs nothing on the art
+ * that exists and only guards the case where a hairline joins diagonally.
+ *
+ * Sorted by pixel count, most first, so `regions[0]` is the hero candidate. */
+export function opaqueRegions(w, h, data) {
+  const label = new Int32Array(w * h).fill(-1)
+  const stack = new Int32Array(w * h)
+  const out = []
+  /* THE EIGHT NEIGHBOURS AS dx,dy AND NOT AS A FLAT OFFSET. An offset of -1 on
+   * column zero lands on the far end of the row above, which joins the left
+   * edge of the canvas to the right edge and reads a whole family as one
+   * region. Carrying the column explicitly is what makes that impossible. */
+  const DX = [-1, 0, 1, -1, 1, -1, 0, 1]
+  const DY = [-1, -1, -1, 0, 0, 1, 1, 1]
+  for (let seed = 0; seed < w * h; seed++) {
+    if (label[seed] >= 0 || data[seed * 4 + 3] <= PIECE_ALPHA) continue
+    const id = out.length
+    let sp = 0
+    stack[sp++] = seed
+    label[seed] = id
+    let x0 = seed % w
+    let x1 = x0
+    let y0 = (seed / w) | 0
+    let y1 = y0
+    let area = 0
+    while (sp) {
+      const at = stack[--sp]
+      const px = at % w
+      const py = (at / w) | 0
+      area++
+      if (px < x0) x0 = px
+      if (px > x1) x1 = px
+      if (py < y0) y0 = py
+      if (py > y1) y1 = py
+      for (let n = 0; n < 8; n++) {
+        const nx = px + DX[n]
+        const ny = py + DY[n]
+        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue
+        const to = ny * w + nx
+        if (label[to] >= 0 || data[to * 4 + 3] <= PIECE_ALPHA) continue
+        label[to] = id
+        stack[sp++] = to
+      }
+    }
+    out.push({ x: x0, y: y0, w: x1 - x0 + 1, h: y1 - y0 + 1, pixels: area })
+  }
+  return out.sort((a, b) => b.pixels - a.pixels)
+}
+
+/* THE HERO'S BOX, OR THE REASON THERE IS NOT ONE.
+ *
+ * Three checks, each of which can refuse, and the refusal names which one it
+ * was. The numbers below are read off the two real families rather than picked:
+ *
+ *   dialogue_box_v4  688x384  hero 518x182 at 85,17   box is 35.7% of canvas
+ *   panel            448x448  hero 403x150 at 22,22   box is 30.1% of canvas
+ *
+ * ONE · AT LEAST A QUARTER OF THE CANVAS. The BOX rather than the pixel count,
+ * because the box is what gets cut and because a highlight edge is drawn with
+ * its centre empty, so counting its pixels would refuse the one type whose
+ * whole point is a hollow middle. A tray button in either family is under four
+ * percent, so a quarter is a wide gap on both sides of the real answer and it
+ * is what stops a stray chip being crowned when the hero fails to be found.
+ *
+ * TWO · NOTHING ELSE INSIDE THE BOX. If the hero's box overlaps another
+ * region's box then the cut would carry a piece of its neighbour, or the two
+ * were really one thing that the scan split. Either way the arithmetic does not
+ * know which, so it stops. This is the check that catches a tray drawn beside
+ * the hero rather than under it.
+ *
+ * THREE · THE SHAPE IS IN THE RIGHT COUNTRY. The hero is normally wider than
+ * its canvas is, because the canvas has to be tall enough to hold the tray
+ * underneath: measured, the hero's aspect is 1.59 times the canvas ratio for
+ * the dialogue box and 2.69 times it for the panel. The band is 0.5 to 6, which
+ * clears both measurements with room and still refuses a hero shaped ten times
+ * its canvas either way. It is the coarsest of the three on purpose; one and
+ * two are the ones carrying the weight.
+ */
+const ASPECT_BAND = [0.5, 6]
+
+export function heroBox(w, h, data, type) {
+  const regions = opaqueRegions(w, h, data)
+  const say = (why) => ({ box: null, regions, why })
+  if (!regions.length) return say('every pixel in it is transparent, so there is no piece in there to find')
+  const box = { x: regions[0].x, y: regions[0].y, w: regions[0].w, h: regions[0].h }
+  const share = (box.w * box.h) / (w * h)
+  if (share < 0.25)
+    return say(
+      `the largest shape in it is ${box.w}x${box.h}, only ${Math.round(share * 100)}% of a ${w}x${h} picture, and a hero piece is never that small a part of its own canvas`,
+    )
+  const inside = regions
+    .slice(1)
+    .find((r) => box.x < r.x + r.w && r.x < box.x + box.w && box.y < r.y + r.h && r.y < box.y + box.h)
+  if (inside)
+    return say(
+      `the largest shape runs ${box.x},${box.y} to ${box.x + box.w},${box.y + box.h} and another shape at ${inside.x},${inside.y} sits inside that, so a cut there would carry part of its neighbour`,
+    )
+  const want = type && type.w > 0 && type.h > 0 ? type.w / type.h : w / h
+  const got = box.w / box.h
+  if (got < want * ASPECT_BAND[0] || got > want * ASPECT_BAND[1])
+    return say(
+      `the largest shape is ${box.w}x${box.h}, a ratio of ${got.toFixed(2)} against the ${want.toFixed(2)} this kind of piece is drawn at, which is too far off to be the piece`,
+    )
+  return { box, regions, why: '' }
+}
+
+/* THE SAME ARITHMETIC, WITH THE BYTES CUT OUT AT THE END OF IT.
+ *
+ * Decoded once and handed to both halves, because a family is a quarter of a
+ * million pixels and inflating it twice to answer one question is a cost paid
+ * on every import for nothing. */
+export function cropHero(png, type) {
+  const { w, h, data } = decodePNG(png)
+  const found = heroBox(w, h, data, type)
+  const out = { canvas: { w, h }, box: found.box, regions: found.regions.length, why: found.why, png: null }
+  if (!found.box) return out
+  const { x, y, w: bw, h: bh } = found.box
+  const cut = new Uint8ClampedArray(bw * bh * 4)
+  for (let row = 0; row < bh; row++) {
+    const from = ((y + row) * w + x) * 4
+    cut.set(data.subarray(from, from + bw * 4), row * bw * 4)
+  }
+  out.png = encodePNG(bw, bh, cut)
+  return out
+}
+
 // ---- reading ---------------------------------------------------------------
 
 /* WHAT THE GAME AND A MEMBER'S PYTHON GET, and the whole of it.
@@ -1250,8 +1477,15 @@ const PENDING_MS = 10 * 60 * 1000
  * picture. So the base is an argument: the authoring reads pass their own
  * scoped route and the published reads keep the public one.
  */
+/* WHERE THE AUTHOR'S OWN ROUTES LIVE, said once. The family a crop came out of
+ * is the author's working material and the game has no use for it, so `full` is
+ * only offered on the scoped base, where a route for it exists. Emitting it on
+ * /api/v1 would be a url that 404s. */
+const OWN_BASE = '/api/ui'
+
 const shape = (r, base = '/api/v1/ui') => {
   const regions = Array.isArray(r.regions) ? r.regions : []
+  const crop = r.crop && typeof r.crop === 'object' && r.crop.w > 0 ? r.crop : null
   const slices = r.slices && typeof r.slices === 'object' && r.slices.slice ? r.slices : null
   /* A GENERATION THAT DIED OUTSIDE THE HANDLER LEFT THE ROW PENDING FOR EVER.
    * failUi is only reachable from the two catches in the generate route, so a
@@ -1273,8 +1507,21 @@ const shape = (r, base = '/api/v1/ui') => {
     published: !!r.published,
     regions,
     faces: regions.filter(isCut).map(({ name, x, y, w, h }) => ({ name, x, y, w, h })),
-    ...(slices ? { ...slices, css: sliceCss(r.name, slices) } : {}),
+    ...(slices ? { ...slices, css: sliceCss(r.name, slices, r.img_sha) } : {}),
     ...(r.blob_key ? { src: `${base}/${r.name}/image` } : {}),
+    /* THE CONTENT HASH RIDES ON THE ROW, so anything holding a picture can ask
+     * whether it is still the picture without downloading it. The authoring
+     * page busts its own <img> with a stamp already; what this is for is the
+     * emitted CSS, whose url the game mounts and whose route answers immutable
+     * for a year. */
+    ...(r.img_sha ? { sha: r.img_sha } : {}),
+    /* WHAT WAS CUT, AND THE FAMILY IT WAS CUT OUT OF, so a bad crop is visible
+     * and undoable rather than a picture that quietly got smaller. */
+    ...(crop ? { crop, ...(base === OWN_BASE ? { full: `${base}/${r.name}/full` } : {}) } : {}),
+    /* AND A REFUSAL SAYS SO ON THE ROW. The scan could not prove which shape
+     * was the hero, kept the whole image, and this is the sentence saying which
+     * check stopped it and that a hand crop is owed. */
+    ...(r.crop_note ? { cropNote: r.crop_note, needsCrop: true } : {}),
     ...(r.pixellab_id ? { pixellabId: r.pixellab_id } : {}),
     createdAt: r.created_at ? +new Date(r.created_at) : 0,
   }
@@ -1285,13 +1532,52 @@ const shape = (r, base = '/api/v1/ui') => {
 export async function listUi(ownerId) {
   if (!ownerId) return []
   const rows = await many('select * from ui_assets where owner_id = $1 order by core desc, name', [ownerId])
-  return rows.map((r) => shape(r, '/api/ui'))
+  return rows.map((r) => shape(r, OWN_BASE))
 }
 
 export async function getUiByName(ownerId, name) {
   if (!ownerId || !isName(name)) return null
   const r = await one('select * from ui_assets where owner_id = $1 and name = $2', [ownerId, name])
-  return r ? shape(r, '/api/ui') : null
+  return r ? shape(r, OWN_BASE) : null
+}
+
+/* THE SHA OF SOME BYTES, IN THE ONE PLACE THE ROW AND THE READ BOTH USE IT.
+ * sha1 rather than anything longer for the same reason blob_shas uses it: this
+ * is a change detector and not a signature, and base64url keeps it short enough
+ * to put in a url. */
+const shaOf = (buf) => crypto.createHash('sha1').update(buf).digest('base64url')
+
+/* BYTES THE ROW AGREES WITH, WHICH IS NOT THE SAME AS BYTES THE CACHE HAS.
+ *
+ * blobs.mjs memoises reads and only evicts a key when a write goes through the
+ * SAME process. A write from anywhere else is invisible to it. Measured
+ * 2026-08-30: a CLI script wrote 67035 bytes for `panel`, the row and the
+ * bucket both took it, and the dev server went on serving the 56644 bytes it
+ * had cached on BOTH image routes until it was restarted. So an author who
+ * redrew a piece kept being shown the old picture, which is the engine lying to
+ * the person measuring it.
+ *
+ * The row is the truth about which bytes belong to this piece, and it is
+ * already being read here to find the key, so the check is free of any extra
+ * query: hash what came back, and if it is not what the row recorded then the
+ * cache is stale, drop the key and read again. One extra hash of a png that is
+ * tens of kilobytes, against a class of bug whose symptom is silence.
+ *
+ * The family is dropped with it. Both keys are written in the same call, so if
+ * the hero is stale the family is stale too, and it has no sha of its own to
+ * catch it with.
+ */
+async function currentBytes(key, sha, alsoForget = '') {
+  if (!key) return null
+  try {
+    const buf = await store().get(key)
+    if (!buf || !sha || shaOf(buf) === sha) return buf
+    store().forget(key)
+    if (alsoForget) store().forget(alsoForget)
+    return await store().get(key)
+  } catch {
+    return null
+  }
 }
 
 // the bytes for one account's own piece. The published route below cannot answer
@@ -1300,10 +1586,20 @@ export async function getUiByName(ownerId, name) {
 // chrome.
 export async function ownedUiImage(ownerId, name) {
   if (!ownerId || !isName(name)) return null
-  const r = await one('select blob_key from ui_assets where owner_id = $1 and name = $2', [ownerId, name])
+  const r = await one('select blob_key, full_key, img_sha from ui_assets where owner_id = $1 and name = $2', [ownerId, name])
   if (!r?.blob_key) return null
+  return currentBytes(r.blob_key, r.img_sha, r.full_key)
+}
+
+/* THE FAMILY THE HERO WAS CUT OUT OF, kept so a crop can be looked at and
+ * undone. Owner-scoped only: this is working material and the game consumes the
+ * piece rather than the sheet it arrived on. */
+export async function ownedUiFull(ownerId, name) {
+  if (!ownerId || !isName(name)) return null
+  const r = await one('select full_key from ui_assets where owner_id = $1 and name = $2', [ownerId, name])
+  if (!r?.full_key) return null
   try {
-    return await store().get(r.blob_key)
+    return await store().get(r.full_key)
   } catch {
     return null
   }
@@ -1346,13 +1642,12 @@ export async function readyUiByName(name) {
 // listing never pays for a png.
 export async function uiImage(name) {
   if (!isName(name)) return null
-  const r = await one(`select blob_key from ui_assets where status = 'ready' and name = $1 order by core desc, created_at limit 1`, [name])
+  const r = await one(
+    `select blob_key, full_key, img_sha from ui_assets where status = 'ready' and name = $1 order by core desc, created_at limit 1`,
+    [name],
+  )
   if (!r?.blob_key) return null
-  try {
-    return await store().get(r.blob_key)
-  } catch {
-    return null
-  }
+  return currentBytes(r.blob_key, r.img_sha, r.full_key)
 }
 
 /* IS ANYTHING ALREADY DRAWING FOR THIS ACCOUNT.
@@ -1455,10 +1750,70 @@ export async function createUi({ ownerId, name, type = '', title = '', descripti
  * the picture does not have is a region that draws in the wrong place. Same
  * reason styleRef reads the IHDR instead of trusting the document.
  */
-export async function setUiImage(ownerId, name, buf, w, h, pixellabId = '') {
+export async function setUiImage(ownerId, name, buf, w, h, pixellabId = '', { crop = true } = {}) {
   if (!ownerId || !isName(name)) throw new Error('no piece to put a picture on')
   const key = `ui/${ownerId}/${name}.png`
-  await store().put(key, buf, 'image/png')
+  const fullKey = `ui/${ownerId}/${name}.full.png`
+
+  /* THE HERO IS CUT OUT HERE, WHICH IS THE MOMENT THE FAMILY ARRIVES.
+   *
+   * Not later on a page, because a piece that spends any time in the library
+   * un-cropped is a piece somebody can measure four edge numbers against, and
+   * those numbers would be insets from the edge of a picture that is about to
+   * be replaced by a smaller one. Cropping at import means the row is never
+   * once in a state where the marks and the picture disagree.
+   *
+   * `crop: false` is for a restore rather than an import. verify-authoring
+   * snapshots the author's real dialogue box and writes it back at the end, and
+   * putting bytes back exactly as they were is not the same act as taking
+   * delivery of a new family. Cropping a restore would shrink the piece a
+   * little more on every verify run.
+   */
+  const row = await one('select type from ui_assets where owner_id = $1 and name = $2', [ownerId, name])
+  const t = row?.type ? pieceType(row.type) : null
+  let img = buf
+  let box = null
+  let note = ''
+  if (crop && cropsToHero(t)) {
+    try {
+      const cut = cropHero(buf, t)
+      note = cut.why
+      // a picture that is already one piece needs no cut, and cutting it would
+      // write a second copy of the same bytes under .full for nothing
+      if (cut.box && !(cut.box.w === cut.canvas.w && cut.box.h === cut.canvas.h)) {
+        img = cut.png
+        box = cut.box
+      }
+    } catch (e) {
+      note = `the picture could not be read to find the piece in it (${String(e.message || e)}), so the whole image is kept`
+    }
+  }
+
+  if (box) {
+    // the family first: if the second write fails, the row still points at the
+    // old picture and the family is an orphan, which is recoverable. The other
+    // order leaves the row pointing at a hero with no family behind it.
+    await store().put(fullKey, buf, 'image/png')
+    await store().put(key, img, 'image/png')
+    w = box.w
+    h = box.h
+  } else {
+    await store().put(key, buf, 'image/png')
+    /* A REDRAW THAT DOES NOT CROP MUST NOT LEAVE THE LAST ONE'S FAMILY BEHIND.
+     * The row is about to stop claiming a crop, so a `.full` from an earlier
+     * import would sit under the undo route as a picture of something else. */
+    await store().del(fullKey).catch(() => {})
+  }
+  /* AND THE CACHE IS TOLD, BY NAME.
+   *
+   * store().put already evicts the key it wrote. This says so out loud at the
+   * one call site in this file that replaces a picture an author is looking at,
+   * because the whole class of bug here was a read handing back bytes a write
+   * had already replaced, and a line that is obvious is a line the next person
+   * does not delete. */
+  store().forget(key)
+  store().forget(fullKey)
+
   /* A REDRAW THAT CHANGED SIZE LOSES THE EDGE NUMBERS.
    *
    * createUi keeps regions and slices through a redraw on purpose, so redrawing
@@ -1481,10 +1836,49 @@ export async function setUiImage(ownerId, name, buf, w, h, pixellabId = '') {
   return one(
     `update ui_assets set blob_key = $3, w = $4, h = $5, status = 'ready',
        pixellab_id = case when $6 <> '' then $6 else ui_assets.pixellab_id end,
+       full_key = $7, crop = $8::jsonb, crop_note = $9, img_sha = $10,
        slices = case when ui_assets.w = $4 and ui_assets.h = $5 then ui_assets.slices else '{}'::jsonb end
      where owner_id = $1 and name = $2 returning *`,
-    [ownerId, name, key, Math.max(1, num(w, 256)), Math.max(1, num(h, 256)), String(pixellabId || '')],
+    [
+      ownerId,
+      name,
+      key,
+      Math.max(1, num(w, 256)),
+      Math.max(1, num(h, 256)),
+      String(pixellabId || ''),
+      box ? fullKey : '',
+      JSON.stringify(box || {}),
+      note,
+      shaOf(img),
+    ],
   )
+}
+
+/* PUTTING A BAD CROP BACK, WHICH IS WHY THE FAMILY IS KEPT AT ALL.
+ *
+ * The scan refuses rather than guesses, so a wrong crop should not happen. It
+ * still has to be undoable, because "should not happen" is not a thing an
+ * author can act on at eleven at night with a piece that came out a third of
+ * the size it should be. This writes the family back as the piece's own picture
+ * and stops the row claiming any crop, which puts it in exactly the state a
+ * refusal would have left it in: the whole image, and a hand crop owed.
+ *
+ * It goes through setUiImage with the cut turned off rather than writing the
+ * columns itself, so the size change drops the slices by the same rule
+ * everything else does. Four edge numbers measured on a 518x182 hero mean
+ * nothing on the 688x384 family they came out of.
+ */
+export async function uncropUi(ownerId, name) {
+  if (!ownerId || !isName(name)) throw new Error('no piece to put back')
+  const r = await one('select full_key from ui_assets where owner_id = $1 and name = $2', [ownerId, name])
+  if (!r) throw new Error(`there is no piece called "${name}" on this account`)
+  if (!r.full_key) throw new Error(`"${name}" was never cropped, so there is nothing to put back`)
+  const full = await store().get(r.full_key)
+  if (!full || full.length < 24) throw new Error(`the picture "${name}" was cut out of is no longer in storage`)
+  // the IHDR sits at a fixed offset in every png, the same read styleRef does,
+  // because the row's own w and h are the CROP's and are about to be replaced
+  const saved = await setUiImage(ownerId, name, full, full.readUInt32BE(16), full.readUInt32BE(20), '', { crop: false })
+  return shape(saved, OWN_BASE)
 }
 
 // a spend that produced nothing still has to be visible, so the row stays and
@@ -1532,7 +1926,15 @@ export async function saveUi(ownerId, name, regions, slices) {
      where owner_id = $1 and name = $2 returning *`,
     [ownerId, name, JSON.stringify(clean), JSON.stringify(rec)],
   )
-  return { ...shape(saved), warnings }
+  /* THE OWNER'S OWN BASE, BECAUSE THIS IS ONLY EVER REACHED FROM /api/ui.
+   *
+   * It defaulted to the account-less base, which is the same defect listUi and
+   * getUiByName were fixed for: a member who saved their marks got back a `src`
+   * pointing at whichever account's row won the name across the platform, so
+   * the page they were measuring on could swap under them at the moment of a
+   * save. It also dropped the link to the family a crop came out of, which is
+   * only offered on the scoped base. */
+  return { ...shape(saved, OWN_BASE), warnings }
 }
 
 // the name the routes call it by. One implementation, because a second one is a
@@ -1569,18 +1971,21 @@ export async function publishUi(ownerId, name) {
     `update ui_assets set published = true, published_at = now() where owner_id = $1 and name = $2 returning *`,
     [ownerId, name],
   )
-  return { ...shape(saved), warnings }
+  return { ...shape(saved, OWN_BASE), warnings }
 }
 
 // a piece leaves both stores or it comes back on the next listing, the same
 // rule dropItem holds a library row to. Core is guarded here too, because
 // deleting the dialogue box is the loudest way to override it.
 export async function removeUi(ownerId, name, { core = false } = {}) {
-  const r = await one('select blob_key, core from ui_assets where owner_id = $1 and name = $2', [ownerId, name])
+  const r = await one('select blob_key, full_key, core from ui_assets where owner_id = $1 and name = $2', [ownerId, name])
   if (!r) return false
   if (r.core && !core)
     throw new Error(`"${name}" is core chrome and core chrome is never overridable, so it cannot be removed from a member's side`)
-  if (r.blob_key) await store().del(r.blob_key).catch(() => {})
+  // the family goes with the hero. A `.full` left behind after the row is gone
+  // is object storage nobody can reach and nothing will ever delete, and the
+  // next piece to take the name would inherit it as its undo.
+  for (const k of [r.blob_key, r.full_key]) if (k) await store().del(k).catch(() => {})
   await q('delete from ui_assets where owner_id = $1 and name = $2', [ownerId, name])
   return true
 }

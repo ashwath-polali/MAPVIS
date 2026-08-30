@@ -100,7 +100,7 @@ type Corner = 'nw' | 'ne' | 'sw' | 'se'
  * because a north west and a south east corner are pulled along the same
  * diagonal and the cursor is a picture of that diagonal. */
 const CURSOR: Record<Corner, string> = { nw: 'nwse-resize', ne: 'nesw-resize', sw: 'nesw-resize', se: 'nwse-resize' }
-type Hit = { kind: 'place' | 'size' | 'region' | 'mark'; i: number; corner?: Corner } | null
+type Hit = { kind: 'place' | 'size' | 'region' | 'mark' | 'runin'; i: number; corner?: Corner } | null
 type Band = { x0: number; y0: number; x1: number; y1: number } | null
 /* FOUR TOOLS AND THERE WERE FIVE THINGS TO PLACE.
  *
@@ -805,7 +805,13 @@ function paint(c: CanvasRenderingContext2D, size: { w: number; h: number }, sc: 
     const img = key ? art.get(key) : undefined
     const { px, py, rw, rh } = boxOf(p, fit)
     const on = sel?.kind === 'place' && sel.i === i
-    const lit = on || (hover?.i === i && hover.kind !== 'region')
+    /* AND THE HOVER HAS TO BE ON AN ISLAND, which this only half asked.
+     * It excluded regions by name and took everything else, so hovering BERTH 0
+     * lit ISLAND 0: the two lists are indexed separately and the test compared
+     * an index against an index with nothing saying which list it came from.
+     * Measured while dragging a run-in, where the island under nobody's pointer
+     * filled in and grew a leader from its raster corner. */
+    const lit = on || ((hover?.kind === 'place' || hover?.kind === 'size') && hover.i === i)
     const tint = inkFor(STATE_INK, p.state)
 
     if (img && img.complete && img.naturalWidth) {
@@ -865,7 +871,13 @@ function paint(c: CanvasRenderingContext2D, size: { w: number; h: number }, sc: 
     const img = key ? art.get(key) : undefined
     const drawn = !!img?.naturalWidth
     const on = sel?.kind === 'place' && sel.i === i
-    const lit = on || (hover?.i === i && hover.kind !== 'region')
+    /* AND THE HOVER HAS TO BE ON AN ISLAND, which this only half asked.
+     * It excluded regions by name and took everything else, so hovering BERTH 0
+     * lit ISLAND 0: the two lists are indexed separately and the test compared
+     * an index against an index with nothing saying which list it came from.
+     * Measured while dragging a run-in, where the island under nobody's pointer
+     * filled in and grew a leader from its raster corner. */
+    const lit = on || ((hover?.kind === 'place' || hover?.kind === 'size') && hover.i === i)
     const tint = inkFor(STATE_INK, p.state)
     const { px, py, rw } = boxOf(p, fit)
     const sk = skinAt(p, reg, art)
@@ -971,12 +983,33 @@ function paint(c: CanvasRenderingContext2D, size: { w: number; h: number }, sc: 
      * the corner of a raster with transparent margin along its top, so on an
      * island nobody is touching it was a faint diagonal beginning in open water
      * well off the coast. */
-    for (const k of lit ? boundTo(doc, p.name) : []) {
+    for (const k of boundTo(doc, p.name)) {
+      /* AT REST THE LINE STARTS AT THE COAST AND NOT AT THE RASTER ORIGIN.
+       *
+       * This whole leader used to be drawn only while the island was under the
+       * hand, for a good reason: x,y is the corner of a raster with transparent
+       * margin along two sides, so on the hub the line began about forty units
+       * out in open water and read as a stray diagonal rather than as a rope.
+       * Hiding it answered that and cost the thing the leader is for, which is
+       * that a chart at rest showed a coral ring under an island with nothing
+       * saying the two were related at all.
+       *
+       * So it is always drawn, and at rest it is anchored on the nearest point
+       * of the DRAWN coast, which is where a rope would actually be made fast.
+       * Under the hand it goes back to x,y, because that is where the discovery
+       * ring is centred and where checkWorld measures the "u out" plate from,
+       * and a line disagreeing with the two marks beside it is worse than a line
+       * that moves when you touch the island. */
+      const bx = X(k.x)
+      const by = Y(k.y)
+      const from = lit
+        ? { x: px, y: py }
+        : { x: clamp(bx, seen.px, seen.px + seen.rw), y: clamp(by, seen.py, seen.py + seen.rh) }
       c.beginPath()
-      c.moveTo(px, py)
-      c.lineTo(X(k.x), Y(k.y))
-      c.strokeStyle = CHART_TOOL
-      c.globalAlpha = on ? 0.5 : 0.28
+      c.moveTo(from.x, from.y)
+      c.lineTo(bx, by)
+      c.strokeStyle = lit ? CHART_TOOL : CHART_BERTH
+      c.globalAlpha = on ? 0.5 : lit ? 0.28 : 0.34
       c.setLineDash([2, 3])
       c.stroke()
       c.setLineDash([])
@@ -1129,6 +1162,58 @@ function paint(c: CanvasRenderingContext2D, size: { w: number; h: number }, sc: 
      * one island and two berths had two large dashed circles floating in open
      * water with nothing on screen saying what they were. Same rule the island's
      * release ring now takes: a radius is drawn while it is being talked about. */
+    /* THE RUN-IN, DRAWN, AND A POINT YOU CANNOT SEE IS A POINT NOBODY CAN AIM.
+     *
+     * server/store/world.mjs has carried this field since 021 with the note that
+     * the UI owed it three things, and the second was this: a second dot on the
+     * water joined to its berth by a line. Without it the run-in was a pair of
+     * numbers the wire accepted, the game steered through, and no author could
+     * find. It is drawn hollow and the berth is drawn solid, because the hull
+     * passes through one and stops at the other.
+     *
+     * BEFORE the ring below rather than after, so the leader runs under the
+     * berth's own plate instead of across it. */
+    if (k.approach) {
+      const ax = X(k.approach.x)
+      const ay = Y(k.approach.y)
+      // hover and nothing else, and it holds through a drag: move() returns
+      // early while something is in the hand, so the last hit stays the last hit
+      // and the run-in keeps the gold it was grabbed with
+      const hotA = hover?.kind === 'runin' && hover.i === i
+      const aTint = hotA ? CHART_ARMED : lit ? CHART_BERTH_LIT : CHART_BERTH
+      c.beginPath()
+      c.moveTo(ax, ay)
+      c.lineTo(mx, my)
+      c.strokeStyle = aTint
+      c.globalAlpha = lit ? 0.75 : 0.4
+      c.setLineDash([4, 3])
+      c.stroke()
+      c.setLineDash([])
+      c.globalAlpha = 1
+      /* A DIAMOND AND NOT A RING, because a second coral circle beside the first
+       * one is two of the same mark and the eye has to read the size to tell
+       * which is which. Turned forty five degrees, which is the shape this chart
+       * has spare and the shape the old nested berth used before 019. */
+      c.save()
+      c.translate(ax, ay)
+      c.rotate(Math.PI / 4)
+      c.lineWidth = 3.4
+      c.strokeStyle = PLATE
+      c.strokeRect(-4, -4, 8, 8)
+      c.lineWidth = hotA ? 2 : 1.4
+      c.strokeStyle = aTint
+      c.strokeRect(-4, -4, 8, 8)
+      c.restore()
+      c.lineWidth = 1
+      /* NAMED, AND ONLY WHILE ITS BERTH IS BEING LOOKED AT. It has no name of
+       * its own to print, so the word is what it is rather than what it is
+       * called, and printing "run-in" beside every dock at all times is a
+       * caption on a chart nobody asked to have annotated. */
+      if (lit || hotA) {
+        c.font = LABEL(nameAt(LABEL_DROP))
+        plate('run-in', ax, ay - 12, aTint, { rim: aTint, keep: hotA, mid: true })
+      }
+    }
     if (k.r && lit) {
       c.beginPath()
       c.arc(mx, my, k.r * fit.s, 0, Math.PI * 2)
@@ -1278,6 +1363,22 @@ function under(doc: Doc, fit: Fit, sel: Sel, mx: number, my: number, skin: (p: P
    * and one dropped on a jetty has to stay reachable. */
   const list = doc.marks || []
   for (let i = list.length - 1; i >= 0; i--) if (near(list[i].x, list[i].y, 10)) return { kind: 'mark', i }
+  /* AND THE RUN-IN, WHICH IS ONLY GRABBABLE ON THE BERTH YOU ARE LOOKING AT.
+   *
+   * It is a second point sitting a short way off a first one, so making it live
+   * on every berth at once means a chart with four docks has four small targets
+   * nobody armed, and a press meant for the dock lands on a run-in a few pixels
+   * away. Testing it only for the selected mark keeps the ordinary gesture
+   * exactly as it was and makes the run-in reachable in the one state where
+   * somebody is deliberately working on that berth.
+   *
+   * AFTER the berths and not before: on a fresh run-in the two are on top of
+   * each other, and the berth has to win that press or the point somebody just
+   * made cannot be told apart from the one it belongs to. */
+  if (sel?.kind === 'mark') {
+    const m = list[sel.i]
+    if (m?.approach && near(m.approach.x, m.approach.y, 9)) return { kind: 'runin', i: sel.i }
+  }
   for (let i = doc.places.length - 1; i >= 0; i--) {
     const p = doc.places[i]
     if (mx >= X(p.x) - 5 && mx <= X(p.x) + Math.max(10, p.w * fit.s) && my >= Y(p.y) - 5 && my <= Y(p.y) + Math.max(10, p.h * fit.s))
@@ -1312,7 +1413,7 @@ export default function World() {
   /* WHAT IS ACTUALLY IN THE HAND, as state and not as the ref the drag lives
    * in. The ref cannot make the cursor change, because writing a ref does not
    * render, so the shape was frozen for the whole of a press. */
-  const [hand, setHand] = useState<'' | 'pan' | 'place' | 'mark' | Corner>('')
+  const [hand, setHand] = useState<'' | 'pan' | 'place' | 'mark' | 'runin' | Corner>('')
   const [band, setBand] = useState<Band>(null)
   /* WHERE THE ARMED TOOL'S ONE LINE IS DRAWN, which used to be the top centre of
    * the stage: measured 500 px from the button that armed it and 500 px from
@@ -1333,15 +1434,33 @@ export default function World() {
   const [lock, setLock] = useState(true)
   const [depth, setDepth] = useState(0)
   const [sure, setSure] = useState(false)
-  // whether this account is the one the ocean belongs to. null while nobody
-  // has answered, and the chart waits rather than flashing up and going away.
+  /* WHOSE WATER THIS IS, AND WHETHER IT IS THE ONE THE GAME SAILS.
+   *
+   * Two different questions, and the page asked one of them and answered both
+   * with it. Before 022 there was a single world row, so "is this yours" and
+   * "is this the game's ocean" were the same boolean; now every account gets a
+   * world of its own and they come apart. A member signed in owns their water
+   * (`mine`) and it is not the row /api/v1/world serves (`game`), and the page
+   * printed "ocean" at them either way with no address they could point their
+   * own engine at.
+   *
+   * `mine` is null while nobody has answered, so the chart waits rather than
+   * flashing up and going away. False means signed out, which is the one case
+   * with no water at all behind it. */
   const [mine, setMine] = useState<boolean | null>(null)
+  const [game, setGame] = useState(true)
+  /* WHERE THIS WATER IS READ FROM WITHOUT AN ACCOUNT, straight off the server
+   * rather than built here out of a pubId. api.mjs decides between
+   * /api/v1/world and /api/v1/worlds/<pub_id> and it is the only thing that
+   * knows the game's row is pinned to id 1, so a second copy of that rule in
+   * the browser is a second thing to get wrong. */
+  const [readUrl, setReadUrl] = useState('')
 
   const box = useRef<HTMLDivElement>(null)
   const cv = useRef<HTMLCanvasElement>(null)
   const art = useRef<Art>(new Map())
   const drag = useRef<{
-    kind: 'place' | 'size' | 'mark'
+    kind: 'place' | 'size' | 'mark' | 'runin'
     i: number
     dx: number
     dy: number
@@ -1379,37 +1498,62 @@ export default function World() {
   // which the resize handle calls four lines into a drag.
   const panel = useRef<HTMLElement>(null)
 
-  /* THE PAGE IS ONE ACCOUNT'S, AND IT SAYS SO RATHER THAN BREAKING.
+  /* ONE REQUEST DECIDES BOTH, AND IT USED TO BE TWO THAT COULD DISAGREE.
    *
-   * There is exactly one world row on the platform and everyone's maps sit on
-   * it, so a second account opening this page could drag somebody else's
-   * islands around and only find out at the save. It asks first.
+   * /api/world/mine was asked separately, on its own effect, and its answer was
+   * defaulted to true whenever it failed. That was written when the only reason
+   * to refuse was "you are not the one account allowed to compose", where being
+   * wrong meant showing an owner a wall. 022 removed that refusal, so the only
+   * remaining false is "nobody is signed in", and the same request that loads
+   * the water already says so with a 401. Asking twice bought a frame where the
+   * document had arrived and the ownership had not, which this file has already
+   * paid for once at the stage measurement.
    *
-   * A request that does not answer at all leaves it alone: the endpoint is new,
-   * an older deploy has no route for it, and hiding the page from its own owner
-   * because a 404 came back is the worse of the two failures. The write is
-   * still gated on the server, which is where it counts. */
+   * A 401 IS NOT AN ERROR HERE. It is the signed-out case, and routing it into
+   * `why` printed "the ocean would not load (401)" at a visitor, which reads as
+   * a broken page rather than as a page that belongs to an account. */
   useEffect(() => {
     if (loading) return
-    fetch('/api/world/mine')
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((j: { mine?: boolean }) => setMine(j.mine !== false))
-      .catch(() => setMine(true))
-  }, [loading])
-
-  useEffect(() => {
+    let live = true
     fetch('/api/world')
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`the ocean would not load (${r.status})`))))
-      .then((j: Doc & { states?: string[]; seaKinds?: string[]; markKinds?: string[] }) => {
+      .then(async (r) => {
+        if (r.status === 401) return null
+        if (!r.ok) throw new Error(`the water would not load (${r.status})`)
+        return (await r.json()) as Doc & {
+          states?: string[]
+          seaKinds?: string[]
+          markKinds?: string[]
+          game?: boolean
+          readUrl?: string
+        }
+      })
+      .then((j) => {
+        if (!live) return
+        if (!j) {
+          setMine(false)
+          return
+        }
         const fresh: Doc = { w: j.w, h: j.h, places: j.places || [], regions: j.regions || [], marks: j.marks, home: j.home || '', updatedAt: j.updatedAt }
         saved.current = stamp(fresh)
         setDoc(fresh)
         setStates(j.states || [])
         setKinds(j.seaKinds || [])
         setMarkKinds(j.markKinds || [])
+        // a deploy older than 022 sends neither, and the game's ocean is what it
+        // served then, so that is what the missing answer means
+        setGame(j.game !== false)
+        setReadUrl(j.readUrl || '/api/v1/world')
+        setMine(true)
       })
-      .catch((e) => setWhy(String((e as Error).message || e)))
-  }, [])
+      .catch((e) => {
+        if (!live) return
+        setWhy(String((e as Error).message || e))
+        setMine(true)
+      })
+    return () => {
+      live = false
+    }
+  }, [loading])
 
   /* THE REGISTRY FEEDS EVERYTHING ON THIS PAGE, not just the dropdown.
    *
@@ -1844,8 +1988,35 @@ export default function World() {
     setDirty(true)
   }, [])
 
+  /* MOVING A BERTH MOVES ITS RUN-IN, and this is the one place that can be
+   * true. A run-in is geometry relative to the dock: it is where a hull is
+   * pointed from before it swings onto the berth's heading, so leaving it
+   * standing while the dock is dragged across the water turns a considered
+   * arrival into a hull steering at open sea. Every gesture that moves a berth
+   * goes through here, so the drag, the arrow keys and the two typed
+   * coordinates all carry it without any of them knowing they do.
+   *
+   * ONLY WHEN THE PATCH REALLY MOVES IT. `patch.x` alone is a legal edit from
+   * the x field, and reading the absent y as zero would throw the run-in to the
+   * top of the world on every keystroke in the other box. */
   const editMark = useCallback((i: number, patch: Partial<WorldMark>) => {
-    setDoc((d) => (d ? { ...d, marks: (d.marks || []).map((m, k) => (k === i ? { ...m, ...patch } : m)) } : d))
+    setDoc((d) => {
+      if (!d) return d
+      return {
+        ...d,
+        marks: (d.marks || []).map((m, k) => {
+          if (k !== i) return m
+          const next = { ...m, ...patch }
+          const dx = (patch.x ?? m.x) - m.x
+          const dy = (patch.y ?? m.y) - m.y
+          // `approach` in the patch is the run-in being set or cleared on
+          // purpose, and shifting what was just typed would fight the author
+          if (m.approach && !('approach' in patch) && (dx || dy))
+            next.approach = { x: m.approach.x + dx, y: m.approach.y + dy }
+          return next
+        }),
+      }
+    })
     setDirty(true)
   }, [])
 
@@ -1934,7 +2105,16 @@ export default function World() {
       return {
         ...d,
         places: d.places.map((q, k) => (k === i ? { ...q, x: nx, y: ny } : q)),
-        marks: (d.marks || []).map((m) => (m.island === p.name ? { ...m, x: m.x + dx, y: m.y + dy } : m)),
+        // and the run-in nested on a bound berth goes by the same dx and dy.
+        // Without this line, dragging an island left its docks' run-ins standing
+        // in the water the island used to be in, which is the failure
+        // server/store/world.mjs names in the third of the three things the UI
+        // owed this field.
+        marks: (d.marks || []).map((m) =>
+          m.island === p.name
+            ? { ...m, x: m.x + dx, y: m.y + dy, ...(m.approach ? { approach: { x: m.approach.x + dx, y: m.approach.y + dy } } : {}) }
+            : m,
+        ),
       }
     })
     setDirty(true)
@@ -2077,6 +2257,18 @@ export default function World() {
       setSel({ kind: 'region', i: hit.i })
       return
     }
+    /* THE RUN-IN MOVES WITHOUT CHANGING WHAT IS SELECTED, because it is not a
+     * thing that can be selected: it has no panel of its own and no name, and
+     * the berth it belongs to is already open in the rail while it is being
+     * dragged. */
+    if (hit.kind === 'runin') {
+      const a = (doc.marks || [])[hit.i].approach
+      if (!a) return
+      drag.current = { kind: 'runin', i: hit.i, dx: w.x - a.x, dy: w.y - a.y, mx, my }
+      setHand('runin')
+      remember()
+      return
+    }
     if (hit.kind === 'mark') {
       setSel({ kind: 'mark', i: hit.i })
       setSure(false)
@@ -2157,6 +2349,9 @@ export default function World() {
     const y = sea(w.y - d.dy, doc.h)
     if (d.kind === 'place') shift(d.i, x, y)
     else if (d.kind === 'mark') editMark(d.i, { x, y })
+    // and the run-in on its own, which is the one drag that moves a point
+    // without moving what it hangs off
+    else if (d.kind === 'runin') editMark(d.i, { approach: { x: Math.round(x), y: Math.round(y) } })
     else {
       /* THE GRIP STAYS UNDER THE HAND, and the arithmetic is what puts it there.
        *
@@ -2258,7 +2453,22 @@ export default function World() {
                 // what the frame before it already scaled
                 marks: (d.m0 || []).map((mk) =>
                   mk.island === p0.name
-                    ? { ...mk, x: Math.round(pinX + (mk.x - pinX) * fx), y: Math.round(pinY + (mk.y - pinY) * fy) }
+                    ? {
+                        ...mk,
+                        x: Math.round(pinX + (mk.x - pinX) * fx),
+                        y: Math.round(pinY + (mk.y - pinY) * fy),
+                        // the run-in takes the same scale as the dock it belongs
+                        // to, for the same reason: it is aimed at the picture,
+                        // and the picture is what just changed size
+                        ...(mk.approach
+                          ? {
+                              approach: {
+                                x: Math.round(pinX + (mk.approach.x - pinX) * fx),
+                                y: Math.round(pinY + (mk.approach.y - pinY) * fy),
+                              },
+                            }
+                          : {}),
+                      }
                     : mk,
                 ),
               }
@@ -2445,17 +2655,33 @@ export default function World() {
     return () => window.removeEventListener('beforeunload', ask)
   }, [dirty])
 
-  /* NOT YOURS, SAID PLAINLY, rather than a chart of somebody else's islands
-   * that refuses at the save. There is one world row for the whole platform. */
+  /* SIGNED OUT, AND THAT IS THE WHOLE OF WHAT THIS CASE IS NOW.
+   *
+   * It read "The ocean is not yours. One account holds the water every map sits
+   * on", which was true of one world row and is a false sentence since 022:
+   * every account gets water of its own the moment it opens this page. A
+   * visitor with no account is not being refused somebody else's ocean, they
+   * have not got one yet, and the door is the sign-in they were never offered.
+   *
+   * The published read still works for anybody, so it is named here rather than
+   * left to look like something the sign-in unlocks. */
   if (mine === false)
     return (
       <div className="world">
         <div className="world-gone">
-          <h1>The ocean is not yours.</h1>
-          <p>One account holds the water every map sits on. Yours are all still here.</p>
-          <Link to="/" className="world-btn">
-            your maps
-          </Link>
+          <h1>A world belongs to an account.</h1>
+          <p>
+            Sign in and you get water of your own to place your islands on, with a public address your own engine can
+            read it from. The game&apos;s ocean stays readable by anyone at <code>/api/v1/world</code>.
+          </p>
+          <div className="world-gone-do">
+            <Link to="/enter" className="world-btn lit">
+              sign in
+            </Link>
+            <Link to="/enter?new=1" className="world-btn">
+              make an account
+            </Link>
+          </div>
         </div>
       </div>
     )
@@ -2463,7 +2689,7 @@ export default function World() {
     return (
       <div className="world">
         <div className="world-gone">
-          <h1>The ocean will not open.</h1>
+          <h1>The water will not open.</h1>
           <p>{why}</p>
           <Link to="/" className="world-btn">
             your maps
@@ -2523,13 +2749,25 @@ export default function World() {
                   ? 'move'
                   : 'grab'
 
+  /* THE ONE WORD THIS PAGE CALLS ITS SUBJECT.
+   *
+   * "the ocean" is a proper noun in this project: it is the water the game
+   * sails, the one row /api/v1/world serves, the thing Thor's ship crosses. A
+   * member composing their own sea is not composing that, and calling theirs
+   * "the ocean" too makes two different documents share a name in every
+   * sentence on the page. So the game's row keeps the name and everybody else's
+   * is a world, which is what the table has always called the row. */
+  const water = game ? 'ocean' : 'world'
+
   return (
     <div className="world">
       <header className="world-bar">
         <button className="world-back" onClick={() => go('/')} title="back to your maps">
           ←
         </button>
-        <span className="world-name">ocean</span>
+        <span className="world-name" title={game ? 'the water the game sails, read at /api/v1/world' : 'your own water, nobody else edits it'}>
+          {water}
+        </span>
         {/* THE TOOLS ARE ONE CONTROL, not four buttons that happen to be beside
             each other, and the shape is the editor's own segmented control so
             the two screens agree about what a group of options looks like.
@@ -2623,8 +2861,10 @@ export default function World() {
                 two hundred unit window of a 4096 unit ocean the header
                 advertises, which is right for opening a chart and wrong to call
                 fit with nothing else on offer. */}
-            <button className="world-zbtn wide" onClick={frameSea} title={`the whole ${doc.w} × ${doc.h} ocean`}>
-              ocean
+            {/* the framing button is named after the thing it frames, and on a
+                member's water that thing is not called the ocean */}
+            <button className="world-zbtn wide" onClick={frameSea} title={`the whole ${doc.w} × ${doc.h} ${water}`}>
+              {water}
             </button>
             <button className="world-zbtn wide" onClick={frameAll} title="everything on the water · 0">
               placed
@@ -2718,6 +2958,10 @@ export default function World() {
                  the island whose panel you happened to be in, which is why the
                  field could not exist on a free point at all. */
               sheet={spot.island ? reg.get(doc.places.find((p) => p.name === spot.island)?.map || '') : undefined}
+              /* the same rule composition() uses to pick the one berth a slot
+                 gets, asked here so the panel can say a run-in on any other
+                 point is a field nothing reads */
+              heeded={!!spot.island && berthOf(doc, spot.island) === spot}
               sure={sure}
               onSure={setSure}
               onEdit={(patch) => editMark(sel.i, patch)}
@@ -2736,6 +2980,13 @@ export default function World() {
               The counts and the size of the water that used to sit here are in
               the readout strip along the bottom now, where the editor keeps the
               same class of fact, so this is only the work left. */}
+          {/* WHOSE WATER THIS IS AND WHERE IT IS READ FROM, which nothing on
+              this page said and which is the whole of what 022 changed. It sits
+              above the work rather than in the footer because it is the one
+              fact that decides what every other row on the rail means: an
+              island placed on the game's ocean is an island a student sails to,
+              and the same island placed on a member's world is not. */}
+          {!sel && <Whose doc={doc} game={game} readUrl={readUrl} />}
           {!sel && <Todo doc={doc} />}
 
           <div className="world-roster">
@@ -2824,11 +3075,11 @@ export default function World() {
             })}
           </div>
 
-          {/* the shared empty state, for the ocean that genuinely has nothing on
+          {/* the shared empty state, for the water that genuinely has nothing on
               it. Anything else is answered by the summary above. */}
           {!sel && !doc.places.length && !doc.regions.length && !(doc.marks || []).length && (
             <div className="nothing">
-              <p className="nothing-say">nothing is on this ocean yet</p>
+              <p className="nothing-say">nothing is on this {water} yet</p>
               <p className="nothing-do">place the first island</p>
             </div>
           )}
@@ -2854,13 +3105,13 @@ export default function World() {
           {doc.regions.length ? ` · ${doc.regions.length} water` : ''}
         </span>
         <span className="world-grow" />
-        <label className="world-size" title="the ocean, across and down, in world units">
-          <span className="dim">ocean</span>
+        <label className="world-size" title={`the ${water}, across and down, in world units`}>
+          <span className="dim">{water}</span>
           <input
             className="world-num"
             type="number"
             value={doc.w}
-            aria-label="ocean width"
+            aria-label={`${water} width`}
             onChange={(e) => {
               setDoc({ ...doc, w: Math.max(1, Math.round(Number(e.target.value) || 0)) })
               setDirty(true)
@@ -2871,7 +3122,7 @@ export default function World() {
             className="world-num"
             type="number"
             value={doc.h}
-            aria-label="ocean height"
+            aria-label={`${water} height`}
             onChange={(e) => {
               setDoc({ ...doc, h: Math.max(1, Math.round(Number(e.target.value) || 0)) })
               setDirty(true)
@@ -2885,6 +3136,84 @@ export default function World() {
       </footer>
     </div>
   )
+}
+
+/* WHOSE WATER THIS IS, AT THE TOP OF THE RAIL.
+ *
+ * 022 made the world per-account and nothing in the browser was told. Two
+ * accounts opening this page got the identical screen, both titled "ocean",
+ * with no way to tell which of the two documents was in front of them and no
+ * address at all for the one the game does not read. A member composing their
+ * own sea for their own engine could not find out where to point it.
+ *
+ * THE ADDRESS IS THE POINT OF THE BLOCK. Everything else here is confirmation;
+ * the read url is the only thing on the page that cannot be worked out by
+ * looking at the chart. Absolute, because it is going to be pasted into another
+ * program on another origin, and a path alone would be pasted and then fail.
+ *
+ * AND IT PUTS A FLOOR UNDER THE RAIL FROM THE TOP. The measured complaint was a
+ * 719 px column with 183 px in it; the legend answered the bottom half and this
+ * answers the top, and both are real content rather than filler. */
+function Whose({ doc, game, readUrl }: { doc: Doc; game: boolean; readUrl: string }) {
+  const [copied, setCopied] = useState(false)
+  // window is read at click time and not at render, so nothing here assumes a
+  // dom during a server render this app does not have yet but might
+  const full = () => (typeof window === 'undefined' ? readUrl : window.location.origin + readUrl)
+  const home = doc.home ? doc.places.find((p) => p.name === doc.home) : undefined
+  return (
+    <section className="world-whose">
+      <h3 className="world-lab">{game ? 'the game reads this water' : 'your own water'}</h3>
+      <p className="world-note">
+        {game
+          ? 'This is the row the ship sails. Anything placed here is somewhere a student can reach.'
+          : 'Nobody else edits this and the game does not sail it. Point your own engine at the address below.'}
+      </p>
+      <div className="world-fact">
+        <span>read at</span>
+        <a className="world-url mono" href={readUrl} target="_blank" rel="noreferrer" title="the composition, as the engine receives it">
+          {readUrl}
+        </a>
+        <button
+          className="world-btn small"
+          onClick={() => {
+            void navigator.clipboard
+              ?.writeText(full())
+              .then(() => setCopied(true))
+              // clipboard is refused outside a secure context and on a denied
+              // permission, and a button that lies about having copied is worse
+              // than one that says it could not
+              .catch(() => setCopied(false))
+          }}
+          title={full()}
+        >
+          {copied ? 'copied' : 'copy'}
+        </button>
+      </div>
+      <div className="world-fact">
+        <span>a run starts at</span>
+        <b>{home ? displayName(home, 'unnamed island').text : 'nothing is marked'}</b>
+      </div>
+      {doc.updatedAt ? (
+        <div className="world-fact">
+          <span>last saved</span>
+          <b>{when(doc.updatedAt)}</b>
+        </div>
+      ) : null}
+    </section>
+  )
+}
+
+/* HOW LONG AGO, IN WORDS, and deliberately coarse. A timestamp to the second on
+ * a document one person edits is precision nobody reads; what is worth knowing
+ * is whether the row changed under you while this tab was open. */
+function when(ms: number): string {
+  const s = Math.max(0, Math.round((Date.now() - ms) / 1000))
+  if (s < 90) return 'just now'
+  const m = Math.round(s / 60)
+  if (m < 60) return `${m} minutes ago`
+  const h = Math.round(m / 60)
+  if (h < 36) return h === 1 ? 'an hour ago' : `${h} hours ago`
+  return `${Math.round(h / 24)} days ago`
 }
 
 /* WHAT THE COLOURED DOTS MEAN, AT THE FOOT OF THE RAIL.
@@ -2988,6 +3317,7 @@ function BerthPanel({
   kinds,
   places,
   sheet,
+  heeded,
   sure,
   onSure,
   onEdit,
@@ -2997,6 +3327,12 @@ function BerthPanel({
   kinds: string[]
   places: Place[]
   sheet: MapRow | undefined
+  /* WHETHER THE GAME WILL EVER READ A RUN-IN PUT ON THIS POINT. The slot shape
+   * holds one berth per island and the server picks the first berth-kind mark
+   * bound to it, so a run-in on the second dock, or on a waypoint, is a field
+   * that saves, draws and is never sent. checkWorld warns about exactly this at
+   * the save; saying it here is the same sentence one press earlier. */
+  heeded: boolean
   sure: boolean
   onSure: (v: boolean) => void
   onEdit: (patch: Partial<WorldMark>) => void
@@ -3154,8 +3490,76 @@ function BerthPanel({
         />
       </section>
 
+      {/* THE RUN-IN, WHICH HAD NO CONTROL AT ALL.
+          The game aims here first and swings onto the berth's heading only once
+          it is astern, so without one every arrival in the game is a straight-in
+          nose. 021 put the field back on the wire and left it authorable by
+          nothing a person could touch, which is the half-plumbed pattern
+          docs/AUTHORING.md names. Only on a berth, because a waypoint is a
+          corner a crossing turns at and nothing comes alongside it. */}
+      {m.kind === 'berth' && <RunIn m={m} heeded={heeded} onEdit={onEdit} />}
+
       <Scrap what={said.text} sure={sure} onSure={onSure} onDrop={onDrop} />
     </div>
+  )
+}
+
+/* THE RUN-IN: WHERE A HULL IS AIMED BEFORE IT COMES ALONGSIDE.
+ *
+ * The first of the three things server/store/world.mjs says the UI owes this
+ * field. It makes one, drags one and clears one, and the other two are the
+ * diamond on the chart and the carry in shift().
+ *
+ * IT IS BORN ASTERN OF THE HEADING RATHER THAN AT THE BERTH. A run-in on top of
+ * its own berth is geometrically the no-op the field was already in, and worse,
+ * the two dots are on the same pixel so the one somebody just made cannot be
+ * dragged off the other. The hull holds `facing` at the dock, so it arrived from
+ * the reverse of it, and that is where the point belongs. With no heading set
+ * there is nothing to reverse, so it goes south, which is toward the reader on
+ * every chart in this tool. */
+function RunIn({ m, heeded, onEdit }: { m: WorldMark; heeded: boolean; onEdit: (patch: Partial<WorldMark>) => void }) {
+  const a = m.approach
+  const make = () => {
+    const f = m.facing || ''
+    let dx = f.includes('east') ? 1 : f.includes('west') ? -1 : 0
+    let dy = f.includes('south') ? 1 : f.includes('north') ? -1 : 0
+    if (!dx && !dy) dy = -1
+    const n = Math.hypot(dx, dy) || 1
+    // far enough out that the two marks are separate targets at the opening
+    // zoom, and outside the arrival radius so it is never inside "already there"
+    const far = Math.max(90, (m.r || 0) * 2.5)
+    dx = Math.round((-dx / n) * far)
+    dy = Math.round((-dy / n) * far)
+    onEdit({ approach: { x: m.x + dx, y: m.y + dy } })
+  }
+  return (
+    <section className="world-sec">
+      <h3 className="world-lab">the run-in</h3>
+      {a ? (
+        <>
+          <div className="world-pair">
+            <Num label="x" v={a.x} on={(n) => onEdit({ approach: { x: n, y: a.y } })} />
+            <Num label="y" v={a.y} on={(n) => onEdit({ approach: { x: a.x, y: n } })} />
+          </div>
+          <p className="world-note">Drag the hollow diamond on the chart. The hull steers at it, then swings onto the heading above.</p>
+          {!heeded && (
+            <p className="world-bad">
+              The game reads one dock per island and this is not it, so nothing will ever steer through this point.
+            </p>
+          )}
+          <button className="world-btn small" onClick={() => onEdit({ approach: undefined })} title="the hull will come straight in">
+            clear it
+          </button>
+        </>
+      ) : (
+        <>
+          <p className="world-note">Nothing set, so a hull noses straight in on the heading above.</p>
+          <button className="world-btn small" onClick={make}>
+            add a run-in
+          </button>
+        </>
+      )}
+    </section>
   )
 }
 

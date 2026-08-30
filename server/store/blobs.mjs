@@ -157,6 +157,29 @@ function memo(b) {
 
   return {
     ...b,
+    /* THE ONE THING THIS CACHE CANNOT HEAR ABOUT: A WRITE FROM ANOTHER PROCESS.
+     *
+     * Every comment above is about writes that pass through this object, and
+     * those are handled. A write that does not is invisible: the entries below
+     * are only ever evicted by put, del, delPrefix or copy IN THIS PROCESS, so
+     * a CLI script, a second dev server or another serverless instance can
+     * replace an object and this one will keep answering with what it holds
+     * until it is restarted.
+     *
+     * Measured 2026-08-30 and it is not theoretical. A script called setUiImage
+     * for `panel` with 67035 bytes; the row and the bucket both took it; the
+     * dev server kept serving the 56644 bytes it had cached, on both image
+     * routes, until it was restarted. So an author redrawing a piece was shown
+     * the old picture with nothing anywhere saying why, which is the kind of
+     * lie that costs an afternoon.
+     *
+     * There is no way for this file to detect that on its own, because knowing
+     * would mean a bucket read, which is the cost the cache exists to avoid. So
+     * the caller that CAN tell says so: server/store/ui.mjs keeps the sha of
+     * the bytes on the row it already reads, and calls this when what it was
+     * handed does not hash to what the row says. */
+    forget: (key) => drop(key),
+    forgetPrefix: (prefix) => dropPrefix(prefix),
     async get(key) {
       const hit = mem.get(key)
       if (hit) { mem.delete(key); mem.set(key, hit); return hit }

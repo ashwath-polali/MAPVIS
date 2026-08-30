@@ -900,10 +900,100 @@ details.world-fold[open] > summary {
   margin: 0;
   font: 400 clamp(1.8rem, 4vw, 3rem) var(--font-display);
 }
+/* A WHOLE SCREEN WITH ONE PARAGRAPH ON IT IS A PAGE, NOT A PANEL.
+   This was --fs-body at 44ch, which is 13px wrapping every four words under a
+   3rem display heading: four short ragged lines that read as a caption under a
+   sign. --fs-read is what the rest of the site sets running prose at, and the
+   measure goes with it so the block is three lines rather than five. */
 .world-gone p {
   margin: 0;
-  max-width: 44ch;
+  max-width: 52ch;
+  font-size: var(--fs-read);
+  line-height: var(--lh);
+  color: var(--dim);
+}
+.world-gone code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  color: var(--ink-2);
+}
+.world-gone-do {
+  display: flex;
+  gap: 8px;
+  margin-top: 6px;
+}
+/* the door that is actually being offered, lit, so a page with two buttons on
+   it does not make somebody read both to find out which one is the way in */
+.world-btn.lit {
+  color: var(--gold);
+  border-color: var(--gold);
+  background: var(--gold-soft);
+}
+
+/* WHOSE WATER THIS IS. The block at the head of the rail, and the one place on
+   the page carrying an address meant to be copied out of it.
+
+   No frame. The panel's rhythm is a mono header, its rows, and a hairline
+   under, which is what .world-sec does two hundred lines up, and a card here
+   would be the boxiness that section is written against. */
+.world-whose {
+  display: grid;
+  gap: 6px;
+  padding-bottom: 11px;
+  border-bottom: var(--hair) solid var(--line);
+  /* A GRID ITEM'S min-width IS auto, WHICH IS ITS CONTENT, so the truncation
+     below has to be granted three times over: on the link, on the row and on
+     this block. Miss any one and the 36 character uuid in a member's read
+     address widens the whole rail and gives the panel a horizontal scrollbar,
+     which is what it did. */
+  min-width: 0;
+}
+.world-whose .world-note {
+  line-height: var(--lh);
+  max-width: 40ch;
+}
+/* a label and its value on one line, the label at the text floor and the value
+   in the reading ink, which is the same pairing the editor's readouts use */
+.world-fact {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-height: 22px;
+  min-width: 0;
+}
+.world-fact > span:first-child {
+  flex: none;
+  font: 400 var(--fs-micro) var(--font-mono);
   color: var(--quiet);
+}
+.world-fact b {
+  font: 500 var(--fs-small) var(--font-label);
+  color: var(--ink-on-sea);
+}
+/* THE ADDRESS, AND IT IS A LINK BECAUSE IT RESOLVES. Pressing it shows the
+   json an engine would receive, which is the fastest way to find out whether
+   the composition is what you think it is. Truncated rather than wrapped: a
+   uuid in the path is 36 characters and wrapping it puts a four line address in
+   a rail that is meant to be scanned. */
+.world-url {
+  flex: 1;
+  /* WITHOUT THIS THE ELLIPSIS NEVER HAPPENS. A flex item's min-width is auto,
+     which is its content, so a 36 character uuid in the path refused to shrink,
+     pushed the copy button off the panel and gave the whole rail a horizontal
+     scrollbar. Measured on a second account's world, which is the only kind
+     whose address carries a uuid. */
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 400 var(--fs-micro) var(--font-mono);
+  color: var(--gold);
+  text-decoration: none;
+  cursor: var(--cur-do);
+}
+.world-url:hover {
+  color: var(--gold-lit);
+  text-decoration: underline;
 }
 
 /* THE LEGEND, AND IT IS ALSO THE RAIL'S FLOOR.
