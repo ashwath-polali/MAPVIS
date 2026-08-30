@@ -15,9 +15,10 @@ import { getMapBySlug, createMap, getDoc, putDoc } from '../store/maps.mjs'
 import { publishBundle, publishedMap, orderedHeadings } from '../store/publish.mjs'
 import { gateMap } from '../store/gate.mjs'
 import { store } from '../store/blobs.mjs'
-import { getWorld, saveWorld, composition, withWorld } from '../store/world.mjs'
+import { getWorld, saveWorld, composition, withWorld, worldIdFor, worldByPubId, GAME_WORLD } from '../store/world.mjs'
 import { putLibraryFrames, copyLibraryItem } from '../store/platform.mjs'
 import { createUi, setUiRegions, setUiImage, getUiByName, removeUi, publishUi, readyUi, pieceType, PIECE_TYPES } from '../store/ui.mjs'
+import { uiAsset } from '../pixellab.mjs'
 import { encodePNG } from '../sheet.mjs'
 import { api } from '../api.mjs'
 import { q, one, closeDb } from './pool.mjs'
@@ -650,6 +651,17 @@ try {
   const saveWorld_ = (d) => saveWorld(d, wc)
   const getWorld_ = () => getWorld(wc)
   const worldBefore = await getWorld_()
+  /* THE REAL OCEAN CARRIES NO TEST RESIDUE, asked of the row as it was found
+   * rather than of anything this run wrote.
+   *
+   * `sunken_bell_buoy`, labelled "Bell of the Deep", was left on the live world
+   * by a verify run that did not clean up after itself. Ash did not recognise it
+   * and said to remove it; 021 does. This is the fence that says a later run has
+   * not put another one there, and it is checked BEFORE the fixture is written
+   * because after that point the ocean is this file's and proves nothing. */
+  worldBefore.marks.some((m) => m.name === 'sunken_bell_buoy')
+    ? no('the bell buoy is back on the live ocean, so something is leaking test marks into it')
+    : ok('the live ocean carries no test residue')
   try {
     const saved = await saveWorld_({
       w: 4096,
@@ -696,13 +708,29 @@ try {
        * to live. The second one is in open water and belongs to nobody, which is
        * the corner a crossing turns at. */
       marks: [
-        { name: 'zz_verify_dock', kind: 'berth', x: 880, y: 700, facing: 'north', at: 'coach_post', island: 'zz_verify_isle', label: 'The Verify Dock' },
-        /* THE SECOND BERTH BOUND TO AN ISLAND IS ITS RUN-IN, which is the order
-         * 019 wrote when it lifted every nested approach out. The game reads
-         * berth.approach and runs a two-stage manoeuvre off it, and after 019
-         * nothing put it back on the wire, so a field with a live consumer had
-         * no author and every arrival was a straight-in nose. */
-        { name: 'zz_verify_run_in', kind: 'berth', x: 940, y: 760, island: 'zz_verify_isle', label: 'The Run In' },
+        /* THE RUN-IN IS A FIELD ON THE BERTH, and it was briefly list order:
+         * "the second berth-kind mark bound to this island", which is what 019's
+         * migration happened to write. Nothing on the chart could see that rule,
+         * so a spare dock or a route corner bound to an island silently became
+         * the thing the hull steers at. The game reads berth.approach and sail.ts
+         * runs a whole two-stage manoeuvre off it, so this is a field with a live
+         * consumer in the other repo and it has to be authorable on purpose. */
+        {
+          name: 'zz_verify_dock',
+          kind: 'berth',
+          x: 880,
+          y: 700,
+          facing: 'north',
+          at: 'coach_post',
+          island: 'zz_verify_isle',
+          label: 'The Verify Dock',
+          approach: { x: 940, y: 760 },
+        },
+        /* AND A SECOND BERTH BOUND TO THE SAME ISLAND IS JUST A SPARE NOW. Under
+         * the old rule this one WAS the run-in and the hull aimed at it. It has
+         * to be inert, or the collapse is still deciding geometry by list index
+         * where nobody can see it. */
+        { name: 'zz_verify_spare', kind: 'berth', x: 700, y: 500, island: 'zz_verify_isle', label: 'The Spare' },
         { name: 'zz_north_turn', kind: 'waypoint', x: 1600, y: 200, r: 50 },
       ],
     })
@@ -721,6 +749,10 @@ try {
       [880, 700, 'north', 'coach_post', 'zz_verify_isle'],
     )
     eq('and a point in open water belongs to nobody', readBack.marks.find((m) => m.name === 'zz_north_turn')?.island, undefined)
+    // the second point survives the round trip nested, which is what makes it an
+    // authored fact rather than a consequence of where it sat in the list
+    eq('a berth carries its own run-in', dock?.approach, { x: 940, y: 760 })
+    eq('and a spare berth beside it is not one', readBack.marks.find((m) => m.name === 'zz_verify_spare')?.approach, undefined)
     eq('the island state', isle?.state, 'available')
     eq('the discovery radius', isle?.discover, 240)
     eq('and the radius it stays in memory to, which is a different number', isle?.release, 900)
@@ -777,9 +809,10 @@ try {
       x: 880,
       y: 700,
       facing: 'north',
-      // the second bound berth, folded back in under the key PmapScene already
-      // reads. Without it the two-stage berthing manoeuvre the game implements
-      // could never fire from a MAPVIS document.
+      // the berth's own second point, folded in under the key PmapScene already
+      // reads at line 2825. Without it the two-stage berthing manoeuvre sail.ts
+      // implements could never fire from a MAPVIS document and every arrival in
+      // the game is a straight-in nose.
       approach: { x: 940, y: 760 },
       at: 'coach_post',
     })
@@ -789,7 +822,7 @@ try {
     eq('every point crosses as well, by name', (comp.marks || []).map((m) => m.name).sort(), [
       'zz_north_turn',
       'zz_verify_dock',
-      'zz_verify_run_in',
+      'zz_verify_spare',
     ])
     /* FOUR NUMBERS AGAINST A READER THAT WANTS FOUR KEYS is the quietest failure
      * on this endpoint: every comparison is against undefined and false, so no
@@ -1158,6 +1191,75 @@ try {
         r: 0,
       })
       eq('and the berth is still reachable by the name it was given', aliased.marks?.zz_alias_dock?.x, 360)
+
+      /* ---- an ocean for any account, and ours pinned where it was ----------
+       *
+       * 022 dropped `check (id = 1)`. Before it, a stranger who signed up for a
+       * map tool found the world page open in front of them and then got a 403
+       * explaining that the ocean belongs to somebody else. Now they get one.
+       *
+       * THE THING THAT MUST NOT MOVE IS OURS. /api/v1/world is fetched by a
+       * chromebook with no account, so it is pinned to row 1 by a constant and
+       * not resolved from anything. Everything below is really one question
+       * asked four ways: can a second world exist without the first one noticing.
+       */
+      const mate = await one(
+        `insert into users (email, password_hash) values ('zz-verify-stranger@example.invalid', 'x')
+         on conflict (email) do update set email = excluded.email returning id`,
+      )
+      try {
+        const theirs = await worldIdFor(mate.id)
+        theirs !== GAME_WORLD
+          ? ok(`a second account gets an ocean of its own, row ${theirs}`)
+          : no('a stranger was handed the game"s own world row')
+        eq('and asking twice does not make a second one', await worldIdFor(mate.id), theirs)
+        /* AND THE GAME'S OWN ROW IS STILL RESOLVED BY THE CONFIGURED ACCOUNT
+         * RATHER THAN BY WHOEVER ASKS FIRST. `game` is the caller's answer to
+         * "is this the account OCEAN_OWNER names", which a store cannot read. */
+        eq('the account the game reads is still row 1', await worldIdFor(mate.id, { game: true }), GAME_WORLD)
+
+        const oursBefore = await getWorld_()
+        await saveWorld(
+          {
+            w: 2048,
+            h: 2048,
+            home: '',
+            places: [{ name: 'zz_their_isle', map: '', x: 10, y: 10, w: 64, h: 64, state: 'rumour', discover: 300 }],
+            regions: [],
+            marks: [{ name: 'zz_their_berth', kind: 'berth', x: 40, y: 40, island: 'zz_their_isle', label: 'Their Berth' }],
+          },
+          null,
+          theirs,
+        )
+        const oursAfter = await getWorld_()
+        eq('a stranger saving their ocean leaves ours alone', [oursAfter.version, oursAfter.places.length], [
+          oursBefore.version,
+          oursBefore.places.length,
+        ])
+
+        /* THE GAME'S READ IS UNCHANGED BY ONE BYTE, which is the only promise
+         * this item makes to the other repo. Asked through the real route with
+         * no cookie, the way the chromebook asks it. */
+        const still = await (await fetch(`http://127.0.0.1:${PORT}/api/v1/world/marks`)).json()
+        eq('/api/v1/world still answers the game"s own ocean', Object.keys(still.marks).sort(), [
+          'zz_alias_dock',
+          'zz_alias_isle',
+        ])
+
+        // and theirs is fetchable at an address of its own, or an ocean nobody
+        // can read is a drawing
+        const pub = (await getWorld(undefined, theirs)).pubId
+        eq('a stranger"s ocean resolves back from its public address', await worldByPubId(pub), theirs)
+        const mine = await (await fetch(`http://127.0.0.1:${PORT}/api/v1/worlds/${pub}`)).json()
+        eq('and their engine reads it in the same words ours does', mine.slots?.length, 1)
+        const theirMarks = await (await fetch(`http://127.0.0.1:${PORT}/api/v1/worlds/${pub}/marks`)).json()
+        eq('their berths come back flat, by name, the way a grape wants them', theirMarks.marks?.zz_their_berth?.x, 40)
+        const nowhere = await fetch(`http://127.0.0.1:${PORT}/api/v1/worlds/00000000-0000-0000-0000-000000000000`)
+        nowhere.status === 404 ? ok('an ocean nobody owns is a 404 rather than ours') : no(`a bogus address answered ${nowhere.status}`)
+      } finally {
+        // the world row goes with the account, on delete cascade
+        await q('delete from users where id = $1', [mate.id])
+      }
     } finally {
       await new Promise((r) => server.close(r))
     }
@@ -1168,6 +1270,21 @@ try {
      * against a snapshot, it is an overwrite of whatever is there, and the write
      * precondition exists to refuse the first kind and not the second. */
     await saveWorld_({ ...worldBefore, updatedAt: 0 }, wc)
+    /* AND THE VERSION BACK WITH IT, because running the tests must not cost a
+     * class its saved positions.
+     *
+     * `version` counts up whenever places or regions differ, which is right for
+     * an author moving an island and wrong for this file: the test writes a
+     * throwaway composition and then writes the real one back, so every run
+     * counts two legitimate changes and lands on a number nobody authored. The
+     * game refuses to resume a saved run when that number moves, so a verify
+     * pass was quietly throwing away the position of every chromebook that had
+     * one. Measured across one session: 341 to 395.
+     *
+     * The ocean is byte for byte what it was, so its version is too. Written
+     * straight rather than through saveWorld, because saveWorld's whole job is
+     * to decide this number and it would be right to refuse. */
+    await wc.query('update world set version = $1 where id = $2', [worldBefore.version, GAME_WORLD])
     // the lock is released by withWorld, with the client, so a crash frees it
     // with the connection instead of wedging the next runner
   }
@@ -1193,6 +1310,72 @@ try {
     eq('a south-west set is found as south-west and not as west', asTheGameAsks('south-west-0.png'), 'south-west')
     eq('and a plain west set is still found as west', asTheGameAsks('west-0.png'), 'west')
     eq('a heading nothing recognises sorts last, where it cannot shadow one', orderedHeadings(['wobble', 'south-east'])[0], 'south-east')
+  }
+
+  /* ---- 5.6 THE ROUTE THAT DRAWS A PIECE OF CHROME ------------------------
+   *
+   * uiAsset() guessed POST /v2/ui-assets, which is a 405: that path is GET-only.
+   * So /api/ui/generate could never work and the whole library button was dead,
+   * every press failing with a Method Not Allowed in the row.
+   *
+   * The real one is POST /v2/create-ui-asset, and the 422 is what proves it: an
+   * empty body there comes back "body.description Field required", which means
+   * the method and the path matched and a handler's own request model rejected
+   * the body. No wrong route can produce that. The same free probe found three
+   * more refusals, because CreateUIAssetRequest sets additionalProperties false
+   * and `width`, `height` and `style_image_base64` were all extra_forbidden.
+   *
+   * NOTHING HERE TOUCHES THE NETWORK AND NOTHING HERE SPENDS. fetch is replaced
+   * for the length of the call and the fake answer carries no id, so uiAsset
+   * gives up the moment the create returns and never reaches its poll. What is
+   * asserted is the request that would have gone out. */
+  {
+    const real = globalThis.fetch
+    let sent = null
+    globalThis.fetch = async (url, init) => {
+      sent = { url: String(url), body: JSON.parse(init.body) }
+      return { ok: true, status: 200, text: async () => '{}' }
+    }
+    try {
+      await uiAsset({ description: 'a carved wooden dialogue box', width: 688, height: 384, elements: ['window'], name: 'zz_probe' })
+      no('the ui route answered without an id and nothing complained')
+    } catch (e) {
+      if (e.name === 'NoPixellab') console.log('  skip  no pixellab key on this machine, so the ui request was not built')
+      else if (!sent) no(`the ui request never left: ${e.message}`)
+      else {
+        eq('a piece of chrome is asked for at the route that answers 422 rather than 405', sent.url, 'https://api.pixellab.ai/v2/create-ui-asset')
+        // nested, because a flat width and height came back extra_forbidden
+        eq('the canvas goes nested, the way the request model takes it', sent.body.image_size, { width: 688, height: 384 })
+        eq('and nothing flat rides beside it', [sent.body.width, sent.body.height, sent.body.style_image_base64], [undefined, undefined, undefined])
+      }
+    } finally {
+      globalThis.fetch = real
+    }
+    /* AND THE TWO FENCES THAT SAVE A SPEND RATHER THAN A 422.
+     *
+     * `elements` types as a plain list of strings, so an unknown name is NOT
+     * refused at the door: it reaches the handler and costs money. That is the
+     * one field on this route where a typo is paid for, and the generate route
+     * lets an author override the preset's list by hand. `pieces` is the mirror:
+     * a bare string is refused three times over as "not a valid dictionary",
+     * which is not a sentence anybody can act on, and the route upstream was
+     * folding a list of NAMES into that field. */
+    const refused = async (fn) => {
+      try {
+        await fn()
+        return ''
+      } catch (e) {
+        return String(e.message || e)
+      }
+    }
+    const badEl = await refused(() => uiAsset({ description: 'x', elements: ['nonsense_widget'] }))
+    badEl.includes('no element called')
+      ? ok('an element the generator does not have is refused before it is paid for')
+      : no(`an unknown element went out to be spent on: ${badEl || 'no error'}`)
+    const badPiece = await refused(() => uiAsset({ description: 'x', pieces: ['panel'] }))
+    badPiece.includes('what kind it is')
+      ? ok('a name where a shape belongs is refused, naming the three shapes there are')
+      : no(`a bare string went out as a shape template: ${badPiece || 'no error'}`)
   }
 
   // ---- 6. the ui library, and one kit shared across maps -------------------

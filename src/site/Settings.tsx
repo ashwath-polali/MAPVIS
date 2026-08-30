@@ -11,6 +11,7 @@
 import { useEffect, useState } from 'react'
 import { useSession, setProvider, makeRelayToken, signOut, can, type User } from './session'
 import { go } from './router'
+import { SOUND_EXISTS, audioSupported, audioUnblocked, isMuted, onFirstGesture, setMuted } from '../core/audio'
 
 type Relay = { id: string; name: string; capabilities: string[]; last_seen_at: string | null; live: boolean }
 
@@ -105,6 +106,8 @@ export function Settings({ onClose }: { onClose: () => void }) {
           )}
         </section>
 
+        <Sound />
+
         {spend.length > 0 && (
           <section>
             <h3>Used in the last 30 days</h3>
@@ -135,6 +138,67 @@ export function Settings({ onClose }: { onClose: () => void }) {
         </footer>
       </div>
     </div>
+  )
+}
+
+/* THE MUTE SWITCH, WHICH MUTES NOTHING, AND SAYS SO.
+ *
+ * Ash ruled it in on 2026-08-30: "mute yes, in settings, first-gesture unlock."
+ * The game's own capability harvest had already ruled on the other half. U3 at
+ * 60-capabilities.md:3400 says a control that reports a state it does not
+ * deliver is worse than no control, and Q80.5.c leaves open whether the switch
+ * should be hidden until audio exists. This is the third answer: the switch
+ * ships, it does the only real thing there is to do, which is remember, and the
+ * row states plainly that nothing plays yet instead of implying something does.
+ *
+ * The dotted line above the switch is the same `.works` list the top of this
+ * sheet uses for what is and is not available, because "no sound exists" is the
+ * same kind of fact as "no art key", and it should not get a second grammar. */
+function Sound() {
+  const [muted, setMine] = useState(isMuted)
+  const [, bump] = useState(0)
+
+  /* the unlock line below reports the real state of this tab, so it has to
+     notice the click or keypress that changes it rather than reading once */
+  useEffect(() => onFirstGesture(() => bump((n) => n + 1)), [])
+
+  const set = (next: boolean) => {
+    setMuted(next)
+    setMine(next)
+  }
+
+  return (
+    <section>
+      <h3>Sound</h3>
+      <ul className="works">
+        <Works on={SOUND_EXISTS} what="anything that makes a sound" note={SOUND_EXISTS ? 'ready' : 'none exists yet'} />
+      </ul>
+      <div className="pref">
+        <span id="pref-sound">Play sound</span>
+        <div className="pref-sw" role="group" aria-labelledby="pref-sound">
+          <button className={muted ? '' : 'on'} aria-pressed={!muted} onClick={() => set(false)}>
+            on
+          </button>
+          <button className={muted ? 'on' : ''} aria-pressed={muted} onClick={() => set(true)}>
+            muted
+          </button>
+        </div>
+      </div>
+      {!SOUND_EXISTS && (
+        <p className="sheet-note">
+          Nothing here or in the game plays a sound yet, so this changes nothing you can hear today. It is kept and
+          handed to whatever plays the first one, which is the point: that sound arrives already silent if you left this
+          muted.
+        </p>
+      )}
+      <p className="sheet-note">
+        {!audioSupported()
+          ? 'This browser has no way to play audio at all, so nothing will be audible in it even once there is something to hear.'
+          : audioUnblocked()
+            ? 'Browsers hold all sound until somebody clicks or presses a key. This tab has, so the first sound will not be swallowed.'
+            : 'Browsers hold all sound until somebody clicks or presses a key. This tab has not yet, so the first sound would wait for one.'}
+      </p>
+    </section>
   )
 }
 

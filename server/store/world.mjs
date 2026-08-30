@@ -13,11 +13,25 @@
  * space with maps placed on it, and a place can be marked before anything has
  * been painted for it.
  *
- * ONE ROW, because there is one ocean. Two accounts holding two compositions
- * would be two worlds that cannot both be sailed, and a berth is a position
- * relative to every other island rather than a private note.
+ * ONE ROW PER ACCOUNT, AND ROW 1 IS OURS. This said one row for the whole
+ * platform, because a berth is a position relative to every other island rather
+ * than a private note. That is right about one OCEAN and wrong about one TABLE:
+ * it meant a stranger who signed up for a map tool found a page that offered to
+ * compose a world and then refused them with a 403. The maps table never made
+ * that mistake, and this is the same shape. Everybody gets an ocean, ours is the
+ * one the game reads, and it is pinned by id because an id cannot be set on two
+ * rows and the game's read has no account behind it to resolve anything else.
  */
 import { db, q, one } from '../db/pool.mjs'
+
+/* THE OCEAN THE GAME READS, AND IT IS NOT A LOOKUP.
+ *
+ * /api/v1/world is fetched by a freshman's chromebook with no account, no
+ * cookie and no way to say whose world it wants, so the answer has to be a
+ * constant. Every function here defaults to it, which is what keeps the game
+ * side unchanged by one byte through all of this: a caller that says nothing
+ * gets exactly the row it always got. */
+export const GAME_WORLD = 1
 
 /* ONE WRITER AT A TIME ON THE ONE ROW THERE IS ONE OF.
  *
@@ -41,18 +55,86 @@ import { db, q, one } from '../db/pool.mjs'
  * than wedging the next runner until the pool's ten second idle timeout. */
 export const WORLD_LOCK = 774_112_090
 
-export async function withWorld(fn) {
+/* THE LOCK IS PER WORLD NOW, through the two-integer form: the key is this
+ * constant and the row's own id. With one shared row a single key was the same
+ * thing, and with one row per account a single key would make every author on
+ * the platform queue behind every other author's save for no reason at all. The
+ * classification half stays constant so the pair cannot collide with any other
+ * advisory lock this codebase might grow. */
+export async function withWorld(fn, id = GAME_WORLD) {
   const c = await db().connect()
   try {
-    await c.query('select pg_advisory_lock($1)', [WORLD_LOCK])
+    await c.query('select pg_advisory_lock($1, $2)', [WORLD_LOCK, id])
     try {
       return await fn(c)
     } finally {
-      await c.query('select pg_advisory_unlock($1)', [WORLD_LOCK])
+      await c.query('select pg_advisory_unlock($1, $2)', [WORLD_LOCK, id])
     }
   } finally {
     c.release()
   }
+}
+
+/* WHICH ROW AN ACCOUNT AUTHORS, RESOLVED OR CREATED.
+ *
+ * Row 1 is the game's and belongs to the account named by OCEAN_OWNER, which is
+ * configuration this file cannot read, so the caller decides whether this user
+ * is that account and passes `game`. Everybody else gets a row of their own, on
+ * first use, which is the only moment there is anything to make it at.
+ *
+ * THE OWNER IS CLAIMED ON ROW 1 RATHER THAN LEFT NULL, and the update is guarded
+ * on it still being null. Without it the ocean owner would fall through to the
+ * insert below and end up with a SECOND world, orphaning the one the game reads
+ * while every check still passed.
+ *
+ * A signed-out caller can never get here with `game` false, because both
+ * authoring routes refuse before this, and with `game` true they get row 1,
+ * which is the laptop-with-no-login case this tool has always run in. */
+export async function worldIdFor(ownerId, { game = false } = {}) {
+  if (game || !ownerId) {
+    /* THE CLAIM IS GUARDED ON THE ACCOUNT NOT ALREADY HAVING ONE, and without
+     * that guard it is a crash rather than a no-op. OCEAN_OWNER is
+     * configuration, so an account can perfectly well author its own ocean for a
+     * week and then be named as ours, at which point this tried to give it row 1
+     * as well and the one-world-per-account index refused the whole request.
+     * Row 1 keeps being the game's either way, because the pin is the id. */
+    if (ownerId)
+      await q(
+        `update world set owner_id = $1 where id = $2 and owner_id is null
+           and not exists (select 1 from world where owner_id = $1)`,
+        [ownerId, GAME_WORLD],
+      )
+    return GAME_WORLD
+  }
+  const mine = await one('select id from world where owner_id = $1', [ownerId])
+  if (mine) return mine.id
+  /* ON CONFLICT ON THE OWNER INDEX, because two tabs signing in at the same
+   * instant both read no row and both insert. The partial unique index makes the
+   * loser a conflict rather than a second unreachable ocean, and returning is
+   * what turns the conflict back into the winner's id. */
+  const made = await one(
+    `insert into world (owner_id) values ($1)
+     on conflict (owner_id) where owner_id is not null do update set owner_id = excluded.owner_id
+     returning id`,
+    [ownerId],
+  )
+  return made.id
+}
+
+/* THE ADDRESS A STRANGER'S OWN ENGINE READS THEIR OCEAN AT.
+ *
+ * Ours is /api/v1/world and it is a constant because the game has no account to
+ * resolve. Theirs is /api/v1/worlds/<pub_id>: opaque, stable, not an email, and
+ * plural so it can never shadow the two paths the game already holds. */
+export async function worldPubId(id = GAME_WORLD) {
+  const r = await one('select pub_id from world where id = $1', [id])
+  return r ? String(r.pub_id) : ''
+}
+
+export async function worldByPubId(pub) {
+  if (!/^[0-9a-f-]{36}$/i.test(String(pub || ''))) return 0
+  const r = await one('select id from world where pub_id = $1', [pub])
+  return r ? r.id : 0
 }
 
 /* THE STATES THE OVERWORLD READS, spelt the way the overworld spells them.
@@ -105,9 +187,11 @@ export const SEA_KINDS = ['sailable', 'shallow', 'forbidden', 'mist', 'ambience'
  * the anchorages should not be handed every landmark too. They are drawn the
  * same, dragged the same and addressed the same.
  *
- * `approach` is GONE. It was never a kind of point, it was the second field on
- * a place, and 019_berths.sql lifted every one of them out as a plain berth.
- * Nothing writes it and cleanMark would have quietly kept accepting it. */
+ * `approach` is GONE AS A KIND and it is back as a FIELD, which is not the same
+ * thing changing its mind. Nothing on the water is an approach: an approach is
+ * one berth's own run-in, a second point that only means anything relative to
+ * the first, and it is nobody's destination. So it is not in this list and it
+ * never will be, and cleanMark carries it nested on the berth it belongs to. */
 export const MARK_KINDS = ['berth', 'waypoint', 'anchorage', 'landmark', 'spawn']
 
 /* THE HEADINGS A HULL CAN ACTUALLY SETTLE ON, AND THERE ARE FOUR.
@@ -245,6 +329,44 @@ export function cleanMark(m) {
      * anchor name inside the map being arrived at, so it takes the same rule
      * every other name in this tool takes. */
     ...(isName(m.at) ? { at: m.at } : {}),
+    /* THE RUN-IN, WHICH IS THE ONE THING A BERTH CARRIES THAT IS NOT A BERTH.
+     *
+     * The game aims here first and only then comes alongside, so a dock looks
+     * deliberate rather than nosed-in: PmapScene reads `s.berth.approach` and
+     * sail.ts runs a whole `approach` stage off it, steering at this point until
+     * it is astern and only then swinging onto the berth's own heading. 019
+     * lifted the old nested approach out as a second free-standing berth and
+     * then nothing put it back on the wire, so a field with a live consumer in
+     * the other repo had no author at all and every arrival was a straight-in
+     * nose.
+     *
+     * NESTED, AND THAT IS NOT A RETREAT FROM 019. What 019 fixed is that a
+     * DESTINATION cannot be welded to an island, because python addresses it by
+     * name and a leg between two islands turns at a corner belonging to neither.
+     * A run-in is the opposite kind of thing: it is geometry that only exists
+     * relative to one berth, nothing sails to it, and no grape ever names it. It
+     * moves when its berth moves, which is exactly the welding that was wrong
+     * for a destination and is exactly right here.
+     *
+     * IT REPLACED A POSITIONAL RULE, which was "the second berth-kind mark bound
+     * to this island". That was an ordering contract nothing on the page could
+     * see: a spare dock, or a route corner an author bound to the island so it
+     * would follow it around, silently became the run-in and the hull steered at
+     * it. 021 folds every mark 019 lifted back in here and the rule is gone.
+     *
+     * WHAT THE UI STILL OWES THIS, and it is three things rather than one.
+     * A control on BerthPanel, live only when the mark is a berth, that drops a
+     * run-in at the berth's own position, lets it be dragged on the chart and
+     * lets it be cleared. A second dot drawn on the water joined to its berth by
+     * a line, because a point you cannot see is a point nobody can aim. And
+     * World.tsx:1937, which moves every mark bound to an island when the island
+     * is dragged and would leave a nested run-in standing where it was: it has to
+     * carry the approach by the same dx and dy. Until all three exist this field
+     * is authorable over the wire and not by hand, which is the half-plumbed
+     * pattern docs/AUTHORING.md names. */
+    ...(m.approach && isFinite(Number(m.approach.x)) && isFinite(Number(m.approach.y))
+      ? { approach: { x: num(m.approach.x), y: num(m.approach.y) } }
+      : {}),
     ...(m.meta && typeof m.meta === 'object' && !Array.isArray(m.meta) ? { meta: m.meta } : {}),
   }
 }
@@ -258,19 +380,6 @@ export function cleanMark(m) {
  * who wants a different one moves it up the list. Everything bound to the island
  * still goes out on the wire under `marks`, so nothing is hidden by this. */
 export const berthOf = (marks, name) => (marks || []).find((m) => m.island === name && m.kind === 'berth') || null
-
-/* AND THE RUN-IN, WHICH IS THE SECOND ONE.
- *
- * The game aims here first and only then comes alongside, which is what makes a
- * dock look deliberate instead of nosed-in. 019 folded the old nested
- * `approach` into this list as a plain berth bound to the same island, appended
- * after the dock, and then nothing put it back on the wire, so a field with a
- * live reader in PmapScene had no author at all. The order 019 wrote is the
- * order this reads. */
-export const approachOf = (marks, name) => {
-  const mine = (marks || []).filter((m) => m.island === name && m.kind === 'berth')
-  return mine.length > 1 ? { x: mine[1].x, y: mine[1].y } : null
-}
 
 export function cleanRegion(r) {
   if (!r || !isName(r.name)) return null
@@ -289,13 +398,20 @@ export function cleanRegion(r) {
 /* Takes an optional pinned client so the read, the version decision and the
  * write inside saveWorld are one atomic unit under one advisory lock. With no
  * client it is the pool, which is what every plain reader wants. */
-export async function getWorld(client) {
+export async function getWorld(client, id = GAME_WORLD) {
   const run = client ? (t, p) => client.query(t, p) : q
-  const w = (await run('select w, h, places, regions, marks, home, version, updated_at from world where id = 1')).rows[0] || null
+  const w = (await run('select id, pub_id, w, h, places, regions, marks, home, version, updated_at from world where id = $1', [id])).rows[0] || null
   // updatedAt 0 on an ocean nobody has written, so the save precondition reads
   // "there is nothing here to be stale against" rather than refusing the first save
-  if (!w) return { w: 4096, h: 4096, places: [], regions: [], marks: [], home: '', version: 1, updatedAt: 0 }
+  if (!w) return { id, pubId: '', w: 4096, h: 4096, places: [], regions: [], marks: [], home: '', version: 1, updatedAt: 0 }
   return {
+    /* WHICH OCEAN THIS IS, AND WHERE ITS OWN ENGINE READS IT. Both ride along
+     * because the page has to be able to say "this is yours, here is the url",
+     * and the alternative is a second round trip for two facts this query has
+     * already read. Neither reaches the game: composition() is a different shape
+     * and does not carry them. */
+    id: w.id,
+    pubId: String(w.pub_id || ''),
     w: w.w,
     h: w.h,
     places: Array.isArray(w.places) ? w.places : [],
@@ -334,8 +450,8 @@ export async function getWorld(client) {
  * three per map and has since the first schema. A slot with no map falls back to
  * the author's w/h, because a rumour has no painting to ask.
  */
-export async function composition() {
-  const w = await getWorld()
+export async function composition(id = GAME_WORLD) {
+  const w = await getWorld(undefined, id)
   const rows = w.places.some((p) => p.map)
     ? (
         await q(
@@ -396,7 +512,6 @@ export async function composition() {
       const m = p.map ? by.get(p.map) : null
       const pb = m ? paintOf(m) : null
       const b = berthOf(w.marks, p.name)
-      const ap = approachOf(w.marks, p.name)
       return {
         ...(p.map ? { map: p.map } : {}),
         ...(p.place ? { place: p.place } : {}),
@@ -448,11 +563,20 @@ export async function composition() {
          * PmapScene reads `s.berth.approach` and feeds it to the berthing
          * manoeuvre, and sail.ts runs an `approach` stage off it, so 019 left a
          * field with a live reader and no author and every arrival became a
-         * straight-in nose. 019 preserved the data: it wrote the berth first and
-         * the old approach second, both bound to the same island, so the SECOND
-         * bound berth-kind point is the run-in. That is the rule, written down
-         * here rather than left to whichever the reader reached first, the same
-         * way berthOf writes down which one is the dock.
+         * straight-in nose.
+         *
+         * IT COMES OFF THE BERTH ITSELF NOW, and it briefly came off list order:
+         * "the second berth-kind mark bound to this island", which is what 019's
+         * migration happened to write. Nothing on the chart could see that rule,
+         * so a spare dock or a route corner an author bound to the island so it
+         * would follow it around became the run-in and the hull steered at it.
+         * The point is nested on the berth, 021 folded the lifted ones back in,
+         * and what crosses is byte for byte what it was.
+         *
+         * ONLY THE BERTH THE GAME USES CAN CARRY ONE, because slot.berth is one
+         * berth and this is its geometry. checkWorld names an approach anywhere
+         * else rather than sending it, since a field nothing reads is worse than
+         * a field nobody wrote.
          *
          * THE HEADING IS NARROWED TO WHAT THE ENGINE TURNS INTO AN ANGLE. radOf
          * answers east, south and north and sends everything else to west, so
@@ -466,7 +590,7 @@ export async function composition() {
                 x: b.x,
                 y: b.y,
                 ...(BERTH_FACINGS.includes(b.facing) ? { facing: b.facing } : {}),
-                ...(ap ? { approach: ap } : {}),
+                ...(b.approach ? { approach: { x: b.approach.x, y: b.approach.y } } : {}),
                 ...(b.at ? { at: b.at } : {}),
               },
             }
@@ -646,6 +770,18 @@ export function checkWorld(doc, slugs = [], maps = new Map()) {
      * to mark the dock before the island exists. */
     if (m.island && !isles.has(m.island))
       warnings.push(`"${m.name}" says it belongs to "${m.island}", and no island on this ocean is called that`)
+    /* A RUN-IN ON SOMETHING THAT IS NOT A DOCK IS A FIELD NOTHING READS.
+     *
+     * The game holds one berth per slot and aims at its approach, so a second
+     * point nested on a waypoint, or on the spare berth further down an island's
+     * list, is stored, is drawn nowhere and is never sent. That is the
+     * half-plumbed pattern this project keeps rediscovering, and the honest
+     * answer is to say so at the save rather than to drop it silently, which
+     * would take the author's work with it and explain nothing. */
+    if (m.approach && berthOf(doc.marks, m.island) !== m)
+      warnings.push(
+        `"${m.name}" carries a run-in and is not the berth its island docks at, so nothing will ever steer through it · put the run-in on the dock itself`,
+      )
     // no bounds test here either, for the same reason a place has none: the sea
     // the game sails is centred on the hub and runs negative in both directions
     /* A BERTH WITH NOTHING TO SAIL BETWEEN. The yardstick is deliberately the
@@ -679,7 +815,7 @@ export function checkWorld(doc, slugs = [], maps = new Map()) {
   return { problems, warnings }
 }
 
-export async function saveWorld(input, client) {
+export async function saveWorld(input, client, id = GAME_WORLD) {
   /* THE READ AND THE WRITE ARE ONE UNIT, OR THEY ARE A COIN TOSS.
    *
    * This was an unlocked, untransacted read-modify-write on the single shared
@@ -694,7 +830,7 @@ export async function saveWorld(input, client) {
    *
    * Called with no client it wraps itself, so every existing caller is covered
    * without knowing about any of this. */
-  if (!client) return withWorld((c) => saveWorld(input, c))
+  if (!client) return withWorld((c) => saveWorld(input, c, id), id)
   const run = (t, p) => client.query(t, p)
   /* AN ABSENT KEY IS NOT AN EMPTY ONE, AND THAT NOW COVERS THE WHOLE DOCUMENT.
    *
@@ -718,7 +854,7 @@ export async function saveWorld(input, client) {
    * the one shared row and got a 200 back. The field with the loudest comment
    * was the safe one. */
   const stated = Array.isArray(input?.marks)
-  const was = await getWorld(client)
+  const was = await getWorld(client, id)
   const doc = {
     w: input?.w === undefined ? was.w : Math.max(1, num(input.w, 4096)),
     h: input?.h === undefined ? was.h : Math.max(1, num(input.h, 4096)),
@@ -797,13 +933,20 @@ export async function saveWorld(input, client) {
   const version = shape(doc) === shape(was) ? was.version : (was.version || 1) + 1
   const wrote = await run(
     `insert into world (id, w, h, places, regions, marks, home, version, updated_at)
-     values (1, $1, $2, $3::jsonb, $4::jsonb, $5::jsonb, $6, $7, now())
+     values ($8, $1, $2, $3::jsonb, $4::jsonb, $5::jsonb, $6, $7, now())
      on conflict (id) do update set w = $1, h = $2, places = $3::jsonb, regions = $4::jsonb,
        marks = $5::jsonb, home = $6, version = $7, updated_at = now()
-     returning updated_at`,
-    [doc.w, doc.h, JSON.stringify(doc.places), JSON.stringify(doc.regions), JSON.stringify(doc.marks), doc.home, version],
+     returning id, pub_id, updated_at`,
+    [doc.w, doc.h, JSON.stringify(doc.places), JSON.stringify(doc.regions), JSON.stringify(doc.marks), doc.home, version, id],
   )
   // the new stamp goes back with the document, or the page has nothing to send
   // on the next save and the precondition above can never fire
-  return { ...doc, version, updatedAt: +new Date(wrote.rows[0].updated_at), warnings }
+  return {
+    ...doc,
+    id: wrote.rows[0].id,
+    pubId: String(wrote.rows[0].pub_id || ''),
+    version,
+    updatedAt: +new Date(wrote.rows[0].updated_at),
+    warnings,
+  }
 }

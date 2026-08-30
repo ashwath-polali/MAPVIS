@@ -92,7 +92,10 @@ import { listMaps } from './store/maps.mjs'
 import { ask, plannerReady, NoPlanner } from './store/planner.mjs'
 import { withRequest, request } from './store/ctx.mjs'
 import { foldersApi } from './store/folders.mjs'
-import { getWorld, saveWorld, composition, berthOf, ISLAND_STATES, SEA_KINDS, MARK_KINDS } from './store/world.mjs'
+import {
+  getWorld, saveWorld, composition, berthOf, worldIdFor, worldByPubId,
+  GAME_WORLD, ISLAND_STATES, SEA_KINDS, MARK_KINDS,
+} from './store/world.mjs'
 import { env } from './db/env.mjs'
 import { keyFor } from './store/auth.mjs'
 import {
@@ -173,8 +176,8 @@ async function styleRef(slug) {
  * a signed-in stranger overwrite another account's library items by name. */
 /* /api/world carries no map id at all, and the gate resolves a missing one to
  * `untitled`, which is a real map somebody may own. So it is exempt from the
- * MAP ownership gate and guards itself instead, against the one account the
- * ocean belongs to rather than against a map. */
+ * MAP ownership gate and guards itself instead: it resolves which ocean the
+ * signed-in account authors rather than checking one against a map. */
 /* The ui routes are the same case as /api/world. A surface belongs to an
  * ACCOUNT and not to a map, so its body carries no map id at all, and the gate
  * resolves a missing one through safeId to 'untitled', which is a real map
@@ -190,15 +193,18 @@ const OPEN_POSTS = new Set([
   '/api/ui/remove',
 ])
 
-/* THE OCEAN BELONGS TO ONE ACCOUNT, because there is one ocean.
+/* WHOSE OCEAN IS THE GAME'S ONE, which is a narrower question than it was.
  *
- * MAPVIS is for anybody: sign up, draw an island, publish it, and nothing you
- * did touched anyone else's work. The world is the single exception and the
- * exception is structural. It is ONE ROW on purpose, so the composition a
- * stranger opens is not a copy of the game's ocean, it IS the game's ocean, and
- * any signed-in visitor dragging an island was moving where the real crossing
- * goes for everybody. Confusing to them and destructive to the game, which is
- * not a thing a general-purpose tool should allow by default.
+ * This used to decide who was allowed to open the world page at all, because
+ * there was one row for the whole platform: a stranger dragging an island was
+ * moving where the real crossing goes for everybody, so they got a 403 and an
+ * apology. 022 gave every account a world of its own, so the page is open and
+ * this answers something else now: whether the ocean you are authoring is ROW 1,
+ * the one /api/v1/world serves and the game reads.
+ *
+ * It still gates the two things that really are one-of-a-kind: minting core
+ * chrome, and removing it. A dialogue box belongs to the whole game the way the
+ * game's ocean does, and neither is a thing a visitor should be able to touch.
  *
  * The address is configuration and never source: OCEAN_OWNER in .env, falling
  * back to BOOTSTRAP_EMAIL, which is already the account every import and every
@@ -219,14 +225,15 @@ const ownedBy = (user) => {
 }
 const ownsOcean = async (req) => ownedBy(await currentUser(req))
 
-/* Said in full rather than as "forbidden", because the person reading it did
- * nothing wrong and the reason is not obvious from the outside. */
-const NOT_YOUR_OCEAN = {
-  error:
-    'the ocean belongs to one account, because there is only one of it. Every map on MAPVIS is yours to draw, ' +
-    'but the world is a single shared row saying where every island sits, so one account composes it and everybody else reads it.',
-  mine: false,
-}
+/* WHICH ROW THIS REQUEST AUTHORS. Row 1 for the account the game's ocean belongs
+ * to, and for a laptop with no owner configured at all, which is where this tool
+ * has always run. Anybody else gets their own, made on first use.
+ *
+ * NOT_YOUR_OCEAN went with it. A refusal that reads "the world is a single
+ * shared row, so one account composes it and everybody else reads it" is now a
+ * false sentence, and a wall you were invited to walk into is worse than a door
+ * that was never drawn. There is nothing to refuse: they get an ocean. */
+const worldOf = async (user) => worldIdFor(user?.id || '', { game: ownedBy(user) })
 
 export function api(req, res, next) {
   const url = new URL(req.url, 'http://local')
@@ -2414,33 +2421,53 @@ async function route(req, res, p, url) {
     return send(res, 200, out)
   }
 
-  /* THE COMPOSITION: where every map sits on the one ocean.
+  /* THE COMPOSITION: where every map sits on this account's ocean.
    *
-   * Both halves are the AUTHORING view and both are gated on the one account
-   * the ocean belongs to. The read is gated as well as the write, which reads
-   * strict and is the point: a stranger who can see the composition has a page
-   * that offers to edit it and then refuses, and a wall you were invited to
-   * walk into is worse than a door that was never drawn. `mine` comes back
-   * either way so the page can be hidden instead.
+   * Both halves are the AUTHORING view and both used to be refused to anybody
+   * but one account, because there was one world row for the whole platform.
+   * That made the tool's own sign-up an invitation to a page that opens and
+   * then apologises. 022 gave every account a world, so these two now resolve
+   * whose row it is instead of deciding whether to let you in.
    *
-   * The published read at /api/v1/world stays open to everybody and is not
-   * touched by any of this. That is what the game fetches with no account. */
+   * `mine` KEPT ITS NAME AND CHANGED ITS QUESTION, from "are you the one account
+   * that may compose" to "is this ocean yours to edit", which is true for anyone
+   * signed in. `game` is the fact it used to be carrying, and the two are not
+   * the same fact: a member's ocean is theirs and is not the one the ship in the
+   * game sails. `readUrl` is where their own engine fetches it, because an ocean
+   * nothing can read is a drawing.
+   *
+   * The published read at /api/v1/world stays open to everybody, pinned to row
+   * 1, and is not touched by any of this. That is what the game fetches with no
+   * account at all. */
   if (p === '/api/world' && req.method === 'GET') {
-    if (!(await ownsOcean(req))) return send(res, 403, NOT_YOUR_OCEAN)
-    return send(res, 200, { ...(await getWorld()), states: ISLAND_STATES, seaKinds: SEA_KINDS, markKinds: MARK_KINDS, mine: true })
+    const me = await currentUser(req)
+    if (platformOn() && !me) return send(res, 401, { error: 'sign in to open an ocean' })
+    const game = ownedBy(me)
+    const w = await getWorld(undefined, await worldOf(me))
+    return send(res, 200, {
+      ...w,
+      states: ISLAND_STATES,
+      seaKinds: SEA_KINDS,
+      markKinds: MARK_KINDS,
+      mine: true,
+      game,
+      readUrl: game || !w.pubId ? '/api/v1/world' : `/api/v1/worlds/${w.pubId}`,
+    })
   }
-  /* One boolean, so the home page can decide whether to offer the ocean at all
-   * without firing a 403 into the console of everybody who is not us. */
+  /* One boolean, so the home page can decide whether to offer the ocean at all.
+   * It was the answer to "are you us"; it is the answer to "have you got one",
+   * and everybody signed in has. Kept rather than removed because the page asks
+   * this before it asks anything else and a 404 there is a blank card. */
   if (p === '/api/world/mine' && req.method === 'GET') {
-    return send(res, 200, { mine: await ownsOcean(req) })
+    const me = await currentUser(req)
+    return send(res, 200, { mine: !platformOn() || !!me, game: ownedBy(me) })
   }
   if (p === '/api/world' && req.method === 'POST') {
     const me = await currentUser(req)
     if (platformOn() && !me) return send(res, 401, { error: 'sign in to place a map on the ocean' })
-    if (!ownedBy(me)) return send(res, 403, NOT_YOUR_OCEAN)
     const b = await body(req)
     try {
-      return send(res, 200, await saveWorld(b))
+      return send(res, 200, await saveWorld(b, null, await worldOf(me)))
     } catch (e) {
       /* a composition that cannot work is refused where it is written, naming
        * what is wrong, rather than found by a student sailing into nothing.
@@ -2603,7 +2630,14 @@ async function route(req, res, p, url) {
         // Several types deliberately send none: a band with furniture
         // scaffolded onto it is not a band.
         elements: Array.isArray(b.elements) ? b.elements : t?.elements || null,
-        pieces: asked && asked.length === 1 ? asked : null,
+        /* ONLY `pieces` IS A SHAPE TEMPLATE, and this took whichever of the
+         * three arrays happened to be present. `names` and `batch` are lists of
+         * NAMES, so a caller sending one had its strings forwarded as the
+         * generator's shape list, where every entry is refused three times over
+         * as "not a valid dictionary" and the author is told nothing they can
+         * act on. Those two are counted for the one-press refusal above and are
+         * not content. */
+        pieces: Array.isArray(b.pieces) && b.pieces.length === 1 ? b.pieces : null,
         styleImageBase64,
         name: row.name,
       })
@@ -3654,8 +3688,14 @@ async function readApi(req, res, p, url) {
    * composition the game asks for, which it gates on Array.isArray(slots).
    * Answering with `places` meant a real composition was discarded and a
    * hand-written fallback used in its place, silently, on both sides.
-   * composition() in store/world.mjs is where every one of those renames is. */
-  if (kind === 'world' && !slugRaw) return send(res, 200, await composition())
+   * composition() in store/world.mjs is where every one of those renames is.
+   *
+   * PINNED TO ROW 1, EXPLICITLY, and that is the whole of what 022 owes the
+   * game. Every account has an ocean now and this path has no account in it and
+   * never will: the request comes from a chromebook with no cookie. So the id is
+   * a constant here rather than something resolved, and the answer is byte for
+   * byte what it was before worlds were per-account. */
+  if (kind === 'world' && !slugRaw) return send(res, 200, await composition(GAME_WORLD))
 
   /* THE BERTHS, FLAT, WHICH IS THE SHAPE A GRAPE ACTUALLY WANTS.
    *
@@ -3683,9 +3723,14 @@ async function readApi(req, res, p, url) {
    * because a grape asking to sail to `panther_isle` should not have to know
    * what the author called its dock. The alias goes down FIRST so a real point
    * named `panther_isle` wins the key; checkWorld refuses that collision at the
-   * save, so this only decides what a row written before the check does. */
-  if (kind === 'world' && slugRaw === 'marks') {
-    const w = await getWorld()
+   * save, so this only decides what a row written before the check does.
+   *
+   * WRITTEN ONCE AND SERVED FROM TWO PATHS, because 022 gave every account an
+   * ocean and a member's engine wants this shape for the same reason ours does.
+   * A second copy of the mapping is a second set of fields that drift, which is
+   * how `label` and `r` came to be missing here in the first place. */
+  const flatMarks = async (id) => {
+    const w = await getWorld(undefined, id)
     const out = {}
     const say = (m) => ({
       kind: m.kind,
@@ -3719,7 +3764,36 @@ async function readApi(req, res, p, url) {
       if (b) out[p.name] = say(b)
     }
     for (const m of w.marks) out[m.name] = say(m)
-    return send(res, 200, { marks: out })
+    return out
+  }
+  if (kind === 'world' && slugRaw === 'marks') return send(res, 200, { marks: await flatMarks(GAME_WORLD) })
+
+  /* AND THE SAME TWO READS FOR ANY OTHER ACCOUNT'S OCEAN.
+   *
+   * 022 gave every account a world, and a world nothing can fetch is a drawing.
+   * A member composing their own sea needs their own engine to consume it the
+   * way ours does, so it is the same two shapes off the same two functions, at
+   * an address of their own.
+   *
+   * PLURAL, AND THAT IS THE WHOLE REASON THE WORD IS DIFFERENT. /api/v1/world
+   * already spends its second segment on `marks`, so a singular
+   * /api/v1/world/<something> could never tell an ocean's address from that
+   * literal, and the game's two paths must not change by one byte. `worlds` has
+   * no such history and cannot collide with either.
+   *
+   * THE ADDRESS IS THE ROW'S pub_id AND NOT ITS OWNER'S. An account uuid appears
+   * in session and ownership code all over this file; an ocean's public address
+   * is a separate opaque value so handing somebody the url to read your world
+   * hands them nothing else, and so it can be rotated without touching identity.
+   *
+   * Public and unauthenticated, like everything else under /api/v1: what it
+   * serves is where somebody's islands sit, which is already published art. */
+  if (kind === 'worlds') {
+    const id = slugRaw ? await worldByPubId(slugRaw) : 0
+    if (!id) return send(res, 404, { error: 'no ocean at that address' })
+    if (!sub) return send(res, 200, await composition(id))
+    if (sub === 'marks') return send(res, 200, { marks: await flatMarks(id) })
+    return send(res, 404, { error: 'an ocean answers with itself or with its marks' })
   }
 
   /* THE CHROME, WITH ITS SLICES, ITS REGIONS AND ITS FACES.

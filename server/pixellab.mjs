@@ -19,8 +19,9 @@
  *                                         mode template off a named walk, or mode v3 off written motion words
  *   GET  /v2/characters                -> { characters, total }, every character on the account
  *   GET  /v2/characters/{id}           -> status, rotation_urls, and animations carrying frame urls
- *   POST /v2/ui-assets                 -> { ui_asset_id }, one panel of chrome. Route NOT confirmed, see uiAsset
- *   GET  /v2/ui-assets/{id}            -> 423 while running, the finished image when done
+ *   POST /v2/create-ui-asset           -> { ui_asset_id, background_job_id }, one panel of chrome
+ *   GET  /v2/ui-assets/{id}            -> { status, image_url, size, progress_percent }, 200 all the way through
+ *   GET  /v2/ui-assets                 -> the list. GET ONLY: a POST here is 405, which is what was being sent
  *   GET  /v1/balance                   -> { usd }
  */
 import fs from 'node:fs'
@@ -210,13 +211,39 @@ export async function mapObject({ description, w, h, view = 'low top-down', seed
  * character: it has no world position, no camera and no body, and it is the one
  * class of art this file could not make at all.
  *
- * ROUTE NOT CONFIRMED FROM ANYTHING IN THIS REPO. Every other endpoint above
- * was read off the live v2 openapi document or measured; this one is written
- * from the shape the ui-asset tooling exposes (create returns ui_asset_id, a
- * get by that id reports progress then a finished image) and has not been
- * checked against the schema, because checking a create route means spending
- * what it costs. If /v2/ui-assets turns out to be named something else, the
- * poll loop and the download are still right and only the two strings move.
+ * THE ROUTE IS POST /v2/create-ui-asset AND IT WAS POST /v2/ui-assets, WHICH IS
+ * A 405. That guess made the whole button dead: the create never left, so no
+ * author could ever draw a piece, and the row failed with a Method Not Allowed
+ * in it.
+ *
+ * HOW IT WAS FOUND, AND THE PROOF IS THE 422. GET /v2/openapi.json is free and
+ * names four ui paths: /generate-ui-v2, /create-ui-asset, /ui-assets and
+ * /ui-assets/{ui_asset_id}. Then each candidate was posted an INVALID body, `{}`,
+ * which fastapi refuses at validation before any work happens and therefore
+ * costs nothing, and the status separates the three cases cleanly:
+ *
+ *   POST /v2/ui-assets        405 Method Not Allowed  · that path is GET-only
+ *   POST /v2/ui-asset         404 Not Found           · no such path
+ *   POST /v2/ui-panels        404 Not Found           · no such path
+ *   POST /v2/create-ui-asset  422 body.description Field required
+ *
+ * A 422 IS THE SIGNAL. It means the method and the path matched and a handler's
+ * own request model rejected the body, which no wrong route can produce. The
+ * same probe proved the BODY was wrong in three more ways, because
+ * CreateUIAssetRequest sets additionalProperties false: `width`, `height` and
+ * `style_image_base64` all came back extra_forbidden. So the size is nested in
+ * `image_size` and the reference is a Base64Image object, and every one of those
+ * would have been a refusal after the route was fixed.
+ *
+ * THE POLL IS NOT A 423 EITHER. That was carried over from /v2/map-objects.
+ * GET /v2/ui-assets/{id} answers 200 the whole way through with a status word
+ * and a null image_url, and the finished picture is `image_url` and never
+ * `download_url`. A non-uuid in that path is a 422, which is how the path was
+ * confirmed without holding a real id.
+ *
+ * The aspect gate is the endpoint's own and the five pairs below are it,
+ * verbatim: 688x512 answers "exceeds the max for this aspect ratio (600x448).
+ * Max per axis: square 512x512, 16:9 688x384, 9:16 384x688."
  *
  * IT IS THE EXPENSIVE ONE, in the pro bracket rather than the one-generation
  * bracket map objects sit in, and that is the reason nothing calls it
@@ -263,21 +290,51 @@ export function fitUi(w, h) {
   }
 }
 
+/* THE TWELVE NAMES THE ENDPOINT SCAFFOLDS FROM, off the schema's own field
+ * description, and they are fenced here because NOTHING VALIDATES THEM.
+ *
+ * `elements` types as a plain list of strings, so a name outside this list is
+ * accepted at the door, reaches the handler, and spends. That is the one place
+ * on this route where a typo costs money instead of a 422, and the generate
+ * route lets an author override the preset's list by hand. Measured with a
+ * deliberately invalid seed alongside: `nonsense_widget` drew no complaint of
+ * its own, which is exactly the shape of a fence that is not there. */
+export const UI_ELEMENTS = [
+  'button', 'icon_button', 'toolbar', 'tab', 'panel', 'window',
+  'health_bar', 'avatar', 'triangle', 'pentagon', 'hexagon', 'octagon',
+]
+
+/* AND THE THREE SHAPES A TEMPLATE PIECE CAN BE. Coordinates are on a virtual
+ * editor canvas whose LONGER side spans 0 to 512, which is not the output size:
+ * a 16:9 panel is authored on 512x288 whatever it is finally drawn at. Anything
+ * that is not one of these three is a 422, so it is refused here rather than
+ * after an author has pressed and watched a row fail. */
+const PIECE_KINDS = { rounded_rect: ['x', 'y', 'w', 'h'], circle: ['x', 'y', 'r'], polygon: ['x', 'y', 'r', 'sides'] }
+
 export async function uiAsset({ description, width = 256, height = 256, palette, elements, pieces, styleImageBase64, seed, name }) {
   const say = String(description || '').trim()
   if (!say) throw new Error('a surface needs a description')
   const size = fitUi(width, height)
+  /* THE SIZE IS NESTED AND IT WAS FLAT. CreateUIAssetRequest sets
+   * additionalProperties false, so the old `width` and `height` at the top level
+   * came back extra_forbidden and would have refused the call even once the
+   * route was right. The schema caps this at 2000 rather than 1000. */
   const req = {
-    description: say.slice(0, 1000),
-    width: size.width,
-    height: size.height,
+    description: say.slice(0, 2000),
+    image_size: { width: size.width, height: size.height },
     // chrome sits on top of a map, so it is cut out for the same reason every
     // map object is: anything opaque behind it is a rectangle of somebody
     // else's idea of a background painted over the island
     no_background: true,
   }
-  if (palette) req.color_palette = String(palette).slice(0, 120)
-  if (Array.isArray(elements) && elements.length) req.elements = elements.map((s) => String(s).slice(0, 40)).filter(Boolean)
+  if (palette) req.color_palette = String(palette).slice(0, 200)
+  if (Array.isArray(elements) && elements.length) {
+    const want = elements.map((s) => String(s).trim()).filter(Boolean)
+    const unknown = want.filter((s) => !UI_ELEMENTS.includes(s))
+    if (unknown.length)
+      throw new Error(`the generator has no element called "${unknown[0]}" · it scaffolds from ${UI_ELEMENTS.join(', ')}`)
+    req.elements = want
+  }
   /* ONE PRESS DRAWS ONE PIECE (Ash, 2026-08-30), and the refusal is here as
    * well as at the route because this is the line that spends the money. A
    * batch is the shape that turns one bad prompt into five bad pictures and
@@ -288,42 +345,69 @@ export async function uiAsset({ description, width = 256, height = 256, palette,
    * and no form could reach. It reaches now, and it carries at most one. */
   if (Array.isArray(pieces) && pieces.length) {
     if (pieces.length > 1) throw new Error(`one press draws one piece, and this asked for ${pieces.length}`)
+    /* A LIST OF NAMES IS NOT A LIST OF SHAPES, and the route upstream was
+     * folding one into the other. Each piece is an object carrying an id, a
+     * kind and that kind's own coordinates, so a bare string is a 422 on every
+     * one of the three shapes at once and the author is told a piece is not a
+     * dictionary, which is not a sentence anybody can act on. */
+    const one = pieces[0]
+    const need = one && typeof one === 'object' && !Array.isArray(one) ? PIECE_KINDS[one.kind] : null
+    if (!need)
+      throw new Error(`a shape has to say what kind it is · ${Object.keys(PIECE_KINDS).join(', ')}`)
+    if (!one.id || need.some((k) => !isFinite(Number(one[k]))))
+      throw new Error(`a ${one.kind} needs an id and ${need.join(', ')}, on a canvas whose longer side runs 0 to 512`)
     req.pieces = pieces
   }
   /* THE STRONGEST LEVER THIS ENDPOINT HAS, and the one measured true elsewhere.
    * A style image transfers palette, outline, detail and shading, which is
    * exactly what makes a panel look like it belongs to the island under it. It
    * cannot transfer layout or content, so it does not carry the same risk the
-   * map did on /v2/map-objects: there is no subject for it to continue. */
-  if (styleImageBase64) req.style_image_base64 = String(styleImageBase64)
+   * map did on /v2/map-objects: there is no subject for it to continue.
+   *
+   * IT IS A Base64Image AND IT WAS A BARE STRING under `style_image_base64`,
+   * which the probe answered extra_forbidden. Same wrapper `submit` already
+   * sends on /v2/generate-image-v2. */
+  if (styleImageBase64) req.style_image = { type: 'base64', base64: String(styleImageBase64), format: 'png' }
   if (seed != null) req.seed = seed
   if (name) req.name = String(name).slice(0, 60)
 
-  const out = await call('POST', '/v2/ui-assets', req)
-  const id = out.ui_asset_id || out.id
+  const out = await call('POST', '/v2/create-ui-asset', req)
+  const id = out.ui_asset_id
   if (!id) throw new Error('the surface was queued without an id to collect it from')
 
-  // 30 to 90 seconds typical; the same five minute ceiling and five second tick
-  // mapObject settled on, and 423 read as still running the same way
+  /* 30 to 90 seconds typical; the same five minute ceiling and five second tick
+   * mapObject settled on. NOT the same statuses, and that is the half of this
+   * function that was wrong independently of the route: there is no 423 and no
+   * 410 here. The read answers 200 all the way through, carrying `processing`
+   * with a null image_url and a progress percent, then `completed` with the url.
+   *
+   * A 404 does not end the wait, for the reason awaitCharacter gives: the row is
+   * not always queryable the instant the post answers, and losing a paid
+   * generation to one blip is not worth the tighter code. */
+  let misses = 0
   for (let waited = 0; waited < 300000; waited += 5000) {
     await new Promise((r) => setTimeout(r, 5000))
     const r = await fetch(BASE + '/v2/ui-assets/' + encodeURIComponent(id), {
       headers: { Authorization: 'Bearer ' + token() },
     })
-    if (r.status === 423) continue
     const text = await r.text()
-    if (r.status === 410) throw new Error('the surface failed: ' + text.slice(0, 200))
+    if (r.status === 404 && ++misses < 3) continue
     if (!r.ok) throw new Error(`pixellab ${r.status} ${text.slice(0, 300)}`)
+    misses = 0
     const j = text ? JSON.parse(text) : {}
-    if (String(j.status || '').toLowerCase() === 'failed') throw new Error(j.error || 'the surface failed to draw')
-    // the field the finished picture arrives under is not confirmed either, so
-    // the three plausible names are tried rather than one guessed at
-    const url = j.download_url || j.image_url || j.url || ''
-    if (String(j.status || '').toLowerCase() === 'completed' && url) {
-      // fetched the instant it exists, because these urls expire the way the
-      // map-object ones do and a surface that has been paid for must not be
-      // lost to a slow caller
-      return { b64: (await fetchPNG(url)).toString('base64'), uiAssetId: String(id), ...size }
+    const st = String(j.status || '').toLowerCase()
+    if (DEAD.includes(st)) throw new Error(String(j.error || j.message || 'the surface failed to draw').slice(0, 200))
+    if (j.image_url) {
+      /* fetched the instant it exists, because a cdn url is not promised
+       * forever and a surface that has been paid for must not be lost to a slow
+       * caller. The size comes off what the endpoint says it drew rather than
+       * off what was asked for, the same reason setUiImage reads the IHDR. */
+      return {
+        b64: (await fetchPNG(j.image_url)).toString('base64'),
+        uiAssetId: String(id),
+        width: Number(j.size?.width) || size.width,
+        height: Number(j.size?.height) || size.height,
+      }
     }
   }
   throw new Error('the surface timed out')

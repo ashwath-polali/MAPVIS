@@ -1383,9 +1383,14 @@ input[type='range']:disabled {
    The rule runs the full column like the make strip's does and the chips sit
    in on the line, so a chip edge and "nothing placed yet" start where every
    other block in the panel starts. */
+/* TWO ACROSS, and a grid rather than a wrapping row. The chip grew a second
+   half for the layer's condition, and at the 229px this column actually gets
+   two of them missed fitting by five pixels, so every layer took its own line
+   and the strip went from two rows to four. auto-fit holds two while two fit
+   and drops to one in a narrower window. */
 .grpstrip {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
   gap: 3px;
   min-width: 0;
   padding: 6px var(--pan-in) 0;
@@ -1395,6 +1400,7 @@ input[type='range']:disabled {
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  min-width: 0;
   padding: 3px 7px;
   border: var(--hair) solid var(--edge);
   border-radius: var(--r-round);
@@ -1402,9 +1408,15 @@ input[type='range']:disabled {
   color: var(--ink);
   font: inherit;
   font-size: var(--fs-fine);
+  white-space: nowrap;
+  overflow: hidden;
   cursor: var(--cur-do);
 }
 .grpchip svg {
+  /* it cannot shrink. The chip is a flex item in a fixed cell now, and a
+     shrinkable mark squeezed the eye down to a dot on whichever layer had the
+     longest name. */
+  flex: 0 0 auto;
   width: 12px;
   height: 12px;
   opacity: 0.7;
@@ -1419,6 +1431,92 @@ input[type='range']:disabled {
 .grpnone {
   color: var(--dim);
   font-size: var(--fs-fine);
+}
+/* the layer's two targets share one pill outline, the way a library tile and
+   its own delete share one wrapper: hiding is a thing you do while you work,
+   the condition is authored and ships. */
+.grpwrap {
+  display: inline-flex;
+  align-items: stretch;
+  min-width: 0;
+  border: var(--hair) solid var(--edge);
+  border-radius: var(--r-round);
+  /* the second half's lit background has to stop at the pill's own curve, or
+     it squares off the right end of every chip that carries a condition */
+  overflow: hidden;
+}
+.grpwrap .grpchip {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  border-radius: 0;
+}
+.grpwrap .grp-n {
+  margin-left: auto;
+}
+.grpwhen {
+  display: grid;
+  place-items: center;
+  padding: 0 7px;
+  border-left: var(--hair) solid var(--edge);
+  color: var(--ink-3);
+  font: var(--fs-micro) var(--font-mono);
+  transition: color 160ms ease, background 160ms ease;
+}
+.grpwhen:hover {
+  color: var(--acc);
+  background: var(--raised);
+}
+/* lit when the layer already carries one, so a condition is visible from the
+   strip instead of only from inside the field that set it */
+.grpwhen.has {
+  color: var(--acc);
+}
+.grpwhen.on {
+  color: var(--acc);
+  background: var(--acc-soft);
+}
+
+/* THE FACES A PLACEMENT CAN WEAR, and the number beside each one is the index
+   `art` actually stores. Both are shown because a round switches on the number
+   and python asks by the name, and an author has to be able to see the pair. */
+.lookrows {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.lookrow {
+  display: grid;
+  grid-template-columns: auto 22px minmax(0, 1fr);
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.lookno {
+  min-width: 10px;
+  font: var(--fs-micro) var(--font-mono);
+  font-style: normal;
+  color: var(--ink-3);
+  text-align: right;
+}
+.lookth {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: var(--hair) solid var(--edge);
+  border-radius: var(--r);
+  overflow: hidden;
+}
+.lookth img {
+  max-width: 20px;
+  max-height: 20px;
+  image-rendering: pixelated;
+}
+.lookrow input {
+  min-width: 0;
+  padding: 4px 6px;
+  font: var(--fs-fine) var(--font-mono);
 }
 
 /* many at once: the arranging verbs, on the set. Rows wrap rather than squeeze,
@@ -2678,6 +2776,125 @@ input[type='range']:disabled {
 .dooracts {
   display: flex;
   gap: 4px;
+}
+
+/* ---- the named collections: a set, a rack, a variant set -----------------
+   Three lists in the same form the anchor, the route and the shot already use,
+   so nothing here invents a fourth row shape. What each one adds is only the
+   part that is genuinely different: a member is one string, a slot carries a
+   number that must never move, and a variant member carries which of them is
+   showing. */
+
+/* one anchor inside a set. The name is the whole row, because that string is
+   the entire content of a membership. */
+.memrow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.memrow > .anchname {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-fine);
+}
+
+/* ONE SLOT: a grip, its number, and the anchor under it. The number is an
+   <em> and not an input on purpose, and this is the one place in the tool
+   where read-only is the feature: `hook[3]` means the third hook for the life
+   of the map, so a rack that let anybody type over 3 would break the only
+   promise it makes. */
+.rackrow {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.rackgrip {
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 20px;
+  color: var(--ink-3);
+  cursor: var(--cur-grab);
+}
+.rackgrip:active {
+  cursor: var(--cur-held);
+}
+.rackgrip svg {
+  width: 12px;
+  height: 12px;
+}
+/* the row being carried, so a drag over four slots says which one is moving */
+.rackrow.lifted {
+  opacity: 0.5;
+}
+.rackno {
+  min-width: 14px;
+  font: var(--fs-micro) var(--font-mono);
+  font-style: normal;
+  color: var(--ink);
+  text-align: right;
+}
+.rackrow select.anchbind {
+  width: 100%;
+  min-width: 0;
+  padding: 4px 6px;
+  border: var(--hair) solid var(--edge);
+  border-radius: var(--r);
+  background: var(--bg);
+  color: var(--acc);
+  font: var(--fs-fine) var(--font-mono);
+  transition: border-color 160ms ease;
+}
+.rackrow select.anchbind:focus {
+  outline: none;
+  border-color: var(--acc);
+}
+
+/* ONE STATE of a variant set. Two lines, for the reason a mark row is two: the
+   name is a python string and gets its own line rather than 60px of a 228px
+   form, and the placement it draws sits under it in the machine face. */
+.varrow {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 3px 4px;
+  min-width: 0;
+}
+.varrow input {
+  min-width: 0;
+  padding: 4px 6px;
+  font: var(--fs-fine) var(--font-mono);
+}
+/* which one is showing to start. A dot rather than a native radio, because it
+   turns all the way off and a radio group cannot: nothing showing is a state
+   an author chooses. */
+.vardot {
+  width: 12px;
+  height: 12px;
+  border-radius: var(--r-round);
+  border: var(--hair) solid var(--edge-ctl);
+  background: transparent;
+  transition: all 160ms ease;
+}
+.vardot:hover {
+  border-color: var(--acc);
+}
+.vardot.on {
+  border-color: var(--acc);
+  background: var(--acc);
+}
+.varplace {
+  grid-column: 1 / -1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: var(--fs-micro) var(--font-mono);
+  color: var(--dim);
 }
 /* this one was live rather than latent: a door named "Panther's Maw →
    panther-maw" pushed the whole list 26px past the panel and grew a sideways

@@ -11,7 +11,22 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { CSSProperties, DragEvent, ReactNode } from 'react'
 import { Editor, isCutTool, loadImage, groupFor, type EditorStatus, type Tool } from './core/editor'
-import { PAL, mkCanvas, nameOf, assetLabel, ANCHOR_KINDS, MAP_CLASSES, PATH_KINDS, type AnchorKind, type AssetLook, type MapClass, type PlacedAsset } from './core/mask'
+import {
+  PAL,
+  mkCanvas,
+  nameOf,
+  assetLabel,
+  anchorName,
+  isLookName,
+  lookOf,
+  ANCHOR_KINDS,
+  MAP_CLASSES,
+  PATH_KINDS,
+  type AnchorKind,
+  type AssetLook,
+  type MapClass,
+  type PlacedAsset,
+} from './core/mask'
 
 /* What each kind is FOR, in the words an author would use. Shown on the kind
  * buttons and under the form, because "post" and "trigger" mean nothing until
@@ -255,6 +270,20 @@ const folderOf = (it: api.LibItem): string => {
 /* A face, in the shape the renderer draws. Same three shapes as a library row
  * and for the same reason: a state of a walking character is eight headings,
  * and losing them mid-round turns a troll south the moment it becomes a rock. */
+/* THE WORD THE FACE ALREADY HAS. A face and a library row both arrive carrying
+ * the name somebody asked for it under, and both of these threw it away, so
+ * `show(placement, state)` had no vocabulary and editor.ts had to recover the
+ * word from the url the picture happens to live at. This is the real fix that
+ * retires that derivation: the name comes across with the picture.
+ *
+ * Folded through anchorName rather than trusted, because a library row arrives
+ * hyphenated (`boulder-2`, off the exporter's own collision suffix) and
+ * migrateAsset drops anything that is not a look name instead of correcting it. */
+const lookNameOf = (want: string | undefined): string | undefined => {
+  const n = anchorName(String(want || ''))
+  return isLookName(n) ? n : undefined
+}
+
 const lookOfState = (f: api.AssetState): AssetLook => {
   const L: AssetLook = f.frames && f.frames.length
     ? { kind: 'animated', frames: f.frames.slice(), fps: f.fps || 8 }
@@ -263,6 +292,8 @@ const lookOfState = (f: api.AssetState): AssetLook => {
     L.dirs = { ...f.dirs }
     if (f.fps && f.fps > 0) L.fps = f.fps
   }
+  const name = lookNameOf(f.name)
+  if (name) L.name = name
   return L
 }
 
@@ -277,6 +308,8 @@ const lookOfItem = (it: api.LibItem): AssetLook => {
     // rate the same way an animated item does
     if (it.fps && it.fps > 0) L.fps = it.fps
   }
+  const name = lookNameOf(it.name)
+  if (name) L.name = name
   return L
 }
 
@@ -593,6 +626,68 @@ function NumField(props: {
   )
 }
 
+/* A STRING YOU CAN TYPE, held while it is being typed. NumField's contract for
+ * words: enter and blur commit, escape puts the old value back.
+ *
+ * Not a controlled field straight onto the editor, because every setter behind
+ * one of these takes an undo snapshot. Committing per keystroke would put one
+ * undo step under every character typed, so z would walk a name back a letter
+ * at a time instead of walking the change back. */
+function HeldInput(props: {
+  value: string
+  placeholder?: string
+  className?: string
+  tip?: string
+  onCommit: (v: string) => void
+}) {
+  const [txt, setTxt] = useState('')
+  const [live, setLive] = useState(false)
+  const cancel = useRef(false)
+  return (
+    <input
+      className={props.className}
+      data-tip={props.tip}
+      value={live ? txt : props.value}
+      placeholder={props.placeholder}
+      onFocus={() => {
+        cancel.current = false
+        setTxt(props.value)
+        setLive(true)
+      }}
+      onChange={(e) => setTxt(e.target.value)}
+      onBlur={() => {
+        setLive(false)
+        if (!cancel.current && txt !== props.value) props.onCommit(txt)
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') e.currentTarget.blur()
+        if (e.key === 'Escape') {
+          cancel.current = true
+          e.currentTarget.blur()
+        }
+      }}
+      spellCheck={false}
+    />
+  )
+}
+
+/* THE CONDITION A THING IS THERE UNDER, and the one field all three carriers
+ * wear: a group, a placement, an anchor.
+ *
+ * MAPVIS DECLARES THE CONDITION AND PYTHON DECIDES WHAT IT MEANS. This tool has
+ * no run state, no year, no flags and no idea what `cord_earned` is, so it never
+ * looks inside the string, and an author is told that on the field rather than
+ * by a paragraph standing under it. Blank is always there, which is what every
+ * placement on every map shipped so far already is. */
+function WhenField({ what, value, onCommit }: { what: string; value: string; onCommit: (v: string) => void }) {
+  return (
+    <label className="anchfield" data-tip="mapvis only declares the condition · python decides what it means">
+      <span>when · {what} is there</span>
+      <HeldInput className="anchname" value={value} placeholder="always" onCommit={onCommit} />
+    </label>
+  )
+}
+
 // the effect preview: the rendered frames looping on a canvas at one zoom.
 // Pixel art, so nothing is smoothed and nothing is tweened between frames, and
 // the clock is the effect's own fps so the panel plays what the map will play.
@@ -829,6 +924,24 @@ export default function App() {
   const [shotEdit, setShotEdit] = useState(0)
   const [snameDraft, setSnameDraft] = useState<string | null>(null)
   const [snameSaid, setSnameSaid] = useState<{ id: number; why: string } | null>(null)
+  /* WHICH NAMED COLLECTION HAS ITS FORM OPEN, as one `kind:id` string and not
+   * three numbers, because only one of the three is ever open: opening a set
+   * closes the rack for the reason picking a route closes a shot, and stacked
+   * forms grew the column until neither was on screen at once. One held name
+   * draft between them for the same reason, since the form that owns the draft
+   * is the only one on screen. */
+  const [collEdit, setCollEdit] = useState('')
+  const [collDraft, setCollDraft] = useState<string | null>(null)
+  const [collSaid, setCollSaid] = useState('')
+  /* the rack slot a drag has hold of, by its NUMBER and never by its position.
+   * The number is the whole guarantee a rack exists for, so nothing here can
+   * carry an index around and hand it back as an address. */
+  const [dragSlot, setDragSlot] = useState(0)
+  /* which layer's condition field is open. The group strip stays a strip: the
+   * field appears under it for one group at a time, rather than every group
+   * carrying a standing input, which is what made the old stacked layer list
+   * the tallest thing in this column. */
+  const [grpWhen, setGrpWhen] = useState('')
   // the map's own id, held while it is typed, because a rename is a server call
   // that can be refused and half a slug is not a thing to send
   const [idDraft, setIdDraft] = useState<string | null>(null)
@@ -4140,6 +4253,80 @@ export default function App() {
     return { named, rest, has: (ref: string) => keys.has(ref) }
   })()
 
+  /* THE THREE NAMED COLLECTIONS, and whichever one has its form open.
+   *
+   * The gaps come off the status the way pathBad does, and are read only when
+   * the open form is the one the editor has selected: each list is measured for
+   * the selected row alone, so a form opened without the same row selected would
+   * report another collection's missing names. */
+  const sets = st?.sets ?? []
+  const racks = st?.racks ?? []
+  const variants = st?.variants ?? []
+  const editingSet = sets.find((s) => collEdit === `set:${s.id}`)
+  const editingRack = racks.find((r) => collEdit === `rack:${r.id}`)
+  const editingVar = variants.find((v) => collEdit === `var:${v.id}`)
+  const setGaps = editingSet && st?.anchorSetSel === editingSet.id ? (st?.setGaps ?? []) : []
+  const rackGaps = editingRack && st?.rackSel === editingRack.id ? (st?.rackGaps ?? []) : []
+  const varGaps = editingVar && st?.variantSel === editingVar.id ? (st?.variantGaps ?? []) : []
+  /* Open one collection and close every other form in this panel, the route and
+   * the shot included. The editor is told which row is selected as well, or the
+   * gaps above measure nothing. */
+  const openColl = (kind: 'set' | 'rack' | 'var', id: number) => {
+    setCollEdit(id ? `${kind}:${id}` : '')
+    setCollDraft(null)
+    setCollSaid('')
+    ed?.selectSet(kind === 'set' ? id : 0)
+    ed?.selectRack(kind === 'rack' ? id : 0)
+    ed?.selectVariantSet(kind === 'var' ? id : 0)
+    setPathEdit(0)
+    ed?.selectPath(0)
+    setShotEdit(0)
+    ed?.selectFraming(0)
+  }
+  /* the anchor picker every collection form spends, offered once. A name that
+   * has been renamed or deleted under a slot is added by the caller, because
+   * only the caller knows which name is missing. */
+  const anchorOpts = doors.map((d) => (
+    <option key={d.id} value={d.name}>
+      {readable(d)} · {d.name}
+    </option>
+  ))
+  /* the same list with the identifier alone, for the picker inside a rack slot.
+   * That one shares its row with a grip, a number and a remove, so `Panther's
+   * Maw · panthers_maw` clipped to `Panther's Maw · ` in every slot and lost the
+   * half that says which anchor is on the hook. A slot is addressed by the
+   * identifier, so the identifier is what the row shows. */
+  const anchorCodeOpts = doors.map((d) => (
+    <option key={d.id} value={d.name}>
+      {d.name}
+    </option>
+  ))
+  /* WHICH COLLECTIONS THE OPEN ANCHOR IS IN, so somebody looking at stele_2 can
+   * see it is one of the five rather than having to open all five. A rack says
+   * the slot number too, because that number is the address and it is the only
+   * fact about a rack membership worth knowing. */
+  const anchorIn = editingDoor
+    ? [
+        ...sets.filter((s) => s.members.includes(editingDoor.name)).map((s) => `set ${s.name}`),
+        /* one rack says its numbers once. An anchor is allowed on several hooks
+         * of the same rack, and one line per hook read `rack rack_1 slot 3 ·
+         * rack rack_1 slot 1 · rack rack_1 slot 2`, which is three sentences
+         * saying one thing in the order the rows happen to sit in. Sorted by
+         * the number, because the number is the address. */
+        ...racks
+          .map((r) => ({
+            r,
+            on: r.slots
+              .filter((q) => q.anchor === editingDoor.name)
+              .map((q) => q.slot)
+              .sort((a, b) => a - b),
+          }))
+          .filter((q) => q.on.length)
+          .map((q) => `rack ${q.r.name} slot${q.on.length > 1 ? 's' : ''} ${q.on.join(', ')}`),
+        ...variants.filter((v) => v.anchor === editingDoor.name).map((v) => `variant set ${v.name}`),
+      ]
+    : []
+
   const testPanel = !has ? (
     needPainting
   ) : (
@@ -4328,6 +4515,18 @@ export default function App() {
             </>
           )}
 
+          {/* WHEN THIS ANCHOR EXISTS AT ALL: a door barred until a cord is
+              earned, a berth that is not there until the ship is repaired. It
+              sits under the two names because it is the same kind of thing as
+              them, a string the author declares and code somewhere else
+              answers. Typed, tabled, exported and read by the game since
+              anchors shipped, with no way for anybody to enter a value. */}
+          <WhenField
+            what="this anchor"
+            value={editingDoor.when ?? ''}
+            onCommit={(v) => ed?.setAnchorWhen(editingDoor.id, v)}
+          />
+
           {/* WHICH PAINTED THING THIS NAME IS ON.
               *
               * Until this box existed the field was typed, tabled, exported and
@@ -4490,6 +4689,10 @@ export default function App() {
             </button>
           </div>
           <div className="doorhint">{ANCHOR_WHAT[editingDoor.kind]}</div>
+          {/* what this one anchor is a member of. Without it a collection is
+              only visible from its own form, so an author looking at stele_2
+              cannot tell it is one of the five that python iterates. */}
+          {anchorIn.length > 0 && <div className="doorhint">in {anchorIn.join(' · ')}</div>}
           <div className="dooracts">
             <button
               className="abtn"
@@ -5074,11 +5277,451 @@ export default function App() {
           ))}
         </div>
       )}
+      {/* SETS. `steles` meaning those five and `the_berths` meaning all of them
+          on this map, so python iterates a collection instead of hard-coding
+          five strings, and this tool can be asked whether the set is complete
+          rather than one name at a time.
+
+          WHAT "SELECTED" MEANS HERE. Nothing on this map selects several
+          anchors at once, so the selection a set can be filled from is the
+          anchor whose form is open above. It is the shape the shots row already
+          uses, down to saying so when no anchor is open. */}
+      <Sec>sets</Sec>
+      <Row
+        icon="flag"
+        label={editingDoor ? `new set from ${readable(editingDoor)}` : 'new set'}
+        desc={
+          editingDoor
+            ? 'a name several anchors answer to at once'
+            : 'open an anchor above first, or it starts empty'
+        }
+        keep
+        onClick={() => openColl('set', ed?.addSet(editingDoor ? [editingDoor.name] : []) || 0)}
+      />
+      {editingSet && (
+        <div className="doorform">
+          <label className="anchfield">
+            <span>name · what code calls it</span>
+            <input
+              className={'anchname' + (collSaid ? ' bad' : '')}
+              value={collDraft ?? editingSet.name}
+              placeholder="steles"
+              onChange={(e) => setCollDraft(e.target.value)}
+              onBlur={() => {
+                if (collDraft === null) return
+                const r = ed?.renameSet(editingSet.id, collDraft)
+                setCollSaid(r?.why || '')
+                setCollDraft(null)
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === 'Escape') e.currentTarget.blur()
+              }}
+              spellCheck={false}
+              autoFocus
+            />
+          </label>
+          {collSaid && <div className="anchwarn">{collSaid}</div>}
+          <div className="anchspot">
+            <span>members · {editingSet.members.length}</span>
+            <button
+              className="mbtn wide"
+              data-tip="puts the anchor whose form is open above into this set"
+              disabled={!editingDoor || editingSet.members.includes(editingDoor.name)}
+              onClick={() =>
+                editingDoor && ed?.updateSet(editingSet.id, { members: [...editingSet.members, editingDoor.name] })
+              }
+            >
+              {/* the name is not repeated in the already-in case: this row is
+                  one nowrap button in a 228px form, and `panthers_maw is
+                  already in` ellipsised to `panthers_maw is alread…` */}
+              {!editingDoor
+                ? 'open an anchor above first'
+                : editingSet.members.includes(editingDoor.name)
+                  ? 'already in this set'
+                  : `add ${editingDoor.name}`}
+            </button>
+          </div>
+          {editingSet.members.map((m) => (
+            <div className="memrow" key={m}>
+              <span className="anchname">{m}</span>
+              <button
+                className="arow-x"
+                data-tip="take it out of the set"
+                onClick={() =>
+                  ed?.updateSet(editingSet.id, { members: editingSet.members.filter((q) => q !== m) })
+                }
+              >
+                <Icon name="x" />
+              </button>
+            </div>
+          ))}
+          {/* the same question the publish gate asks, asked while somebody is
+              still looking at the screen, in the red check reach paints
+              stranded ground with */}
+          {setGaps.length > 0 && (
+            <div className="anchwarn">nothing on this map is called {setGaps.join(', ')}</div>
+          )}
+          <div className="dooracts">
+            <button className="abtn" onClick={() => openColl('set', 0)}>
+              done
+            </button>
+            <button
+              className={'abtn danger' + (armed === 'set:' + editingSet.id ? ' armed' : '')}
+              onClick={() => {
+                if (!arm('set:' + editingSet.id)) return
+                ed?.removeSet(editingSet.id)
+                openColl('set', 0)
+              }}
+            >
+              {armed === 'set:' + editingSet.id ? 'sure?' : 'remove'}
+            </button>
+          </div>
+        </div>
+      )}
+      {sets.length > 0 && (
+        <div className="evrows">
+          {sets.map((s) => (
+            <div
+              key={s.id}
+              className={'evrow' + (collEdit === `set:${s.id}` ? ' sel' : '')}
+              data-tip={`one name for ${s.members.length} anchors · ${s.members.join(', ') || 'empty so far'}`}
+              onClick={() => openColl('set', collEdit === `set:${s.id}` ? 0 : s.id)}
+            >
+              <span className="row-ic">
+                <Icon name="flag" />
+              </span>
+              <span className="ev-name">
+                <b className={displayName(s).derived ? 'guessed' : undefined}>{displayName(s).text}</b>
+                <Addr parts={[['code', s.name], [null, `${s.members.length} anchors`]]} />
+              </span>
+              <button
+                className={'arow-x' + (armed === 'setrow:' + s.id ? ' armed' : '')}
+                data-tip={armed === 'setrow:' + s.id ? undefined : 'remove'}
+                onClick={(e2) => {
+                  e2.stopPropagation()
+                  if (!arm('setrow:' + s.id)) return
+                  ed?.removeSet(s.id)
+                  if (collEdit === `set:${s.id}`) openColl('set', 0)
+                }}
+              >
+                {armed === 'setrow:' + s.id ? 'sure?' : <Icon name="x" />}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* RACKS. The same anchors given stable positions: the trophy wall, the
+          banner wall, the three season tokens, the graduation front row, where
+          the third hook has to be the third hook every run.
+
+          THE NUMBER IS READ-ONLY AND IT NEVER RENUMBERS. That is the whole
+          guarantee: dragging the fourth banner to the front means it is hung
+          first and it is still banner 4, and deleting the second hook leaves
+          1, 3, 4, 5. So the row can be dragged and the number cannot be
+          typed. */}
+      <Sec>racks</Sec>
+      <Row
+        icon="mark"
+        label="new rack"
+        desc="ordered slots · code fills slot 3 and slot 3 is where it lands"
+        onClick={() => openColl('rack', ed?.addRack() || 0)}
+      />
+      {editingRack && (
+        <div className="doorform">
+          <label className="anchfield">
+            <span>name · what code calls it</span>
+            <input
+              className={'anchname' + (collSaid ? ' bad' : '')}
+              value={collDraft ?? editingRack.name}
+              placeholder="trophy_wall"
+              onChange={(e) => setCollDraft(e.target.value)}
+              onBlur={() => {
+                if (collDraft === null) return
+                const r = ed?.renameRack(editingRack.id, collDraft)
+                setCollSaid(r?.why || '')
+                setCollDraft(null)
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === 'Escape') e.currentTarget.blur()
+              }}
+              spellCheck={false}
+              autoFocus
+            />
+          </label>
+          {collSaid && <div className="anchwarn">{collSaid}</div>}
+          <div className="anchspot">
+            <span>slots · {editingRack.slots.length}</span>
+            <button
+              className="mbtn wide"
+              data-tip="hangs the anchor open above on the next number this rack has never handed out"
+              disabled={!editingDoor}
+              onClick={() => editingDoor && ed?.addRackSlot(editingRack.id, editingDoor.name)}
+            >
+              {editingDoor ? `add ${editingDoor.name}` : 'open an anchor above first'}
+            </button>
+          </div>
+          {editingRack.slots.map((s, i) => (
+            <div
+              className={'rackrow' + (dragSlot === s.slot ? ' lifted' : '')}
+              key={s.slot}
+              onDragOver={(e) => {
+                if (dragSlot) e.preventDefault()
+              }}
+              onDrop={(e) => {
+                e.preventDefault()
+                if (dragSlot) ed?.moveRackSlot(editingRack.id, dragSlot, i)
+                setDragSlot(0)
+              }}
+            >
+              <span
+                className="rackgrip"
+                draggable
+                data-tip="drag to change the order they fill in · the number stays where it is"
+                onDragStart={() => setDragSlot(s.slot)}
+                onDragEnd={() => setDragSlot(0)}
+              >
+                <Icon name="dots" />
+              </span>
+              <em className="rackno">{s.slot}</em>
+              <select
+                className="anchbind"
+                value={s.anchor}
+                onChange={(e) => ed?.updateRackSlot(editingRack.id, s.slot, { anchor: e.target.value })}
+              >
+                {anchorCodeOpts}
+                {!doors.some((d) => d.name === s.anchor) && <option value={s.anchor}>{s.anchor} · gone</option>}
+              </select>
+              <button
+                className="arow-x"
+                data-tip="the number goes with it and is not handed out again"
+                onClick={() => ed?.removeRackSlot(editingRack.id, s.slot)}
+              >
+                <Icon name="x" />
+              </button>
+            </div>
+          ))}
+          {rackGaps.length > 0 && (
+            <div className="anchwarn">nothing on this map is called {rackGaps.join(', ')}</div>
+          )}
+          <div className="dooracts">
+            <button className="abtn" onClick={() => openColl('rack', 0)}>
+              done
+            </button>
+            <button
+              className={'abtn danger' + (armed === 'rack:' + editingRack.id ? ' armed' : '')}
+              onClick={() => {
+                if (!arm('rack:' + editingRack.id)) return
+                ed?.removeRack(editingRack.id)
+                openColl('rack', 0)
+              }}
+            >
+              {armed === 'rack:' + editingRack.id ? 'sure?' : 'remove'}
+            </button>
+          </div>
+        </div>
+      )}
+      {racks.length > 0 && (
+        <div className="evrows">
+          {racks.map((r) => (
+            <div
+              key={r.id}
+              className={'evrow' + (collEdit === `rack:${r.id}` ? ' sel' : '')}
+              data-tip={`ordered slots · ${r.slots.map((q) => `${q.slot} ${q.anchor}`).join(', ') || 'empty so far'}`}
+              onClick={() => openColl('rack', collEdit === `rack:${r.id}` ? 0 : r.id)}
+            >
+              <span className="row-ic">
+                <Icon name="mark" />
+              </span>
+              <span className="ev-name">
+                <b className={displayName(r).derived ? 'guessed' : undefined}>{displayName(r).text}</b>
+                <Addr parts={[['code', r.name], [null, `${r.slots.length} slots`]]} />
+              </span>
+              <button
+                className={'arow-x' + (armed === 'rackrow:' + r.id ? ' armed' : '')}
+                data-tip={armed === 'rackrow:' + r.id ? undefined : 'remove'}
+                onClick={(e2) => {
+                  e2.stopPropagation()
+                  if (!arm('rackrow:' + r.id)) return
+                  ed?.removeRack(r.id)
+                  if (collEdit === `rack:${r.id}`) openColl('rack', 0)
+                }}
+              >
+                {armed === 'rackrow:' + r.id ? 'sure?' : <Icon name="x" />}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* VARIANT SETS. One name resolving to one of several PLACEMENTS with at
+          most one of them showing: five docks, one per island state, a hearth
+          lit and unlit, a ship and the empty berth it is not in.
+
+          It is not a face. A face is one placement wearing another picture, and
+          drawing a ship and empty water as two frames of one sprite gives the
+          empty berth the ship's collision. Two silhouettes, two footprints, one
+          name. It hangs off an anchor, so a set is made from the anchor whose
+          form is open above the same way a shot is. */}
+      <Sec>variant sets</Sec>
+      <Row
+        icon="wand"
+        label={editingDoor ? `new variant set on ${readable(editingDoor)}` : 'new variant set'}
+        desc={
+          editingDoor
+            ? 'placements that trade places · at most one shows'
+            : 'open an anchor above first · a set hangs off one'
+        }
+        keep
+        disabled={!editingDoor}
+        onClick={() => editingDoor && openColl('var', ed?.addVariantSet(editingDoor.name) || 0)}
+      />
+      {editingVar && (
+        <div className="doorform">
+          <label className="anchfield">
+            <span>name · what code calls it</span>
+            <HeldInput
+              className="anchname"
+              value={editingVar.name}
+              placeholder="the_berth"
+              onCommit={(v) => ed?.updateVariantSet(editingVar.id, { name: v })}
+            />
+          </label>
+          <label className="anchfield">
+            <span>on · the anchor it is addressed through</span>
+            <select
+              className="anchbind"
+              value={editingVar.anchor}
+              onChange={(e) => ed?.updateVariantSet(editingVar.id, { anchor: e.target.value })}
+            >
+              {anchorOpts}
+              {!doors.some((d) => d.name === editingVar.anchor) && (
+                <option value={editingVar.anchor}>{editingVar.anchor} · gone</option>
+              )}
+            </select>
+          </label>
+          {/* a member can only be a placement somebody NAMED: an unnamed one has
+              no address for the set to hold on to */}
+          <label className="anchfield">
+            <span>add a placement</span>
+            <select
+              className="anchbind"
+              data-empty="1"
+              value=""
+              onChange={(e) => e.target.value && ed?.addVariant(editingVar.id, e.target.value)}
+            >
+              <option value="">
+                {bindTargets.named.length ? 'pick a named placement' : 'name a placement in step 5 first'}
+              </option>
+              {bindTargets.named
+                .filter((a) => !editingVar.members.some((m) => m.placement === a.name))
+                .map((a) => (
+                  <option key={a.id} value={a.name as string}>
+                    {readable(a)} · {a.name}
+                  </option>
+                ))}
+            </select>
+          </label>
+          {editingVar.members.map((m) => (
+            <div className="varrow" key={m.name}>
+              {/* the dot turns all the way off, because nothing showing is a
+                  state an author chooses and not a fallback */}
+              <button
+                className={'vardot' + (editingVar.initial === m.name ? ' on' : '')}
+                role="radio"
+                aria-checked={editingVar.initial === m.name}
+                data-tip={
+                  editingVar.initial === m.name
+                    ? 'showing to start · press again for none showing'
+                    : 'show this one to start'
+                }
+                onClick={() =>
+                  ed?.updateVariantSet(editingVar.id, { initial: editingVar.initial === m.name ? '' : m.name })
+                }
+              />
+              <HeldInput
+                className="anchname"
+                value={m.name}
+                placeholder="ship_in"
+                onCommit={(v) => ed?.updateVariant(editingVar.id, m.name, { name: v })}
+              />
+              <button
+                className="arow-x"
+                data-tip="take this state out of the set"
+                onClick={() => ed?.removeVariant(editingVar.id, m.name)}
+              >
+                <Icon name="x" />
+              </button>
+              <span className="varplace">{m.placement}</span>
+            </div>
+          ))}
+          {varGaps.length > 0 && (
+            <div className="anchwarn">nothing on this map is called {varGaps.join(', ')}</div>
+          )}
+          <div className="doorhint">
+            {editingVar.initial ? `${editingVar.initial} shows to start` : 'nothing shows to start'}
+          </div>
+          <div className="dooracts">
+            <button className="abtn" onClick={() => openColl('var', 0)}>
+              done
+            </button>
+            <button
+              className={'abtn danger' + (armed === 'var:' + editingVar.id ? ' armed' : '')}
+              onClick={() => {
+                if (!arm('var:' + editingVar.id)) return
+                ed?.removeVariantSet(editingVar.id)
+                openColl('var', 0)
+              }}
+            >
+              {armed === 'var:' + editingVar.id ? 'sure?' : 'remove'}
+            </button>
+          </div>
+        </div>
+      )}
+      {variants.length > 0 && (
+        <div className="evrows">
+          {variants.map((v) => (
+            <div
+              key={v.id}
+              className={'evrow' + (collEdit === `var:${v.id}` ? ' sel' : '')}
+              data-tip={`at most one of ${v.members.length} shows · ${v.members.map((m) => m.name).join(', ') || 'empty so far'}`}
+              onClick={() => openColl('var', collEdit === `var:${v.id}` ? 0 : v.id)}
+            >
+              <span className="row-ic">
+                <Icon name="wand" />
+              </span>
+              <span className="ev-name">
+                <b className={displayName(v).derived ? 'guessed' : undefined}>{displayName(v).text}</b>
+                <Addr
+                  parts={[
+                    ['code', v.name],
+                    ['on', v.anchor],
+                    [null, `${v.members.length} states`],
+                  ]}
+                />
+              </span>
+              <button
+                className={'arow-x' + (armed === 'varrow:' + v.id ? ' armed' : '')}
+                data-tip={armed === 'varrow:' + v.id ? undefined : 'remove'}
+                onClick={(e2) => {
+                  e2.stopPropagation()
+                  if (!arm('varrow:' + v.id)) return
+                  ed?.removeVariantSet(v.id)
+                  if (collEdit === `var:${v.id}`) openColl('var', 0)
+                }}
+              >
+                {armed === 'varrow:' + v.id ? 'sure?' : <Icon name="x" />}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
       <Keys
         lines={[
           'space walks, then space hops · wasd or arrows move · esc stops',
           'esc drops an armed door click',
           'laying a route: enter or double click keeps it · backspace takes a point back · esc drops it',
+          'a rack slot drags up and down · its number does not move with it',
           'z undoes',
         ]}
       />
@@ -5093,6 +5736,25 @@ export default function App() {
   // set is picked and the many-at-once row takes its place
   const selA = many ? undefined : assets.find((a) => a.id === st?.assetSel)
   const hiddenSet = new Set(st?.hiddenGroups ?? [])
+  // the condition a layer carries. A group only gets a row in the document once
+  // it says something, so most maps answer '' here and grow no field.
+  const whenOfGroup = (name: string) => (st?.groups ?? []).find((g) => g.name === name)?.when ?? ''
+  /* WHICH VARIANT SET THIS PLACEMENT IS ONE OF, so somebody looking at
+   * `the_ship` can see it is one of two that trade places rather than scenery.
+   * Read off the sets, because the membership lives there: a placement has no
+   * idea it is in one. */
+  const selVariant = (() => {
+    if (!selA?.name) return null
+    for (const v of variants) {
+      const m = v.members.find((q) => q.placement === selA.name)
+      if (m) return { set: v, member: m }
+    }
+    return null
+  })()
+  /* EVERY FACE THIS PLACEMENT HAS, numbered the way `art` numbers them: slot 0
+   * is the picture it was placed with and slot 1 is looks[0]. That off-by-one
+   * lives in lookOf and this list only counts. */
+  const selFaces = selA ? [0, ...(selA.looks || []).map((_, i) => i + 1)] : []
   const groupNames = [...SUGGESTED_GROUPS]
   for (const a of assets) if (!groupNames.includes(a.group)) groupNames.push(a.group)
   const thumbOf = (a: { src?: string; frames?: string[] }) => a.src || (a.frames && a.frames[0]) || ''
@@ -5485,6 +6147,38 @@ export default function App() {
           </button>
         </div>
       )}
+      {/* WHAT EACH FACE IS CALLED, which is the whole of `show(placement,
+          state)` having a vocabulary to select from.
+          *
+          * The number beside each one is the index `art` actually stores, and
+          * it is shown because that is what a round switches on. The name is
+          * kept beside the index and never instead of it, so anything reading
+          * by number cannot tell the difference.
+          *
+          * Only when there is more than one face: a placement with a single
+          * picture has nothing to switch between, and a name on it would be a
+          * field asking to be filled for no reason. */}
+      {selFaces.length > 1 && (
+        <div className="lookrows">
+          <span className="grainlab">faces · what code shows by name</span>
+          {selFaces.map((i) => {
+            const L = lookOf(selA, i)
+            const shot = L.src || L.frames?.[0] || Object.values(L.dirs || {})[0]?.[0] || ''
+            return (
+              <div className="lookrow" key={i}>
+                <em className="lookno">{i}</em>
+                <span className="lookth">{shot ? <img src={shot} alt="" /> : null}</span>
+                <HeldInput
+                  className="anchname"
+                  value={(i === 0 ? selA.lookName : L.name) ?? ''}
+                  placeholder={i === 0 ? 'as it was placed' : 'unnamed'}
+                  onCommit={(v) => ed?.setLookName(selA.id, i, v)}
+                />
+              </div>
+            )
+          })}
+        </div>
+      )}
       {/* THE ADDRESS, and it sits above the group because it is the identity
           and the group is only the set it belongs to. It wears the anchor
           form's shape rather than the property rows below it, because it is
@@ -5516,6 +6210,15 @@ export default function App() {
         />
       </label>
       {pnameSaid?.id === selA.id && <div className="anchwarn">{pnameSaid.why}</div>}
+      {/* it is one of several that trade places, not scenery. Said here because
+          the set itself lives two steps back, on step 4, and nothing on this
+          placement would otherwise admit it is half of a pair. */}
+      {selVariant && (
+        <div className="doorhint">
+          one of {selVariant.set.members.length} in {selVariant.set.name} · this one is{' '}
+          {selVariant.member.name}
+        </div>
+      )}
       <label className="insp-row">
         <span>group</span>
         <select
@@ -5532,6 +6235,20 @@ export default function App() {
           ))}
         </select>
       </label>
+      {/* WHEN THIS ONE IS THERE, and it beats its group's where both exist.
+          Typed, tabled, exported and resolved by whenOf with no way for
+          anybody to enter a value. */}
+      <WhenField
+        what="this one"
+        value={selA.when ?? ''}
+        onCommit={(v) => ed?.setAssetWhen([selA.id], v)}
+      />
+      {/* a group's condition is inherited rather than copied, so a placement
+          with none of its own is not unconditional and must not read as if it
+          is */}
+      {!selA.when && whenOfGroup(selA.group) && (
+        <div className="doorhint">inherits {whenOfGroup(selA.group)} from {selA.group}</div>
+      )}
       <div className="numgrid">
         <NumField label="x" value={selA.x} onCommit={(v) => ed?.editAsset(selA.id, { x: v })} />
         <NumField label="y" value={selA.y} onCommit={(v) => ed?.editAsset(selA.id, { y: v })} />
@@ -5971,27 +6688,71 @@ export default function App() {
    * column after the tuner, and what it is actually for is showing counts and
    * turning a layer off while you work under it. */
   const groupStrip = (
-    <div className="grpstrip">
-      {groupNames
-        .map((g) => ({ g, n: assets.filter((a) => a.group === g).length }))
-        .filter((q) => q.n > 0)
-        .map(({ g, n }) => {
-          const hidden = hiddenSet.has(g)
-          return (
-            <button
-              key={g}
-              className={'grpchip' + (hidden ? ' off' : '')}
-              data-tip={hidden ? 'show ' + g : 'hide ' + g}
-              onClick={() => ed?.setGroupHidden(g, !hidden)}
-            >
-              <Icon name={hidden ? 'eyeoff' : 'eye'} />
-              {g}
-              <span className="grp-n">{n}</span>
+    <>
+      <div className="grpstrip">
+        {groupNames
+          .map((g) => ({ g, n: assets.filter((a) => a.group === g).length }))
+          .filter((q) => q.n > 0)
+          .map(({ g, n }) => {
+            const hidden = hiddenSet.has(g)
+            return (
+              /* TWO THINGS TO DO TO A LAYER AND THEY ARE NOT THE SAME THING.
+                 The eye is a thing you do while you work and the map forgets
+                 it; the condition is authored and ships in the bundle. So the
+                 chip keeps the eye and grows a second target beside it, the
+                 way a library tile carries its own delete, rather than every
+                 layer standing a permanent input in a 272px column. */
+              <span className="grpwrap" key={g}>
+                <button
+                  className={'grpchip' + (hidden ? ' off' : '')}
+                  data-tip={hidden ? 'show ' + g : 'hide ' + g}
+                  onClick={() => ed?.setGroupHidden(g, !hidden)}
+                >
+                  <Icon name={hidden ? 'eyeoff' : 'eye'} />
+                  {g}
+                  <span className="grp-n">{n}</span>
+                </button>
+                {/* THE WORD AND NOT A PICTOGRAM. Nothing in the drawn set means
+                    "a condition": `trigger` is a point with a ripple, which is
+                    an anchor kind and already means something else two steps
+                    away, and a tick means confirmed. The two pills in the
+                    placement inspector say `moves` and `becomes` in words for
+                    the same reason. */}
+                <button
+                  className={
+                    'grpwhen' + (grpWhen === g ? ' on' : '') + (whenOfGroup(g) ? ' has' : '')
+                  }
+                  data-tip={
+                    whenOfGroup(g) ? `${g} is there when ${whenOfGroup(g)}` : `say when ${g} is there`
+                  }
+                  onClick={() => setGrpWhen(grpWhen === g ? '' : g)}
+                >
+                  when
+                </button>
+              </span>
+            )
+          })}
+        {!assets.length && <span className="grpnone">nothing placed yet</span>}
+      </div>
+      {/* one layer's condition at a time, under the strip. A dozen placements
+          that are the same year's dressing share one condition, and copying the
+          string onto each of them means the thirteenth is placed without it and
+          nothing anywhere says so. */}
+      {grpWhen && (
+        <div className="doorform">
+          <WhenField
+            what={`the ${grpWhen} layer`}
+            value={whenOfGroup(grpWhen)}
+            onCommit={(v) => ed?.setGroupWhen(grpWhen, v)}
+          />
+          <div className="dooracts">
+            <button className="abtn" onClick={() => setGrpWhen('')}>
+              done
             </button>
-          )
-        })}
-      {!assets.length && <span className="grpnone">nothing placed yet</span>}
-    </div>
+          </div>
+        </div>
+      )}
+    </>
   )
 
   const libraryPane = (

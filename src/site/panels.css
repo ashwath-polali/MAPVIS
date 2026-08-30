@@ -348,6 +348,63 @@
   color: var(--ink-3);
 }
 
+/* A PREFERENCE ROW: a name on the left, the control on the right. One row shape
+ * so a second preference cannot arrive with its own spacing. */
+.pref {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: 14px 0 10px;
+  font-size: var(--fs-body);
+}
+
+/* Two words in a track, not an icon and not a sliding knob, and it is the
+ * .walk-cam grammar from the walk panel on purpose: a switch drawn as a shape
+ * has to be learned, and one of the two states of a mute icon is a picture of
+ * silence that people read as "press to silence". The words cannot be misread.
+ * Kept as two buttons rather than one that flips, so a screen reader is told
+ * which state is chosen instead of being handed a verb. */
+.pref-sw {
+  display: flex;
+  gap: 2px;
+  padding: 2px;
+  border: var(--hair) solid var(--edge);
+  border-radius: var(--r);
+}
+.pref-sw button {
+  appearance: none;
+  padding: 4px 12px;
+  font: 400 var(--fs-small) var(--font-mono);
+  letter-spacing: 0.08em;
+  color: var(--ink-off);
+  background: transparent;
+  border: 0;
+  border-radius: var(--r-tight);
+  cursor: var(--cur-do);
+  transition:
+    color 120ms ease,
+    background-color 120ms ease;
+}
+.pref-sw button:hover {
+  color: var(--ink-2);
+}
+.pref-sw button.on {
+  color: var(--ink);
+  background: #1b2027;
+}
+.pref-sw button:focus-visible {
+  outline: var(--hair) solid var(--edge-lit);
+  outline-offset: 1px;
+}
+
+/* two notes stack under this row, the standing fact and the browser's state.
+   Scoped to a section that has a preference in it rather than written as
+   .sheet-note + .sheet-note, which would reach into the key blocks as well. */
+.pref ~ .sheet-note {
+  margin-top: 8px;
+}
+
 .key {
   padding: 14px 0;
   border-top: var(--hair) solid #1a2027;
