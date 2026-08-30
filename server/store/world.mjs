@@ -931,6 +931,21 @@ export async function saveWorld(input, client, id = GAME_WORLD) {
    * when there is no recorded position, so it can never invalidate one. */
   const shape = (d) => JSON.stringify(stable([d.places, d.regions]))
   const version = shape(doc) === shape(was) ? was.version : (was.version || 1) + 1
+  /* EVERY WRITE TO THIS ROW SAYS SO, because there is one of it and it has
+   * already been destroyed once by a runner nobody was watching, and later an
+   * unexplained writer touched it every minute for an hour before anyone asked
+   * what it was. It turned out to be a test session, which is the good outcome;
+   * the bad outcome is indistinguishable without a line in a log. Cheap: one
+   * console line per save, and a save is a deliberate act nobody does in a loop. */
+  console.log()
+  /* EVERY WRITE TO THIS ROW SAYS SO IN THE LOG, because there is one of it.
+   * It has already been destroyed once by concurrent test runs nobody was
+   * watching, and later an unexplained writer touched it every minute for an
+   * hour before anybody asked what that was. It turned out to be a test session
+   * driving a browser, which is the harmless answer; the harmful answer is
+   * indistinguishable from it without a line in a log. One line per save, and a
+   * save is a deliberate act that nothing should be doing in a loop. */
+  console.log('[world] row ' + id + ' written · ' + doc.places.length + ' place(s), ' + (doc.marks || []).length + ' berth(s), version ' + version)
   const wrote = await run(
     `insert into world (id, w, h, places, regions, marks, home, version, updated_at)
      values ($8, $1, $2, $3::jsonb, $4::jsonb, $5::jsonb, $6, $7, now())
