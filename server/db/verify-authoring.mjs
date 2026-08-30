@@ -531,6 +531,25 @@ try {
    * outside the canvas, and growing the canvas to make room zooms the island
    * out. This saves a composition, reads it back the way the game reads it, and
    * puts the whole thing back exactly as it was found. */
+  /* SAVE AND RESTORE IS NOT SAFE ON A ROW THERE IS ONLY ONE OF, and this test
+   * destroyed Ash's real composition proving it.
+   *
+   * The pattern below is read-the-world, overwrite it with a throwaway, put it
+   * back in a finally. That is correct for one runner and wrong for two. Two
+   * runs overlapped: A read the real ocean, B read A's throwaway as though it
+   * were the truth, A put the real one back, and then B put A's throwaway back
+   * on top. The hub and its berth were gone and nothing said so, because both
+   * runs reported every check green. There is exactly one world row, so any
+   * concurrency at all makes the restore a coin toss.
+   *
+   * A lock is the fix rather than more care. This takes a postgres advisory
+   * lock for the whole section, so a second runner waits instead of interleaving
+   * and reading a half-finished ocean as its baseline. The key is an arbitrary
+   * constant that only this section uses. The lock is session scoped and the
+   * pool hands the connection back on release, so a crashed run frees it when
+   * its connection closes rather than wedging the next one for ever. */
+  const WORLD_LOCK = 774_112_090
+  await q('select pg_advisory_lock($1)', [WORLD_LOCK])
   const worldBefore = await getWorld()
   try {
     const saved = await saveWorld({
@@ -770,6 +789,9 @@ try {
   } finally {
     // put the ocean back exactly as it was, because it is one shared row
     await saveWorld(worldBefore)
+    // released only after the ocean is back, so the next runner's baseline is
+    // the real one and never this test's throwaway
+    await q('select pg_advisory_unlock($1)', [WORLD_LOCK])
   }
 
   // ---- 6. the chrome, and one kit shared across maps -----------------------
