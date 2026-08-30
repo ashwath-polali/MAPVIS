@@ -1,0 +1,631 @@
+/* THE UI GENERATOR, wearing the map editor's chrome.
+ *
+ * WHY THIS FILE IS SHORT. The page is built out of app.css: `.app`, `header`,
+ * `.brand`, `.stepper`, `.panel`, `.asec`, `.row`, `.insp`, `.seg`, `.numf`,
+ * `.abtn`, `.anchfield`, `.stage` and `footer` are the editor's own classes and
+ * this page uses them unchanged. Two pages that copy each other's numbers drift;
+ * two pages that share a stylesheet cannot.
+ *
+ * So what is here is only the things the editor has no equivalent of: a checker
+ * to see transparency against, a rectangle drawn at a canvas's true proportion,
+ * the four-edge overlay, and the stretch preview. Every value below is a token.
+ *
+ * THE PAGE THIS REPLACES was a landing page: a Fraunces hero, three paragraphs
+ * of prose and grey cards. There is no display face anywhere in this file, and
+ * no block of running text on the screen, on purpose.
+ */
+
+/* ---- one gallery, one card ------------------------------------------------
+ *
+ * Two grids of pickable things live on this page: what the account has drawn,
+ * and the twenty-one kinds of piece it could draw. They had two card designs and
+ * had already begun to drift, so there is one card and a modifier for how much
+ * room the art gets.
+ *
+ * THE CARD IS THE EDITOR'S LIBRARY TILE, ENLARGED. `.acc` in app.css is the
+ * tool's existing answer to "a grid of pickable things with pictures on them":
+ * a hairline in --edge, a --bg well for the art, the name under it and the
+ * accent on the border of the one you hovered or armed. Nothing here invents a
+ * second answer, it just gives that one more room. */
+.ui-gal {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 100%;
+  height: 100%;
+  padding: 14px;
+  overflow-y: auto;
+}
+/* THE FLOOR IS THE WIDEST DIAGRAM PLUS EVERYTHING AROUND IT: 144, the art
+   well's 5 a side, the card's 6 a side and the two hairlines. It is not a
+   number that looked right. Below it the box holding the diagram gets clamped,
+   and while nothing breaks (the box carries no border and the drawing inside it
+   letterboxes) a 688 wide piece stops being honest to the 384 beside it, which
+   is the one thing the single divisor is for. */
+.ui-gal-set {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+  align-content: start;
+  gap: 8px;
+}
+/* the shelf of real art. A generated piece is worth looking at, so it gets more
+   than twice the room a diagram of one does. */
+.ui-gal-set.wide {
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 12px;
+}
+/* the tier heading over each group. The stage is not the rail, so the rail's
+   gutter does not apply and the first one does not want a gap above it. */
+.ui-gal .asec {
+  padding: 12px 2px 5px;
+}
+.ui-gal-part:first-child .asec {
+  padding-top: 0;
+}
+
+.ui-card {
+  display: grid;
+  gap: 5px;
+  padding: 6px;
+  text-align: left;
+  border: var(--hair) solid var(--edge);
+  border-radius: var(--r);
+  background: var(--panel);
+  transition: border-color 150ms ease, background 150ms ease;
+}
+.ui-card:hover {
+  border-color: var(--acc);
+}
+.ui-card.on {
+  border-color: var(--acc);
+  background: var(--acc-soft);
+}
+/* ONE HEIGHT FOR EVERY CARD and the art fitted inside it. Sized by its own
+   aspect ratio instead, a 448 square sits a hundred pixels taller than the 688
+   by 384 beside it and no two cards on a row line up. */
+.ui-card-art {
+  display: grid;
+  place-items: center;
+  height: 156px;
+  padding: 5px;
+  border-radius: var(--r-tight);
+  background: var(--bg);
+  overflow: hidden;
+}
+.ui-gal-set.wide .ui-card-art {
+  height: 208px;
+  padding: 12px;
+}
+.ui-card-art img {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  image-rendering: pixelated;
+}
+.ui-card-say {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  padding: 0 2px 1px;
+}
+.ui-card-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--fs-small);
+}
+.ui-card-meta {
+  flex: 0 0 auto;
+  font-size: var(--fs-micro);
+  color: var(--ink-3);
+}
+/* a spend that produced nothing, or one still in flight. The card stays either
+   way, because a generation that vanished is worse than one that says so. */
+.ui-void {
+  font: var(--fs-fine) var(--font-mono);
+  color: var(--ink-off);
+}
+
+/* ---- transparency, seen ---------------------------------------------------
+ *
+ * Every piece of chrome in this game is drawn on transparency, so a piece on a
+ * flat dark fill gives no way at all to tell a hole from a black pixel. The
+ * checker is the only way that reads. Two board tones and nothing brighter, so
+ * the art stays the loudest thing on the stage.
+ *
+ * BELOW .ui-card-art AND NOT ABOVE IT, and this cost a silent bug. `background`
+ * is a shorthand, so a later `background: var(--bg)` on the well set
+ * background-image back to none and quietly deleted the checker off every card
+ * that had asked for one. Same specificity, later rule wins, nothing in the
+ * console. */
+.ui-check {
+  background-color: var(--board);
+  background-image: linear-gradient(45deg, var(--stage) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--stage) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--stage) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--stage) 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 0 8px, 8px -8px, -8px 0;
+}
+
+/* ---- what a type is, drawn ------------------------------------------------
+ *
+ * A season token is 24 pixels across and the generator will not draw anything
+ * under 192 a side, which is why six of the twenty-one are sheets. The only way
+ * to feel that is to see a 384 square beside a 688 by 384, so every diagram box
+ * on this page is scaled by ONE divisor and is honest against every other.
+ *
+ * TWO INKS AND NO MORE. --edge-ctl is the boundary of a thing you could operate
+ * and --ink-edge is named in tokens.css as a glyph that carries meaning without
+ * being read, which is exactly what every mark in here is. Gold appears on the
+ * one card that is armed and nowhere else: twenty-one gold-tinted rectangles was
+ * the tool shouting a fact nobody armed, and it is what the old canvas outline
+ * did. */
+.ui-dia-box {
+  display: block;
+  flex: 0 0 auto;
+  max-width: 100%;
+  max-height: 100%;
+}
+.ui-dia {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+/* the stroke is pinned to css pixels, so a 688 wide diagram and a 384 wide one
+   carry the same weight of line instead of the wide one drawing at half */
+.ui-dia [class] {
+  vector-effect: non-scaling-stroke;
+}
+/* a drawn frame: the edge of the piece itself */
+.ui-dia .f {
+  fill: none;
+  stroke: var(--edge-ctl);
+  stroke-width: 1;
+}
+/* something that is not there yet: an empty socket, a face that is off, the
+   entry a rail has room for and has not been given */
+.ui-dia .g {
+  fill: none;
+  stroke: var(--edge-ctl);
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+  opacity: 0.7;
+}
+/* a rule the tool draws rather than an edge of the piece: the line a tab sits
+   on, the seam between two frames of a strip */
+.ui-dia .s {
+  fill: none;
+  stroke: var(--ink-edge);
+  stroke-width: 1;
+}
+/* a mark: a head, a chevron, a fill, an icon */
+.ui-dia .m {
+  fill: var(--ink-edge);
+}
+/* a run of type, drawn as a bar because at a fifth of size a word is noise and
+   what the diagram is saying is where the words go */
+.ui-dia .t {
+  fill: var(--ink-off);
+}
+/* painted paper, and the only place a diagram carries a fill */
+.ui-dia .p {
+  fill: var(--raised);
+}
+/* a painted silhouette INSIDE the piece rather than a mark drawn on it. It has
+   to sit under everything, because on a cover plate the title, the bar and the
+   fact are the surface and the land behind them is the picture. */
+.ui-dia .d {
+  fill: var(--line);
+}
+/* a hole punched through a mark, so five season tokens are five pictures rather
+   than five identical discs. Both fill and stroke, because it is used on a
+   closed shape and on an open line. */
+.ui-dia .o {
+  fill: var(--bg);
+  stroke: var(--bg);
+  stroke-width: 1.6;
+}
+.ui-card:hover .ui-dia .f {
+  stroke: var(--edge-lit);
+}
+.ui-card.on .ui-dia .f {
+  stroke: var(--acc);
+}
+
+/* the diagram riding in a row's 26px icon slot, where a picture of the piece is
+   better still and takes the same room */
+.row-ic .ui-dia {
+  width: 20px;
+  height: 20px;
+}
+.row-ic img {
+  display: block;
+  max-width: 22px;
+  max-height: 22px;
+  image-rendering: pixelated;
+}
+/* THE RAIL BEFORE ANYTHING IS ARMED. One line saying what is not here and one
+   at the foot saying what a press costs. It is tokens.css's .sparse argument in
+   the editor's own classes: content at the top and a floor at the bottom reads
+   as a place with a job, where content at the top and six hundred pixels of
+   nothing under it reads as a page that failed to load.
+
+   ITS OWN CLASS AND NOT :last-child. .panel and .panel-foot are the editor's,
+   and the editor's foot happens to have a sibling under it today. A rule that
+   depends on that is a rule that breaks the editor's cut panel the first time
+   somebody moves the fold. */
+.panel > .panel-foot.ui-foot {
+  margin-top: auto;
+}
+
+/* what is armed, above its own controls. Centred rather than top-aligned like a
+   list row, because it is one line and a button rather than a label and a
+   sentence, and the button decides the height. */
+.ui-armed {
+  align-items: center;
+  margin-bottom: 4px;
+}
+.ui-armed .row-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ui-armed .abtn {
+  flex: 0 0 auto;
+}
+
+/* ---- the marking stage ---------------------------------------------------- */
+
+.ui-stage {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  overflow: hidden;
+}
+/* RELATIVE, because the naming popover is absolute and the nearest positioned
+   ancestor was otherwise .stage: the popover hung off the bottom of the stage
+   and covered the stretch previews, which is the one thing on screen it is
+   asking you to look away from. */
+.ui-board {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 0;
+  height: 100%;
+  padding: 14px;
+  overflow: auto;
+}
+.ui-art {
+  position: relative;
+  touch-action: none;
+  user-select: none;
+}
+.ui-art[data-mode='marks'] {
+  cursor: var(--cur-draw);
+}
+.ui-art img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+/* A PIECE THAT IS NOT DRAWN YET STILL TAKES ITS MARKS. The frame is the right
+   size whether or not a picture has arrived, so a redraw keeps every rectangle
+   instead of the marking waiting on the art. */
+.ui-art-void {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  text-align: center;
+  border: var(--hair) dashed var(--edge-ctl);
+  font: var(--fs-fine) var(--font-mono);
+  color: var(--ink-off);
+  pointer-events: none;
+}
+
+/* the nine, shading as the four lines move: the corners never scale, the edges
+   repeat along one axis, and the middle is the paper */
+.ui-nine {
+  position: absolute;
+  pointer-events: none;
+}
+.ui-nine[data-part='corner'] {
+  background: color-mix(in srgb, var(--acc-tool) 22%, transparent);
+}
+.ui-nine[data-part='edge'] {
+  background: color-mix(in srgb, var(--acc-tool) 9%, transparent);
+}
+/* the middle is the one of the nine that has to stay readable, because the drawn
+   paper is what the edges are being measured against */
+.ui-nine[data-part='mid'] {
+  background: color-mix(in srgb, var(--stage) 18%, transparent);
+}
+.ui-guide {
+  position: absolute;
+  background: var(--acc-tool);
+  pointer-events: none;
+}
+.ui-guide.h {
+  left: 0;
+  right: 0;
+  height: var(--hair);
+}
+.ui-guide.v {
+  top: 0;
+  bottom: 0;
+  width: var(--hair);
+}
+/* the four things the hand grabs, wider than the line they carry, because a one
+   pixel target is not a target */
+.ui-grip {
+  position: absolute;
+  display: grid;
+  place-items: center;
+}
+.ui-grip.h {
+  left: 0;
+  right: 0;
+  height: 15px;
+  transform: translateY(-50%);
+  cursor: ns-resize;
+}
+.ui-grip.v {
+  top: 0;
+  bottom: 0;
+  width: 15px;
+  transform: translateX(-50%);
+  cursor: ew-resize;
+}
+.ui-grip i {
+  padding: 1px 5px;
+  border-radius: var(--r-tight);
+  background: var(--acc-tool);
+  color: var(--acc-tool-ink);
+  font: var(--fs-micro) var(--font-mono);
+  font-style: normal;
+  opacity: 0.85;
+  pointer-events: none;
+}
+.ui-grip:hover i {
+  opacity: 1;
+  background: var(--acc-tool-lit);
+}
+.ui-grip.h i {
+  margin-left: auto;
+  margin-right: 6px;
+}
+.ui-grip.v i {
+  margin-top: 6px;
+  margin-bottom: auto;
+}
+
+/* A MARK HAS TO BE VISIBLE ON ANY PAINTING, and a one pixel salmon line on a
+   brown plaque is not. Every rectangle carries a dark halo outside it and a dark
+   line inside it, so the hue only has to beat the halo rather than beat whatever
+   art happens to be under it.
+   The two that are not drawn things read differently: a face is a CUT, so it
+   wears the cut layer's own magenta, and a press is a hit area, so it is dashed. */
+.ui-rect {
+  position: absolute;
+  border: var(--hair) solid var(--acc-mark);
+  background: color-mix(in srgb, var(--acc-mark) 12%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--stage) 78%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--stage) 55%, transparent);
+  cursor: var(--cur-grab);
+}
+.ui-rect[data-kind='face'] {
+  border-color: var(--mask-cut);
+  background: color-mix(in srgb, var(--mask-cut) 12%, transparent);
+}
+.ui-rect[data-kind='press'] {
+  border-style: dashed;
+  border-color: var(--mask-occ);
+  background: none;
+}
+.ui-rect[data-kind='fill'] {
+  border-color: var(--acc-live);
+  background: color-mix(in srgb, var(--acc-live) 12%, transparent);
+}
+.ui-rect.on {
+  border-color: var(--acc-tool);
+  background: color-mix(in srgb, var(--acc-tool) 16%, transparent);
+}
+.ui-rect.draft {
+  border-style: dashed;
+  border-color: var(--acc-tool);
+  background: color-mix(in srgb, var(--acc-tool) 12%, transparent);
+  pointer-events: none;
+}
+.ui-rect i {
+  position: absolute;
+  left: 0;
+  bottom: 100%;
+  padding: 0 4px;
+  background: var(--acc-mark);
+  color: var(--stage);
+  font: var(--fs-micro) var(--font-mono);
+  font-style: normal;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.ui-rect.on i {
+  background: var(--acc-tool);
+}
+.ui-rect[data-kind='face'] i {
+  background: var(--mask-cut);
+}
+.ui-rect[data-kind='press'] i {
+  background: var(--mask-occ);
+}
+.ui-rect b {
+  position: absolute;
+  right: -5px;
+  bottom: -5px;
+  width: 11px;
+  height: 11px;
+  border-radius: var(--r-tight);
+  background: var(--ink);
+  cursor: nwse-resize;
+}
+
+/* ---- the slice, working ---------------------------------------------------
+ *
+ * The failure this whole record exists to end is one painting squashed into
+ * whatever box the element happens to be, and one preview at one size cannot
+ * show a corner deforming. Three aspect ratios, drawn with the same
+ * border-image rule the game will run, so this is the game's behaviour rather
+ * than a drawing of it. It sits under the art because that is where the hand
+ * is: drag an edge and the same edge redraws a glance below. */
+/* A FIXED HEIGHT, so the board above it does not resize every time an edge
+   moves. The art's zoom is computed off the board, and a tray that grew with
+   the slice made the picture being measured jump under the hand. */
+.ui-tray {
+  display: flex;
+  align-items: flex-end;
+  gap: 18px;
+  height: 158px;
+  padding: 10px 14px;
+  border-top: var(--hair) solid var(--edge);
+  background: var(--panel);
+  overflow-x: auto;
+}
+.ui-tray > .asec {
+  flex: 0 0 auto;
+  padding: 0 4px 5px 0;
+}
+.ui-prev {
+  display: grid;
+  gap: 5px;
+  justify-items: center;
+  flex: 0 0 auto;
+}
+/* the fitted box holds the scaled one's footprint, because a transform does not
+   change layout and three overlapping previews is what that looks like */
+.ui-prev-fit {
+  position: relative;
+}
+.ui-prev-box {
+  box-sizing: content-box;
+  transform-origin: top left;
+  border: 0 solid transparent;
+}
+.ui-prev span {
+  font: var(--fs-micro) var(--font-mono);
+  color: var(--ink-3);
+}
+
+/* ---- naming a rectangle that has just been dragged -------------------------
+ *
+ * It is not a region until it has a name, because the name is the address a
+ * member's python holds and `region_3` is a promise nobody made. Over the stage
+ * rather than in the rail: the hand is on the art and the rectangle it just drew
+ * is the thing being talked about. */
+.ui-naming {
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  z-index: 4;
+  display: grid;
+  gap: 8px;
+  width: min(330px, 92%);
+  padding: 12px 14px;
+  border: var(--hair) solid var(--acc);
+  border-radius: var(--r-soft);
+  background: var(--raised);
+  box-shadow: 0 8px 30px var(--drop);
+}
+.ui-naming .anchkinds {
+  max-height: 74px;
+  overflow-y: auto;
+}
+
+/* ---- small things the editor has no name for ------------------------------ */
+
+/* the swatch that ties a mark's row in the rail to its rectangle on the art.
+   Same idiom as the level chips, where the swatch is the canvas colour. */
+.ui-sw {
+  width: 15px;
+  height: 15px;
+  flex: 0 0 15px;
+  border-radius: var(--r);
+  border: var(--hair) solid var(--acc-mark);
+  background: color-mix(in srgb, var(--acc-mark) 30%, transparent);
+}
+.ui-sw[data-kind='face'] {
+  border-color: var(--mask-cut);
+  background: color-mix(in srgb, var(--mask-cut) 30%, transparent);
+}
+.ui-sw[data-kind='press'] {
+  border-style: dashed;
+  border-color: var(--mask-occ);
+  background: none;
+}
+.ui-sw[data-kind='fill'] {
+  border-color: var(--acc-live);
+  background: color-mix(in srgb, var(--acc-live) 30%, transparent);
+}
+
+/* what the game takes: six lines, pasted into its own tokens, nothing guessed */
+.ui-css {
+  margin: 0 var(--pan-in);
+  padding: 8px 9px;
+  max-height: 132px;
+  overflow: auto;
+  border: var(--hair) solid var(--edge);
+  border-radius: var(--r);
+  background: var(--bg);
+  color: var(--ink-2);
+  font: var(--fs-micro)/1.5 var(--font-mono);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* the description box. The editor has no multi-line field, and this is the one
+   place a person writes a sentence rather than a value. */
+.anchfield textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 6px 9px;
+  border: var(--hair) solid var(--edge);
+  border-radius: var(--r);
+  background: var(--bg);
+  color: var(--ink);
+  font: var(--fs-small)/var(--lh) var(--font-ui);
+  resize: vertical;
+  transition: border-color 160ms ease;
+}
+.anchfield textarea:focus {
+  outline: none;
+  border-color: var(--acc);
+}
+
+/* a block of controls that is not a row and not a field: a number grid, a
+   segment, a pair. It steps in by the panel's own left line like everything
+   else in there, so nothing invents a fourth indent. */
+.ui-block {
+  display: grid;
+  gap: 6px;
+  padding: 4px var(--pan-in) 8px;
+}
+.ui-block > .seg {
+  margin: 0;
+}
+
+/* a refusal, in the words of the thing refusing. --acc-stop-lit and not
+   --acc-stop, which is under the text floor and is a fill colour only. */
+.ui-err {
+  margin: 6px var(--pan-in) 0;
+  color: var(--acc-stop-lit);
+  font-size: var(--fs-small);
+  line-height: var(--lh);
+}

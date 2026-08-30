@@ -19,7 +19,6 @@ export type IconName =
   | 'dots'
   | 'wave'
   | 'ocean'
-  | 'surface'
   | 'eye'
   | 'eyeoff'
   | 'x'
@@ -174,17 +173,6 @@ const D: Record<IconName, ReactNode> = {
       <path d="M4.1 6.9c1-2.6 2.3-3.9 3.9-3.9s2.9 1.3 3.9 3.9z" />
       <path d="M2.4 9.7c1.4 0 1.4-1.3 2.8-1.3s1.4 1.3 2.7 1.3 1.4-1.3 2.8-1.3 1.4 1.3 2.7 1.3" />
       <path d="M2.4 12.5c1.4 0 1.4-1.3 2.8-1.3s1.4 1.3 2.7 1.3 1.4-1.3 2.8-1.3 1.4 1.3 2.7 1.3" />
-    </>
-  ),
-  /* THE NINE SLICE, which is what a ui surface actually is: a frame with fixed
-   * corners and edges that stretch. It was a rectangle with two lines of words
-   * ruled inside it, and every icon set on earth draws a message that way, so
-   * the link to /surfaces read as "messages" to everybody who looked at it. The
-   * corner ticks are the thing no message icon has. */
-  surface: (
-    <>
-      <rect x="2.2" y="3" width="11.6" height="10" rx="1" />
-      <path d="M5.2 5.4H4.6v1M11.4 5.4h.6v1M5.2 10.6H4.6v-1M11.4 10.6h.6v-1" />
     </>
   ),
   /* A ROUTE: a line with its waypoints on it and a head where it ends. The list

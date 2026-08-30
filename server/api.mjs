@@ -91,7 +91,7 @@ import { listMaps } from './store/maps.mjs'
 import { ask, plannerReady, NoPlanner } from './store/planner.mjs'
 import { withRequest, request } from './store/ctx.mjs'
 import { foldersApi } from './store/folders.mjs'
-import { getWorld, saveWorld, composition, ISLAND_STATES, SEA_KINDS, MARK_KINDS } from './store/world.mjs'
+import { getWorld, saveWorld, composition, berthOf, ISLAND_STATES, SEA_KINDS, MARK_KINDS } from './store/world.mjs'
 import { env } from './db/env.mjs'
 import { keyFor } from './store/auth.mjs'
 import {
@@ -185,7 +185,6 @@ const OPEN_POSTS = new Set([
   '/api/world',
   '/api/ui/generate',
   '/api/ui/regions',
-  '/api/ui/slots',
   '/api/ui/publish',
   '/api/ui/remove',
 ])
@@ -2601,15 +2600,16 @@ async function route(req, res, p, url) {
    * only legal against the picture the regions sit on, and two requests would
    * let the pair go inconsistent between them.
    *
-   * `/api/ui/slots` is the old path kept alive so the page that still calls it
-   * does not break on the day this lands. It is not the word on the wire and it
-   * goes when that page does. */
-  if ((p === '/api/ui/regions' || p === '/api/ui/slots') && req.method === 'POST') {
+   * There was a `/api/ui/slots` alias here holding the door open for the page
+   * that spoke that word. That page is gone, and so is the alias: `region` is
+   * the word on the wire, because a WorldSlot is an island's berth on the sea
+   * and PmapScene reads it about thirty times. */
+  if (p === '/api/ui/regions' && req.method === 'POST') {
     const me = await currentUser(req)
     if (!me) return send(res, 401, { error: 'sign in to mark a piece' })
     const b = await body(req)
     try {
-      return send(res, 200, await setUiRegions(me.id, String(b.name || ''), b.regions || b.slots, b.slices))
+      return send(res, 200, await setUiRegions(me.id, String(b.name || ''), b.regions, b.slices))
     } catch (e) {
       // refused where it is written, naming what is wrong, rather than found by
       // a member whose number prints half off the panel
@@ -3593,7 +3593,7 @@ async function readApi(req, res, p, url) {
    * composition() in store/world.mjs is where every one of those renames is. */
   if (kind === 'world' && !slugRaw) return send(res, 200, await composition())
 
-  /* THE WAYPOINTS, FLAT, WHICH IS THE SHAPE A GRAPE ACTUALLY WANTS.
+  /* THE BERTHS, FLAT, WHICH IS THE SHAPE A GRAPE ACTUALLY WANTS.
    *
    * A member writing sail_to("north_passage") holds a name and nothing else.
    * Handing them the whole composition means walking a list and matching a
@@ -3603,29 +3603,51 @@ async function readApi(req, res, p, url) {
    * by the name the author typed in MAPVIS.
    *
    * This is the project's dividing line in one route: MAPVIS authors WHERE, and
-   * python authors WHAT HAPPENS and WHEN. The mark says the corner of the
+   * python authors WHAT HAPPENS and WHEN. The berth says the corner of the
    * crossing is at (2100, 880) facing north; whether the ship pauses there,
    * whether somebody speaks, and what it costs are the grape's business and
    * this endpoint has no opinion about any of it.
    *
-   * Berths and approaches that belong to a PLACE are folded in under the
-   * place's own name, because a grape asking to sail to `panther_isle` should
-   * not have to know whether the author drew that as a place or as a mark. */
+   * A ROUTE BETWEEN BERTHS IS A LATER THING. Ash asked for a ship that hops from
+   * one island to another, steering through whatever berths sit in the middle,
+   * and nothing here builds it. It does not need to: every point is addressable
+   * by name and says which island it belongs to, so a route is a list of names
+   * that some future thing writes down. Do not add a `routes` key until there is
+   * something on the other side of the wire reading it.
+   *
+   * A BERTH BOUND TO AN ISLAND IS ALSO ANSWERED UNDER THAT ISLAND'S OWN NAME,
+   * because a grape asking to sail to `panther_isle` should not have to know
+   * what the author called its dock. The alias goes down FIRST so a real point
+   * named `panther_isle` wins the key; checkWorld refuses that collision at the
+   * save, so this only decides what a row written before the check does. */
   if (kind === 'world' && slugRaw === 'marks') {
     const w = await getWorld()
     const out = {}
+    const say = (m) => ({
+      kind: m.kind,
+      x: m.x,
+      y: m.y,
+      facing: m.facing || '',
+      /* THE LABEL RIDES ALONG, and it was the one field this route dropped. The
+       * column, cleanMark and the chart's inspector all carry it, so a grape
+       * sailing to a point could hold the address and had no way at all to get
+       * the words a player should be shown for it, which leaves an island
+       * printing `north_passage` at somebody. */
+      label: m.label || '',
+      /* WHICH ISLAND IT BELONGS TO, and this is what makes the flat lookup
+       * enough on its own. Without it a grape holding `the_hub_berth` can sail
+       * there and cannot tell what it has arrived at, so it would have to fetch
+       * the whole composition to answer a question this row already knows. */
+      island: m.island || '',
+      // and where the hull puts somebody down once they are ashore, which is an
+      // anchor name inside that island rather than a point on the ocean
+      at: m.at || '',
+    })
     for (const p of w.places) {
-      if (p.berth) out[p.name] = { kind: 'berth', x: p.berth.x, y: p.berth.y, facing: p.berth.facing || '' }
+      const b = berthOf(w.marks, p.name)
+      if (b) out[p.name] = say(b)
     }
-    // marks last, so a free-standing mark wins a name a place also carries.
-    // checkWorld refuses that collision at the save, so this only decides what
-    // an older row that predates the check does.
-    /* THE LABEL RIDES ALONG, and it was the one field this route dropped. The
-     * column, cleanMark and the chart's inspector all carry it, so a grape
-     * sailing to a mark could hold the address and had no way at all to get the
-     * words a player should be shown for it, which leaves an island printing
-     * `north_passage` at somebody. */
-    for (const m of w.marks) out[m.name] = { kind: m.kind, x: m.x, y: m.y, facing: m.facing || '', label: m.label || '' }
+    for (const m of w.marks) out[m.name] = say(m)
     return send(res, 200, { marks: out })
   }
 

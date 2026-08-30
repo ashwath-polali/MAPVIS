@@ -530,7 +530,15 @@ try {
    * anchor could ever have expressed one: anchor creation refuses a click
    * outside the canvas, and growing the canvas to make room zooms the island
    * out. This saves a composition, reads it back the way the game reads it, and
-   * puts the whole thing back exactly as it was found. */
+   * puts the whole thing back exactly as it was found.
+   *
+   * ONE KIND OF POINT SINCE 019_berths.sql. A place carried a nested `berth` and
+   * a nested `approach`, so the only points that could exist were welded to an
+   * island's corner, and this section tested that shape. Every point is an entry
+   * in `marks` now with `island` naming the place it belongs to, and the fences
+   * below are the ones that shape needs: that a bound point still crosses as
+   * that slot's berth, that an unreachable one is still warned about, and that a
+   * point in open water is still addressable by a name nothing else holds. */
   /* SAVE AND RESTORE IS NOT SAFE ON A ROW THERE IS ONLY ONE OF, and this test
    * destroyed Ash's real composition proving it.
    *
@@ -575,10 +583,6 @@ try {
           // two radii, and this tool had one under the other one's name
           discover: 240,
           release: 900,
-          // off the painting, which is the whole point of the category. `at` is
-          // the anchor inside the island the hull puts somebody down on.
-          berth: { x: 880, y: 700, facing: 'north', at: 'coach_post' },
-          approach: { x: 940, y: 780 },
         },
         // a reserved position holding no map, reading as a rumour, with the
         // rise happening where the rumour was. Negative on purpose: the sea the
@@ -587,17 +591,33 @@ try {
         { name: 'zz_verify_rumour', map: '', title: '', x: 2200, y: -1400, w: 64, h: 64, state: 'rumour', discover: 300 },
       ],
       regions: [{ name: 'zz_the_shallows', kind: 'shallow', rect: [700, 500, 1100, 900] }],
+      /* THE BERTH IS A ROW OF ITS OWN AND NAMES THE ISLAND IT BELONGS TO, which
+       * is the whole of 019. It is off the painting, which is the reason the
+       * category exists at all: no anchor can express a point outside a canvas.
+       * `at` is the anchor INSIDE the island the hull puts somebody down on, and
+       * it is the one field the old nested shape carried that had nowhere else
+       * to live. The second one is in open water and belongs to nobody, which is
+       * the corner a crossing turns at. */
+      marks: [
+        { name: 'zz_verify_dock', kind: 'berth', x: 880, y: 700, facing: 'north', at: 'coach_post', island: 'zz_verify_isle', label: 'The Verify Dock' },
+        { name: 'zz_north_turn', kind: 'waypoint', x: 1600, y: 200, r: 50 },
+      ],
     })
     const readBack = await getWorld()
     const isle = readBack.places.find((p) => p.name === 'zz_verify_isle')
+    const dock = readBack.marks.find((m) => m.name === 'zz_verify_dock')
+    /* A PLACE CARRIES NO POINT AT ALL NOW, and that is the fence: cleanPlace
+     * dropping the nesting is what stops a stale berth riding along beside the
+     * real one, where nothing would say which of the two the game read. */
+    eq('an island carries no point of its own', [isle?.berth, isle?.approach], [undefined, undefined])
     // field by field rather than whole, because this one came back out of jsonb
     // and postgres does not keep the key order an object went in with
     eq(
-      'a berth exists in world space',
-      [isle?.berth?.x, isle?.berth?.y, isle?.berth?.facing, isle?.berth?.at],
-      [880, 700, 'north', 'coach_post'],
+      'a berth exists in world space and says whose it is',
+      [dock?.x, dock?.y, dock?.facing, dock?.at, dock?.island],
+      [880, 700, 'north', 'coach_post', 'zz_verify_isle'],
     )
-    eq('the approach beside it', isle?.approach, { x: 940, y: 780 })
+    eq('and a point in open water belongs to nobody', readBack.marks.find((m) => m.name === 'zz_north_turn')?.island, undefined)
     eq('the island state', isle?.state, 'available')
     eq('the discovery radius', isle?.discover, 240)
     eq('and the radius it stays in memory to, which is a different number', isle?.release, 900)
@@ -627,16 +647,24 @@ try {
     eq('the footprint is the painting', slot?.footprint, { w: W, h: H })
     eq('the canvas beside it', slot?.canvas, { w: W, h: H })
     eq('and what it really costs to hold', slot?.placements, doc.assets.length)
-    /* THE APPROACH SITS INSIDE THE BERTH over there. The chart drags them as two
-     * independent marks, which is right for a pointer; the game reads
-     * berth.approach and berth.at, and the game is the consumer. */
-    eq('the approach folded into the berth', slot?.berth, {
+    /* THE BERTH IS FOLDED BACK IN UNDER THE KEY THE GAME ALREADY READS, and this
+     * is the fence that makes 019 invisible on the wire. PmapScene reads
+     * slot.berth about thirty times, so the collapse had to be a change to where
+     * a point is AUTHORED and never to what crosses: composition() looks the
+     * island's berth up out of the flat list and hands it over unchanged, with
+     * its own name added so a grape holding a slot can go straight to the flat
+     * lookup instead of matching coordinates. */
+    eq('the free-standing berth crosses as that slot"s berth', slot?.berth, {
+      name: 'zz_verify_dock',
       x: 880,
       y: 700,
       facing: 'north',
       at: 'coach_post',
-      approach: { x: 940, y: 780 },
     })
+    /* AND EVERY POINT IS STILL ON THE WIRE UNDER `marks`, including the one
+     * folded into the slot above, because the sail loop that grows routes will
+     * want the whole list and not the one dock per island. */
+    eq('every point crosses as well, by name', (comp.marks || []).map((m) => m.name).sort(), ['zz_north_turn', 'zz_verify_dock'])
     /* FOUR NUMBERS AGAINST A READER THAT WANTS FOUR KEYS is the quietest failure
      * on this endpoint: every comparison is against undefined and false, so no
      * region ever matches and nothing anywhere is raised. */
@@ -687,23 +715,39 @@ try {
       ? ok('two places with one name are refused, because a name is the only address there is')
       : no(`a duplicate place name saved anyway: ${worldRefused || 'no error'}`)
 
-    /* A BERTH OUTSIDE ITS OWN RELEASE RADIUS is the quiet one: the ship sails
-     * to a dock that is offered before the island has been discovered. */
+    /* A BERTH OUTSIDE ITS ISLAND'S DISCOVERY RADIUS is the quiet one: the ship
+     * sails to a dock that is offered before the island has been discovered.
+     * Measured through berthOf, the same rule composition() sends, so this can
+     * never warn about a point the game will not be handed. */
     const far = await saveWorld({
       w: 4096,
       h: 4096,
-      places: [
-        { name: 'zz_far', map: '', x: 100, y: 100, w: 8, h: 8, state: 'rumour', discover: 10, berth: { x: 900, y: 900 } },
-      ],
+      places: [{ name: 'zz_far', map: '', x: 100, y: 100, w: 8, h: 8, state: 'rumour', discover: 10 }],
       regions: [],
+      marks: [{ name: 'zz_far_dock', kind: 'berth', x: 900, y: 900, island: 'zz_far' }],
     })
-    far.warnings.some((w) => w.includes('berths'))
-      ? ok('a berth outside its own discovery radius is warned about')
+    far.warnings.some((w) => w.includes('the dock is offered before the island is'))
+      ? ok('a berth outside its island"s discovery radius is warned about')
       : no('an unreachable berth passed without a word')
 
-    /* A WAYPOINT, WHICH BELONGS TO NEITHER ISLAND IT SITS BETWEEN.
+    /* A BERTH BOUND TO AN ISLAND NOBODY HAS PLACED, which is the one thing the
+     * collapse made possible to get wrong. Nesting could not express it: a berth
+     * lived inside its island, so deleting the island took the berth with it.
+     * Now the name can dangle, so it is named at the save. */
+    const orphan = await saveWorld({
+      w: 4096,
+      h: 4096,
+      places: [{ name: 'zz_far', map: '', x: 100, y: 100, w: 8, h: 8, state: 'rumour', discover: 10 }],
+      regions: [],
+      marks: [{ name: 'zz_lost_dock', kind: 'berth', x: 120, y: 120, island: 'zz_sunk_isle' }],
+    })
+    orphan.warnings.some((w) => w.includes('zz_sunk_isle'))
+      ? ok('a berth tied to an island that is not there is named at the save')
+      : no('a berth pointed at nothing and nobody said so')
+
+    /* A POINT THAT BELONGS TO NEITHER ISLAND IT SITS BETWEEN.
      *
-     * A berth and an approach hang off a place, so the only points that could
+     * A berth and an approach hung off a place, so the only points that could
      * exist were points about arriving somewhere. The corner a sail leg turns
      * at halfway across has no place to hang off and was a constant typed into
      * the game repo. This is the fence saying it survives the save and comes
@@ -716,16 +760,24 @@ try {
       marks: [
         { name: 'zz_north_passage', kind: 'waypoint', x: 1200, y: 400, facing: 'north', r: 60, label: 'the north passage' },
         { name: 'zz_deep_water', kind: 'anchorage', x: 900, y: 1500 },
+        // `approach` left the vocabulary with 019: it was never a kind of point,
+        // it was the second field on a place. A row still carrying it falls back
+        // rather than being kept as a seventh spelling of the same thing.
+        { name: 'zz_old_approach', kind: 'approach', x: 950, y: 1550 },
         // dropped rather than corrected, because bending it invents an address
         // the author never wrote and nothing in their python calls
         { name: 'North Passage', kind: 'waypoint', x: 10, y: 10 },
       ],
     })
-    eq('a bad mark name is dropped rather than tidied into one', marked.marks.length, 2)
+    eq('a bad berth name is dropped rather than tidied into one', marked.marks.length, 3)
     const readMarks = (await getWorld()).marks
     const wp = readMarks.find((m) => m.name === 'zz_north_passage')
     eq('the waypoint survives the save', [wp?.kind, wp?.x, wp?.y, wp?.facing, wp?.r], ['waypoint', 1200, 400, 'north', 60])
-    eq('a mark with no kind of its own is a waypoint', readMarks.find((m) => m.name === 'zz_deep_water')?.kind, 'anchorage')
+    eq('a kind the author narrowed is kept', readMarks.find((m) => m.name === 'zz_deep_water')?.kind, 'anchorage')
+    /* BERTH IS THE FALLBACK NOW AND IT WAS `waypoint`. Everything on the water is
+     * a berth unless somebody deliberately narrowed it, so a kind this file has
+     * never heard of lands on the word Ash gave the category. */
+    eq('a kind nothing recognises falls back to a berth', readMarks.find((m) => m.name === 'zz_old_approach')?.kind, 'berth')
 
     /* ONE NAMESPACE, because python has one. A grape calls sail_to("x") and
      * never says which list to look in, so a mark sharing a name with an island
@@ -743,15 +795,16 @@ try {
       clash = e.message
     }
     clash.includes('one namespace')
-      ? ok('a mark taking an island name is refused, because python addresses both in one namespace')
-      : no(`a mark and a place shared a name: ${clash || 'no error'}`)
+      ? ok('a berth taking an island name is refused, because python addresses both in one namespace')
+      : no(`a berth and a place shared a name: ${clash || 'no error'}`)
 
-    /* AND THE MARKS ARE ABSENT RATHER THAN EMPTY when nobody mentions them. The
-     * world page posts w, h, places and regions and says nothing about marks, so
-     * treating that silence as an empty list means one drag of an island wipes
-     * every waypoint the crossing is made of. */
+    /* AND THE BERTHS ARE ABSENT RATHER THAN EMPTY when nobody mentions them.
+     * The world page posts w, h, places and regions and says nothing about this
+     * field, so treating the silence as an empty list means one drag of an
+     * island wipes the list. It costs more since 019 than it did before: this
+     * used to hold only free waypoints and now it holds every dock as well. */
     await saveWorld({ w: 4096, h: 4096, places: [], regions: [] })
-    eq('a save that never mentions marks keeps them', (await getWorld()).marks.length, 2)
+    eq('a save that never mentions berths keeps them', (await getWorld()).marks.length, 3)
 
     /* THE PUBLISHED READ HAS NO ACCOUNT AND MUST NOT NEED ONE.
      *
@@ -774,7 +827,7 @@ try {
         ? ok('the published ocean still answers with no account behind the request')
         : no(`/api/v1/world answered ${pub.status} to a request with no cookie`)
       const flat = await (await fetch(`http://127.0.0.1:${PORT}/api/v1/world/marks`)).json()
-      eq('a grape looks a waypoint up by the name its author typed', flat.marks?.zz_north_passage, {
+      eq('a grape looks a berth up by the name its author typed', flat.marks?.zz_north_passage, {
         kind: 'waypoint',
         x: 1200,
         y: 400,
@@ -782,7 +835,33 @@ try {
         // and the words a player is shown for it, which this route used to drop:
         // an island holding only the address prints `zz_north_passage` at somebody
         label: 'the north passage',
+        // which island it belongs to, so a grape that has sailed somewhere can
+        // tell what it arrived at without fetching the whole composition
+        island: '',
+        at: '',
       })
+      /* AND A BOUND BERTH ANSWERS UNDER ITS ISLAND'S OWN NAME AS WELL, because a
+       * grape asking to sail to `panther_isle` should not have to know what the
+       * author called its dock. Set up here rather than relying on what the
+       * saves above left, so the alias is proved and not assumed. */
+      await saveWorld({
+        w: 4096,
+        h: 4096,
+        places: [{ name: 'zz_alias_isle', map: '', x: 300, y: 300, w: 64, h: 64, state: 'rumour', discover: 900 }],
+        regions: [],
+        marks: [{ name: 'zz_alias_dock', kind: 'berth', x: 360, y: 360, island: 'zz_alias_isle', label: 'The Alias Dock' }],
+      })
+      const aliased = await (await fetch(`http://127.0.0.1:${PORT}/api/v1/world/marks`)).json()
+      eq('an island answers with its own berth, under its own name', aliased.marks?.zz_alias_isle, {
+        kind: 'berth',
+        x: 360,
+        y: 360,
+        facing: '',
+        label: 'The Alias Dock',
+        island: 'zz_alias_isle',
+        at: '',
+      })
+      eq('and the berth is still reachable by the name it was given', aliased.marks?.zz_alias_dock?.x, 360)
     } finally {
       await new Promise((r) => server.close(r))
     }

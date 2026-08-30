@@ -57,12 +57,22 @@ const STATE_WAS = { rumoured: 'rumour', in_season: 'active' }
  * ship is not a walker. */
 export const SEA_KINDS = ['sailable', 'shallow', 'forbidden', 'mist', 'ambience']
 
-/* what a free-standing point on the water is FOR. `waypoint` is the one the
- * whole category was asked for: a corner a sail leg turns at, belonging to
- * neither island it sits between. The other five are the names an author
- * already uses out loud, kept apart so a grape can ask for the anchorages
- * without being handed every landmark too. */
-export const MARK_KINDS = ['berth', 'approach', 'waypoint', 'anchorage', 'landmark', 'spawn']
+/* WHAT A POINT ON THE WATER IS FOR, AND THERE IS ONLY ONE KIND OF POINT NOW.
+ *
+ * Ash, 2026-08-30: "collapse it into waypoints. currently, a berth is tied to a
+ * corner of the map and annoying to place around. keep it simple, we can call
+ * it a 'berth' which are basically waypoints for the ocean. you can place and
+ * move it around freely."
+ *
+ * So `berth` is the word and the default, and everything on the water is one.
+ * The rest of this list is a FILTER and not a second type: a grape asking for
+ * the anchorages should not be handed every landmark too. They are drawn the
+ * same, dragged the same and addressed the same.
+ *
+ * `approach` is GONE. It was never a kind of point, it was the second field on
+ * a place, and 019_berths.sql lifted every one of them out as a plain berth.
+ * Nothing writes it and cleanMark would have quietly kept accepting it. */
+export const MARK_KINDS = ['berth', 'waypoint', 'anchorage', 'landmark', 'spawn']
 
 const isName = (s) => /^[a-z][a-z0-9_]{0,47}$/.test(String(s || ''))
 
@@ -78,31 +88,18 @@ const isPlaceId = (s) => /^[a-z][a-z0-9-]{0,47}$/.test(String(s || ''))
 
 const num = (v, d = 0) => (isFinite(Number(v)) ? Math.round(Number(v)) : d)
 
-/* A POINT OUT ON THE WATER, which is the shape §12 asks for six times under six
- * names. Absent rather than zeroed, because (0,0) is a real position on the
- * ocean and "no berth" has to be distinguishable from "berth at the origin". */
-const point = (p) => {
-  if (!p || !isFinite(Number(p.x)) || !isFinite(Number(p.y))) return null
-  return {
-    x: num(p.x),
-    y: num(p.y),
-    ...(p.facing ? { facing: String(p.facing).slice(0, 16) } : {}),
-    /* WHERE THE HULL PUTS SOMEBODY DOWN ONCE THEY ARE INSIDE, which only a berth
-     * ever carries. Without it a voyage arrives at the destination's default
-     * spawn rather than the dock somebody drew for it, and nothing anywhere says
-     * the berth was ignored. An anchor name in the map being arrived at, so it
-     * takes the same rule every other name in this tool takes. */
-    ...(isName(p.at) ? { at: p.at } : {}),
-  }
-}
-
 /* One entry in the composition. `map` empty is deliberate and is the whole of
  * the empty-slot ask: a position that exists, carries a state and reads as a
- * rumour, with no bundle behind it yet. */
+ * rumour, with no bundle behind it yet.
+ *
+ * A PLACE NO LONGER CARRIES A POINT. It held `berth` and `approach` as two
+ * nested objects, which is what welded a mooring to the island that owned it:
+ * the only way to make a point on the water was to pick an island first, and a
+ * point halfway between two of them had to be faked as a berth on whichever was
+ * nearer. Both are entries in `marks` now, with `island` naming the place they
+ * belong to, so "attached to an island" is a field and not a different type. */
 export function cleanPlace(p) {
   if (!p || !isName(p.name)) return null
-  const berth = point(p.berth)
-  const approach = point(p.approach)
   const state = STATE_WAS[p.state] || (ISLAND_STATES.includes(p.state) ? p.state : 'misty')
   /* TWO RADII, BECAUSE THE GAME HAS TWO AND MAPVIS HAD THE WRONG ONE.
    *
@@ -135,45 +132,78 @@ export function cleanPlace(p) {
     // held in memory well past the radius that discovered it, or the bundle is
     // dropped and re-fetched every time the hull drifts back across one circle
     release: pre || num(p.release, 0) <= discover ? discover * 2 : num(p.release),
-    ...(berth ? { berth } : {}),
-    ...(approach ? { approach } : {}),
     ...(p.meta && typeof p.meta === 'object' && !Array.isArray(p.meta) ? { meta: p.meta } : {}),
   }
 }
 
-/* A NAMED POINT ON THE WATER THAT BELONGS TO NO ISLAND.
+/* A BERTH: THE ONE KIND OF POINT ON THE WATER, AND IT IS FREE STANDING.
  *
- * A place carries one berth and one approach, which is enough to arrive at that
- * island and nothing else. A leg of sailing between two islands, the corner the
- * route turns at halfway across, the spot a cutscene holds the ship at: none of
- * those are a property of any island, and every one of them lived as a typed
- * constant in the other repo because there was nowhere on this document to put
- * it. So a mark is free standing, and its NAME is the whole of its interface,
- * since python only ever holds the name.
+ * There were two shapes doing this job and one of them could not be placed. A
+ * place carried a nested `berth` and a nested `approach`, welded to whichever
+ * island owned them, and this list carried everything else. So the corner a sail
+ * leg turns at halfway across, which belongs to neither island it sits between,
+ * had to be faked as a berth on the nearer one and then moved when that island
+ * moved.
+ *
+ * One array now, and `island` is how a point says it belongs to a place: a
+ * FIELD rather than a different type. A berth with no island is the corner in
+ * open water; a berth naming `the_hub` is the hub's dock, moves when the hub
+ * moves, and is what composition() hands the game as that slot's berth.
+ *
+ * The NAME is the whole of the interface, because python only ever holds a name,
+ * and a route between two berths is a later thing this shape is already able to
+ * express: sail(from='the_hub_berth', via=['north_passage']) needs nothing here
+ * that is not here. Nothing draws or stores a route yet, on purpose.
  *
  * A BAD NAME IS DROPPED RATHER THAN CORRECTED. Bending `North Passage` into
  * `north_passage` invents an address the author never wrote and nothing in their
- * code calls, which is worse than the mark simply not being there. cleanPlace
+ * code calls, which is worse than the berth simply not being there. cleanPlace
  * takes the same line for the same reason.
  */
 export function cleanMark(m) {
   if (!m || !isName(m.name)) return null
-  // absent rather than zeroed, the same argument point() makes: (0,0) is a real
-  // position on the ocean, so a mark with no coordinates is not a mark
+  // absent rather than zeroed: (0,0) is a real position on the ocean, so a point
+  // with no coordinates is not a point
   if (!isFinite(Number(m.x)) || !isFinite(Number(m.y))) return null
   return {
     name: m.name,
-    kind: MARK_KINDS.includes(m.kind) ? m.kind : 'waypoint',
+    /* BERTH IS THE FALLBACK NOW, and it was `waypoint`. Everything on the water
+     * is a berth unless an author deliberately narrowed it, so a kind this file
+     * has never heard of lands on the word Ash gave the category rather than on
+     * one that no longer means anything different. */
+    kind: MARK_KINDS.includes(m.kind) ? m.kind : 'berth',
     x: num(m.x),
     y: num(m.y),
     ...(m.facing ? { facing: String(m.facing).slice(0, 16) } : {}),
-    // how close counts as arrived, so sailing to a mark is not an exact-pixel
+    // how close counts as arrived, so sailing to a berth is not an exact-pixel
     // test on a hull that moves in floats. Absent leaves it to the caller.
     ...(isFinite(Number(m.r)) ? { r: Math.max(0, num(m.r)) } : {}),
     ...(m.label ? { label: String(m.label).slice(0, 120) } : {}),
+    /* WHICH ISLAND THIS POINT BELONGS TO, IF ANY. Not validated against the
+     * roster here, because cleanMark runs one row at a time and cannot see the
+     * places; checkWorld warns about an island nobody has drawn. A name that is
+     * not even a legal address is dropped, since it can never match one. */
+    ...(isName(m.island) ? { island: m.island } : {}),
+    /* WHERE THE HULL PUTS SOMEBODY DOWN ONCE THEY ARE ASHORE. It lived on the
+     * nested berth and it is the one field from there that had nowhere else to
+     * go: without it a voyage arrives at the destination's default spawn rather
+     * than the dock somebody drew, and nothing anywhere says it was ignored. An
+     * anchor name inside the map being arrived at, so it takes the same rule
+     * every other name in this tool takes. */
+    ...(isName(m.at) ? { at: m.at } : {}),
     ...(m.meta && typeof m.meta === 'object' && !Array.isArray(m.meta) ? { meta: m.meta } : {}),
   }
 }
+
+/* THE BERTH THE GAME MEANS WHEN IT SAYS "THIS ISLAND'S BERTH".
+ *
+ * A place used to carry exactly one, so there was nothing to choose. Now it can
+ * carry any number, and the game's slot shape has room for one, so the rule has
+ * to be written down somewhere rather than being whichever the reader reached
+ * first: the earliest berth-kind point bound to that island wins, and an author
+ * who wants a different one moves it up the list. Everything bound to the island
+ * still goes out on the wire under `marks`, so nothing is hidden by this. */
+export const berthOf = (marks, name) => (marks || []).find((m) => m.island === name && m.kind === 'berth') || null
 
 export function cleanRegion(r) {
   if (!r || !isName(r.name)) return null
@@ -250,6 +280,7 @@ export async function composition() {
     ...(w.home ? { home: { slot: w.home } } : {}),
     slots: w.places.map((p) => {
       const m = p.map ? by.get(p.map) : null
+      const b = berthOf(w.marks, p.name)
       return {
         ...(p.map ? { map: p.map } : {}),
         ...(p.place ? { place: p.place } : {}),
@@ -267,18 +298,25 @@ export async function composition() {
         state: p.state,
         release: p.release,
         discover: p.discover,
-        /* THE APPROACH SITS INSIDE THE BERTH over here. The chart drags them as
-         * two independent marks and keeps them as siblings, which is the right
-         * shape for a pointer; the game reads berth.approach and berth.at, and
-         * the game is the consumer. */
-        ...(p.berth
+        /* THE BERTH IS LOOKED UP RATHER THAN UNPACKED, and the game does not
+         * find out. It reads slot.berth about thirty times in PmapScene, so the
+         * collapse is a change to where the point is AUTHORED and never to what
+         * crosses: a free-standing point naming this island is folded back in
+         * here under the key the game already reads.
+         *
+         * `approach` is not on the wire any more. It was an optional second
+         * point inside the berth, nothing in the composition ever carried one,
+         * and it is a plain berth of its own after 019, addressable by name like
+         * everything else. `name` rides along so a grape holding a slot can go
+         * straight to the flat marks lookup without matching coordinates. */
+        ...(b
           ? {
               berth: {
-                x: p.berth.x,
-                y: p.berth.y,
-                ...(p.berth.facing ? { facing: p.berth.facing } : {}),
-                ...(p.berth.at ? { at: p.berth.at } : {}),
-                ...(p.approach ? { approach: { x: p.approach.x, y: p.approach.y } } : {}),
+                name: b.name,
+                x: b.x,
+                y: b.y,
+                ...(b.facing ? { facing: b.facing } : {}),
+                ...(b.at ? { at: b.at } : {}),
               },
             }
           : {}),
@@ -298,11 +336,13 @@ export async function composition() {
         rect: { x: Math.min(x0, x1), y: Math.min(y0, y1), w: Math.abs(x1 - x0), h: Math.abs(y1 - y0) },
       }
     }),
-    /* UNREAD, AND LEFT ON THE WIRE ON PURPOSE. The game's composition has no
-     * marks key and its berthing holds one target and one approach rather than a
-     * list of legs, so nothing over there can take a waypoint yet. It is not in
-     * the way of anything and a grape already reads it flat at
-     * /api/v1/world/marks, so it stays until the sail loop grows waypoints. */
+    /* EVERY POINT ON THE WATER, INCLUDING THE ONES FOLDED INTO A SLOT ABOVE.
+     *
+     * The game's berthing holds one target per island rather than a list of
+     * legs, so most of this is still unread over there, and that is fine: it is
+     * not in the way of anything and a grape reads it flat at
+     * /api/v1/world/marks. It stays until the sail loop grows routes, which is
+     * the one thing this list was collapsed to make possible. */
     marks: w.marks,
     source: 'mapvis',
   }
@@ -342,12 +382,18 @@ export function checkWorld(doc, slugs = []) {
       warnings.push(`"${p.name}" carries no place id, so the game has no id to discover it or count a visit under`)
     /* A BERTH YOU CANNOT REACH IS WORSE THAN NO BERTH, because the ship sails
      * to it and stops. It has to be within the discovery radius or the island is
-     * never discovered at the point the dock is offered. */
-    if (p.berth) {
-      const d = Math.hypot(p.berth.x - p.x, p.berth.y - p.y)
+     * never discovered at the point the dock is offered.
+     *
+     * Asked of the berth the GAME will use, through the same berthOf the wire
+     * uses, so this cannot warn about a point the composition never sends. A
+     * berth bound to the island but further down the list is somebody's spare
+     * and is not what the hull sails to. */
+    const b = berthOf(doc.marks, p.name)
+    if (b) {
+      const d = Math.hypot(b.x - p.x, b.y - p.y)
       if (d > p.discover)
         warnings.push(
-          `"${p.name}" berths ${Math.round(d)} out but is only discovered at ${p.discover}, so the dock is offered before the island is`,
+          `"${b.name}" ties up ${Math.round(d)} out from "${p.name}", which is only discovered at ${p.discover}, so the dock is offered before the island is`,
         )
     }
   }
@@ -359,22 +405,32 @@ export function checkWorld(doc, slugs = []) {
    * above rather than in a set of its own, and fatal for the same reason a
    * duplicate place is: the name is the only address there is. */
   const diag = Math.hypot(doc.w, doc.h)
+  const isles = new Set(doc.places.map((p) => p.name))
   for (const m of doc.marks || []) {
     if (seen.has(m.name))
-      problems.push(`"${m.name}" is the name of two things on this ocean, and python addresses every place and every mark in one namespace`)
+      problems.push(`"${m.name}" is the name of two things on this ocean, and python addresses every place and every berth in one namespace`)
     seen.add(m.name)
+    /* A BERTH BOUND TO AN ISLAND NOBODY HAS PLACED.
+     *
+     * `island` is what makes a mooring follow its island around instead of being
+     * welded to it, and the cost of that is a name that can point at nothing:
+     * delete the island and the berth stays, silently unbound, still drawn and
+     * still sailed to. A warning and not a refusal, because an author is allowed
+     * to mark the dock before the island exists. */
+    if (m.island && !isles.has(m.island))
+      warnings.push(`"${m.name}" says it belongs to "${m.island}", and no island on this ocean is called that`)
     // no bounds test here either, for the same reason a place has none: the sea
     // the game sails is centred on the hub and runs negative in both directions
-    /* A MARK WITH NOTHING TO SAIL BETWEEN. The yardstick is deliberately the
+    /* A BERTH WITH NOTHING TO SAIL BETWEEN. The yardstick is deliberately the
      * whole ocean's diagonal, so nothing inside a populated composition can
-     * ever trip it: what it really catches is a waypoint left behind after the
+     * ever trip it: what it really catches is a point left behind after the
      * islands either side of it were deleted, which is a leg that goes nowhere
      * and a cutscene that stops. A warning and not a refusal, because marking
      * the water before painting the island is allowed here the same way an
      * empty slot is. */
     const nearest = doc.places.length ? Math.min(...doc.places.map((p) => Math.hypot(m.x - p.x, m.y - p.y))) : Infinity
     if (nearest > diag)
-      warnings.push(`the mark "${m.name}" has no island within reach of it, so nothing sails to or from it`)
+      warnings.push(`the berth "${m.name}" has no island within reach of it, so nothing sails to or from it`)
   }
   const rseen = new Set()
   for (const r of doc.regions) {
@@ -389,10 +445,15 @@ export async function saveWorld(input) {
    *
    * Every caller written before marks existed posts w, h, places and regions and
    * says nothing at all about this field. Treating that silence as an empty list
-   * means dragging one island and pressing save wipes every waypoint the
-   * crossing is built out of, and nothing anywhere would mention it. So an
-   * absent key keeps what is in the row and only a real array replaces it, which
-   * is also what lets an empty array still mean "clear them". */
+   * means dragging one island and pressing save wipes every point the crossing
+   * is built out of, and nothing anywhere would mention it. So an absent key
+   * keeps what is in the row and only a real array replaces it, which is also
+   * what lets an empty array still mean "clear them".
+   *
+   * IT MATTERS MORE SINCE 019 THAN IT DID BEFORE. This list held only free
+   * waypoints, so the worst a silent caller could do was lose a corner of a
+   * route. It now holds every berth on the ocean, so the same silence would take
+   * every dock with it. */
   const stated = Array.isArray(input?.marks)
   const was = await getWorld()
   const doc = {
@@ -416,11 +477,17 @@ export async function saveWorld(input) {
    *
    * The game stamps a saved position with this number and refuses to resume a
    * run when it has changed, because a position taken before a re-cut can land
-   * inside blocked pixels. So it has to be quiet: a title typed, a waypoint
-   * nudged or a save that changed nothing must leave it alone, or thirty
-   * chromebooks lose their place every time somebody presses save. Compared on
-   * the things that actually move a hull, which is where the islands are, how
-   * far out they read, and how the water is divided. */
+   * inside blocked pixels. So it has to be quiet: a title typed, a berth nudged
+   * or a save that changed nothing must leave it alone, or thirty chromebooks
+   * lose their place every time somebody presses save. Compared on the things
+   * that actually move a hull, which is where the islands are, how far out they
+   * read, and how the water is divided.
+   *
+   * MARKS ARE STILL OUT OF THE COMPARISON, and that is deliberate rather than
+   * left over from when they were only waypoints. A saved position is a spot a
+   * student is STANDING on inside a painting, and moving the dock they arrived
+   * through does not put them inside a wall. Dragging the island does, and that
+   * is in `places`, which is in the comparison. */
   /* KEYS SORTED, because the two sides of this comparison have been through
    * different mills. One is freshly cleaned in this process and the other came
    * back out of jsonb, and postgres does not keep the order an object went in

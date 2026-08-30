@@ -144,8 +144,11 @@
   --acc-stop-lit: #ff8d80; /* 8.3:1  the words of a refusal */
   --acc-door: #d08a4a; /* 7.0:1  A WAY THROUGH to another map. Doors and the
                              prompts on them, and nothing else. */
-  --acc-mark: #d0785f; /* 6.1:1  AN ANCHOR'S OWN LABEL: the name an author gave
-                             a point, drawn beside it on the chart. */
+  --acc-mark: #d0785f; /* 6.1:1  A POINT AN AUTHOR PUT DOWN: an anchor's own
+                             label on a painting, and a berth on the ocean. The
+                             one warm hue on a chart made of cold water, which
+                             is why a berth is findable at any zoom. */
+  --acc-mark-lit: #e39b83; /* 8.2:1  the same, under a pointer or selected */
 
   /* FUNCTIONAL, and it stays exactly this hue. The cut layer is drawn as a 1px
      checker at rgb(255,64,208) by src/core/editor.ts, picked because no
@@ -153,6 +156,37 @@
      here so the panel that talks about the cut can match the canvas. */
   --mask-cut: #ff40d0;
   --mask-occ: #be78ff; /* occluders, lilac, same argument */
+}
+
+/* ---- the sea, which is a whole page's palette ------------------------------
+ *
+ * /world draws an ocean with islands on it, and it had no hue of its own. The
+ * water was #0b111a against a void of #070b11, four points apart, so nothing on
+ * screen read as water at all; what was left carrying the page was a neutral
+ * grey graticule, an amber leader, a teal one and five unrelated accent hues
+ * for the states, the water kinds and the marks. Ash rejected it twice.
+ *
+ * A chart of an ocean is drawn in the ocean's colours. This is one hue family
+ * ramped by DEPTH, and it does three jobs at once so the page stops needing
+ * three vocabularies: it is the water, it is the wash on a stretch of water,
+ * and it is the ramp of island states from a rumour up to one that has just
+ * risen. Gold, green and coral are the only things allowed to leave it, and
+ * each of them already means one thing across the whole app.
+ *
+ * Named by DEPTH and not by job, because the same step is a shoal on the water
+ * and a discovered island on the roster, and naming it after either one would
+ * be wrong the other half of the time.
+ *
+ * The canvas cannot read a custom property, so World.tsx keeps a copy of every
+ * value below in one fenced block that names the token each line came from.
+ */
+:root {
+  --sea-deep: #0b1626; /* the open water itself, under everything */
+  --sea-rim: #132437; /* where the water stops. A boundary, not text */
+  --sea-1: #44586c; /*  4.0:1  the dimmest step. A position nobody has heard of */
+  --sea-2: #5d7891; /*  6.0:1  the text floor of this family */
+  --sea-3: #86a6c2; /* 10.0:1 */
+  --sea-4: #a8cbe6; /* 13.5:1 the brightest: something happening now */
 }
 
 /* ---- edges: a rule you can actually see at 1x ------------------------------

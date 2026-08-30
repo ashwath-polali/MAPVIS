@@ -975,9 +975,7 @@ export async function saveUi(ownerId, name, regions, slices) {
 }
 
 // the name the routes call it by. One implementation, because a second one is a
-// second set of refusals that drift apart. The old `/api/ui/slots` path is kept
-// alive at the route only, so the page that still calls it does not break on
-// the day this lands, and there is no second function behind it.
+// second set of refusals that drift apart.
 export const setUiRegions = saveUi
 
 /* SAYING A PIECE IS FINISHED, which is a different fact from the picture having

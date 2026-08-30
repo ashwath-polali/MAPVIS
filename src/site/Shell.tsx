@@ -63,8 +63,7 @@ const Enter = lazy(fresh(() => import('./Enter')))
 const Home = lazy(fresh(() => import('./Home')))
 const MapPage = lazy(fresh(() => import('./MapPage')))
 const World = lazy(fresh(() => import('./World')))
-const Surfaces = lazy(fresh(() => import('./Surfaces')))
-const Kit = lazy(fresh(() => import('./Kit')))
+const Ui = lazy(fresh(() => import('./Ui')))
 
 /* One loading mark for the whole app: four squares walking a ring on the pixel
  * grid. The bleeding ink blot it replaced was slow, soft and the wrong shape for
@@ -123,18 +122,41 @@ export default function Shell() {
     installGrain()
   }, [])
 
-  // the editor owns the whole viewport and locks scrolling; the site does not
+  /* THE TWO TOOLS OWN THE WHOLE VIEWPORT AND LOCK SCROLLING; the site does not.
+   *
+   * The map editor and the UI generator are one piece of software wearing one
+   * set of chrome, so they take the same body flag and therefore the same
+   * stylesheet. That is not a shortcut: /ui was drawn twice as a landing page
+   * with its own hero and its own greys, and the only reliable cure for a second
+   * page inventing a second look is for it to have no stylesheet of its own to
+   * invent one in. */
   const editing = route.path === '/edit'
+  const making = route.path === '/ui'
+  const tool = editing || making
   useEffect(() => {
-    document.body.style.overflow = editing ? 'hidden' : ''
-    document.body.dataset.view = editing ? 'editor' : 'site'
-  }, [editing])
+    document.body.style.overflow = tool ? 'hidden' : ''
+    document.body.dataset.view = tool ? 'editor' : 'site'
+  }, [tool])
 
   if (editing) {
     return (
       <Suspense fallback={<Ink what="opening the map" />}>
         <Editor />
       </Suspense>
+    )
+  }
+
+  /* Outside the page-in wrapper, because .app is height:100% and a wrapper with
+   * automatic height collapses it. Inside a boundary, because this one is not
+   * the canvas app and a broken panel here should say so rather than white out
+   * the tab. */
+  if (making) {
+    return (
+      <Boundary what="the ui generator">
+        <Suspense fallback={<Ink what="opening the ui generator" />}>
+          <Ui />
+        </Suspense>
+      </Boundary>
     )
   }
 
@@ -152,14 +174,6 @@ export default function Shell() {
   // the one page that is not about a single map: where every map sits on the
   // one ocean, which is a document the platform holds exactly one of
   else if (route.path === '/world') page = <World />
-  // the panels the game draws its text into, which belong to no single map
-  // either: one dialogue box serves every island there is
-  else if (route.path === '/surfaces') page = <Surfaces />
-  /* THE UI LIBRARY: the shelf of drawn pieces the game's interface is made of,
-     and the replacement for /surfaces. "Surfaces" names nothing a person can
-     guess, and Ash could not tell what the page was; this one opens with the
-     twenty-one types the game's own record already describes. */
-  else if (route.path === '/kit') page = <Kit />
   else if (mapMatch) page = <MapPage slug={mapMatch.slug} />
   else page = <Lost path={route.path} />
 

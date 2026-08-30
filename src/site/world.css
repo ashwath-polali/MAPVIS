@@ -45,6 +45,21 @@
      sixth grey with no relation to the five above it. Mixed out of the two
      tokens either side of it, so it can never drift off them again. */
   --sunk: color-mix(in srgb, var(--void) 82%, var(--line));
+
+  /* THE EDITOR'S TWO SURFACES, COPIED RATHER THAN IMPORTED, AND WHY.
+   *
+   * app.css declares --panel and --raised at :root, and app.css is the editor's
+   * lazy chunk: Shell only loads it for /edit and /ui, so on this route both
+   * names resolve to nothing and every rule reaching for one falls back to
+   * transparent. That is how a panel meant to look like the editor's ends up
+   * with no surface at all.
+   *
+   * So they are mixed out of the two tokens either side of them, which lands
+   * within a point or two of #10141a and #161c24 and keeps this sheet's own
+   * rule that it writes no raw hex. If the editor's greys move, these move with
+   * them, because both are derived from --void and --line. */
+  --panel: color-mix(in srgb, var(--void) 78%, var(--line));
+  --raised: color-mix(in srgb, var(--void) 62%, var(--line));
   --say: var(--ink-2);
   --quiet: var(--ink-3);
   /* what a plate over the water is filled with. The chart writes the same wash
@@ -53,11 +68,29 @@
   --glass: color-mix(in srgb, var(--void) 88%, transparent);
 
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  /* a bar, the work, a readout strip. The editor is 48px / 1fr / 30px and this
+     was two rows, which is the largest single reason the two screens did not
+     read as one program. */
+  grid-template-rows: auto minmax(0, 1fr) 30px;
   height: 100svh;
   background: var(--void);
   color: var(--ink-on-sea);
   font-family: var(--font-label);
+}
+
+/* A KEYBOARD FOCUS RING, WHICH THIS ROUTE DID NOT HAVE ONE OF.
+ *
+ * app.css declares `:focus-visible { outline: 2px solid var(--acc) }` and app.css
+ * is the editor's lazy chunk, so on /world neither the rule nor --acc exists and
+ * every tab stop fell back to whatever chromium draws. Measured on the tool
+ * group: a pale two pixel box the same weight as an armed control, which is a
+ * second thing that looks selected while nothing is. Gold, because gold is the
+ * tool speaking, and it matches the editor's ring in everything but the token
+ * name that route can reach. */
+.world :focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 1px;
+  border-radius: var(--r);
 }
 
 /* scrollbars stop being the one thing on screen that looks like an operating
@@ -113,59 +146,120 @@
   text-transform: uppercase;
   color: var(--ink-on-sea);
 }
-.world-meta {
+/* the one flexible gap in a bar, so the things after it sit right. `grow` and
+   not `margin-left: auto` on whatever happens to be next, which is how a bar
+   ends up re-anchored every time an item is added to it. */
+.world-grow {
+  flex: 1;
+}
+
+/* ---- the readout strip --------------------------------------------------
+ *
+ * The editor's own footer, restated with the tokens this route has loaded:
+ * --panel, a hairline over it, mono numbers and dim words. What is IN it is the
+ * same class of fact the editor puts there, the scale and the size and the
+ * counts, and every one of those used to be somewhere else on this page. */
+.world-foot {
   display: flex;
   align-items: center;
-  gap: 4px;
-  margin-left: auto;
-  font: 400 var(--fs-micro) var(--font-mono);
+  gap: 14px;
+  padding: 0 14px;
+  background: var(--panel);
+  border-top: var(--hair) solid var(--wl);
+  font-size: var(--fs-fine);
+  color: var(--ink-on-sea);
+}
+.world-read {
+  white-space: nowrap;
+}
+/* the same two utility names the editor's footer uses, scoped so they cannot
+   reach anything else on the site */
+.world-foot .mono {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.world-foot .dim {
+  color: var(--quiet);
+}
+.world-size {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font: 400 var(--fs-fine) var(--font-mono);
   color: var(--quiet);
 }
 .world-num {
   width: 56px;
-  padding: 4px 6px;
+  padding: 2px 6px;
   font: 400 var(--fs-micro) var(--font-mono);
-  color: var(--say);
-  background: var(--sunk);
-  border: var(--hair) solid var(--wl);
-  border-radius: var(--r-tight);
+  color: var(--ink-on-sea);
+  background: var(--void);
+  border: var(--hair) solid var(--edge-ctl);
+  border-radius: var(--r);
   outline: none;
-  transition: border-color var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out);
+  text-align: right;
+  transition: border-color var(--t-fast) var(--ease-out);
+}
+.world-num:hover {
+  border-color: var(--edge-lit);
 }
 .world-num:focus {
-  color: var(--ink-on-sea);
-  border-color: var(--wl-lit);
+  border-color: var(--gold);
+}
+.world-num::-webkit-inner-spin-button,
+.world-num::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 
-/* one segmented control, not three buttons that happen to be adjacent. The
-   armed one is a gold word on a gold hairline: a filled gold slab made the tool
-   picker the loudest thing on a page whose subject is the paintings. */
+/* the last thing in the strip is a standing line about the two gestures, and it
+   gives way first: at a narrow window the numbers matter and the reminder does
+   not. The editor's own hint takes the same treatment at the same end. */
+@media (max-width: 1100px) {
+  .world-foot > .world-read:last-child {
+    display: none;
+  }
+}
+
+/* ONE SEGMENTED CONTROL, AND IT IS THE EDITOR'S OWN.
+ *
+ * This was a 1px gap over a coloured background, which is a second idiom for a
+ * thing the editor already draws: .seg in app.css is a bordered tray at
+ * --r-tight holding options at --r, and the armed one takes a soft accent fill
+ * with a matching border. Two screens one click apart cannot disagree about
+ * what a group of options looks like, so this is that rule restated with the
+ * tokens this route actually has loaded. */
 .world-tools {
   display: flex;
-  gap: 1px;
-  padding: 1px;
-  background: var(--wl);
-  border-radius: var(--r);
+  gap: 2px;
+  padding: 2px;
+  background: var(--void);
+  border: var(--hair) solid var(--wl);
+  border-radius: var(--r-tight);
 }
 .world-tool {
-  padding: 5px 13px;
-  font: 500 var(--fs-small) var(--font-label);
-  letter-spacing: 0.06em;
+  padding: 5px 12px;
+  font: 400 var(--fs-small) var(--font-label);
   color: var(--quiet);
-  background: var(--void);
-  border: 0;
-  border-radius: var(--r-tight);
+  background: none;
+  border: var(--hair) solid transparent;
+  border-radius: var(--r);
   cursor: var(--cur-do);
-  transition: color var(--t-fast) var(--ease-out), background-color var(--t-fast) var(--ease-out);
+  transition: color var(--t-fast) var(--ease-out), background-color var(--t-fast) var(--ease-out),
+    border-color var(--t-fast) var(--ease-out);
 }
 .world-tool:hover {
   color: var(--ink-on-sea);
-  background: var(--sunk);
+  background: var(--raised);
 }
 .world-tool.on {
-  color: var(--gold-lit);
-  background: color-mix(in srgb, var(--gold) 12%, var(--void));
+  color: var(--gold);
+  background: var(--gold-soft);
+  border-color: var(--gold);
 }
+/* THE ONE FILLED CONTROL ON THE PAGE, and it is the one that writes. Everything
+   else on this bar is an outline, which is what makes a filled gold button read
+   as the end of the sentence rather than as decoration. */
 .world-save {
   padding: 5px 16px;
   font: 600 var(--fs-small) var(--font-label);
@@ -179,7 +273,7 @@
   transition: all var(--t-fast) var(--ease-out);
 }
 .world-save:hover:not(:disabled) {
-  color: var(--void);
+  color: var(--acc-tool-ink);
   background: var(--gold);
   border-color: var(--gold);
 }
@@ -261,42 +355,51 @@
   top: 10px;
   display: flex;
   align-items: center;
-  gap: 2px;
-  padding: 3px;
+  gap: 3px;
+  padding: 4px;
   background: var(--glass);
   border: var(--hair) solid var(--wl);
-  border-radius: var(--r);
+  border-radius: var(--r-soft);
 }
+/* the editor's own tool button: a square target, transparent at rest, a raised
+   fill under the pointer and a soft accent when it is on. It was a borderless
+   text link with a 2px radius, which is the one shape the editor never uses. */
 .world-zbtn {
-  min-width: 24px;
-  height: 22px;
-  padding: 0 4px;
-  font: 500 var(--fs-small) var(--font-label);
+  min-width: 26px;
+  height: 26px;
+  padding: 0 5px;
+  font: 400 var(--fs-small) var(--font-label);
   color: var(--say);
   background: none;
-  border: 0;
-  border-radius: var(--r-tight);
+  border: var(--hair) solid transparent;
+  border-radius: var(--r);
   cursor: var(--cur-do);
-  transition: color var(--t-fast) var(--ease-out), background-color var(--t-fast) var(--ease-out);
+  transition: color var(--t-fast) var(--ease-out), background-color var(--t-fast) var(--ease-out),
+    border-color var(--t-fast) var(--ease-out);
 }
 .world-zbtn.wide {
-  padding: 0 9px;
-  font-size: var(--fs-small);
+  padding: 0 10px;
 }
 .world-zbtn:hover:not(:disabled) {
   color: var(--ink-on-sea);
-  background: var(--sunk);
+  background: var(--raised);
 }
 .world-zbtn:disabled {
   color: var(--ink-off);
   cursor: var(--cur-no);
 }
 .world-zbtn.on {
-  color: var(--gold-lit);
-  background: color-mix(in srgb, var(--gold) 12%, transparent);
+  color: var(--gold);
+  background: var(--gold-soft);
+  border-color: var(--gold);
 }
+/* a readout, not a control, so it is mono and it is not on the tile grid. The
+   divider is what stops it reading as a fifth button in the row. */
 .world-zread {
-  min-width: 42px;
+  min-width: 46px;
+  padding-right: 4px;
+  margin-right: 1px;
+  border-right: var(--hair) solid var(--wl);
   text-align: center;
   font: 400 var(--fs-micro) var(--font-mono);
   color: var(--quiet);
@@ -307,14 +410,24 @@
 /* the layout comes from .sparse in tokens.css, which is a flex column so the
    empty state can claim the leftover height instead of the panel ending in
    700px of nothing. This adds the surface and the padding and nothing else. */
+/* THE PANEL IS A SURFACE, and it was the page's own black with a line down one
+   side. The editor's rail carries --panel against a darker stage, which is what
+   makes it read as a thing beside the work rather than as a margin. */
 .world-side {
   overflow-y: auto;
   padding: 14px 14px 24px;
+  background: var(--panel);
   border-left: var(--hair) solid var(--wl);
   gap: 12px;
 }
+/* A SECTION HEADER, AND IT IS THE EDITOR'S .asec EXACTLY.
+   Mono, micro, uppercase, tracked, at the text floor. It was the label face,
+   which put a sans header on this page and a mono one two clicks away for the
+   same job. h3 where it heads a section, so a screen reader gets the outline the
+   eye gets; still a span inside a summary, which cannot hold a heading. */
 .world-lab {
-  font: 600 var(--fs-micro) var(--font-label);
+  margin: 0;
+  font: 600 var(--fs-micro)/1 var(--font-mono);
   letter-spacing: var(--track-label);
   text-transform: uppercase;
   color: var(--quiet);
@@ -380,53 +493,62 @@
 }
 /* the word in front of an address, so a monospace string on screen is never
    just loose. It reads "code name the_hub", which is what it is. */
+/* --ink-3 and not --ink-off. It was the latter, which tokens.css names for a
+   control that CANNOT BE PRESSED and measures 3.9:1, and this is neither a
+   control nor disabled: it is a ten pixel word somebody reads to know whether
+   the address under the heading is an island, a stretch of water or a berth.
+   Small text takes the 4.5:1 floor and --ink-3 is the token that meets it. */
 .world-code i {
   font-style: normal;
   letter-spacing: var(--track-label);
   text-transform: uppercase;
-  color: var(--ink-off);
+  color: var(--quiet);
 }
 
-/* THE FOUR THINGS SOMEBODY ACTUALLY DOES, ABOVE THE FOLD.
+/* ---- THE GROUPS, AND WHY THEY STOPPED BEING BOXES -------------------------
  *
- * Measured: the inspector ran 856 px inside a 719 px column, so setting a berth,
- * which is the whole reason this page draws the paintings at all, was below the
- * fold behind eleven number fields. The acts come first and the fields follow
- * them, and the fields are grouped so the column is a form you scan rather than
- * a column you hunt down. */
-.world-acts {
+ * Every group of fields was a bordered, filled card sitting inside a bordered,
+ * filled panel, which is where "boxy and robotic" comes from: seventeen inputs
+ * in outlined boxes, inside five outlined boxes, inside one outlined rail. The
+ * editor's panel has no cards at all. It has section headers and hairlines, and
+ * the rhythm comes from the space between blocks rather than from a frame drawn
+ * round each one.
+ *
+ * So a section is a header, its fields, and a rule under it. `.world-insp` keeps
+ * the only frame left, because the inspector really is one object lifted off the
+ * roster below it, which is the same job .insp does in the editor. */
+.world-sec {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 4px;
+  gap: 6px;
+  padding: 9px 0 11px;
+  border-bottom: var(--hair) solid var(--line);
 }
-/* a group of fields under one word, so eleven inputs read as four things */
-.world-set {
-  display: grid;
-  gap: 5px;
-  padding: 7px 8px;
-  background: var(--sunk);
-  border: var(--hair) solid var(--wl);
-  border-radius: var(--r);
+.world-sec:last-of-type {
+  border-bottom: 0;
+  padding-bottom: 2px;
 }
-.world-set > .world-lab {
-  margin-bottom: -2px;
+/* the first one has the head above it, which already carries its own space */
+.world-insp > .world-sec:first-of-type {
+  padding-top: 4px;
 }
 /* THE GROUPS THAT FOLD, and only the ones nobody opens twice.
-   The painting, the radii and the mooring are three things an author sets once
-   and then leaves, and all three sitting open is most of the 856 px. What is
-   open by default is what is unfinished: a slot with no map opens the painting,
-   a place with a berth opens the mooring. */
-details.world-set > summary {
+   The painting and the radii are things an author sets once and then leaves,
+   and both sitting open is most of the 856 px this panel used to run to. What
+   is open by default is what is unfinished: a slot with no map opens the
+   painting. The caret is the editor's, drawn as two borders rotated, so a fold
+   here and a fold in the tool are the same mark. */
+details.world-fold > summary {
   display: flex;
   align-items: center;
   gap: 6px;
   list-style: none;
   padding: 1px 0;
+  cursor: var(--cur-do);
 }
-details.world-set > summary::-webkit-details-marker {
+details.world-fold > summary::-webkit-details-marker {
   display: none;
 }
-details.world-set > summary::after {
+details.world-fold > summary::after {
   content: '';
   flex: none;
   width: 5px;
@@ -437,45 +559,56 @@ details.world-set > summary::after {
   transform: rotate(45deg) translate(-2px, -2px);
   transition: transform var(--t-fast) var(--ease-out);
 }
-details.world-set[open] > summary::after {
+details.world-fold[open] > summary::after {
   transform: rotate(-135deg) translate(-1px, -1px);
 }
-details.world-set > summary:hover {
+details.world-fold > summary:hover {
   color: var(--ink-on-sea);
 }
-details.world-set[open] {
-  gap: 6px;
-}
-details.world-set[open] > summary {
+details.world-fold[open] > summary {
   margin-bottom: 2px;
 }
 .world-f {
   display: grid;
   gap: 3px;
 }
+/* a field's name above its input, in mono micro at the text floor. The editor's
+   .numf settled this for the whole product and named /world as the reason. */
 .world-f > span {
   font: 400 var(--fs-micro) var(--font-mono);
   color: var(--quiet);
 }
+/* THE INPUT IS THE EDITOR'S INPUT. It was 2px of radius on a --sunk fill with
+   an --edge border at 1.8:1, which is under the floor for a control boundary;
+   the tool draws a --r box on the darkest surface with a boundary you can see.
+   --edge-ctl and not --edge, which is the token tokens.css names for exactly
+   this and measures at 3.1:1. */
 .world-in {
   width: 100%;
-  padding: 5px 8px;
+  padding: 6px 9px;
   font: 400 var(--fs-small) var(--font-label);
   color: var(--ink-on-sea);
-  background: var(--sunk);
-  border: var(--hair) solid var(--wl);
-  border-radius: var(--r-tight);
+  background: var(--void);
+  border: var(--hair) solid var(--edge-ctl);
+  border-radius: var(--r);
   outline: none;
   transition: border-color var(--t-fast) var(--ease-out);
 }
 .world-in:hover {
-  border-color: var(--wl-lit);
+  border-color: var(--edge-lit);
 }
 .world-in:focus {
-  border-color: color-mix(in srgb, var(--gold) 45%, transparent);
+  border-color: var(--gold);
 }
 .world-in.bad {
-  border-color: var(--wax);
+  border-color: var(--acc-stop-edge);
+}
+/* the browser's own up and down arrows, which nobody here designed and which
+   cost 13px of every number field. The same un-appearance .numf takes. */
+.world-in[type='number']::-webkit-inner-spin-button,
+.world-in[type='number']::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 .world-bad {
   margin: 0;
@@ -506,26 +639,65 @@ details.world-set[open] > summary {
   accent-color: var(--gold);
   cursor: var(--cur-do);
 }
-.world-mark {
+/* THE BERTHS AN ISLAND CARRIES, as rows rather than as fields.
+ *
+ * A berth is a real object with a name, a label and a panel of its own now, so
+ * an island lists them the way the editor lists the anchors on a map: a swatch,
+ * the words, and a quiet right column. Pressing one goes to it. */
+.world-list {
+  display: grid;
+  gap: 2px;
+}
+.world-lrow {
   display: flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
+  padding: 5px 7px;
+  background: none;
+  border: var(--hair) solid transparent;
+  border-radius: var(--r);
+  cursor: var(--cur-do);
+  text-align: left;
+  transition: background-color var(--t-fast) var(--ease-out), border-color var(--t-fast) var(--ease-out);
 }
-.world-mark-t {
+.world-lrow:hover {
+  background: var(--raised);
+  border-color: var(--wl);
+}
+.world-lrow i {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: var(--r-round);
+}
+.world-lrow-n {
   flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font: 400 var(--fs-micro) var(--font-mono);
-  color: var(--say);
+  font: 400 var(--fs-small) var(--font-label);
+  color: var(--ink-on-sea);
+}
+/* which one the game actually reads, in the editor's own badge shape */
+.world-lrow-m {
+  flex: none;
+  padding: 2px 6px;
+  border-radius: var(--r);
+  background: var(--raised);
+  color: var(--quiet);
+  font: 400 var(--fs-micro)/1.2 var(--font-mono);
 }
 
+/* THE BUTTON IS THE EDITOR'S .abtn. It was a bare outline with --ink-2 words on
+   a page whose every other outline is a field, so a control and a text input
+   were the same rectangle. A raised fill is what says this one is pressed. */
 .world-btn {
-  padding: 5px 12px;
-  font: 500 var(--fs-small) var(--font-label);
-  color: var(--say);
-  background: none;
+  padding: 6px 12px;
+  font: 400 var(--fs-small) var(--font-label);
+  color: var(--ink-on-sea);
+  background: var(--raised);
   border: var(--hair) solid var(--wl);
   border-radius: var(--r);
   cursor: var(--cur-do);
@@ -533,21 +705,21 @@ details.world-set[open] > summary {
   transition: all var(--t-fast) var(--ease-out);
 }
 .world-btn:hover:not(:disabled) {
-  color: var(--ink-on-sea);
-  border-color: var(--wl-lit);
+  color: var(--gold);
+  border-color: var(--gold);
 }
 .world-btn:disabled {
   color: var(--ink-off);
   cursor: var(--cur-no);
 }
 .world-btn.small {
-  padding: 3px 9px;
-  font-size: var(--fs-small);
+  padding: 4px 10px;
+  justify-self: start;
 }
 .world-btn.on {
-  color: var(--gold-lit);
-  border-color: color-mix(in srgb, var(--gold) 45%, transparent);
-  background: color-mix(in srgb, var(--gold) 10%, transparent);
+  color: var(--gold);
+  border-color: var(--gold);
+  background: var(--gold-soft);
 }
 /* THE ONE CONTROL HERE THAT DESTROYS SOMETHING, AND IT LOOKS LIKE IT AT REST.
  *
@@ -555,10 +727,14 @@ details.world-set[open] > summary {
  * the row above it and the row below it, and only went red once a pointer was
  * already on it. A control that reveals what it is after you have reached for
  * it has told you too late. It carries the wax at rest now and the lit edge
- * once armed, which is the pair tokens.css names for precisely this. */
+ * once armed, which is the pair tokens.css names for precisely this.
+ *
+ * AND IT DOES NOT TAKE THE RAISED FILL the other buttons take, so the last
+ * control in the panel is the one thing in the column drawn on nothing. */
 .world-btn.danger {
   color: var(--acc-stop-lit);
-  border-color: color-mix(in srgb, var(--acc-stop) 55%, transparent);
+  background: none;
+  border-color: color-mix(in srgb, var(--acc-stop) 62%, transparent);
 }
 .world-btn.danger:hover {
   color: var(--acc-stop-lit);
@@ -575,29 +751,38 @@ details.world-set[open] > summary {
 
 /* the compass, laid out the way the editor lays it out for a door and a post,
    with the middle meaning no opinion */
+/* THE COMPASS IS THE EDITOR'S COMPASS, cell for cell.
+   .facegrid in app.css is three 22px columns on 22px rows with a 2px gap, and
+   each cell is an .abtn: a raised tile with its own edge, going accent when it
+   is on. This was 30px columns of 26px outlined boxes at --r-tight, so the one
+   control that exists on both screens for the same job was drawn twice. */
 .world-face {
   display: grid;
-  grid-template-columns: repeat(3, 30px);
+  grid-template-columns: repeat(3, 22px);
+  grid-auto-rows: 22px;
   gap: 2px;
 }
 .world-fbtn {
-  height: 26px;
-  font: 400 var(--fs-body) var(--font-label);
-  color: var(--quiet);
-  background: var(--sunk);
+  display: grid;
+  place-items: center;
+  padding: 0;
+  font: 400 var(--fs-small) var(--font-label);
+  line-height: 1;
+  color: var(--ink-on-sea);
+  background: var(--raised);
   border: var(--hair) solid var(--wl);
-  border-radius: var(--r-tight);
+  border-radius: var(--r);
   cursor: var(--cur-do);
   transition: all var(--t-fast) var(--ease-out);
 }
 .world-fbtn:hover {
-  color: var(--ink-on-sea);
-  border-color: var(--wl-lit);
+  color: var(--gold);
+  border-color: var(--gold);
 }
 .world-fbtn.on {
-  color: var(--gold-lit);
-  border-color: color-mix(in srgb, var(--gold) 45%, transparent);
-  background: color-mix(in srgb, var(--gold) 10%, transparent);
+  color: var(--gold);
+  border-color: var(--gold);
+  background: var(--gold-soft);
 }
 
 /* WHAT IS ON THIS CHART, SAID ONCE, IN A RAIL THAT WAS OTHERWISE AIR.
@@ -607,35 +792,11 @@ details.world-set[open] > summary {
  * actually in, which is a chart with one island on it and a column of nothing
  * under it. Counts, the water's own extent, and the things checkWorld would
  * complain about at the save, so the rail earns its border. */
-.world-sum {
-  display: grid;
-  gap: 5px;
-  padding: 9px 10px;
-  background: var(--sunk);
-  border: var(--hair) solid var(--wl);
-  border-radius: var(--r);
-}
-.world-sum-r {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  font: 400 var(--fs-small) var(--font-label);
-  color: var(--say);
-}
-.world-sum-r > span:first-child {
-  flex: 1;
-  color: var(--quiet);
-}
-.world-sum-r b {
-  font: 400 var(--fs-micro) var(--font-mono);
-  color: var(--ink-on-sea);
-}
 /* what is not finished yet, in the words the save will use. Gold, because it is
-   the tool speaking about work left rather than a refusal. */
-.world-sum-todo {
+   the tool speaking about work left rather than a refusal. The counts and the
+   size of the water that shared this block are in the readout strip now. */
+.world-todo p {
   margin: 0;
-  padding-top: 5px;
-  border-top: var(--hair) solid var(--wl);
   font: 400 var(--fs-small) var(--font-label);
   line-height: var(--lh);
   color: var(--gold-lit);
@@ -688,17 +849,25 @@ details.world-set[open] > summary {
   transition: background-color var(--t-fast) var(--ease-out), border-color var(--t-fast) var(--ease-out);
 }
 .world-row:hover {
-  background: var(--sunk);
+  background: var(--raised);
 }
 .world-row.on {
   border-left-color: var(--gold);
-  background: var(--sunk);
+  background: var(--gold-soft);
 }
 .world-row i {
   flex: none;
   width: 7px;
   height: 7px;
-  border-radius: var(--r-tight);
+  border: var(--hair) solid transparent;
+  border-radius: var(--r-round);
+}
+/* A BERTH IN OPEN WATER, drawn hollow, which is the same difference the chart
+   draws: a filled centre is a point tied to an island, an empty one is a corner
+   the crossing turns at and belongs to nobody. The border colour is written
+   inline beside the fill, so the ring keeps the coral when the middle goes. */
+.world-row i.open {
+  background: none !important;
 }
 .world-row-n {
   flex: 1;
@@ -769,7 +938,7 @@ details.world-set[open] > summary {
   flex: none;
   width: 7px;
   height: 7px;
-  border-radius: var(--r-tight);
+  border-radius: var(--r-round);
 }
 
 /* the same answer the rest of the site gives. The chart's own easing is turned

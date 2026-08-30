@@ -390,15 +390,12 @@ export default function Home() {
               <Icon name="ocean" />
             </Link>
           )}
-          {/* and the panels the game draws its words into, which belong to no
-              single map for the same reason the water does not */}
-          <Link to="/surfaces" className="home-icon" aria-label="ui surfaces" title="ui surfaces">
-            <Icon name="surface" />
-          </Link>
-          {/* the shelf of drawn pieces the interface is made of: panels,
-              plaques, buttons and marks. One kit for the whole game, so it
-              belongs to no single map either. */}
-          <Link to="/kit" className="home-icon" aria-label="the ui library" title="the ui library">
+          {/* where the game's interface art gets drawn: the panels, boxes,
+              buttons, bars and marks the engine draws and an island needs. It
+              belongs to no single map for the same reason the water does not.
+              There were two of these links, /surfaces and /kit, and neither
+              word named anything a person could guess. */}
+          <Link to="/ui" className="home-icon" aria-label="generate the game's UI" title="generate the game's UI">
             <KitIcon />
           </Link>
           <input
@@ -1232,10 +1229,9 @@ function Trash() {
   )
 }
 
-/* THE UI LIBRARY: pieces of three different shapes on one shelf. Deliberately
- * not the nine-slice mark, which the link two along already wears: a nine-slice
- * is one thing in the library and this link is the whole set. Stroked rather
- * than filled, to sit beside the ocean and the surface marks. */
+/* THE UI GENERATOR: pieces of three different shapes on one shelf, because the
+ * page makes panels, sheets of faces and bands, not one kind of thing. Stroked
+ * rather than filled, to sit beside the ocean mark. */
 function KitIcon() {
   return (
     <svg
