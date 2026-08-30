@@ -1650,8 +1650,16 @@ function Marking({
                 <span className="ui-sw" data-kind={r.kind} />
                 <span className="row-tx">
                   <span className={'row-label' + (said.derived ? ' guessed' : '')}>{said.text}</span>
+                  {/* THE ADDRESS BELONGS HERE AND NOT ON THE ART. The tag drawn
+                      on the rectangle used to be the raw identifier, so the one
+                      place a mark was labelled over the picture read
+                      `plaque_hang` while the row beside it read "Plaque Hang".
+                      The words moved to the tag, because that is the mark
+                      somebody points at; the string a member's python holds is
+                      here, in the mono line, the way the roster on /world keeps
+                      its code name column. */}
                   <span className="row-desc mono">
-                    {r.kind} · {r.x},{r.y} {r.w}×{r.h}
+                    {r.name} · {r.kind} · {r.x},{r.y} {r.w}×{r.h}
                   </span>
                 </span>
               </button>
@@ -1665,8 +1673,13 @@ function Marking({
         {chosen ? (
           <div className="insp">
             <div className="insp-head">
-              <span className="insp-name mono">{chosen.name}</span>
-              <button className="arow-x" aria-label={`drop ${chosen.name}`} onClick={() => {
+              {/* the words first and the address after, which is the shape the
+                  ocean's inspector already uses for the same pair. Mono alone
+                  said "this is an identifier" to somebody who already knew the
+                  convention and said `plaque_hang` to everybody else. */}
+              <span className="insp-name">{displayName(chosen.name).text}</span>
+              <span className="insp-code mono">{chosen.name}</span>
+              <button className="arow-x" aria-label={`drop ${displayName(chosen.name).text}`} onClick={() => {
                 setRegions((rs) => rs.filter((_, j) => j !== pick))
                 setPick(-1)
               }}>
@@ -1933,7 +1946,10 @@ function Marking({
                       moveRegion(i, false)(e)
                     }}
                   >
-                    <i>{r.name}</i>
+                    {/* the words, never the identifier, which is the one rule
+                        src/core/naming.ts exists to hold. The address is on the
+                        rail row's mono line. */}
+                    <i>{displayName(r.name).text}</i>
                     <b onPointerDown={moveRegion(i, true)} />
                   </span>
                 ))}

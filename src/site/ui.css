@@ -32,6 +32,15 @@
   flex: 1 1 100%;
 }
 
+/* the address beside the words in the mark inspector's head. Not flexible, so
+   the name is what gets an ellipsis when the panel is narrow: losing half of
+   `plaque_hang` costs the one string a member types into python. */
+.uikit .insp-code {
+  flex: 0 0 auto;
+  font-size: var(--fs-micro);
+  color: var(--ink-3);
+}
+
 /* the move that fills an empty panel, under the fact that it is empty. Same
    pairing .nothing makes on the ocean: what is missing, then what press fixes
    it, the second one quieter than the first. */

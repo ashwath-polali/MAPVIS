@@ -184,19 +184,21 @@ function Sound() {
           </button>
         </div>
       </div>
+      {/* TWO SHORT LINES AND THEY WERE FIVE. The row above already says no sound
+          exists, and the paragraph under it said so again and then explained
+          itself twice: "changes nothing you can hear today" and "arrives already
+          silent if you left this muted" are one fact. What is worth keeping is
+          the reason the switch is here at all before there is anything to
+          silence, which is that the answer outlives the first sound. */}
       {!SOUND_EXISTS && (
-        <p className="sheet-note">
-          Nothing here or in the game plays a sound yet, so this changes nothing you can hear today. It is kept and
-          handed to whatever plays the first one, which is the point: that sound arrives already silent if you left this
-          muted.
-        </p>
+        <p className="sheet-note">Nothing plays a sound yet. The answer is kept, so the first one ever added arrives already silent.</p>
       )}
       <p className="sheet-note">
         {!audioSupported()
-          ? 'This browser has no way to play audio at all, so nothing will be audible in it even once there is something to hear.'
+          ? 'This browser cannot play audio at all, so nothing will be audible in it even once there is something to hear.'
           : audioUnblocked()
-            ? 'Browsers hold all sound until somebody clicks or presses a key. This tab has, so the first sound will not be swallowed.'
-            : 'Browsers hold all sound until somebody clicks or presses a key. This tab has not yet, so the first sound would wait for one.'}
+            ? 'Browsers hold sound until somebody clicks or presses a key. This tab has.'
+            : 'Browsers hold sound until somebody clicks or presses a key. This tab has not yet.'}
       </p>
     </section>
   )
