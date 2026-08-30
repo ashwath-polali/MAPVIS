@@ -14,7 +14,24 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { closeDb } from './pool.mjs'
-import { publishBundle } from '../store/publish.mjs'
+import { publishBundle, orderedHeadings } from '../store/publish.mjs'
+import { isPlacementName, isAnchorName } from '../store/crypto.mjs'
+
+// a round is at most this many states and each can name one picture that is not
+// look 0, which is the same cap the export route packs to
+const STATES_MAX = 6
+
+/* WHOSE CONDITION A PLACEMENT SHIPS UNDER. editor.ts bundle() resolves this
+ * against the map's group rows because that is the side holding them, and
+ * nothing downstream recomputes it, so a re-export that read only the placement
+ * turned every conditional placement unconditional. Restated here rather than
+ * imported, because that resolver is browser TypeScript and this is node. */
+const whenOf = (a, groups) => {
+  const own = typeof a.when === 'string' ? a.when.trim() : ''
+  if (own) return own
+  const g = (groups || []).find((x) => x && x.name === a.group)
+  return g && typeof g.when === 'string' ? g.when.trim() : ''
+}
 
 const WORK = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'work')
 const slug = process.argv[2]
@@ -51,7 +68,12 @@ const pack = (s) => {
   if (s.dirs && Object.keys(s.dirs).length) {
     const outDirs = {}
     let metaFile = ''
-    for (const [k, arr] of Object.entries(s.dirs)) {
+    /* THE COMPOUND HEADINGS FIRST, the same order and the same one list the
+     * export route packs in. Two publishers disagreeing about key order are two
+     * bundles that face different ways, which is what this file exists to
+     * repair, so the order is not restated here. */
+    for (const k of orderedHeadings(Object.keys(s.dirs))) {
+      const arr = s.dirs[k]
       if (!Array.isArray(arr) || !arr[0]) continue
       const out = []
       for (const u of arr) {
@@ -111,9 +133,28 @@ for (const a of doc.assets || []) {
   const look0 = pack(a)
   if (!look0) continue
   const looks = (a.looks || []).map(pack).map((l, i) => l || (i === 0 ? look0 : null))
+  /* THREE FIELDS THIS PUBLISHER USED TO DROP, and the export route writes all
+   * three, so a re-export silently produced a poorer bundle than the button did.
+   *
+   * `name` is the only address anything outside the map holds: PmapScene keys
+   * every placement by both its MAPVIS id and its author name, and an anchor's
+   * `placement` resolves through that map, so losing it kills every
+   * anchor-to-placement binding made by name. `when` is the resolved group
+   * condition and nothing downstream recomputes it, so losing it turns every
+   * conditional placement unconditional. `lookNames` is the vocabulary
+   * show(placement, state) selects from. All three fail invisibly until a grape
+   * misses. This file exists because a writer bug baked wrong data into a
+   * bundle, and it was baking in three missing fields the same way. */
+  const when = whenOf(a, doc.groups)
+  const names = [
+    isAnchorName(a.lookName) ? String(a.lookName) : '',
+    ...(Array.isArray(a.looks) ? a.looks.slice(0, STATES_MAX) : []).map((L) => (L && isAnchorName(L.name) ? String(L.name) : '')),
+  ]
   out.push({
     id: a.id,
+    ...(isPlacementName(a.name) ? { name: String(a.name) } : {}),
     group: a.group,
+    ...(when ? { when: when.slice(0, 240) } : {}),
     ...look0,
     x: Math.round(a.x),
     y: Math.round(a.y),
@@ -124,6 +165,7 @@ for (const a of doc.assets || []) {
     ...(a.fy ? { flipY: true } : {}),
     ...(a.life ? { life: a.life } : {}),
     ...(looks.filter(Boolean).length ? { looks: looks.filter(Boolean) } : {}),
+    ...(names.some((n) => n) ? { lookNames: names } : {}),
   })
 }
 

@@ -646,24 +646,86 @@ export function checkSlices(rec, w, h, type) {
  * numbers come from measuring the png once, which is exactly what was already
  * done by hand for `padding: 11% 13% 11.5%`.
  */
+/* WHAT THE GAME ALREADY CALLS THE PIECE IT MOUNTS.
+ *
+ * Three of the grounds have a mount in the game today and two of them lined up
+ * by luck: `panel` is --kit-art-panel and .kit-surface-panel, `plank` is
+ * --kit-art-plank and .kit-surface-plank. The reserved core name here is
+ * `dialogue_box` and the game's shipped handle is `dialogue`: --kit-art-dialogue
+ * in tokens.css, .kit-surface-dialogue on DialogueBox, pinned by a passing test
+ * over there. --kit-art-dialogue_box and .kit-surface-dialogue_box exist nowhere
+ * in the game.
+ *
+ * It is worse than cosmetic because dialogue_box is order 1, the first piece Ash
+ * generates, so the very first paste produced a selector matching no element and
+ * a var() nothing defines: invalid at computed-value time, and border-image
+ * drops silently to none. MAPVIS emits X, the game reads Y, and nothing says so.
+ * Every other piece keeps its own name, because no class exists for it yet and
+ * the emitted name is the one the game would create. */
+const CSS_HANDLE = { dialogue_box: 'dialogue' }
+
 export function sliceCss(name, rec) {
   if (!hasSlices(rec)) return ''
+  const h = CSS_HANDLE[name] || name
   const { top, right, bottom, left } = rec.slice
   const k = rec.scale
   const px = [top, right, bottom, left].map((n) => `${n * k}px`).join(' ')
   const rep = rec.repeat.x === rec.repeat.y ? rec.repeat.x : `${rec.repeat.x} ${rec.repeat.y}`
+  /* THE CUSTOM PROPERTIES LIVE IN A BLOCK, and without one this whole string
+   * parsed to ZERO rules.
+   *
+   * Three declarations at the top level of a stylesheet are not declarations,
+   * they are the start of a malformed qualified rule, and CSS error recovery
+   * swallows them and the rule that follows them as one. Pasted into a live
+   * style element and read back: cssRules.length 0, --kit-slice-panel undefined
+   * on :root, a .kit-surface-panel div computing border-width 0px and
+   * border-image-source none. This string is the only artefact the library
+   * produces for the consumer, it sits behind a copy button under "what the game
+   * takes", and every correct number in it arrived dead. Wrapped, the same
+   * content gives two rules and a 49px border-image.
+   *
+   * THE IMAGE FALLS BACK TO THE PIECE'S OWN BYTES. var(--kit-art-x) with nothing
+   * defining it makes the whole border-image invalid, and the export gave a
+   * consumer no way to discover which token it was meant to point at, so even a
+   * hand fix was a guess. The fallback stands the rule up unaided and a
+   * game-side token still overrides it.
+   *
+   * AND THE BORDER IS TRANSPARENT. border-style: solid with no colour inherits
+   * currentColor, and the study's plain arm sets --kit-art-*: none precisely so
+   * a drawn surface blanks. Measured with the art off: a 49 pixel solid black
+   * ring round every panel, in the control condition, out of the CSS the author
+   * is told to paste. border-image paints over the border box, so the colour is
+   * never seen while the art is there. */
   return [
-    `--kit-slice-${name}: ${top} ${right} ${bottom} ${left};`,
-    `--kit-slice-w-${name}: ${px};`,
-    `--kit-repeat-${name}: ${rep};`,
+    `:root {`,
+    `  --kit-slice-${h}: ${top} ${right} ${bottom} ${left};`,
+    `  --kit-slice-w-${h}: ${px};`,
+    `  --kit-repeat-${h}: ${rep};`,
+    `}`,
     ``,
-    `.kit-surface-${name} {`,
+    `.kit-surface-${h} {`,
     `  border-style: solid;`,
-    `  border-width: var(--kit-slice-w-${name});`,
-    `  border-image: var(--kit-art-${name}) var(--kit-slice-${name})${rec.fill ? ' fill' : ''} / 1 / 0 var(--kit-repeat-${name});`,
+    `  border-color: transparent;`,
+    `  border-width: var(--kit-slice-w-${h});`,
+    `  border-image: var(--kit-art-${h}, url('/api/v1/ui/${name}/image')) var(--kit-slice-${h})${rec.fill ? ' fill' : ''} / 1 / 0 var(--kit-repeat-${h});`,
     `}`,
   ].join('\n')
 }
+
+/* WHAT COUNTS AS A CUT, WRITTEN ONCE.
+ *
+ * There were two definitions and they disagreed. The validator that tells an
+ * author a face has been cut counted a `fill` region as well; the `faces`
+ * projection on the wire counted only `face`. A gauge declares faces ['track']
+ * and its region vocabulary is a fill kind, so an author who cut the track as a
+ * fill satisfied checkUi with no warning and then shipped a cut list missing
+ * that cut: the piece reported itself fully cut and the consumer got nothing.
+ *
+ * Narrowed to `face` rather than widened, because a fill is a rectangle a
+ * consumer stretches or tiles inside the piece and a face is a rectangle it cuts
+ * OUT of the sheet, and calling both a face would put fill_unit into the cut
+ * list of every gauge. Names are unique per piece, so a gauge carries both. */
+const isCut = (r) => r.kind === 'face'
 
 // ---- what a piece is not allowed to be -------------------------------------
 
@@ -715,7 +777,7 @@ export function checkUi(asset) {
       if (want.required && !seen.has(want.name))
         warnings.push(`a ${type.label.toLowerCase()} normally carries a region called "${want.name}" and this one has none`)
     if (type.faces.length) {
-      const cut = new Set(regions.filter((r) => r.kind === 'face' || r.kind === 'fill').map((r) => r.name))
+      const cut = new Set(regions.filter(isCut).map((r) => r.name))
       for (const f of type.faces) if (!cut.has(f)) warnings.push(`the "${f}" face has not been cut yet`)
     }
   }
@@ -741,17 +803,49 @@ export function checkUi(asset) {
  * a face and a text region on one piece is a real ambiguity that the shared
  * namespace refuses.
  *
- * `status` of pending or failed is not an error to a reader. It is the study's
- * plain arm, which blanks every surface, and the game's tokens.css already
- * treats a missing image that way.
+ * `status` IS ALWAYS 'ready' ON THE /api/v1 ROUTES, and the note here used to
+ * say the opposite: that pending and failed are not an error to a reader, and
+ * that a blank surface is the study's plain arm. The second half is true of the
+ * game, whose tokens.css sets --kit-art-*: none and falls back to a colour. The
+ * first half was false about this file's own routes twenty lines below, which
+ * both filter on status = 'ready', so a published reader can never see any other
+ * value. Corrected rather than left, because a comment describing behaviour the
+ * code does not have is how the next session designs against a promise nothing
+ * made. The authoring routes, listUi and getUiByName, do serve pending and
+ * failed, and that is where the value means something.
  *
  * `src` resolves on the MAPVIS origin only, where the game's own four are
  * same-origin files. That is the same cross-origin case already logged against
  * reading a map from the platform and it is not new here.
  */
-const shape = (r) => {
+/* HOW LONG A ROW IS ALLOWED TO CLAIM A SPEND IS IN FLIGHT. The same window
+ * pendingUi uses, because there is one truth about staleness and two copies of a
+ * number is how they drift. */
+const PENDING_MS = 10 * 60 * 1000
+
+/* THE PICTURE COMES OFF THE ROUTE THE CALLER IS ON.
+ *
+ * `src` was hard-coded to the account-less /api/v1 route for every row,
+ * including the owner-scoped authoring list, and uiImage has no owner_id in its
+ * query at all. Names are unique per ACCOUNT, so two people with a piece called
+ * `binder` were both served ONE picture: the core one, otherwise the oldest.
+ * The authoring page then stretched that png to the other row's w by h and
+ * measured rectangles against art the author never saw, and saved them. Cross
+ * account bleed on the one surface whose entire job is measuring a specific
+ * picture. So the base is an argument: the authoring reads pass their own
+ * scoped route and the published reads keep the public one.
+ */
+const shape = (r, base = '/api/v1/ui') => {
   const regions = Array.isArray(r.regions) ? r.regions : []
   const slices = r.slices && typeof r.slices === 'object' && r.slices.slice ? r.slices : null
+  /* A GENERATION THAT DIED OUTSIDE THE HANDLER LEFT THE ROW PENDING FOR EVER.
+   * failUi is only reachable from the two catches in the generate route, so a
+   * process restart, which the dev server does on every server file save,
+   * stranded the row: its card read "still drawing" permanently while the poller
+   * gave up after ten minutes, so it claimed a spend was in flight that was not.
+   * Aged out on read rather than with a sweeper, so there is one expression and
+   * one truth about it. */
+  const status = r.status === 'pending' && r.created_at && Date.now() - +new Date(r.created_at) > PENDING_MS ? 'failed' : r.status
   return {
     name: r.name,
     type: r.type || '',
@@ -759,28 +853,45 @@ const shape = (r) => {
     description: r.description,
     w: r.w,
     h: r.h,
-    status: r.status,
+    status,
     core: !!r.core,
     published: !!r.published,
     regions,
-    faces: regions.filter((s) => s.kind === 'face').map(({ name, x, y, w, h }) => ({ name, x, y, w, h })),
+    faces: regions.filter(isCut).map(({ name, x, y, w, h }) => ({ name, x, y, w, h })),
     ...(slices ? { ...slices, css: sliceCss(r.name, slices) } : {}),
-    ...(r.blob_key ? { src: `/api/v1/ui/${r.name}/image` } : {}),
+    ...(r.blob_key ? { src: `${base}/${r.name}/image` } : {}),
     ...(r.pixellab_id ? { pixellabId: r.pixellab_id } : {}),
     createdAt: r.created_at ? +new Date(r.created_at) : 0,
   }
 }
 
+// the owner's own shelf, so every picture on this page is that account's row and
+// not whichever row across the platform happened to share the name
 export async function listUi(ownerId) {
   if (!ownerId) return []
   const rows = await many('select * from ui_assets where owner_id = $1 order by core desc, name', [ownerId])
-  return rows.map(shape)
+  return rows.map((r) => shape(r, '/api/ui'))
 }
 
 export async function getUiByName(ownerId, name) {
   if (!ownerId || !isName(name)) return null
   const r = await one('select * from ui_assets where owner_id = $1 and name = $2', [ownerId, name])
-  return r ? shape(r) : null
+  return r ? shape(r, '/api/ui') : null
+}
+
+// the bytes for one account's own piece. The published route below cannot answer
+// this question: it has no account in its path and picks core-then-oldest across
+// every account, which is a member's rectangles measured against somebody else's
+// chrome.
+export async function ownedUiImage(ownerId, name) {
+  if (!ownerId || !isName(name)) return null
+  const r = await one('select blob_key from ui_assets where owner_id = $1 and name = $2', [ownerId, name])
+  if (!r?.blob_key) return null
+  try {
+    return await store().get(r.blob_key)
+  } catch {
+    return null
+  }
 }
 
 /* WHAT THE READ API SERVES, which has no account in its path.
@@ -793,7 +904,21 @@ export async function getUiByName(ownerId, name) {
  * said out loud here rather than left to whichever row the planner returned.
  */
 export async function readyUi() {
-  return (await many(`select * from ui_assets where status = 'ready' order by name, core desc, created_at`)).map(shape)
+  /* DEDUPED, BECAUSE THE LIST CONTRADICTED THE BY-NAME READ.
+   *
+   * This was a plain select with no dedupe, so a name owned by two accounts came
+   * back twice with the identical `src`, and the ordinary way to consume a flat
+   * list is to fold it into a map by name, where the LAST row wins. Under
+   * `order by name, core desc, created_at` the last row is the newest MEMBER
+   * one, so a consumer ended up with the core png drawn to a member's slice
+   * numbers, regions and faces. That inverts the ruling the two lines below it
+   * implement correctly, and it breaks "core chrome is never overridable"
+   * silently and across accounts. DISTINCT ON keeps the first row per name under
+   * exactly the ordering the comment already states, and the index written for
+   * this tie already exists. */
+  return (await many(`select distinct on (name) * from ui_assets where status = 'ready' order by name, core desc, created_at`)).map((r) =>
+    shape(r),
+  )
 }
 
 export async function readyUiByName(name) {
@@ -915,14 +1040,35 @@ export async function createUi({ ownerId, name, type = '', title = '', descripti
  * the picture does not have is a region that draws in the wrong place. Same
  * reason styleRef reads the IHDR instead of trusting the document.
  */
-export async function setUiImage(ownerId, name, buf, w, h) {
+export async function setUiImage(ownerId, name, buf, w, h, pixellabId = '') {
   if (!ownerId || !isName(name)) throw new Error('no piece to put a picture on')
   const key = `ui/${ownerId}/${name}.png`
   await store().put(key, buf, 'image/png')
+  /* A REDRAW THAT CHANGED SIZE LOSES THE EDGE NUMBERS.
+   *
+   * createUi keeps regions and slices through a redraw on purpose, so redrawing
+   * a panel at the same size keeps the marks. That promise is only true for the
+   * same-size case and nothing checked the size: this writes w and h off the new
+   * png, deliberately, because the generator answers with the canvas IT chose,
+   * and the form lets a piece be redrawn under a different type entirely, which
+   * moves both by hundreds of pixels in one press. So `top + bottom >= h`, the
+   * exact condition checkSlices exists to refuse, could end up stored, and the
+   * read API serves ready-but-unpublished rows, so it reached a consumer with
+   * border-image drawing nothing and saying nothing.
+   *
+   * The slices go and the regions stay. Four numbers are a minute's work and the
+   * rectangles are the expensive hand pass, and publishUi re-runs checkUi over
+   * them, which catches one that now falls off the sheet.
+   *
+   * The pixellab id lands here too. It has never been non-empty on any row,
+   * because the generate route never passed it, so a spend on chrome could not
+   * be traced back to what it bought. */
   return one(
-    `update ui_assets set blob_key = $3, w = $4, h = $5, status = 'ready'
+    `update ui_assets set blob_key = $3, w = $4, h = $5, status = 'ready',
+       pixellab_id = case when $6 <> '' then $6 else ui_assets.pixellab_id end,
+       slices = case when ui_assets.w = $4 and ui_assets.h = $5 then ui_assets.slices else '{}'::jsonb end
      where owner_id = $1 and name = $2 returning *`,
-    [ownerId, name, key, Math.max(1, num(w, 256)), Math.max(1, num(h, 256))],
+    [ownerId, name, key, Math.max(1, num(w, 256)), Math.max(1, num(h, 256)), String(pixellabId || '')],
   )
 }
 

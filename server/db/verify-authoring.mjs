@@ -12,12 +12,12 @@
 // of object storage, and then deletes the map. Small on purpose: no library, no
 // placements with art, six objects written rather than eight hundred.
 import { getMapBySlug, createMap, getDoc, putDoc } from '../store/maps.mjs'
-import { publishBundle, publishedMap } from '../store/publish.mjs'
+import { publishBundle, publishedMap, orderedHeadings } from '../store/publish.mjs'
 import { gateMap } from '../store/gate.mjs'
 import { store } from '../store/blobs.mjs'
-import { getWorld, saveWorld, composition } from '../store/world.mjs'
+import { getWorld, saveWorld, composition, withWorld } from '../store/world.mjs'
 import { putLibraryFrames, copyLibraryItem } from '../store/platform.mjs'
-import { createUi, setUiRegions, setUiImage, getUiByName, removeUi, publishUi, pieceType, PIECE_TYPES } from '../store/ui.mjs'
+import { createUi, setUiRegions, setUiImage, getUiByName, removeUi, publishUi, readyUi, pieceType, PIECE_TYPES } from '../store/ui.mjs'
 import { encodePNG } from '../sheet.mjs'
 import { api } from '../api.mjs'
 import { q, one, closeDb } from './pool.mjs'
@@ -53,6 +53,29 @@ const levelsPNG = (() => {
     rgba[i * 4] = rgba[i * 4 + 1] = rgba[i * 4 + 2] = lvl[i]
     rgba[i * 4 + 3] = 255
   }
+  return encodePNG(W, H, rgba)
+})()
+
+/* A PAINTING THAT DOES NOT FILL ITS CANVAS, which is every real map.
+ *
+ * The hub's file was dropped at 688x640 with its transparent margin already
+ * baked in, and only rows 194 to 570 hold an opaque pixel. `base` taken off the
+ * dropped file's own size is therefore the canvas: the field claiming to be the
+ * painting overstated the island by 75 percent, put its centre 62 pixels north,
+ * and made a composition past the game's pixel ceiling that got refused whole.
+ * The scene here is deliberately inset so the measurement has something to be
+ * wrong about. */
+const PAINT = { ox: 5, oy: 6, w: 40, h: 24 }
+const scenePNG = (() => {
+  const rgba = Buffer.alloc(W * H * 4)
+  for (let y = PAINT.oy; y < PAINT.oy + PAINT.h; y++)
+    for (let x = PAINT.ox; x < PAINT.ox + PAINT.w; x++) {
+      const i = (y * W + x) * 4
+      rgba[i] = 90
+      rgba[i + 1] = 120
+      rgba[i + 2] = 140
+      rgba[i + 3] = 255
+    }
   return encodePNG(W, H, rgba)
 })()
 
@@ -320,7 +343,9 @@ try {
   const pub = await publishBundle(SLUG, {
     mapJson: bundleMap,
     assetsJson: pubAssets,
-    images: { 'levels.png': levelsPNG },
+    // the scene goes in, because the painted extent is measured off the bytes
+    // that ship rather than read off a column describing the dropped file
+    images: { 'levels.png': levelsPNG, 'scene.png': scenePNG },
     files: new Map(),
   })
   console.log(`  published v${pub.version}`)
@@ -389,11 +414,62 @@ try {
   /* AND AN ANCHOR NOBODY POINTED A CAMERA AT GROWS NOTHING, so a bundle with no
    * shots on it stays what it was. */
   eq('an anchor with no shot on it stays as it was', (shipped.anchors || []).find((a) => a.name === 'the_yard')?.meta, { docId: 2 })
-  /* THE PAINTING'S OWN SIZE. A discovery radius taken off h instead of base_h is
-   * wrong by about 41 percent on the hub, in the direction that discovers an
-   * island before it is on screen. Four columns that existed from the first
-   * schema and never reached a bundle. */
-  eq('published base extent', shipped.base, { w: W, h: H, ox: 0, oy: 0 })
+
+  /* OWNING A KEY MEANS OWNING ITS ABSENCE TOO, and neither projection could
+   * clear the keys it owns.
+   *
+   * With no shots on an anchor, both copies handed the incoming bag straight
+   * back, so a `framings` or `framing` key already sitting in it shipped as a
+   * live camera the shot list no longer contained. That is reachable and
+   * permanent: restoreFromDisk pulls map.json's anchors into the document
+   * carrying the PROJECTED meta from the last export, syncEventsToAnchors bakes
+   * the bag into postgres, and every later publish reads it back and re-ships
+   * it. The author sees zero shots, cannot edit or delete the camera, and the
+   * game goes on pushing in on it, because framingOf reads meta.framings[name]
+   * then meta.framing and never cross-checks the list. Written straight into the
+   * anchors row and put back afterwards, because this has to change one thing. */
+  const yardMeta = (await one(`select meta from anchors where map_id = $1 and name = 'the_yard'`, [map.id])).meta
+  await q(`update anchors set meta = $2::jsonb where map_id = $1 and name = 'the_yard'`, [
+    map.id,
+    JSON.stringify({ docId: 2, framings: { ghost: { zoom: 3, dx: 0, dy: 0 } }, framing: { zoom: 3, dx: 0, dy: 0, name: 'ghost' }, variants: { gone: {} } }),
+  ])
+  const ghosted = await publishBundle(SLUG, {
+    mapJson: bundleMap,
+    assetsJson: pubAssets,
+    images: { 'levels.png': levelsPNG, 'scene.png': scenePNG },
+    files: new Map(),
+  })
+  const ghostRow = await publishedMap(SLUG)
+  const ghostShipped = JSON.parse((await store().get(ghostRow.blob_prefix + 'map.json')).toString('utf8'))
+  eq(
+    'a camera left in the bag with no shot behind it is cleared rather than re-shipped',
+    (ghostShipped.anchors || []).find((a) => a.name === 'the_yard')?.meta,
+    { docId: 2 },
+  )
+  ghosted.version > pub.version ? ok(`the clearing publish went out as v${ghosted.version}`) : no('the clearing publish did not write a version')
+  await q(`update anchors set meta = $2::jsonb where map_id = $1 and name = 'the_yard'`, [map.id, JSON.stringify(yardMeta)])
+  /* THE PAINTING'S OWN SIZE, MEASURED OFF THE BYTES THAT SHIPPED.
+   *
+   * This used to come off base_w/base_h, which is where the DROPPED FILE sits,
+   * not where the paint is. On the hub the two are the same 688x640 because the
+   * margin was baked into the file, so the manifest claimed the whole canvas
+   * under a field named for the painting: 75 percent too much area, a centre 62
+   * pixels north, and 440,320 pixels against a ceiling of 265,000, which made
+   * the game refuse the whole composition. The canvas here is 64x48 and the
+   * paint is 40x24 at 5,6, so a reader that goes back to the columns fails. */
+  // read field by field rather than compared whole, because jsonb does not keep
+  // the key order it was handed and a shape test would fail on that alone
+  eq('published base extent is the paint and not the canvas', [shipped.base?.w, shipped.base?.h, shipped.base?.ox, shipped.base?.oy], [
+    PAINT.w,
+    PAINT.h,
+    PAINT.ox,
+    PAINT.oy,
+  ])
+  eq(
+    'and the row carries the same four numbers the bundle does',
+    Object.values(await one('select paint_w, paint_h, paint_ox, paint_oy from maps where id = $1', [map.id])),
+    [PAINT.w, PAINT.h, PAINT.ox, PAINT.oy],
+  )
   /* a bundle that has left the platform should know where it came from, because
    * twelve islands means twelve authors and a file on a cdn has no row behind it */
   shipped.provenance?.owner && shipped.provenance?.publishedAt && shipped.provenance?.version === pub.version
@@ -522,7 +598,11 @@ try {
     ? ok('a map with an unreachable anchor is refused before a version is written')
     : no('an unreachable anchor published anyway')
   const after = await publishedMap(SLUG)
-  after.version === pub.version ? ok(`still at v${pub.version}, so nothing was half written`) : no(`version moved to ${after.version}`)
+  // measured against the LAST publish rather than the first, because the meta
+  // clearing fence above deliberately writes a version of its own
+  after.version === ghosted.version
+    ? ok(`still at v${ghosted.version}, so nothing was half written`)
+    : no(`version moved to ${after.version}`)
 
   // ---- 5. the water between the islands -----------------------------------
   /* The one surface the entire crossing happens on, and until now the one
@@ -550,17 +630,28 @@ try {
    * runs reported every check green. There is exactly one world row, so any
    * concurrency at all makes the restore a coin toss.
    *
-   * A lock is the fix rather than more care. This takes a postgres advisory
-   * lock for the whole section, so a second runner waits instead of interleaving
-   * and reading a half-finished ocean as its baseline. The key is an arbitrary
-   * constant that only this section uses. The lock is session scoped and the
-   * pool hands the connection back on release, so a crashed run frees it when
-   * its connection closes rather than wedging the next one for ever. */
-  const WORLD_LOCK = 774_112_090
-  await q('select pg_advisory_lock($1)', [WORLD_LOCK])
-  const worldBefore = await getWorld()
+   * A lock is the fix rather than more care, AND IT DOES NOT LIVE HERE ANY MORE.
+   * It did, and that made it a cooperative lock with exactly one cooperator: the
+   * dev server serving POST /api/world never asked for it, so the same interleave
+   * was wide open with a different second party, and two browser tabs did it too.
+   * It was also taken through q(), which is pool.query, so the lock was acquired
+   * on whichever pooled client came out and released three hundred lines later on
+   * whichever client came out then, and pg_advisory_lock belongs to the
+   * connection that ran it. It worked by luck.
+   *
+   * withWorld in the store pins ONE client for the lock, the body and the
+   * unlock, and saveWorld wraps itself in it when nobody passes one, so every
+   * writer is covered. This section passes its client down, which is also what
+   * makes the whole section one held lock rather than one per save. */
+  await withWorld(async (wc) => {
+  // every read and every write in this section runs on the one pinned client the
+  // lock is held on, so a second runner waits instead of reading a half-finished
+  // ocean as its baseline
+  const saveWorld_ = (d) => saveWorld(d, wc)
+  const getWorld_ = () => getWorld(wc)
+  const worldBefore = await getWorld_()
   try {
-    const saved = await saveWorld({
+    const saved = await saveWorld_({
       w: 4096,
       h: 4096,
       home: 'zz_verify_isle',
@@ -577,8 +668,14 @@ try {
           title: 'The Verify Yard',
           x: 800,
           y: 600,
-          w: 128,
-          h: 96,
+          /* THE BOX IS THE MAP'S CANVAS, and it was 128x96 in front of a 64x48
+           * painting. One chart unit is one painting pixel, because the game
+           * measures a distance in the units it measures a footprint in, so a
+           * box that is not the canvas puts every berth aimed against it
+           * somewhere else. The live hub was 128x119 in front of 688x640, a
+           * ratio of 5.4, and its only berth landed inside the island. */
+          w: W,
+          h: H,
           state: 'available',
           // two radii, and this tool had one under the other one's name
           discover: 240,
@@ -600,10 +697,16 @@ try {
        * the corner a crossing turns at. */
       marks: [
         { name: 'zz_verify_dock', kind: 'berth', x: 880, y: 700, facing: 'north', at: 'coach_post', island: 'zz_verify_isle', label: 'The Verify Dock' },
+        /* THE SECOND BERTH BOUND TO AN ISLAND IS ITS RUN-IN, which is the order
+         * 019 wrote when it lifted every nested approach out. The game reads
+         * berth.approach and runs a two-stage manoeuvre off it, and after 019
+         * nothing put it back on the wire, so a field with a live consumer had
+         * no author and every arrival was a straight-in nose. */
+        { name: 'zz_verify_run_in', kind: 'berth', x: 940, y: 760, island: 'zz_verify_isle', label: 'The Run In' },
         { name: 'zz_north_turn', kind: 'waypoint', x: 1600, y: 200, r: 50 },
       ],
     })
-    const readBack = await getWorld()
+    const readBack = await getWorld_()
     const isle = readBack.places.find((p) => p.name === 'zz_verify_isle')
     const dock = readBack.marks.find((m) => m.name === 'zz_verify_dock')
     /* A PLACE CARRIES NO POINT AT ALL NOW, and that is the fence: cleanPlace
@@ -639,12 +742,27 @@ try {
       ? ok('the ocean leaves as slots, the key the game gates the whole fetch on')
       : no('the composition still answers with places')
     const slot = comp.slots.find((s) => s.place === 'verify-yard')
-    eq('the slot position is a point, not two loose numbers', slot?.at, { x: 800, y: 600 })
+    /* WHERE THE PAINTING'S CENTRE LANDS, NOT WHERE THE CHART'S CORNER IS.
+     *
+     * The chart holds x,y as the top-left of the box and the game does
+     * `toSea = at + (px - paintedCentre)`, so `at` is where the middle of the
+     * painting sits. Sending the corner put every island half a footprint
+     * north-west of where the chart drew it and every berth beside it inside the
+     * island. 800 + 5 + 20 and 600 + 6 + 12, off the measured paint. */
+    eq('the slot position is the painting"s centre', slot?.at, {
+      x: 800 + PAINT.ox + PAINT.w / 2,
+      y: 600 + PAINT.oy + PAINT.h / 2,
+    })
     /* THE PAINTED EXTENT, NOT THE CANVAS. A radius measured off the canvas is 41
      * percent too generous on the hub, in the direction that discovers an island
      * before it is on screen. Asked of the maps table, which has known all three
      * numbers since the first schema and never said any of them. */
-    eq('the footprint is the painting', slot?.footprint, { w: W, h: H })
+    eq('the footprint is the painting', slot?.footprint, { w: PAINT.w, h: PAINT.h })
+    /* AND WHERE THAT PAINTING SITS INSIDE ITS CANVAS. The test used to be
+     * `(base_ox || base_oy)`, which suppresses a legitimate origin of 0,0: a
+     * painting at 0,0 in a taller canvas is not centred, and absent means
+     * centred to the game. Sent whenever the paint is not the whole canvas. */
+    eq('and where it sits inside its canvas', slot?.origin, { x: PAINT.ox, y: PAINT.oy })
     eq('the canvas beside it', slot?.canvas, { w: W, h: H })
     eq('and what it really costs to hold', slot?.placements, doc.assets.length)
     /* THE BERTH IS FOLDED BACK IN UNDER THE KEY THE GAME ALREADY READS, and this
@@ -659,12 +777,20 @@ try {
       x: 880,
       y: 700,
       facing: 'north',
+      // the second bound berth, folded back in under the key PmapScene already
+      // reads. Without it the two-stage berthing manoeuvre the game implements
+      // could never fire from a MAPVIS document.
+      approach: { x: 940, y: 760 },
       at: 'coach_post',
     })
     /* AND EVERY POINT IS STILL ON THE WIRE UNDER `marks`, including the one
      * folded into the slot above, because the sail loop that grows routes will
      * want the whole list and not the one dock per island. */
-    eq('every point crosses as well, by name', (comp.marks || []).map((m) => m.name).sort(), ['zz_north_turn', 'zz_verify_dock'])
+    eq('every point crosses as well, by name', (comp.marks || []).map((m) => m.name).sort(), [
+      'zz_north_turn',
+      'zz_verify_dock',
+      'zz_verify_run_in',
+    ])
     /* FOUR NUMBERS AGAINST A READER THAT WANTS FOUR KEYS is the quietest failure
      * on this endpoint: every comparison is against undefined and false, so no
      * region ever matches and nothing anywhere is raised. */
@@ -674,32 +800,192 @@ try {
       w: 400,
       h: 400,
     })
-    eq('and the run knows where it starts', comp.home, { slot: 'zz_verify_isle' })
+    /* HOME CROSSES IN THE GAME'S ADDRESSING, AND THIS IS THE FOURTH BUG.
+     *
+     * MAPVIS stores the place NAME, a python identifier, and the game resolves
+     * home against `s.place ?? s.map`, the kebab roster id or the map slug. It
+     * sent the name verbatim, so nothing ever matched, compositionFaults raised
+     * a fault, and loadComposition throws a faulty document away WHOLE and falls
+     * back with only a console.warn. One home tick killed every island, every
+     * region and every berth MAPVIS authored. The live ocean was doing exactly
+     * this: home "the_hub" beside a slot whose place is "hub".
+     *
+     * The name cannot simply be renamed to match, either: isName rejects a
+     * hyphen, so `home-island` can never be typed into that field. Translating
+     * on the wire is what composition() is for. */
+    eq('and the run starts at a slot the game can resolve', comp.home, { slot: 'verify-yard' })
 
     /* THE VERSION HAS TO BE QUIET. The game stamps a saved position with it and
      * refuses to resume when the number has changed, so one that moved on every
      * press would throw away every position on a class of chromebooks each time
      * an author saved. updated_at could never have done this job. */
-    const v1 = (await getWorld()).version
-    await saveWorld({ w: 4096, h: 4096, home: 'zz_verify_isle', places: saved.places, regions: saved.regions })
-    eq('a save that changed nothing leaves the world version alone', (await getWorld()).version, v1)
-    await saveWorld({
+    const v1 = (await getWorld_()).version
+    await saveWorld_({ w: 4096, h: 4096, home: 'zz_verify_isle', places: saved.places, regions: saved.regions })
+    eq('a save that changed nothing leaves the world version alone', (await getWorld_()).version, v1)
+    await saveWorld_({
       w: 4096,
       h: 4096,
       home: 'zz_verify_isle',
       places: saved.places.map((q) => (q.name === 'zz_verify_isle' ? { ...q, x: 810 } : q)),
       regions: saved.regions,
     })
-    const v2 = (await getWorld()).version
+    const v2 = (await getWorld_()).version
     v2 === v1 + 1
       ? ok('and moving an island counts it up, which is what refuses a stale position')
       : no(`the version did not move: ${v1} then ${v2}`)
+
+    /* AND THREE FIELDS ARE OUT OF THE COMPARISON THAT FAILED THE RULE ABOVE.
+     *
+     * The comment names what belongs in it, "where the islands are, how far out
+     * they read, and how the water is divided", and then w, h and home went in.
+     * w/h never reach composition() at all, so resizing the chart canvas is an
+     * editorial act the game literally cannot observe and it was throwing away
+     * the saved position of every chromebook in a class. home only answers a
+     * question asked when there is NO recorded position, so it can never
+     * invalidate one. */
+    const placesNow = (await getWorld_()).places
+    await saveWorld_({ w: 8192, h: 8192, home: '', places: placesNow, regions: saved.regions })
+    eq('resizing the chart and clearing home leave the version alone', (await getWorld_()).version, v2)
+    await saveWorld_({ w: 4096, h: 4096, home: 'zz_verify_isle', places: placesNow, regions: saved.regions })
+    eq('and putting them back does too', (await getWorld_()).version, v2)
+
+    /* AN ABSENT KEY IS NOT AN EMPTY ONE, AND FOUR OF SIX FELL THROUGH TO A
+     * DESTRUCTIVE DEFAULT directly under the essay explaining why they must not.
+     * places and regions went to [], w and h to 4096, and the route hands the
+     * raw parsed body to saveWorld with no shape check at all, so any caller
+     * posting a subset wiped every island and every sea region on the one shared
+     * row and got a 200 back. */
+    const before = await getWorld_()
+    await saveWorld_({ marks: before.marks })
+    const kept = await getWorld_()
+    eq('a save that mentions no places keeps them', kept.places.length, before.places.length)
+    eq('and keeps the sea regions', kept.regions.length, before.regions.length)
+    eq('and keeps the size of the ocean', [kept.w, kept.h], [before.w, before.h])
+    eq('and keeps where a run starts', kept.home, before.home)
+
+    /* THE STAMP THE PAGE WAS HANDED HAS TO COME BACK, or a stale writer wins.
+     *
+     * There was no write precondition anywhere: the GET handed back a version
+     * and an updatedAt, the page kept neither, and every save was a blind
+     * full-document overwrite. A second tab or a reload left open posted a
+     * document built from a snapshot the row had moved past and silently
+     * discarded every island written since, with a 200 and no word to either
+     * author. Locking does not fix that: locking makes each write atomic, it
+     * does not stop a stale writer winning. */
+    let staleRefused = ''
+    try {
+      await saveWorld_({ ...kept, updatedAt: kept.updatedAt - 1000 })
+    } catch (e) {
+      staleRefused = e.message
+    }
+    staleRefused.includes('moved while this page was open')
+      ? ok('a save built on a snapshot the row has moved past is refused')
+      : no(`a stale document overwrote the ocean: ${staleRefused || 'no error'}`)
+    const fresh = await getWorld_()
+    await saveWorld_({ ...fresh, updatedAt: fresh.updatedAt })
+    ok('and the stamp the row actually holds saves')
+
+    /* THE SEVERITY MODEL HAS TO BE THE CONSUMER'S. Three of these were warnings
+     * here and are faults in the game's compositionFaults, and ANY fault makes
+     * loadComposition discard the whole document and use its hand-written
+     * fallback with only a console.warn. So what MAPVIS called a nudge cost
+     * every island on the ocean, including the ones that were right. */
+    const refuses = async (what, doc, needle) => {
+      let msg = ''
+      try {
+        await saveWorld_(doc)
+      } catch (e) {
+        msg = e.message
+      }
+      msg.includes(needle) ? ok(what) : no(`${what}: got ${msg || 'no error'}`)
+    }
+    await refuses(
+      'a slot holding no map and reading as anything but a rumour is refused',
+      { w: 4096, h: 4096, places: [{ name: 'zz_liar', map: '', x: 10, y: 10, w: 8, h: 8, state: 'available' }], regions: [] },
+      'only honest state',
+    )
+    await refuses(
+      'and a slot holding a map that still reads as a rumour is refused, which nothing checked at all',
+      { w: 4096, h: 4096, places: [{ name: 'zz_shy', map: SLUG, x: 10, y: 10, w: W, h: H, state: 'rumour' }], regions: [] },
+      'still reads as a rumour',
+    )
+    await refuses(
+      'the same map placed twice is refused, because the game discards the whole ocean over it',
+      {
+        w: 4096,
+        h: 4096,
+        places: [
+          { name: 'zz_here', map: SLUG, x: 10, y: 10, w: W, h: H, state: 'misty' },
+          { name: 'zz_there', map: SLUG, x: 90, y: 90, w: W, h: H, state: 'misty' },
+        ],
+        regions: [],
+      },
+      'placed twice',
+    )
+    await refuses(
+      'and a stretch of water taking an island name is refused, because python has one namespace',
+      {
+        w: 4096,
+        h: 4096,
+        places: [{ name: 'zz_reach', map: '', x: 10, y: 10, w: 8, h: 8, state: 'rumour' }],
+        regions: [{ name: 'zz_reach', kind: 'sailable', rect: [0, 0, 10, 10] }],
+      },
+      'one namespace',
+    )
+
+    /* HOME WAS THE ONE POINTER WITH NO FENCE, and it is the one with the largest
+     * blast radius. Every other dangling reference in this document is named at
+     * the save; this was admitted on nothing but "is it a legal identifier", so
+     * deleting the island marked home passed clean and the fault surfaced in the
+     * other repo at render time, where the author never sees it. */
+    const homeless = await saveWorld_({
+      w: 4096,
+      h: 4096,
+      home: 'zz_sunk_isle',
+      places: [{ name: 'zz_still_here', map: '', x: 10, y: 10, w: 8, h: 8, state: 'rumour' }],
+      regions: [],
+      marks: [],
+    })
+    homeless.warnings.some((w) => w.includes('zz_sunk_isle') && w.includes('where a run starts'))
+      ? ok('a home naming an island nobody has placed is named at the save')
+      : no('home pointed at nothing and nobody said so')
+    const unspellable = await saveWorld_({
+      w: 4096,
+      h: 4096,
+      home: 'zz_still_here',
+      places: [{ name: 'zz_still_here', map: '', x: 10, y: 10, w: 8, h: 8, state: 'rumour' }],
+      regions: [],
+      marks: [],
+    })
+    unspellable.warnings.some((w) => w.includes('nothing the game can spell it with'))
+      ? ok('and a home carrying neither a place id nor a map says it will not be sent')
+      : no('a home the game cannot resolve passed without a word')
+    eq('and it really is not sent', (await composition()).home, undefined)
+
+    /* A HEADING THE ENGINE CANNOT TURN INTO AN ANGLE. The game radOf answers
+     * east, south and north and sends EVERYTHING else to Math.PI, which is west,
+     * so all four diagonals collapse silently and the live hub berth was one of
+     * them. MAPVIS is the side that moves, so the picker offers four and the
+     * wire carries nothing the consumer cannot honour. */
+    const skew = await saveWorld_({
+      w: 4096,
+      h: 4096,
+      home: '',
+      places: [{ name: 'zz_skew_isle', map: '', x: 100, y: 100, w: 64, h: 64, state: 'rumour', discover: 900 }],
+      regions: [],
+      marks: [{ name: 'zz_skew_dock', kind: 'berth', x: 140, y: 140, facing: 'north-west', island: 'zz_skew_isle' }],
+    })
+    skew.warnings.some((w) => w.includes('north-west') && w.includes('point west'))
+      ? ok('a berth aimed at a diagonal is named at the save')
+      : no('a diagonal berth heading passed without a word')
+    eq('and the diagonal does not cross, because absent and west are the same hull', (await composition()).slots[0]?.berth?.facing, undefined)
+    eq('the row keeps what the author typed, so nothing is lost', (await getWorld_()).marks[0]?.facing, 'north-west')
 
     /* A composition that cannot work is refused where it is written, naming
      * what is wrong, rather than found by a student sailing into nothing. */
     let worldRefused = ''
     try {
-      await saveWorld({
+      await saveWorld_({
         w: 4096,
         h: 4096,
         places: [
@@ -719,7 +1005,7 @@ try {
      * sails to a dock that is offered before the island has been discovered.
      * Measured through berthOf, the same rule composition() sends, so this can
      * never warn about a point the game will not be handed. */
-    const far = await saveWorld({
+    const far = await saveWorld_({
       w: 4096,
       h: 4096,
       places: [{ name: 'zz_far', map: '', x: 100, y: 100, w: 8, h: 8, state: 'rumour', discover: 10 }],
@@ -734,7 +1020,7 @@ try {
      * collapse made possible to get wrong. Nesting could not express it: a berth
      * lived inside its island, so deleting the island took the berth with it.
      * Now the name can dangle, so it is named at the save. */
-    const orphan = await saveWorld({
+    const orphan = await saveWorld_({
       w: 4096,
       h: 4096,
       places: [{ name: 'zz_far', map: '', x: 100, y: 100, w: 8, h: 8, state: 'rumour', discover: 10 }],
@@ -752,7 +1038,7 @@ try {
      * at halfway across has no place to hang off and was a constant typed into
      * the game repo. This is the fence saying it survives the save and comes
      * back out of the read api in the shape python asks for it in. */
-    const marked = await saveWorld({
+    const marked = await saveWorld_({
       w: 4096,
       h: 4096,
       places: [{ name: 'zz_verify_isle', map: '', x: 800, y: 600, w: 128, h: 96, state: 'rumour', release: 240 }],
@@ -770,7 +1056,7 @@ try {
       ],
     })
     eq('a bad berth name is dropped rather than tidied into one', marked.marks.length, 3)
-    const readMarks = (await getWorld()).marks
+    const readMarks = (await getWorld_()).marks
     const wp = readMarks.find((m) => m.name === 'zz_north_passage')
     eq('the waypoint survives the save', [wp?.kind, wp?.x, wp?.y, wp?.facing, wp?.r], ['waypoint', 1200, 400, 'north', 60])
     eq('a kind the author narrowed is kept', readMarks.find((m) => m.name === 'zz_deep_water')?.kind, 'anchorage')
@@ -784,7 +1070,7 @@ try {
      * is a call whose answer depends on which lookup runs first. */
     let clash = ''
     try {
-      await saveWorld({
+      await saveWorld_({
         w: 4096,
         h: 4096,
         places: [{ name: 'zz_both', map: '', x: 10, y: 10, w: 8, h: 8, state: 'rumour', release: 10 }],
@@ -803,8 +1089,8 @@ try {
      * field, so treating the silence as an empty list means one drag of an
      * island wipes the list. It costs more since 019 than it did before: this
      * used to hold only free waypoints and now it holds every dock as well. */
-    await saveWorld({ w: 4096, h: 4096, places: [], regions: [] })
-    eq('a save that never mentions berths keeps them', (await getWorld()).marks.length, 3)
+    await saveWorld_({ w: 4096, h: 4096, places: [], regions: [] })
+    eq('a save that never mentions berths keeps them', (await getWorld_()).marks.length, 3)
 
     /* THE PUBLISHED READ HAS NO ACCOUNT AND MUST NOT NEED ONE.
      *
@@ -839,12 +1125,19 @@ try {
         // tell what it arrived at without fetching the whole composition
         island: '',
         at: '',
+        /* HOW CLOSE COUNTS AS ARRIVED, which this route also dropped. BerthPanel
+         * makes the author type it and cleanMark stores it, and the one lookup
+         * built for a grape holding nothing but a name did not say it, so every
+         * island had to invent its own tolerance and the number somebody typed
+         * did nothing. A hull moves in floats, so an exact-pixel test never
+         * fires and this is not optional. */
+        r: 60,
       })
       /* AND A BOUND BERTH ANSWERS UNDER ITS ISLAND'S OWN NAME AS WELL, because a
        * grape asking to sail to `panther_isle` should not have to know what the
        * author called its dock. Set up here rather than relying on what the
        * saves above left, so the alias is proved and not assumed. */
-      await saveWorld({
+      await saveWorld_({
         w: 4096,
         h: 4096,
         places: [{ name: 'zz_alias_isle', map: '', x: 300, y: 300, w: 64, h: 64, state: 'rumour', discover: 900 }],
@@ -860,17 +1153,46 @@ try {
         label: 'The Alias Dock',
         island: 'zz_alias_isle',
         at: '',
+        // zero, which is the honest answer for a point nobody set a tolerance
+        // on, and it means the caller decides rather than the route guessing
+        r: 0,
       })
       eq('and the berth is still reachable by the name it was given', aliased.marks?.zz_alias_dock?.x, 360)
     } finally {
       await new Promise((r) => server.close(r))
     }
   } finally {
-    // put the ocean back exactly as it was, because it is one shared row
-    await saveWorld(worldBefore)
-    // released only after the ocean is back, so the next runner's baseline is
-    // the real one and never this test's throwaway
-    await q('select pg_advisory_unlock($1)', [WORLD_LOCK])
+    /* put the ocean back exactly as it was, because it is one shared row.
+     *
+     * The stamp is deliberately dropped. A restore is not an edit somebody made
+     * against a snapshot, it is an overwrite of whatever is there, and the write
+     * precondition exists to refuse the first kind and not the second. */
+    await saveWorld_({ ...worldBefore, updatedAt: 0 }, wc)
+    // the lock is released by withWorld, with the client, so a crash frees it
+    // with the connection instead of wedging the next runner
+  }
+  })
+
+  /* WHICH WAY A FIGURE FACES, AND IT IS DECIDED BY KEY ORDER.
+   *
+   * The game does not read the `facing` an exporter writes. It re-derives the
+   * resting heading with `Object.keys(views).find(k => src.endsWith(k +
+   * '-0.png'))`, and 'south-west-0.png'.endsWith('west-0.png') is true, so
+   * whichever key was written first wins. With the plain headings first, 17 of
+   * the hub's 38 direction sets resolved to the wrong view and 15 of those
+   * landed on a one-frame heading, where the game's `set.length > 1` test fails
+   * and they never animate at all. Nothing in the pixels or the JSON was wrong,
+   * which is what made it invisible, and MAPVIS's own preview got it right by
+   * testing array membership, so the editor and the game disagreed.
+   *
+   * Asserted as the game asks the question rather than as a list comparison,
+   * because the list is not the contract: the endsWith scan is. */
+  {
+    const packed = Object.fromEntries(orderedHeadings(['south', 'west', 'south-west', 'north']).map((k) => [k, [`${k}-0.png`]]))
+    const asTheGameAsks = (src) => Object.keys(packed).find((k) => src.endsWith(`${k}-0.png`))
+    eq('a south-west set is found as south-west and not as west', asTheGameAsks('south-west-0.png'), 'south-west')
+    eq('and a plain west set is still found as west', asTheGameAsks('west-0.png'), 'west')
+    eq('a heading nothing recognises sorts last, where it cannot shadow one', orderedHeadings(['wobble', 'south-east'])[0], 'south-east')
   }
 
   // ---- 6. the ui library, and one kit shared across maps -------------------
@@ -1009,6 +1331,36 @@ try {
       ? ok('the measurement comes out as css that can be pasted, with the thickness worked out')
       : no(`the css is not the shape the game takes: ${(back?.css || '').split('\n')[0] || 'nothing'}`)
 
+    /* AND IT HAS TO PARSE, WHICH FOR A LONG TIME IT DID NOT.
+     *
+     * The three custom properties were emitted at the TOP LEVEL of a stylesheet,
+     * which is not three declarations, it is the start of a malformed qualified
+     * rule, and CSS error recovery swallows them AND the rule after them.
+     * Measured by pasting the exact output into a live style element:
+     * cssRules.length 0, --kit-slice-panel undefined on :root, and a
+     * .kit-surface-panel div computing border-width 0px with
+     * border-image-source none. This string is the only artefact the library
+     * produces for the consumer and it sits behind a copy button, so every
+     * correct number in it arrived dead. */
+    back?.css.startsWith(':root {') && /}\s*\n\s*\n\.kit-surface-/.test(back?.css || '')
+      ? ok('the custom properties are inside a block, so the whole thing parses instead of nothing')
+      : no('the css still opens with a bare declaration, which throws the rule after it away')
+    /* THE PLAIN ARM BLANKS A SURFACE, and this rule was giving it a 49 pixel
+     * solid black ring instead. border-style: solid with no colour inherits
+     * currentColor, and the study's control condition sets --kit-art-*: none on
+     * purpose. border-image paints over the border box, so a transparent colour
+     * is never seen while the art is there. */
+    back?.css.includes('border-color: transparent;')
+      ? ok('the border is transparent, so the study plain arm blanks instead of ringing')
+      : no('the emitted rule would draw a solid ring in the plain arm')
+    /* AND THE IMAGE STANDS UP UNAIDED. It pointed at var(--kit-art-<name>) with
+     * nothing anywhere defining it, so the whole border-image was invalid at
+     * computed-value time and dropped to none, and the export gave a consumer no
+     * way to discover which token it was supposed to mean. */
+    back?.css.includes("var(--kit-art-zz_verify_ground, url('/api/v1/ui/zz_verify_ground/image'))")
+      ? ok('and it falls back to the piece own bytes, so an undefined token is not a blank panel')
+      : no('the border image still depends on a token nothing defines')
+
     /* THE CONSTRAINT THAT BREAKS SILENTLY. If the top and bottom insets do not
      * leave a middle, CSS drops to no border image at all and says nothing, and
      * the author spends an hour in the wrong stylesheet. */
@@ -1104,8 +1456,133 @@ try {
     // the two named so nobody generates them, refused before anything is spent
     const notArt = await thrown(() => createUi({ ownerId: owner.id, name: 'zz_verify_signpost', type: 'sign', description: 'a signpost', w: 96, h: 96 }))
     notArt.includes('not generated') ? ok('a sign is refused here rather than costing a spend to find out') : no(`a sign was accepted: ${notArt || 'no error'}`)
+
+    /* THE PIECE NAME THE GAME ACTUALLY MOUNTS, which is not always the kit's.
+     *
+     * `panel` and `plank` line up by luck. The reserved core name here is
+     * `dialogue_box` and the game's shipped handle is `dialogue`:
+     * --kit-art-dialogue in tokens.css, .kit-surface-dialogue on DialogueBox,
+     * pinned by a passing test over there, and --kit-art-dialogue_box exists
+     * nowhere in the game. dialogue_box is order 1, the FIRST piece Ash
+     * generates, so the very first paste produced a selector matching no element
+     * and a var() nothing defines. Bug pattern one, reproduced verbatim. */
+    await createUi({ ownerId: owner.id, name: 'dialogue_box', type: 'dialogue_box', description: 'the real one', w: 688, h: 384, core: true })
+    await setUiImage(owner.id, 'dialogue_box', solidPNG(688, 384, 60, 50, 40), 688, 384)
+    const dlg = await setUiRegions(owner.id, 'dialogue_box', [{ name: 'caption', kind: 'text', x: 40, y: 40, w: 200, h: 40 }], {
+      slice: { top: 40, right: 40, bottom: 40, left: 40 },
+      scale: 2,
+      fill: true,
+      repeat: { x: 'round', y: 'round' },
+    })
+    dlg.css.includes('.kit-surface-dialogue {') &&
+    dlg.css.includes('--kit-slice-dialogue:') &&
+    // the fallback url still names the row, which is right: the ROUTE is keyed
+    // by the piece name and only the css handle is translated
+    !dlg.css.includes('.kit-surface-dialogue_box') &&
+    !dlg.css.includes('--kit-slice-dialogue_box')
+      ? ok('the core dialogue box emits the handle the game mounts and not the kit name')
+      : no(`the css still names dialogue_box, which the game has no class or token for: ${dlg.css.split('\n')[5] || ''}`)
+    await removeUi(owner.id, 'dialogue_box', { core: true })
+
+    /* A REDRAW THAT CHANGED SIZE LOSES THE EDGE NUMBERS. createUi keeps regions
+     * and slices through a redraw on purpose, and the promise it makes is only
+     * true at the SAME size: this writes w and h off the new png, deliberately,
+     * because the generator answers with the canvas it chose. So top + bottom >=
+     * h, the exact thing checkSlices exists to refuse, could end up stored, and
+     * the read API serves ready-but-unpublished rows, so it reached a consumer
+     * with border-image drawing nothing and saying nothing. */
+    await setUiImage(owner.id, GROUND, solidPNG(96, 96, 190, 170, 130), 96, 96)
+    eq('a redraw at the same size keeps the edge numbers, which is the promise', (await getUiByName(owner.id, GROUND))?.slice?.top, 12)
+    await setUiImage(owner.id, GROUND, solidPNG(64, 64, 190, 170, 130), 64, 64)
+    eq('a redraw at a different size drops them rather than pointing them at a picture that is gone', (await getUiByName(owner.id, GROUND))?.slice, undefined)
+
+    /* AND THE SPEND KEEPS ITS PROVENANCE. The column exists, createUi accepts
+     * it and has an on-conflict rule written to preserve it, and the generate
+     * route used only b64, width and height, so pixellab_id was the empty string
+     * on every row ever produced. Every other generated thing in this repo can be
+     * traced back to what it was paid for; chrome silently could not. */
+    await setUiImage(owner.id, GROUND, solidPNG(64, 64, 1, 2, 3), 64, 64, 'zz-pixellab-1234')
+    eq('a generated piece remembers the spend it came from', (await getUiByName(owner.id, GROUND))?.pixellabId, 'zz-pixellab-1234')
+
+    /* A GENERATION THAT DIED OUTSIDE THE HANDLER LEFT THE ROW PENDING FOR EVER.
+     * failUi is reachable only from the two catches in the generate route, so a
+     * process restart, which the dev server does on every server file save,
+     * stranded the row: its card read "still drawing" permanently while the
+     * poller gave up after ten minutes, so it claimed a spend was in flight that
+     * was not. Aged out on read, one expression, one truth about staleness. */
+    const STUCK = 'zz_verify_stuck'
+    await removeUi(owner.id, STUCK, { core: true })
+    await createUi({ ownerId: owner.id, name: STUCK, type: 'panel', description: 'never came back', w: 96, h: 96 })
+    eq('a row that is genuinely drawing says so', (await getUiByName(owner.id, STUCK))?.status, 'pending')
+    await q(`update ui_assets set created_at = now() - interval '30 minutes' where owner_id = $1 and name = $2`, [owner.id, STUCK])
+    eq('and one that has been drawing for half an hour says nothing came back', (await getUiByName(owner.id, STUCK))?.status, 'failed')
+    await removeUi(owner.id, STUCK, { core: true })
   } finally {
     for (const n of [GROUND, SHEET, CORE]) await removeUi(owner.id, n, { core: true })
+    await removeUi(owner.id, 'dialogue_box', { core: true })
+  }
+
+  /* CORE WINS THE TIE ON EVERY ROUTE, AND THE LIST ROUTE WAS THE ONE THAT LOST IT.
+   *
+   * A name is unique per ACCOUNT only, so two people can both call a piece
+   * `binder` and the published read has nowhere to put the difference. The rule
+   * is written above readyUi and implemented by the by-name read and the image
+   * read; the LIST had no dedupe at all, so both rows came back with the
+   * identical src, and the ordinary way to consume a flat list is to fold it
+   * into a map by name, where the last row wins. Under `order by name, core
+   * desc, created_at` the last row is the newest MEMBER one, so a consumer ended
+   * up drawing the core png to a member's slice numbers, regions and faces.
+   * Silent, cross-account, and it inverts "core chrome is never overridable". */
+  const TWIN = 'zz_verify_twin'
+  const other = await one(
+    `insert into users (email, password_hash) values ('zz-verify-other@example.invalid', 'x')
+     on conflict (email) do update set password_hash = 'x' returning id`,
+  )
+  try {
+    await removeUi(owner.id, TWIN, { core: true })
+    await removeUi(other.id, TWIN, { core: true })
+    // the member row first, so "the oldest wins" alone would pick the wrong one
+    // and only the core flag can save it
+    await createUi({ ownerId: other.id, name: TWIN, type: 'panel', description: 'a member piece', w: 96, h: 96 })
+    await setUiImage(other.id, TWIN, solidPNG(96, 96, 10, 10, 10), 96, 96)
+    await createUi({ ownerId: owner.id, name: TWIN, type: 'panel', description: 'the core one', w: 96, h: 96, core: true })
+    await setUiImage(owner.id, TWIN, solidPNG(96, 96, 250, 250, 250), 96, 96)
+    const listed = (await readyUi()).filter((u) => u.name === TWIN)
+    eq('the published list answers with one row per name', listed.length, 1)
+    eq('and it is the core one, which is what the by-name read has always said', listed[0]?.core, true)
+    /* AND THE AUTHORING PAGE SEES ITS OWN PICTURE. `src` was hard-coded to the
+     * account-less route for every row, including the owner-scoped list, and
+     * uiImage has no owner_id in its query, so two accounts with a piece called
+     * `binder` were both shown one picture, stretched to the other row's size,
+     * and every rectangle they dragged was measured against art they never saw. */
+    eq('a member marking up their own piece is served their own bytes', (await getUiByName(other.id, TWIN))?.src, `/api/ui/${TWIN}/image`)
+    eq('and the published read keeps the account-less route the game asks on', listed[0]?.src, `/api/v1/ui/${TWIN}/image`)
+    /* AND THE ROUTE UNDER THAT SRC REALLY ANSWERS, because a src pointing at
+     * nothing is the same blank picture the account-less route was giving them.
+     * The two pictures are deliberately different colours, so a byte comparison
+     * is enough to prove the scoping without decoding anything. */
+    {
+      const server = http.createServer((req, res) =>
+        api(req, res, () => {
+          res.statusCode = 404
+          res.end('not found')
+        }),
+      )
+      await new Promise((r) => server.listen(PORT, '127.0.0.1', r))
+      try {
+        const pubBytes = Buffer.from(await (await fetch(`http://127.0.0.1:${PORT}/api/v1/ui/${TWIN}/image`)).arrayBuffer())
+        const core = solidPNG(96, 96, 250, 250, 250)
+        pubBytes.equals(core)
+          ? ok('the published image route hands over the core picture, which is the row the list agrees on')
+          : no('the published image route and the published list disagree about which row is which')
+      } finally {
+        await new Promise((r) => server.close(r))
+      }
+    }
+  } finally {
+    await removeUi(owner.id, TWIN, { core: true })
+    await removeUi(other.id, TWIN, { core: true })
+    await q('delete from users where id = $1', [other.id])
   }
 
   /* ONE DOCK KIT, TWENTY MAPS. The bytes are duplicated on purpose: that costs

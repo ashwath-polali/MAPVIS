@@ -511,12 +511,21 @@ export const MAP_CLASSES: MapClass[] = ['island', 'room', 'hall']
  * All four of these were missing in different ways. `title` was a real postgres
  * column, machine-filled with the slug, shown on the dashboard and dropped
  * before the export, so every named place a student reads is a slug or a string
- * typed into the game's source. `class` was known and never said. `islandId` is
- * the join between a published map and the school offering behind it, and it
- * lived in a hardcoded Set in the other repo, so shipping a member's island was
- * a source edit and a deploy. `meta` is the author's own bag and there was no
- * map-level one at all, so the only place to hang map-scoped data was a `meta`
- * on some arbitrarily chosen anchor. */
+ * typed into the game's source. `class` was known and never said. `meta` is the
+ * author's own bag and there was no map-level one at all, so the only place to
+ * hang map-scoped data was a `meta` on some arbitrarily chosen anchor.
+ *
+ * `islandId` HAS NO READER YET, AND THIS NOTE CLAIMED OTHERWISE. It is the join
+ * between a published map and the school offering behind it, and the reason
+ * given for adding it was that the binding lived in a hardcoded Set in the other
+ * repo, so shipping a member's island was a source edit and a deploy. That is
+ * still true now the field ships: the game declares islandId on its map type and
+ * never reads it, and the only binding is islandOfMap(mapId), a lookup over
+ * member-islands.json, so a new island is still a row added there and a deploy.
+ * The field is right and the emit stays. The reader belongs in the game repo,
+ * and this says so rather than reading as a problem somebody solved. MAPVIS
+ * emitting a field is not the same as the consumer having a reader, which is the
+ * lesson the framings array and the top-level anchor fields already taught. */
 export interface MapProps {
   /* what a player reads. The id is what code addresses, the same split anchors
    * make between name and label, and for the same reason. */
@@ -953,13 +962,35 @@ export function shotZoom(f: { zoom?: number; overFit?: number }): number {
  * A name of `(default)` cannot happen: framing names go through isAnchorName,
  * and that is the literal string the game's own refusal listing prints for the
  * unnamed slot. */
+/* OWNING A KEY MEANS OWNING ITS ABSENCE TOO.
+ *
+ * Both projections below were additive only: with no shots on an anchor they
+ * handed the incoming bag straight back, so a `framings` or `framing` key
+ * already sitting in it shipped as a live camera the shot list no longer
+ * contained. That is reachable and permanent. restoreFromDisk pulls map.json's
+ * anchors into the document carrying the PROJECTED meta from the previous
+ * export, and the shot list is empty at that point, so syncEventsToAnchors bakes
+ * the stale projection into postgres and every later publish reads it back and
+ * re-ships it. The author sees no shots, cannot edit or delete the camera, and
+ * the game keeps pushing in on it, because framingOf reads meta.framings[name]
+ * and meta.framing and never cross-checks anything.
+ *
+ * A DELIBERATE SECOND COPY of the same helper in server/store/publish.mjs. If
+ * either half changes, change both. */
+const without = (meta: Record<string, unknown> | undefined, ...keys: string[]): Record<string, unknown> | undefined => {
+  if (!meta) return undefined
+  const out = { ...meta }
+  for (const k of keys) delete out[k]
+  return Object.keys(out).length ? out : undefined
+}
+
 export function shotsOntoMeta(
   framings: MapFraming[],
   anchor: string,
   meta?: Record<string, unknown>,
 ): Record<string, unknown> | undefined {
   const mine = framings.filter((f) => f.anchor === anchor)
-  if (!mine.length) return meta && Object.keys(meta).length ? meta : undefined
+  if (!mine.length) return without(meta, 'framings', 'framing')
   const one = (f: MapFraming) => ({ zoom: shotZoom(f), dx: f.dx, dy: f.dy })
   const set: Record<string, unknown> = {}
   for (const f of mine) set[f.name] = one(f)
@@ -992,7 +1023,9 @@ export function variantsOntoMeta(
   meta?: Record<string, unknown>,
 ): Record<string, unknown> | undefined {
   const mine = variants.filter((v) => v.anchor === anchor)
-  if (!mine.length) return meta && Object.keys(meta).length ? meta : undefined
+  // the same clearing the shots do, for the same reason: a projection that
+  // cannot remove its own key ships a set the document no longer holds
+  if (!mine.length) return without(meta, 'variants')
   const set: Record<string, unknown> = {}
   for (const v of mine)
     set[v.name] = {

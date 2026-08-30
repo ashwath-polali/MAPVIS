@@ -17,7 +17,43 @@
  * would be two worlds that cannot both be sailed, and a berth is a position
  * relative to every other island rather than a private note.
  */
-import { q, one } from '../db/pool.mjs'
+import { db, q, one } from '../db/pool.mjs'
+
+/* ONE WRITER AT A TIME ON THE ONE ROW THERE IS ONE OF.
+ *
+ * A verify run destroyed Ash's real ocean by interleaving with a second run,
+ * and the lock that was added afterwards lived in verify-authoring.mjs alone.
+ * That made it a cooperative lock with exactly one cooperator: the dev server
+ * serving POST /api/world never asked for it, so the same interleave was still
+ * open with a different second party, and two browser tabs did it too.
+ *
+ * It was also taken through q(), which is pool.query, so the lock was acquired
+ * on whichever pooled client came out and released three hundred lines later on
+ * whichever client came out then. pg_advisory_lock belongs to the connection
+ * that ran it. Same client by luck is not the same client by design, and the
+ * mirror case is worse: a session advisory lock is re-entrant, so a second
+ * acquirer landing on the same client is granted immediately and gets no
+ * exclusion at all.
+ *
+ * So the lock lives here, in the store every writer goes through, and it pins
+ * ONE client for the read, the version decision and the write. The finally
+ * releases the client, so a crash frees the lock with the connection rather
+ * than wedging the next runner until the pool's ten second idle timeout. */
+export const WORLD_LOCK = 774_112_090
+
+export async function withWorld(fn) {
+  const c = await db().connect()
+  try {
+    await c.query('select pg_advisory_lock($1)', [WORLD_LOCK])
+    try {
+      return await fn(c)
+    } finally {
+      await c.query('select pg_advisory_unlock($1)', [WORLD_LOCK])
+    }
+  } finally {
+    c.release()
+  }
+}
 
 /* THE STATES THE OVERWORLD READS, spelt the way the overworld spells them.
  *
@@ -73,6 +109,24 @@ export const SEA_KINDS = ['sailable', 'shallow', 'forbidden', 'mist', 'ambience'
  * a place, and 019_berths.sql lifted every one of them out as a plain berth.
  * Nothing writes it and cleanMark would have quietly kept accepting it. */
 export const MARK_KINDS = ['berth', 'waypoint', 'anchorage', 'landmark', 'spawn']
+
+/* THE HEADINGS A HULL CAN ACTUALLY SETTLE ON, AND THERE ARE FOUR.
+ *
+ * The picker offers the full eight-way grid, and the game's radOf in
+ * PmapScene.tsx answers east, south and north and sends EVERYTHING ELSE to
+ * Math.PI, which is west. So an author clicking the north-west arrow got a hull
+ * pointing due west, with nothing said anywhere, and all four diagonals
+ * collapsed onto the same heading. The live hub berth was one of them.
+ *
+ * That is the camera-zoom-notch failure again: MAPVIS authoring in a vocabulary
+ * the consumer does not run. The consumer is the canonical side and it is
+ * read-only, so this is the side that narrows.
+ *
+ * ONLY A BERTH IS NARROWED. A waypoint's facing goes out on
+ * /api/v1/world/marks and is read by a member's python, which can do whatever
+ * it likes with a diagonal. The narrowing belongs to the one field the engine
+ * itself turns into an angle. */
+export const BERTH_FACINGS = ['north', 'east', 'south', 'west']
 
 const isName = (s) => /^[a-z][a-z0-9_]{0,47}$/.test(String(s || ''))
 
@@ -205,6 +259,19 @@ export function cleanMark(m) {
  * still goes out on the wire under `marks`, so nothing is hidden by this. */
 export const berthOf = (marks, name) => (marks || []).find((m) => m.island === name && m.kind === 'berth') || null
 
+/* AND THE RUN-IN, WHICH IS THE SECOND ONE.
+ *
+ * The game aims here first and only then comes alongside, which is what makes a
+ * dock look deliberate instead of nosed-in. 019 folded the old nested
+ * `approach` into this list as a plain berth bound to the same island, appended
+ * after the dock, and then nothing put it back on the wire, so a field with a
+ * live reader in PmapScene had no author at all. The order 019 wrote is the
+ * order this reads. */
+export const approachOf = (marks, name) => {
+  const mine = (marks || []).filter((m) => m.island === name && m.kind === 'berth')
+  return mine.length > 1 ? { x: mine[1].x, y: mine[1].y } : null
+}
+
 export function cleanRegion(r) {
   if (!r || !isName(r.name)) return null
   const rect = Array.isArray(r.rect) && r.rect.length === 4 && r.rect.every((n) => isFinite(Number(n)))
@@ -219,9 +286,15 @@ export function cleanRegion(r) {
   }
 }
 
-export async function getWorld() {
-  const w = await one('select w, h, places, regions, marks, home, version, updated_at from world where id = 1')
-  if (!w) return { w: 4096, h: 4096, places: [], regions: [], marks: [], home: '', version: 1 }
+/* Takes an optional pinned client so the read, the version decision and the
+ * write inside saveWorld are one atomic unit under one advisory lock. With no
+ * client it is the pool, which is what every plain reader wants. */
+export async function getWorld(client) {
+  const run = client ? (t, p) => client.query(t, p) : q
+  const w = (await run('select w, h, places, regions, marks, home, version, updated_at from world where id = 1')).rows[0] || null
+  // updatedAt 0 on an ocean nobody has written, so the save precondition reads
+  // "there is nothing here to be stale against" rather than refusing the first save
+  if (!w) return { w: 4096, h: 4096, places: [], regions: [], marks: [], home: '', version: 1, updatedAt: 0 }
   return {
     w: w.w,
     h: w.h,
@@ -266,31 +339,97 @@ export async function composition() {
   const rows = w.places.some((p) => p.map)
     ? (
         await q(
-          `select slug, w, h, base_w, base_h, base_ox, base_oy, jsonb_array_length(assets) as placements from maps`,
+          `select slug, w, h, base_w, base_h, base_ox, base_oy, paint_w, paint_h, paint_ox, paint_oy,
+                  jsonb_array_length(assets) as placements from maps`,
         )
       ).rows
     : []
   const by = new Map(rows.map((r) => [r.slug, r]))
+  /* THE PAINTED EXTENT IS MEASURED, AND base_* IS NOT IT.
+   *
+   * This sent base_w/base_h under a field named for the painting and a comment
+   * saying the canvas is 41 percent too generous. base_* is the DROPPED IMAGE's
+   * size and offset inside the canvas, which is what growCanvas moves and what
+   * re-grows a map on reload. On the hub the picture was dropped at 688x640 with
+   * its margin already baked in, so base_* reads 688x640 at 0,0 and the wire
+   * said 688x640: identical to the canvas, 440,320 pixels against the game's
+   * 265,000 ceiling, and compositionFaults REFUSES THE WHOLE DOCUMENT on that
+   * one field. The comment described the intended behaviour and the query
+   * supplied the wrong columns, so the defect read as fixed.
+   *
+   * paint_* is the opaque bounding box, scanned off the bytes that actually
+   * ship at publish. base_* stays the fallback for a map published before the
+   * measurement existed, which is honest rather than right: it is what this
+   * function was already sending. */
+  const paintOf = (m) =>
+    m.paint_w > 0 && m.paint_h > 0
+      ? { w: m.paint_w, h: m.paint_h, ox: m.paint_ox || 0, oy: m.paint_oy || 0 }
+      : { w: m.base_w || m.w, h: m.base_h || m.h, ox: m.base_ox || 0, oy: m.base_oy || 0 }
+  /* HOME CROSSES IN THE GAME'S ADDRESSING, NOT IN MAPVIS'S.
+   *
+   * `w.home` is a PLACE NAME: a python identifier, validated by isName, written
+   * from the chart's "the run starts here" tick. The game resolves it against
+   * `s.place ?? s.map`, the kebab-case roster id or the map slug, and
+   * compositionFaults raises a fault when nothing matches. loadComposition
+   * discards the ENTIRE composition on any fault and falls back with only a
+   * console.warn, so one home tick killed every island, every region and every
+   * berth MAPVIS authored.
+   *
+   * It is the fourth instance of the same law: MAPVIS emits X, the game reads Y,
+   * and the failure is silent. Translating here is what this function is for.
+   * Renaming the column is not an option, because isName can never spell a
+   * kebab id like `home-island`.
+   *
+   * OMITTED WHEN THE NAMED PLACE HAS NEITHER, because a home slot the game
+   * cannot resolve is worse than no home slot: absent means the game uses its
+   * own answer, present and wrong means it throws the ocean away. */
+  const hp = w.home ? w.places.find((p) => p.name === w.home) : null
+  const homeSlot = hp ? hp.place || hp.map : ''
   return {
     /* NOT updated_at. The game stamps a saved position with this and refuses to
      * resume a run when it has changed, so a millisecond epoch would throw away
      * every position on every class chromebook each time an author nudged one
      * island. An integer that only counts up when the composition really moved. */
     version: w.version,
-    ...(w.home ? { home: { slot: w.home } } : {}),
+    ...(homeSlot ? { home: { slot: homeSlot } } : {}),
     slots: w.places.map((p) => {
       const m = p.map ? by.get(p.map) : null
+      const pb = m ? paintOf(m) : null
       const b = berthOf(w.marks, p.name)
+      const ap = approachOf(w.marks, p.name)
       return {
         ...(p.map ? { map: p.map } : {}),
         ...(p.place ? { place: p.place } : {}),
         title: p.title || '',
-        at: { x: p.x, y: p.y },
+        /* WHERE THE PAINTING'S CENTRE LANDS, WHICH IS NOT THE CHART'S CORNER.
+         *
+         * The chart holds x,y as the top-left of a w by h box, and the game does
+         * `toSea = at + (px - paintedCentre)`, so `at` is where the middle of the
+         * painting sits. Sending the corner put every island half a footprint
+         * north-west of where the chart drew it, and every berth authored beside
+         * it landed inside the island: measured on the live hub, the one berth on
+         * the ocean was on dry land.
+         *
+         * One chart unit is one painting pixel. It has to be: the game measures
+         * distance in the same units it measures a footprint in, and a footprint
+         * is painting pixels because it is checked against the one-generation
+         * pixel ceiling. So there is no scale factor here and there must not be
+         * one. checkWorld warns when a place's box is not its map's canvas,
+         * which is the only way the two can disagree. */
+        at: {
+          x: p.x + (pb ? pb.ox + pb.w / 2 : p.w / 2),
+          y: p.y + (pb ? pb.oy + pb.h / 2 : p.h / 2),
+        },
         // the painted extent, which is what a distance is measured against.
         // Taking it off the canvas is 41 percent too generous on the hub, in the
         // direction that discovers an island before it is on screen.
-        footprint: m ? { w: m.base_w, h: m.base_h } : { w: p.w, h: p.h },
-        ...(m && (m.base_ox || m.base_oy) ? { origin: { x: m.base_ox, y: m.base_oy } } : {}),
+        footprint: pb ? { w: pb.w, h: pb.h } : { w: p.w, h: p.h },
+        /* WHERE THE PAINTING SITS INSIDE ITS CANVAS, and the test used to be
+         * `(base_ox || base_oy)`, which suppresses a legitimate origin of 0,0: a
+         * 669x377 painting at 0,0 in a 688x640 canvas is not centred, and absent
+         * means centred to the game. Sent whenever the painting is not the whole
+         * canvas, which is the real question. */
+        ...(m && pb && (pb.w !== m.w || pb.h !== m.h || pb.ox || pb.oy) ? { origin: { x: pb.ox, y: pb.oy } } : {}),
         ...(m ? { canvas: { w: m.w, h: m.h } } : {}),
         // what this map really costs, so the budget stops charging every island
         // the same invented ninety-four and dropping ones it should have kept
@@ -304,18 +443,30 @@ export async function composition() {
          * crosses: a free-standing point naming this island is folded back in
          * here under the key the game already reads.
          *
-         * `approach` is not on the wire any more. It was an optional second
-         * point inside the berth, nothing in the composition ever carried one,
-         * and it is a plain berth of its own after 019, addressable by name like
-         * everything else. `name` rides along so a grape holding a slot can go
-         * straight to the flat marks lookup without matching coordinates. */
+         * `approach` IS BACK ON THE WIRE, and the note that said nothing ever
+         * carried one was reasoning about MAPVIS instead of about the consumer.
+         * PmapScene reads `s.berth.approach` and feeds it to the berthing
+         * manoeuvre, and sail.ts runs an `approach` stage off it, so 019 left a
+         * field with a live reader and no author and every arrival became a
+         * straight-in nose. 019 preserved the data: it wrote the berth first and
+         * the old approach second, both bound to the same island, so the SECOND
+         * bound berth-kind point is the run-in. That is the rule, written down
+         * here rather than left to whichever the reader reached first, the same
+         * way berthOf writes down which one is the dock.
+         *
+         * THE HEADING IS NARROWED TO WHAT THE ENGINE TURNS INTO AN ANGLE. radOf
+         * answers east, south and north and sends everything else to west, so
+         * emitting a diagonal is emitting a lie. Absent has exactly the same
+         * effect and does not claim anything. checkWorld names it at the save so
+         * the author can re-aim rather than finding out from a hull. */
         ...(b
           ? {
               berth: {
                 name: b.name,
                 x: b.x,
                 y: b.y,
-                ...(b.facing ? { facing: b.facing } : {}),
+                ...(BERTH_FACINGS.includes(b.facing) ? { facing: b.facing } : {}),
+                ...(ap ? { approach: ap } : {}),
                 ...(b.at ? { at: b.at } : {}),
               },
             }
@@ -357,13 +508,26 @@ export async function composition() {
  * published is a warning rather than a refusal, because a slot is allowed to
  * name the island that is going to be painted next week.
  */
-export function checkWorld(doc, slugs = []) {
+export function checkWorld(doc, slugs = [], maps = new Map()) {
   const problems = []
   const warnings = []
   const seen = new Set()
+  /* THE SEVERITY MODEL HAS TO BE THE CONSUMER'S.
+   *
+   * Three of the checks below were warnings here and are faults in the game's
+   * compositionFaults, and any fault makes loadComposition throw the WHOLE
+   * document away and use its hand-written fallback with only a console.warn. So
+   * what MAPVIS called a nudge cost every island, every region and every berth
+   * on the ocean, including the ones that were right. A publish gate that saves
+   * a document the consumer refuses is not a gate. */
+  const seenMap = new Set()
   for (const p of doc.places) {
     if (seen.has(p.name)) problems.push(`two places are both called "${p.name}", and a name is the only address there is`)
     seen.add(p.name)
+    // the game faults on a map placed twice and discards the whole composition
+    if (p.map && seenMap.has(p.map))
+      problems.push(`the map "${p.map}" is placed twice, and the game refuses a whole composition that places one map in two positions`)
+    if (p.map) seenMap.add(p.map)
     /* NEGATIVE IS NORMAL OUT THERE, and refusing it was this file reasoning
      * about a coordinate space it does not own. The game's ocean is the hub's
      * own painting pixels extended outwards with the hub at the origin, so half
@@ -374,12 +538,38 @@ export function checkWorld(doc, slugs = []) {
     if (p.map && slugs.length && !slugs.includes(p.map))
       warnings.push(`"${p.name}" names the map "${p.map}", which nothing has published yet`)
     if (!p.map && p.state !== 'rumour')
-      warnings.push(`"${p.name}" has no map, so only the state "rumour" reads honestly; it says "${p.state}"`)
+      problems.push(
+        `"${p.name}" has no map, so its only honest state is "rumour" and it says "${p.state}" · the game refuses the whole composition over this, every other island with it`,
+      )
+    /* AND THE MIRROR, WHICH NOTHING CHECKED AT ALL. The island tool is born a
+     * rumour and picking a painting in the inspector never touched the state, so
+     * the ordinary authoring path produced a document the game throws away: drop
+     * an island, choose its map, press save, and MAPVIS says saved while the
+     * whole ocean silently vanishes at the other end. The dropdown lifts the
+     * state now, and this is the fence under it. */
+    if (p.map && p.state === 'rumour')
+      problems.push(
+        `"${p.name}" holds the map "${p.map}" and still reads as a rumour · the game refuses the whole composition over this, so pick a state it has really reached`,
+      )
     /* AN ISLAND THE GAME CANNOT ADDRESS. It looks a slot up by its place id and
      * counts exposure by the same id, so one without it is never discovered, has
      * no programmes, and reads misty for the whole run with nothing said. */
     if (p.map && !p.place)
       warnings.push(`"${p.name}" carries no place id, so the game has no id to discover it or count a visit under`)
+    /* ONE CHART UNIT IS ONE PAINTING PIXEL, AND THIS IS THE ONLY WAY TO BREAK IT.
+     *
+     * The game measures a distance in the units it measures a footprint in, and
+     * a footprint is painting pixels. So a place's box has to be its map's
+     * canvas or the berth beside it arrives somewhere else: the live hub sat in
+     * a 128x119 box in front of a 688x640 painting, a ratio of 5.4, and its one
+     * berth landed inside the island. A warning rather than a refusal because
+     * the size is fixed by the dropdown now and an old row has to stay
+     * loadable. */
+    const mm = p.map ? maps.get(p.map) : null
+    if (mm && (p.w !== mm.w || p.h !== mm.h))
+      warnings.push(
+        `"${p.name}" is drawn ${p.w}x${p.h} on the chart in front of a ${mm.w}x${mm.h} painting, and one chart unit has to be one painting pixel, so every point aimed against it lands somewhere else`,
+      )
     /* A BERTH YOU CANNOT REACH IS WORSE THAN NO BERTH, because the ship sails
      * to it and stops. It has to be within the discovery radius or the island is
      * never discovered at the point the dock is offered.
@@ -390,12 +580,49 @@ export function checkWorld(doc, slugs = []) {
      * and is not what the hull sails to. */
     const b = berthOf(doc.marks, p.name)
     if (b) {
-      const d = Math.hypot(b.x - p.x, b.y - p.y)
+      /* MEASURED FROM WHERE THE GAME MEASURES, WHICH IS THE PAINTING'S CENTRE.
+       *
+       * This took the distance from x,y, the box's top-left corner, while the
+       * game measures every radius from `at`, and `at` is where the middle of
+       * the painting lands. On the hub that is 344 pixels of difference in each
+       * axis, so a berth sitting comfortably inside the discovery radius was
+       * being reported as 807 out and unreachable. A checker that measures from
+       * a different point than the consumer is a checker that cries wolf. */
+      const c = mm
+        ? { x: p.x + (mm.paint_w > 0 ? mm.paint_ox + mm.paint_w / 2 : mm.w / 2), y: p.y + (mm.paint_h > 0 ? mm.paint_oy + mm.paint_h / 2 : mm.h / 2) }
+        : { x: p.x + p.w / 2, y: p.y + p.h / 2 }
+      const d = Math.hypot(b.x - c.x, b.y - c.y)
       if (d > p.discover)
         warnings.push(
           `"${b.name}" ties up ${Math.round(d)} out from "${p.name}", which is only discovered at ${p.discover}, so the dock is offered before the island is`,
         )
+      /* A HEADING THE ENGINE CANNOT TURN INTO AN ANGLE. radOf answers east,
+       * south and north and everything else falls through to west, so all four
+       * diagonals collapse silently. Named here rather than dropped in
+       * cleanMark, because dropping it produces the same west and takes the
+       * author's choice with it without saying anything. */
+      if (b.facing && !BERTH_FACINGS.includes(b.facing))
+        warnings.push(
+          `"${b.name}" is aimed ${b.facing} and the game only turns north, east, south and west into a heading · a hull tying up there will point west`,
+        )
     }
+  }
+  /* WHERE A RUN WITH NO SHIP BEGINS, WHICH WAS THE ONE POINTER WITH NO FENCE.
+   *
+   * Every other dangling reference in this document is named at the save: an
+   * orphan berth's island, a map nobody published, a place the game cannot
+   * address. Home was admitted on nothing but "is it a legal identifier", so
+   * deleting or renaming the island marked home passed clean, and the fault
+   * surfaced in the other repo at render time where the author never sees it.
+   * It is also the pointer with the largest blast radius, because it is what
+   * decides where a run with no recorded position starts. */
+  if (doc.home) {
+    const h = doc.places.find((p) => p.name === doc.home)
+    if (!h) warnings.push(`"${doc.home}" is marked as where a run starts, and no island on this ocean is called that`)
+    else if (!h.place && !h.map)
+      warnings.push(
+        `"${doc.home}" is where a run starts and carries neither a place id nor a map, so there is nothing the game can spell it with and it will not be sent`,
+      )
   }
   /* ONE NAMESPACE, because python has one.
    *
@@ -432,16 +659,44 @@ export function checkWorld(doc, slugs = []) {
     if (nearest > diag)
       warnings.push(`the berth "${m.name}" has no island within reach of it, so nothing sails to or from it`)
   }
+  /* REGIONS ARE IN THE SAME NAMESPACE AS EVERYTHING ELSE, and this loop started
+   * a fresh set, so a stretch of water could take an island's name or a berth's
+   * and the save was accepted. Every other layer already honoured one namespace:
+   * 019's migration builds `taken` from places, marks AND regions, and the chart
+   * does the same when it names a new berth. The server is the only enforcement
+   * point and it was the one leaving the hole, so sail_to("the_reach") could
+   * resolve to two different things depending on which lookup ran first. The
+   * region-only wording is kept for the case where both hits really are
+   * regions, because that is the sentence an author can act on. */
   const rseen = new Set()
   for (const r of doc.regions) {
     if (rseen.has(r.name)) problems.push(`two sea regions are both called "${r.name}"`)
+    else if (seen.has(r.name))
+      problems.push(`"${r.name}" is the name of two things on this ocean, and python addresses every island, every berth and every stretch of water in one namespace`)
     rseen.add(r.name)
+    seen.add(r.name)
   }
   return { problems, warnings }
 }
 
-export async function saveWorld(input) {
-  /* NO MARKS IN THE BODY IS NOT THE SAME AS NO MARKS.
+export async function saveWorld(input, client) {
+  /* THE READ AND THE WRITE ARE ONE UNIT, OR THEY ARE A COIN TOSS.
+   *
+   * This was an unlocked, untransacted read-modify-write on the single shared
+   * row: read the whole world, decide a version off it, write it back, with
+   * nothing serialising the gap. That is the exact interleave that destroyed
+   * Ash's ocean, and it stayed open after the fix, because the lock was added to
+   * verify-authoring and never to the store every writer goes through. Two
+   * browser tabs did it too. It also broke the version: two writers both read 10
+   * and both wrote 11 with different content, and a writer whose own save
+   * changed nothing wrote 10 back on top of somebody's 11, so the counter went
+   * BACKWARDS onto content that is not what 10 was.
+   *
+   * Called with no client it wraps itself, so every existing caller is covered
+   * without knowing about any of this. */
+  if (!client) return withWorld((c) => saveWorld(input, c))
+  const run = (t, p) => client.query(t, p)
+  /* AN ABSENT KEY IS NOT AN EMPTY ONE, AND THAT NOW COVERS THE WHOLE DOCUMENT.
    *
    * Every caller written before marks existed posts w, h, places and regions and
    * says nothing at all about this field. Treating that silence as an empty list
@@ -453,21 +708,50 @@ export async function saveWorld(input) {
    * IT MATTERS MORE SINCE 019 THAN IT DID BEFORE. This list held only free
    * waypoints, so the worst a silent caller could do was lose a corner of a
    * route. It now holds every berth on the ocean, so the same silence would take
-   * every dock with it. */
+   * every dock with it.
+   *
+   * AND IT ONLY PROTECTED marks AND home, with the other four falling back to a
+   * destructive default directly under this essay about why they must not:
+   * places and regions to [], w and h to 4096. The route hands the raw parsed
+   * body straight here with no shape check, and an empty payload parses to {},
+   * so any caller posting a subset wiped every island and every sea region on
+   * the one shared row and got a 200 back. The field with the loudest comment
+   * was the safe one. */
   const stated = Array.isArray(input?.marks)
-  const was = await getWorld()
+  const was = await getWorld(client)
   const doc = {
-    w: Math.max(1, num(input?.w, 4096)),
-    h: Math.max(1, num(input?.h, 4096)),
-    places: (Array.isArray(input?.places) ? input.places : []).map(cleanPlace).filter(Boolean),
-    regions: (Array.isArray(input?.regions) ? input.regions : []).map(cleanRegion).filter(Boolean),
+    w: input?.w === undefined ? was.w : Math.max(1, num(input.w, 4096)),
+    h: input?.h === undefined ? was.h : Math.max(1, num(input.h, 4096)),
+    places: Array.isArray(input?.places) ? input.places.map(cleanPlace).filter(Boolean) : was.places,
+    regions: Array.isArray(input?.regions) ? input.regions.map(cleanRegion).filter(Boolean) : was.regions,
     marks: stated ? input.marks.map(cleanMark).filter(Boolean) : was.marks,
     // silence keeps what is there, the same argument marks makes, so a page that
     // has never heard of a home slot cannot clear one by saving
     home: typeof input?.home === 'string' ? (isName(input.home) ? input.home : '') : was.home,
   }
-  const slugs = (await q('select slug from maps')).rows.map((r) => r.slug)
-  const { problems, warnings } = checkWorld(doc, slugs)
+  /* THE STAMP THE PAGE WAS HANDED HAS TO COME BACK.
+   *
+   * There was no write precondition anywhere. GET hands the client `version` and
+   * `updatedAt`, the client kept neither, and the save was a blind full-document
+   * overwrite, so a second tab, a reload left open or the same tab after a
+   * verify run posted a document built from a stale snapshot and silently
+   * discarded every island written since. The lock above does not fix that:
+   * locking makes each write atomic, it does not stop a stale writer winning.
+   *
+   * Not `version`: version deliberately does not move for a title or a berth, so
+   * it cannot detect the overwrites that matter most. A caller that sends no
+   * stamp is a deliberate overwrite, which is what the verify restore is. */
+  if (isFinite(Number(input?.updatedAt)) && Number(input.updatedAt) > 0 && was.updatedAt && Number(input.updatedAt) !== was.updatedAt) {
+    const why = 'the ocean moved while this page was open, so nothing was saved · reload the chart and make the change again'
+    const e = new Error(why)
+    e.problems = [why]
+    throw e
+  }
+  // the paint columns come too, because checkWorld measures a berth from the
+  // painting's centre, which is the point the game measures every radius from
+  const rows = (await run('select slug, w, h, paint_w, paint_h, paint_ox, paint_oy from maps')).rows
+  const slugs = rows.map((r) => r.slug)
+  const { problems, warnings } = checkWorld(doc, slugs, new Map(rows.map((r) => [r.slug, r])))
   if (problems.length) {
     const e = new Error(`the world was not saved · ${problems.join(' · ')}`)
     e.problems = problems
@@ -503,14 +787,23 @@ export async function saveWorld(input) {
               .map((k) => [k, stable(v[k])]),
           )
         : v
-  const shape = (d) => JSON.stringify(stable([d.w, d.h, d.places, d.regions, d.home]))
+  /* AND w, h AND home ARE OUT OF IT, because they fail the rule the comment
+   * above states. w/h are the chart's own frame and never reach composition() at
+   * all, so resizing the canvas is an editorial act the game literally cannot
+   * observe and it was counting the version up and throwing away the saved
+   * position of every chromebook in a class. home only answers a question asked
+   * when there is no recorded position, so it can never invalidate one. */
+  const shape = (d) => JSON.stringify(stable([d.places, d.regions]))
   const version = shape(doc) === shape(was) ? was.version : (was.version || 1) + 1
-  await q(
+  const wrote = await run(
     `insert into world (id, w, h, places, regions, marks, home, version, updated_at)
      values (1, $1, $2, $3::jsonb, $4::jsonb, $5::jsonb, $6, $7, now())
      on conflict (id) do update set w = $1, h = $2, places = $3::jsonb, regions = $4::jsonb,
-       marks = $5::jsonb, home = $6, version = $7, updated_at = now()`,
+       marks = $5::jsonb, home = $6, version = $7, updated_at = now()
+     returning updated_at`,
     [doc.w, doc.h, JSON.stringify(doc.places), JSON.stringify(doc.regions), JSON.stringify(doc.marks), doc.home, version],
   )
-  return { ...doc, version, warnings }
+  // the new stamp goes back with the document, or the page has nothing to send
+  // on the next save and the precondition above can never fire
+  return { ...doc, version, updatedAt: +new Date(wrote.rows[0].updated_at), warnings }
 }

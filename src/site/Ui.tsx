@@ -111,6 +111,15 @@ type Vocab = {
   core: string[]
   pending: { name: string; since: number } | null
   kinds: string[]
+  /* HORIZONTAL ALIGNMENT, which the API has published since the kit shipped and
+   * this type did not even declare, so the inspector carried controls for six
+   * qualifiers and none for this one. Every text region on the wire shipped with
+   * `align` absent, always: a field in the type, the vocabulary, the store and
+   * the export with no way for a human to enter a value, which is the
+   * half-plumbed sweep this page exists to end. It matters more than the rest,
+   * because a plaque's label is centred and a field's typed text is left, and a
+   * consumer drawing them cannot guess which. */
+  aligns: string[]
   valigns: string[]
   fits: string[]
   fillAxes: string[]
@@ -955,7 +964,13 @@ function Drawing({
   const legal = IDENT.test(name)
   const reserved = !core && v.core.includes(name)
   const replacing = taken.has(name)
-  const blocked = !!v.pending && v.pending.name !== name
+  /* ANY PENDING ROW BLOCKS, and the exemption for the same name was a live path
+   * to two spends on one row: `Drawing` is keyed by `armed`, so pressing "pick
+   * another" and re-arming the same type remounts this with a fresh busy flag
+   * and the name field defaulting to the type name both times, while v.pending
+   * is still null because load() has not run. The server refuses it now and this
+   * matches, so the button says why instead of firing into a 409. */
+  const blocked = !!v.pending
   const can = !!t && !refused && legal && !reserved && !blocked && what.trim().length > 0 && !busy
 
   const draw = async () => {
@@ -1293,14 +1308,19 @@ function Marking({
     if (mode !== 'marks' || e.target !== e.currentTarget) return
     const a = at(e)
     setPick(-1)
-    drag(({ x, y }) =>
-      setDraft({
-        x: clamp(Math.min(a.x, x), 0, piece.w),
-        y: clamp(Math.min(a.y, y), 0, piece.h),
-        w: clamp(Math.abs(x - a.x), 0, piece.w),
-        h: clamp(Math.abs(y - a.y), 0, piece.h),
-      }),
-    )(e)
+    /* CLAMPED AGAINST THE ROOM LEFT FROM THE ORIGIN, not against the whole
+     * canvas. The pointermove listener is on window, so dragging past the right
+     * or bottom edge produced x + w greater than piece.w, commitDraft added it
+     * with no further clamp, and the marks canvas drew a rectangle hanging off
+     * the art. checkUi then refused the whole save, naming a rectangle the
+     * author had no reason to think was illegal, and every later save failed the
+     * same way. moveRegion has always clamped correctly against the remaining
+     * room and the draft path did not, so the two disagreed. */
+    drag(({ x, y }) => {
+      const x0 = clamp(Math.min(a.x, x), 0, piece.w)
+      const y0 = clamp(Math.min(a.y, y), 0, piece.h)
+      setDraft({ x: x0, y: y0, w: clamp(Math.abs(x - a.x), 0, piece.w - x0), h: clamp(Math.abs(y - a.y), 0, piece.h - y0) })
+    })(e)
   }
 
   const moveRegion = (i: number, corner: boolean) =>
@@ -1634,6 +1654,27 @@ function Marking({
                   </select>
                 </label>
               </>
+            ) : null}
+            {/* WHICH EDGE THE WORDS SIT AGAINST, on the two kinds that carry
+                words. It is the one qualifier a consumer cannot guess: a
+                plaque's label is centred and a field's typed text is left, and
+                both are text regions. The empty option means the reader decides,
+                which is what cleanRegion already means by omitting the field. */}
+            {chosen.kind === 'text' || chosen.kind === 'number' ? (
+              <label className="insp-row">
+                <span>aligns</span>
+                <select
+                  value={chosen.align || ''}
+                  onChange={(e) => setRegions((rs) => rs.map((x, j) => (j === pick ? { ...x, align: e.target.value } : x)))}
+                >
+                  <option value="">the reader decides</option>
+                  {(v.aligns || []).map((k) => (
+                    <option key={k} value={k}>
+                      {k}
+                    </option>
+                  ))}
+                </select>
+              </label>
             ) : null}
             {chosen.kind === 'text' ? (
               <>

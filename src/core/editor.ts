@@ -436,6 +436,34 @@ const BOARD = '#0e1319' // --board
  * the overlay count legs the same way. A closed route has one more leg than an
  * open one, the run back to the first point, and forgetting it is how a patrol
  * would have been declared clean while its closing leg went through a wall. */
+/* WHERE THE PAINT IS ON A COMPOSITED CANVAS, in that canvas's own pixels.
+ *
+ * The browser half of the same measurement server/store/publish.mjs makes at
+ * publish, and it has to answer the same numbers or the disk export and the
+ * platform export describe two different islands. Alpha 8 rather than 128 for
+ * the same reason there: the cut writes a hard zero and generated art has soft
+ * edges, so a high threshold eats a coastline. A canvas with nothing opaque on
+ * it answers with the whole raster, because "this map is nothing" is a worse
+ * claim than "this map is its canvas". */
+function paintedBoxOf(c: HTMLCanvasElement): { w: number; h: number; ox: number; oy: number } {
+  const g = c.getContext('2d') as CanvasRenderingContext2D
+  const d = g.getImageData(0, 0, c.width, c.height).data
+  let x0 = c.width
+  let y0 = c.height
+  let x1 = -1
+  let y1 = -1
+  for (let y = 0; y < c.height; y++)
+    for (let x = 0; x < c.width; x++)
+      if (d[(y * c.width + x) * 4 + 3] > 8) {
+        if (x < x0) x0 = x
+        if (y < y0) y0 = y
+        if (x > x1) x1 = x
+        if (y > y1) y1 = y
+      }
+  if (x1 < 0) return { w: c.width, h: c.height, ox: 0, oy: 0 }
+  return { w: x1 - x0 + 1, h: y1 - y0 + 1, ox: x0, oy: y0 }
+}
+
 function legsOf(p: MapPath): [Pt, Pt][] {
   const out: [Pt, Pt][] = []
   for (let i = 0; i + 1 < p.points.length; i++) out.push([p.points[i], p.points[i + 1]])
@@ -4965,15 +4993,22 @@ export class Editor {
         id: this.sceneId,
         w: this.doc.W,
         h: this.doc.H,
-        /* THE PAINTING, AS OPPOSED TO THE CANVAS IT SITS IN.
+        /* THE PAINTING, AS OPPOSED TO THE CANVAS IT SITS IN, AND IT WAS NEITHER.
          *
-         * growCanvas adds transparent margin and never picture, so w/h is the
-         * canvas and says nothing about how big the island actually is. A
-         * discovery radius computed from h is wrong by about 41 percent on the
-         * one real map, in the direction that discovers an island before it is
-         * on screen. The document has carried these four numbers since v3 and
-         * they stopped at the export. */
-        base: { w: this.doc.bw, h: this.doc.bh, ox: this.doc.ox, oy: this.doc.oy },
+         * This said doc.bw/bh/ox/oy, which is where the DROPPED FILE sits. Those
+         * only move under growCanvas and know nothing about the cut, and the cut
+         * is the thing that makes the sea transparent. The hub's picture was
+         * dropped at 688x640 with its margin already baked in, so the manifest
+         * said 688x640 at 0,0 under a comment claiming it was the painting, while
+         * the scene.png beside it is opaque only in x 7..675, y 194..570.
+         *
+         * The consumer refused the field in writing and hand-copied the real
+         * numbers into a fallback instead, and worse: 688*640 is past the pixel
+         * ceiling one generation can hold, so the composition built off it was
+         * thrown away whole. Measured off the bytes that ship, which is the only
+         * thing that can be right, and the server measures the same bytes the
+         * same way at publish so both exporters say one thing. */
+        base: paintedBoxOf(scene),
         /* WHAT THIS MAP IS AND WHAT IT CALLS ITSELF. The engine guessed `class`
          * from whether the border was transparent, on every map, while this
          * tool knew the answer the whole time; `title` never left the database.
@@ -5482,7 +5517,16 @@ export class Editor {
          * events[], and those migrate into doors with a derived name. */
         const exported =
           (s.map as
-            | { anchors?: unknown[]; events?: unknown[]; variants?: unknown[]; groups?: unknown[] }
+            | {
+                anchors?: unknown[]
+                events?: unknown[]
+                variants?: unknown[]
+                groups?: unknown[]
+                paths?: unknown[]
+                framings?: unknown[]
+                sets?: unknown[]
+                racks?: unknown[]
+              }
             | undefined) || {}
         const list = Array.isArray(exported.anchors) ? exported.anchors : exported.events
         if (Array.isArray(list) && list.length) {
@@ -5507,6 +5551,50 @@ export class Editor {
           this.doc.groups = (exported.groups as MapGroup[])
             .map(migrateGroup)
             .filter((g): g is MapGroup => !!g)
+        /* AND THE OTHER FOUR, WHICH THE FIX ABOVE WAS APPLIED TO TWO OF.
+         *
+         * bundle() writes six arrays and this restored two, so a reopen dropped
+         * every route, every shot, every anchor set and every rack while the
+         * comment above described exactly that failure and claimed to have
+         * stopped it. It lands where there is no other copy: this only runs when
+         * the browser holds nothing, so it is the new-machine recovery path.
+         * Reopen the hub on a fresh machine, the panels come up empty, and the
+         * next four-second autosave writes that emptiness into postgres as the
+         * truth.
+         *
+         * WORSE FOR THE SHOTS THAN FOR THE REST. The anchors restored above
+         * carry the PROJECTED meta from the last export, so a lost shot list
+         * leaves a live `framings` bag on an anchor with nothing in the panel to
+         * edit or delete, and the game goes on pushing in on a camera that no
+         * longer exists anywhere an author can reach.
+         *
+         * Ids are not in the bundle by design, because a name is the only
+         * identity across that boundary, so they are handed out by index the way
+         * the variants above already do. */
+        if (Array.isArray(exported.paths) && exported.paths.length) {
+          this.doc.paths = (exported.paths as MapPath[])
+            .map((p, i) => migratePath({ ...(p as object), id: i + 1 } as MapPath))
+            .filter((p): p is MapPath => !!p)
+          this.doc.pathNext = this.doc.paths.reduce((m, p) => Math.max(m, p.id), 0) + 1
+        }
+        if (Array.isArray(exported.framings) && exported.framings.length) {
+          this.doc.framings = (exported.framings as MapFraming[])
+            .map((f, i) => migrateFraming({ ...(f as object), id: i + 1 } as MapFraming))
+            .filter((f): f is MapFraming => !!f)
+          this.doc.framingNext = this.doc.framings.reduce((m, f) => Math.max(m, f.id), 0) + 1
+        }
+        if (Array.isArray(exported.sets) && exported.sets.length) {
+          this.doc.sets = (exported.sets as MapAnchorSet[])
+            .map((a, i) => migrateAnchorSet({ ...(a as object), id: i + 1 } as MapAnchorSet))
+            .filter((a): a is MapAnchorSet => !!a)
+          this.doc.setNext = this.doc.sets.reduce((m, a) => Math.max(m, a.id), 0) + 1
+        }
+        if (Array.isArray(exported.racks) && exported.racks.length) {
+          this.doc.racks = (exported.racks as MapRack[])
+            .map((r, i) => migrateRack({ ...(r as object), id: i + 1 } as MapRack))
+            .filter((r): r is MapRack => !!r)
+          this.doc.rackNext = this.doc.racks.reduce((m, r) => Math.max(m, r.id), 0) + 1
+        }
         got = true
       }
       // assets.json paths are bundle-relative (assets/foo.png); the bundle's

@@ -75,7 +75,16 @@ type Region = { name: string; kind: string; rect: [number, number, number, numbe
 /* `home` is the slot a run with no vessel record starts in and the one a
  * graduate is handed back to. One name for the whole ocean, and the game had it
  * as a constant because nothing here could say it. */
-type Doc = { w: number; h: number; places: Place[]; regions: Region[]; marks?: WorldMark[]; home?: string }
+/* THE STAMP THE ROW WAS AT WHEN THIS PAGE READ IT.
+ *
+ * Not drawn anywhere and deliberately not part of `stamp()`, because it is not
+ * content. It exists because there was no write precondition anywhere: the GET
+ * handed back a version and an updatedAt, the page kept neither, and the POST
+ * was a blind full-document overwrite. A second tab, a reload left open, or the
+ * same tab after a verify run posted a document built from a stale snapshot and
+ * silently discarded every island written since, with a 200 and no word to
+ * either author. Sent back so the server can refuse. */
+type Doc = { w: number; h: number; places: Place[]; regions: Region[]; marks?: WorldMark[]; home?: string; updatedAt?: number }
 
 /* What the registry hands back for one map. The x,y on an anchor is in that
  * map's OWN pixel raster, the same raster scene.png is published at, which is
@@ -258,9 +267,19 @@ const STOPS = [0.125, 0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48
  * painting was chosen afterwards, so how big an island came out depended on
  * which map you picked and no two of them started the same. The long side is
  * fixed here instead and the short side follows the painting, which is the
- * shape rule this page already holds everywhere else. 96 against a 4096 ocean
- * is small enough that a dozen fit and big enough to aim a berth at. */
-const ISLAND_DEFAULT = 96
+ * shape rule this page already holds everywhere else.
+ *
+ * IT IS A PAINTING'S WIDTH, AND IT WAS 96, WHICH IS THE UNIT BUG IN ONE NUMBER.
+ * One chart unit is one painting pixel, and it has to be: the game measures a
+ * distance in the units it measures a footprint in, and a footprint is painting
+ * pixels because it is checked against the pixel ceiling one generation can
+ * hold. Born at 96 in front of a 688 pixel painting, an island was drawn seven
+ * times too small and a berth aimed against it arrived 5.4 times too close,
+ * which is how the only berth on the live ocean ended up on dry land. 512 is the
+ * smallest painting this project has published, so a rumour nobody has painted
+ * yet reads at about the size the real ones do. The chart frames its own
+ * content, so nothing on screen moves for this; only the numbers stop lying. */
+const ISLAND_DEFAULT = 512
 /* and the fences either side of it. Both were reachable with the handle: the
  * old resize collapsed the footprint to a single unit on the first frame of a
  * grab, and nothing at all stopped it swallowing a quarter of the chart. */
@@ -332,6 +351,23 @@ const MAJOR = 4
 const stamp = (d: Doc) => JSON.stringify({ w: d.w, h: d.h, places: d.places, regions: d.regions, marks: d.marks || [], home: d.home || '' })
 
 const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi : v)
+
+/* THE OCEAN RUNS NEGATIVE IN BOTH DIRECTIONS, and every coordinate on this page
+ * was snapped to 0..doc.w.
+ *
+ * The reason written beside the drag was that checkWorld refuses a save for a
+ * place off the ocean. That refusal was removed, and world.mjs says so at
+ * length: the sea the game sails is the hub's own painting pixels extended
+ * outwards with the hub at the origin, so half of it is negative by
+ * construction, and the shipped composition has a rumour at y -260 and a mist
+ * bank starting at x -2600. Half the water the game really sails was
+ * unauthorable, and anything already sitting at a negative coordinate was
+ * snapped to zero the first time somebody dragged it, with no prompt and no
+ * message.
+ *
+ * A symmetric fence rather than none, because a fat-fingered drag should still
+ * not put an island a hundred thousand units out where nothing can find it. */
+const sea = (v: number, span: number) => clamp(Math.round(v), -span, span)
 const side = (n: number) => clamp(Math.round(n), ISLAND_MIN, ISLAND_MAX)
 const freeName = (stem: string, taken: string[]) => {
   let n = 1
@@ -339,13 +375,20 @@ const freeName = (stem: string, taken: string[]) => {
   return `${stem}_${n}`
 }
 
-// the footprint a place is born with, and the one it takes when a painting is
-// chosen for it: the long side at the default, the short side off the painting
+/* THE FOOTPRINT A PLACE TAKES, AND ONCE THERE IS A PAINTING IT IS NOT A CHOICE.
+ *
+ * This scaled the painting down to a default long side, which is what made the
+ * chart a schematic in units of its own. It cannot be: the box on this chart is
+ * the map's canvas, anchorAt draws every anchor into it, and the game reads a
+ * berth's absolute coordinate straight into that canvas's pixels. So a place
+ * holding a map is exactly its canvas, one unit to one pixel, and a place
+ * holding none takes the default because there it really is the author saying
+ * how big the island will be. Measured on the live hub: a 128x119 box in front
+ * of a 688x640 painting, a ratio of 5.4, and its berth landed inside the
+ * island. */
 const bornAs = (m?: MapRow) => {
   if (!m || m.w <= 0 || m.h <= 0) return { w: ISLAND_DEFAULT, h: ISLAND_DEFAULT }
-  return m.w >= m.h
-    ? { w: ISLAND_DEFAULT, h: side((ISLAND_DEFAULT * m.h) / m.w) }
-    : { w: side((ISLAND_DEFAULT * m.w) / m.h), h: ISLAND_DEFAULT }
+  return { w: m.w, h: m.h }
 }
 
 /* WHERE THE PAINTING ACTUALLY IS INSIDE ITS OWN RASTER.
@@ -467,6 +510,17 @@ const skinBox = (p: Place, fit: Fit, sk: Skin) => {
  * already did at the zoom floor. */
 const CORNERS: Corner[] = ['nw', 'ne', 'sw', 'se']
 const gripsOf = (p: Place, fit: Fit, sk: Skin): { corner: Corner; gx: number; gy: number }[] => {
+  /* AND THERE ARE NONE ON A PLACE THAT HOLDS A PAINTING.
+   *
+   * The size of an island with a map is not an authored number, it is the
+   * canvas: one chart unit is one painting pixel, so this box IS the raster
+   * anchorAt draws into and the game reads a berth's coordinate straight out of
+   * it. Dragging it smaller was authoring a scale factor nothing downstream
+   * honours, and it is what put the live hub in a 128x119 box in front of a
+   * 688x640 painting with its berth on dry land. A rumour still resizes, because
+   * there the box really is the author saying how big the island will be, and it
+   * is the footprint that crosses. */
+  if (p.map) return []
   const b = skinBox(p, fit, sk)
   if (b.rw < GRIP_DROP || b.rh < GRIP * 2 + 4) return []
   return CORNERS.map((c) => ({
@@ -541,6 +595,13 @@ const FACE_GRID = [
   ['south-west', 'south', 'south-east'],
 ]
 const FACE_ARROW = '↖↑↗←·→↙↓↘'
+
+/* AND THE FOUR OF THEM THE ENGINE CAN TURN INTO AN ANGLE. The game's radOf
+ * answers east, south and north and sends everything else to west, so a berth
+ * aimed at a diagonal is a hull pointing west with nothing said. Copied from the
+ * server's own list rather than restated, so the picker and the save cannot
+ * disagree about which four. */
+const BERTH_FACINGS = ['north', 'east', 'south', 'west']
 
 /* Where one map's anchor lands on the ocean.
  *
@@ -1340,7 +1401,7 @@ export default function World() {
     fetch('/api/world')
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`the ocean would not load (${r.status})`))))
       .then((j: Doc & { states?: string[]; seaKinds?: string[]; markKinds?: string[] }) => {
-        const fresh: Doc = { w: j.w, h: j.h, places: j.places || [], regions: j.regions || [], marks: j.marks, home: j.home || '' }
+        const fresh: Doc = { w: j.w, h: j.h, places: j.places || [], regions: j.regions || [], marks: j.marks, home: j.home || '', updatedAt: j.updatedAt }
         saved.current = stamp(fresh)
         setDoc(fresh)
         setStates(j.states || [])
@@ -1753,7 +1814,33 @@ export default function World() {
   }, [])
 
   const edit = useCallback((i: number, patch: Partial<Place>) => {
-    setDoc((d) => (d ? { ...d, places: d.places.map((p, k) => (k === i ? { ...p, ...patch } : p)) } : d))
+    setDoc((d) => {
+      if (!d) return d
+      const was = d.places[i]
+      const places = d.places.map((p, k) => (k === i ? { ...p, ...patch } : p))
+      /* RENAMING AN ISLAND CARRIES EVERYTHING THAT NAMES IT.
+       *
+       * `island` on a berth and `home` on the document are both foreign keys
+       * holding this string, and the name input wrote the field and nothing
+       * else, so a rename silently orphaned every berth bound to the island and
+       * quietly unset the home tick, with the dead name still sitting in the
+       * document. The file already took this obligation on for position, where
+       * dragging an island carries its berths, and for typed coordinates, and
+       * then left the one edit that changes the key itself uncascaded. Since it
+       * fires per keystroke, the binding was gone before the author had finished
+       * typing.
+       *
+       * ONLY FROM A LEGAL OLD NAME, so half-typed intermediate states do not
+       * chase each other through the marks list. */
+      const to = patch.name
+      if (to === undefined || !was || to === was.name || !isAnchorName(was.name)) return { ...d, places }
+      return {
+        ...d,
+        places,
+        marks: (d.marks || []).map((m) => (m.island === was.name ? { ...m, island: to } : m)),
+        home: d.home === was.name ? to : d.home,
+      }
+    })
     setDirty(true)
   }, [])
 
@@ -1788,8 +1875,8 @@ export default function World() {
       const made: WorldMark = {
         name,
         kind: 'berth',
-        x: clamp(Math.round(x), 0, d.w),
-        y: clamp(Math.round(y), 0, d.h),
+        x: sea(x, d.w),
+        y: sea(y, d.h),
         // a label from the start, so a berth never reaches a player as
         // `berth_1`. Ash, 2026-08-29: points get labels too.
         label: displayName({ name }).text,
@@ -1831,16 +1918,16 @@ export default function World() {
    * the island moved and its dock still where it was, thirty times a second, for
    * the whole of a drag.
    *
-   * Clamped to the chart as it goes, because checkWorld refuses a save for a
-   * place that is off the ocean and a drag should not be able to make a document
-   * the server will not take. */
+   * Fenced symmetrically as it goes, and it was fenced at zero on the strength
+   * of a checkWorld refusal that no longer exists. See `sea` at the top of the
+   * file: the ocean the game sails is negative in both directions. */
   const shift = useCallback((i: number, x: number, y: number) => {
     setDoc((d) => {
       if (!d) return d
       const p = d.places[i]
       if (!p) return d
-      const nx = clamp(Math.round(x), 0, d.w)
-      const ny = clamp(Math.round(y), 0, d.h)
+      const nx = sea(x, d.w)
+      const ny = sea(y, d.h)
       const dx = nx - p.x
       const dy = ny - p.y
       if (!dx && !dy) return d
@@ -1931,8 +2018,8 @@ export default function World() {
          * thinking about a corner. Anchored there, a click low or right on the
          * stage put most of the new island off the edge of the view and the
          * first thing an author did was drag it back. */
-        x: clamp(Math.round(w.x - born.w / 2), 0, doc.w),
-        y: clamp(Math.round(w.y - born.h / 2), 0, doc.h),
+        x: sea(w.x - born.w / 2, doc.w),
+        y: sea(w.y - born.h / 2, doc.h),
         ...born,
         // a slot with no map behind it is a rumour and nothing else reads
         // honestly, which is what checkWorld warns about
@@ -2066,8 +2153,8 @@ export default function World() {
       setAim(p ? `${p.p.name}/${p.a.name}` : '')
       return
     }
-    const x = clamp(Math.round(w.x - d.dx), 0, doc.w)
-    const y = clamp(Math.round(w.y - d.dy), 0, doc.h)
+    const x = sea(w.x - d.dx, doc.w)
+    const y = sea(w.y - d.dy, doc.h)
     if (d.kind === 'place') shift(d.i, x, y)
     else if (d.kind === 'mark') editMark(d.i, { x, y })
     else {
@@ -2196,10 +2283,10 @@ export default function World() {
       // held inside the chart, because a drag that ran off the edge names water
       // that is not on the ocean and nothing would ever sail through it
       const rect: [number, number, number, number] = [
-        clamp(Math.round(Math.min(band.x0, band.x1)), 0, doc.w),
-        clamp(Math.round(Math.min(band.y0, band.y1)), 0, doc.h),
-        clamp(Math.round(Math.max(band.x0, band.x1)), 0, doc.w),
-        clamp(Math.round(Math.max(band.y0, band.y1)), 0, doc.h),
+        sea(Math.min(band.x0, band.x1), doc.w),
+        sea(Math.min(band.y0, band.y1), doc.h),
+        sea(Math.max(band.x0, band.x1), doc.w),
+        sea(Math.max(band.y0, band.y1), doc.h),
       ]
       // a region dragged out by accident, one pixel across, is a click and not
       // a region, and it would sit on the chart as an invisible thing to hit
@@ -2260,14 +2347,24 @@ export default function World() {
         // brought some back. The waypoint tool can now make the first one on an
         // ocean that had none, and an absent key means "keep what is in the
         // row", so that first waypoint would have been dropped in silence.
-        body: JSON.stringify({ w: doc.w, h: doc.h, places: doc.places, regions: doc.regions, marks: doc.marks || [], home: doc.home || '' }),
+        // the stamp goes with it, so a save built on a snapshot the row has
+        // moved past is refused rather than winning
+        body: JSON.stringify({
+          w: doc.w,
+          h: doc.h,
+          places: doc.places,
+          regions: doc.regions,
+          marks: doc.marks || [],
+          home: doc.home || '',
+          updatedAt: doc.updatedAt ?? 0,
+        }),
       })
       const j = await r.json().catch(() => ({}))
       if (!r.ok) {
         setProblems(j.problems?.length ? j.problems : [j.error || `the server refused it (${r.status})`])
         return
       }
-      const kept: Doc = { w: j.w, h: j.h, places: j.places || [], regions: j.regions || [], marks: j.marks, home: j.home || '' }
+      const kept: Doc = { w: j.w, h: j.h, places: j.places || [], regions: j.regions || [], marks: j.marks, home: j.home || '', updatedAt: j.updatedAt }
       saved.current = stamp(kept)
       setDoc(kept)
       setWarnings(j.warnings || [])
@@ -2975,7 +3072,14 @@ function BerthPanel({
             className="world-in"
             value={m.island || ''}
             title="the island this point is the dock for · it moves with that island, and the game reads the first one as that slot's berth"
-            onChange={(e) => onEdit({ island: e.target.value || undefined, ...(e.target.value ? {} : { at: undefined }) })}
+            /* `at` GOES ON EVERY CHANGE, not only on the move to open water. It
+               names an anchor inside ONE map's anchor list, so carrying it from
+               island A to island B leaves a live value naming something B has
+               never heard of: the select below renders blank because no option
+               matches, and the player arrives at a name the arrival map does not
+               have. Nothing validates it anywhere, since cleanMark accepts any
+               legal identifier and checkWorld never sees a map's anchors. */
+            onChange={(e) => onEdit({ island: e.target.value || undefined, at: undefined })}
           >
             <option value="">open water</option>
             {places.map((p) => (
@@ -3035,7 +3139,19 @@ function BerthPanel({
             onChange={(e) => onEdit({ r: Math.max(0, Math.round(Number(e.target.value) || 0)) })}
           />
         </label>
-        <Facing v={m.facing || ''} say="the heading held here" on={(k) => onEdit({ facing: k || undefined })} />
+        {/* FOUR ARROWS ON A BERTH AND NINE ON EVERYTHING ELSE.
+            The engine turns a berth's heading into an angle with a reader that
+            answers east, south and north and sends everything else to west, so
+            an author clicking north-west got a hull pointing due west and all
+            four diagonals collapsed silently. A waypoint's heading is read by a
+            member's python off the flat marks route, which can do what it likes
+            with a diagonal, so only the berth narrows. */}
+        <Facing
+          v={m.facing || ''}
+          say="the heading held here"
+          only={m.kind === 'berth' ? BERTH_FACINGS : undefined}
+          on={(k) => onEdit({ facing: k || undefined })}
+        />
       </section>
 
       <Scrap what={said.text} sure={sure} onSure={onSure} onDrop={onDrop} />
@@ -3050,22 +3166,30 @@ function BerthPanel({
  * already knew that a berth has a facing, which is the one group on this page
  * that cannot be worked out from its own shape. Lifted out of the inspector so
  * a berth and a waypoint ask for a heading the same way. */
-function Facing({ v, say, on }: { v: string; say: string; on: (k: string) => void }) {
+function Facing({ v, say, on, only }: { v: string; say: string; on: (k: string) => void; only?: readonly string[] }) {
   return (
     <div className="world-f">
       <span>{say}</span>
       <div className="world-face" role="group" aria-label={say}>
-        {FACE_GRID.flat().map((k, n) => (
-          <button
-            key={k || 'none'}
-            className={'world-fbtn' + ((k ? v === k : !v) ? ' on' : '')}
-            title={k || 'no opinion'}
-            aria-pressed={k ? v === k : !v}
-            onClick={() => on(k && v !== k ? k : '')}
-          >
-            {FACE_ARROW[n]}
-          </button>
-        ))}
+        {FACE_GRID.flat().map((k, n) => {
+          // a heading the consumer cannot honour is not offered. Drawn dead
+          // rather than removed, because the grid is read as a compass and a
+          // compass with holes punched out of it is harder to aim than one with
+          // four arrows lit.
+          const off = !!k && !!only && !only.includes(k)
+          return (
+            <button
+              key={k || 'none'}
+              className={'world-fbtn' + ((k ? v === k : !v) ? ' on' : '')}
+              title={off ? `the game cannot hold ${k}, so a hull here would point west` : k || 'no opinion'}
+              disabled={off}
+              aria-pressed={k ? v === k : !v}
+              onClick={() => on(k && v !== k ? k : '')}
+            >
+              {FACE_ARROW[n]}
+            </button>
+          )
+        })}
       </div>
     </div>
   )
@@ -3141,20 +3265,12 @@ function Inspector({
   const setW = (n: number) => set(lock && shape ? { w: side(n), h: side(n / shape) } : { w: side(n) })
   const setH = (n: number) => set(lock && shape ? { h: side(n), w: side(n * shape) } : { h: side(n) })
 
-  /* A TICKED CONSTRAINT THAT IS NOT ENFORCED IS A LIE IN THE UI.
-   *
-   * The box said "hold the painting's shape · 688x640" with the tick on, while
-   * the footprint sat at 64x64, and offered a button to straighten it. So the
-   * tool showed a rule, showed the rule being broken, and asked the author to
-   * fix it by hand. The two states this can be in are held and not held; a
-   * third state where it is held but wrong is not one anybody asked for.
-   *
-   * IT DOES NOT HAPPEN HERE ANY MORE. It ran on mount, so opening an island to
-   * read it rewrote its height and lit the save button on a page nobody had
-   * edited, and undo could then never reach a clean document because the panel
-   * put the change straight back. Correcting the document is right; charging it
-   * to the author for looking is not. squareUp in World() does it once, for
-   * every place, at the load, before the page decides what "saved" means. */
+  /* A TICKED CONSTRAINT THAT IS NOT ENFORCED IS A LIE IN THE UI, and the shape
+   * lock is not a constraint on a place holding a painting any more: the size is
+   * the canvas, one chart unit to one painting pixel, so both fields and the
+   * tick are dead there and say so. The lock still means something on a rumour,
+   * where w and h really are the author saying how big the island will be and
+   * are the footprint that crosses. */
 
   const said = displayName(p, 'unnamed island')
   return (
@@ -3260,7 +3376,11 @@ function Inspector({
             spellCheck={false}
             maxLength={48}
             placeholder="home-island"
-            title="the roster id the game finds this slot by · lower case with hyphens"
+            /* the ids are NAMED, because MAPVIS cannot see the roster and the
+               live hub was authored `hub`, which is on nobody's roster, so that
+               island could never be discovered and read misty for the whole run
+               with nothing raised. A guess costs a session. */
+            title="the roster id the game finds this slot by · today it knows home-island, stadium, flex-200 and atc-room"
             onChange={(e) => set({ place: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') })}
           />
         </label>
@@ -3279,16 +3399,25 @@ function Inspector({
             value={p.map}
             onChange={(e) => {
               const slug = e.target.value
-              const m = reg.get(slug)
+              const m = slug ? reg.get(slug) : undefined
               onBefore()
-              /* A FOOTPRINT NOBODY HAS SIZED TAKES THE DEFAULT WHOLE, and one
-               * somebody HAS sized keeps its width and only has the shape put
-               * right. Bending the height of a square is correct for an island
-               * already placed and wrong for one born a moment ago, which would
-               * otherwise keep a width chosen before there was a picture. */
-              if (!m || m.w <= 0 || m.h <= 0) return set({ map: slug })
-              const fresh = p.w === ISLAND_DEFAULT && p.h === ISLAND_DEFAULT
-              set(fresh ? { map: slug, ...bornAs(m) } : { map: slug, h: side((p.w * m.h) / m.w) })
+              /* THE BOX BECOMES THE CANVAS, because one chart unit is one
+               * painting pixel and this box is the raster every anchor is drawn
+               * into. It used to scale the painting down to a default long side,
+               * which is where the 5.4x error on the live hub came from.
+               *
+               * AND THE STATE LIFTS OFF `rumour`. The island tool is born a
+               * rumour and picking a painting never touched the state, so the
+               * ordinary path produced a document the game refuses whole: drop
+               * an island, choose its map, press save, and MAPVIS said saved
+               * while every island on the ocean silently vanished at the other
+               * end. Clearing the map puts it back, for the same reason from the
+               * other side. */
+              set({
+                map: slug,
+                ...(m && m.w > 0 && m.h > 0 ? bornAs(m) : {}),
+                ...(slug ? (p.state === 'rumour' ? { state: 'misty' } : {}) : { state: 'rumour' }),
+              })
             }}
           >
             <option value="">no map</option>
@@ -3308,14 +3437,21 @@ function Inspector({
           <Num label="x" v={p.x} on={(n) => onMove(i, n, p.y)} />
           <Num label="y" v={p.y} on={(n) => onMove(i, p.x, n)} />
         </div>
+        {/* AND ON A PLACE THAT HOLDS A PAINTING THE SIZE IS NOT TYPED EITHER.
+            It is the canvas, one chart unit to one painting pixel, because that
+            is the space the game reads a berth's coordinate in. Shown rather
+            than hidden, because the number is a fact worth reading. */}
         <div className="world-pair">
-          <Num label="w" v={p.w} min={ISLAND_MIN} on={setW} />
-          <Num label="h" v={p.h} min={ISLAND_MIN} on={setH} />
+          <Num label="w" v={p.w} min={ISLAND_MIN} on={setW} disabled={!!p.map} />
+          <Num label="h" v={p.h} min={ISLAND_MIN} on={setH} disabled={!!p.map} />
         </div>
         {/* the sentence this was, "hold the painting's shape · 688x640", said the
             same thing three times. The size it is holding is the title. */}
-        <label className="world-check" title={sheet ? `the painting is ${sheet.w}×${sheet.h}` : 'the painting decides the short side'}>
-          <input type="checkbox" checked={lock} onChange={(e) => onLock(e.target.checked)} />
+        <label
+          className="world-check"
+          title={p.map ? 'a place holding a painting is that painting"s canvas, one unit to one pixel' : 'the painting decides the short side'}
+        >
+          <input type="checkbox" checked={lock} disabled={!!p.map} onChange={(e) => onLock(e.target.checked)} />
           <span>keep the shape</span>
         </label>
       </details>
@@ -3477,13 +3613,14 @@ function SeaPanel({
   )
 }
 
-function Num({ label, v, min, on }: { label: string; v: number; min?: number; on: (n: number) => void }) {
+function Num({ label, v, min, on, disabled }: { label: string; v: number; min?: number; on: (n: number) => void; disabled?: boolean }) {
   return (
     <label className="world-f">
       <span>{label}</span>
       <input
         className="world-in"
         type="number"
+        disabled={disabled}
         value={v}
         onChange={(e) => {
           const n = Number(e.target.value)

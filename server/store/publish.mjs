@@ -20,6 +20,70 @@ import { decodePNG } from '../sheet.mjs'
 
 const sha = (b) => crypto.createHash('sha256').update(b).digest('hex')
 
+/* WHERE THE PAINT IS, MEASURED OFF THE BYTES THAT ACTUALLY SHIP.
+ *
+ * `base` in the bundle claimed to be "the painting, as opposed to the canvas it
+ * sits in" and was neither. It is bw/bh/ox/oy, the DROPPED IMAGE's size and
+ * offset, which only move under growCanvas and know nothing about the cut, and
+ * the cut is the thing that makes the sea transparent. On the hub the file was
+ * dropped at 688x640 with its margin already baked in, so the manifest said
+ * 688x640 at 0,0 while scene.png is opaque only in x 7..675, y 194..570. That
+ * overstates the island's area by 75 percent and puts its centre 62 pixels
+ * north, and the consumer had to hand-copy the real numbers into a fallback to
+ * work around it. Worse, 688*640 is past the pixel ceiling one generation can
+ * hold, so the game refused the whole composition on that field alone.
+ *
+ * Alpha 8 rather than 128, because the cut writes a hard zero and generated art
+ * has soft edges, so a high threshold would eat a coastline. The chart's own
+ * skinOf uses 128 on a downsampled thumbnail, where it is measuring what the eye
+ * reads rather than what the engine draws.
+ *
+ * A picture with nothing opaque in it answers with the whole raster, because
+ * "this map is nothing" is a worse claim than "this map is its canvas". */
+export function paintedBox(png) {
+  const { w, h, data } = decodePNG(png)
+  let x0 = w
+  let y0 = h
+  let x1 = -1
+  let y1 = -1
+  for (let y = 0; y < h; y++)
+    for (let x = 0; x < w; x++)
+      if (data[(y * w + x) * 4 + 3] > 8) {
+        if (x < x0) x0 = x
+        if (y < y0) y0 = y
+        if (x > x1) x1 = x
+        if (y > y1) y1 = y
+      }
+  if (x1 < 0) return { w, h, ox: 0, oy: 0 }
+  return { w: x1 - x0 + 1, h: y1 - y0 + 1, ox: x0, oy: y0 }
+}
+
+/* THE ORDER THE HEADINGS OF A VIEW SET ARE WRITTEN IN, AND IT IS LOAD BEARING.
+ *
+ * The game does not read the `facing` an exporter writes. It re-derives the
+ * resting heading with `Object.keys(views).find(k => src.endsWith(k + '-0.png'))`,
+ * and 'south-west-0.png'.endsWith('west-0.png') is true, so whichever key was
+ * written first wins. With the plain headings first, 17 of the hub's 38
+ * direction sets resolved to the wrong view and 15 of those landed on a
+ * one-frame heading, where the game's `set.length > 1` test fails and they never
+ * animate at all. MAPVIS's own editor preview got it right by testing array
+ * membership, so the editor and the game disagreed about which way the same
+ * figure faced, with nothing wrong in the pixels or the JSON.
+ *
+ * JSON.stringify and Object.keys both keep insertion order, so writing the
+ * compounds first is the whole fix, and the game repo needs no change. It lives
+ * here because two publishers write these sets and two copies of this list is
+ * how they end up facing different ways. An unknown heading sorts last, where it
+ * cannot shadow anything. */
+export const DIR_ORDER = ['north-east', 'north-west', 'south-east', 'south-west', 'east', 'west', 'north', 'south']
+
+export const orderedHeadings = (keys) =>
+  [...keys].sort((a, b) => {
+    const ia = DIR_ORDER.indexOf(a)
+    const ib = DIR_ORDER.indexOf(b)
+    return (ia < 0 ? DIR_ORDER.length : ia) - (ib < 0 ? DIR_ORDER.length : ib)
+  })
+
 /* SHOTS, FOLDED ONTO THE ANCHOR THEY NAME.
  *
  * A DELIBERATE SECOND COPY of shotZoom and shotsOntoMeta in src/core/mask.ts,
@@ -55,11 +119,34 @@ const shotZoom = (f) => {
   return Math.round((rel / GAME_OPENING_PULL) * 1000) / 1000
 }
 
+/* OWNING A KEY MEANS OWNING ITS ABSENCE TOO.
+ *
+ * Both projections were additive only: with no shots on an anchor they handed
+ * the incoming bag straight back, so a `framings` or `framing` key already
+ * sitting in it shipped as a live camera the shot list no longer contained. That
+ * is reachable and it is permanent. restoreFromDisk pulls map.json's anchors
+ * into the document carrying the PROJECTED meta from the previous export, and it
+ * does not restore the framings list, so the bag holds a shot the panel shows
+ * none of. syncEventsToAnchors then copies the bag whole into the anchors table
+ * and every later publish reads it back and re-ships it. The author sees zero
+ * shots, cannot edit or delete the camera, and the game keeps pushing in on it.
+ * The consumer never cross-checks: framingOf reads meta.framings[name] and then
+ * meta.framing and nothing else.
+ *
+ * A DELIBERATE SECOND COPY of the same function in src/core/mask.ts. If either
+ * half changes, change both. */
+const without = (meta, ...keys) => {
+  if (!meta || typeof meta !== 'object') return undefined
+  const out = { ...meta }
+  for (const k of keys) delete out[k]
+  return Object.keys(out).length ? out : undefined
+}
+
 const shotsOntoMeta = (framings, anchor, meta) => {
   const all = Array.isArray(framings) ? framings : []
   const mine = all.filter((f) => f && f.anchor === anchor)
   const had = meta && typeof meta === 'object' && Object.keys(meta).length ? meta : null
-  if (!mine.length) return had || undefined
+  if (!mine.length) return without(had, 'framings', 'framing')
   const one = (f) => ({ zoom: shotZoom(f), dx: f.dx ?? 0, dy: f.dy ?? 0 })
   const set = {}
   for (const f of mine) set[f.name] = one(f)
@@ -101,7 +188,9 @@ const variantsOntoMeta = (variants, anchor, meta) => {
   const all = Array.isArray(variants) ? variants : []
   const mine = all.filter((v) => v && v.anchor === anchor)
   const had = meta && typeof meta === 'object' && Object.keys(meta).length ? meta : null
-  if (!mine.length) return had || undefined
+  // the same clearing the shots do, for the same reason: a projection that
+  // cannot remove its own key ships a set nothing in the document still holds
+  if (!mine.length) return without(had, 'variants')
   const set = {}
   for (const v of mine)
     set[v.name] = {
@@ -407,6 +496,15 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
      from maps m join users u on u.id = m.owner_id where m.id = $1`,
     [m.id],
   )
+  /* MEASURED BEFORE THE BUNDLE IS ASSEMBLED, and never fatal: a scene this
+   * decoder cannot read is a reason to fall back to the columns, not a reason to
+   * refuse a publish that is otherwise fine. */
+  let paint = null
+  try {
+    if (images?.['scene.png']) paint = paintedBox(images['scene.png'])
+  } catch (e) {
+    console.warn(`[publish] ${slug}: could not measure the painted extent, falling back to base_* · ${e.message}`)
+  }
   const map = {
     ...mapJson,
     contract: 2,
@@ -424,11 +522,14 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
     character: { heightPx: props?.char_h ?? 18, hip: props?.char_hip ?? 2, hipDY: props?.char_hipdy ?? 1 },
     speed: Number(props?.speed ?? 34),
     yScale: Number(props?.yscale ?? 0.72),
-    /* THE PAINTING'S OWN SIZE, which is not the canvas's. growCanvas buys room
-     * in transparent margin, so a discovery radius taken off h is wrong by
-     * about 41 percent on the hub, early rather than late. Four columns that
-     * have existed since the first schema and never left the database. */
-    base: {
+    /* THE PAINTING'S OWN SIZE, MEASURED HERE RATHER THAN ASKED OF A COLUMN.
+     * See paintedBox at the top of this file: base_* is where the dropped FILE
+     * sits, and the field is read as where the PAINT is, which on the hub is a
+     * 75 percent overstatement and a centre 62 pixels out. Measured off the
+     * scene.png that is about to be written, so the number describes the bytes
+     * this version actually ships. It is written back to the row below, so the
+     * ocean's composition serves the same four numbers this bundle carries. */
+    base: paint || {
       w: props?.base_w ?? mapJson?.w ?? 0,
       h: props?.base_h ?? mapJson?.h ?? 0,
       ox: props?.base_ox ?? 0,
@@ -911,6 +1012,20 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
   // this the home page kept leading with whichever map happened to be saved
   // last, while the one just re-exported sat further down the grid.
   await q('update maps set updated_at = now() where id = $1', [m.id])
+  /* AND THE PAINTED EXTENT LANDS IN THE ROW, so the ocean's composition serves
+   * the same numbers this bundle carries. Its own columns rather than base_*,
+   * because base_* is round-tripped back into the document by getDoc and is what
+   * re-grows a map on reload, so overwriting it would put the painting back in
+   * the wrong place the next time somebody opened the map. Written after the
+   * bytes are in the bucket, because it describes bytes that exist. */
+  if (paint)
+    await q('update maps set paint_w = $2, paint_h = $3, paint_ox = $4, paint_oy = $5 where id = $1', [
+      m.id,
+      paint.w,
+      paint.h,
+      paint.ox,
+      paint.oy,
+    ])
 
   /* A PUBLISH THAT WOULD COST HUNDREDS OF REQUESTS TO OPEN IS A BUG.
    *

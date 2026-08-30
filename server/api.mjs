@@ -69,6 +69,7 @@ import {
   readyUi,
   readyUiByName,
   uiImage,
+  ownedUiImage,
   legalCanvas,
   pieceType,
   PIECE_TYPES,
@@ -83,7 +84,7 @@ import {
   TEXT_WRAPS,
   TEXT_OVERFLOWS,
 } from './store/ui.mjs'
-import { publishBundle, publishedMap, publishHistory, hotGet, hotPut } from './store/publish.mjs'
+import { publishBundle, publishedMap, publishHistory, hotGet, hotPut, orderedHeadings } from './store/publish.mjs'
 import { store } from './store/blobs.mjs'
 import { q, one, many } from './db/pool.mjs'
 import { newToken, hashToken, isPlacementName, isAnchorName } from './store/crypto.mjs'
@@ -2441,9 +2442,18 @@ async function route(req, res, p, url) {
     try {
       return send(res, 200, await saveWorld(b))
     } catch (e) {
-      // a composition that cannot work is refused where it is written, naming
-      // what is wrong, rather than found by a student sailing into nothing
-      return send(res, 400, { error: String(e.message || e), problems: e.problems || [] })
+      /* a composition that cannot work is refused where it is written, naming
+       * what is wrong, rather than found by a student sailing into nothing.
+       *
+       * ONLY WHEN IT REALLY IS A REFUSAL. This caught everything, so a pool
+       * timeout, a dropped Neon connection or a failed maps query came back as
+       * 400 with an empty problems list and the page printed it into the refusal
+       * panel. The author was told their composition was rejected when the
+       * database was unreachable, which is the one case where retrying is the
+       * right move and 400 is the status that says do not. Anything carrying no
+       * `problems` is a server fault and goes up to the handler as a 500. */
+      if (!e.problems) throw e
+      return send(res, 400, { error: String(e.message || e), problems: e.problems })
     }
   }
 
@@ -2508,8 +2518,16 @@ async function route(req, res, p, url) {
       return send(res, 400, {
         error: `one press draws one piece, and this asked for ${asked.length} · they get judged one at a time, so the next one starts after this one is looked at`,
       })
+    /* ANY PENDING ROW REFUSES, and the exemption for the same name was a hole
+     * with a real path through it. `Drawing` is keyed by `armed`, so pressing
+     * "pick another" and re-arming the same type remounts it with a fresh local
+     * busy flag and the name field defaulting to the type name both times, while
+     * the page's own `v.pending` is still null because load() has not run. Two
+     * concurrent pixellab spends on one row, and whichever answered last won.
+     * The stuck-process case the exemption was reaching for is already covered:
+     * pendingUi only sees a row younger than ten minutes. */
     const busy = await pendingUi(me.id)
-    if (busy && busy.name !== name)
+    if (busy)
       return send(res, 409, { error: `"${busy.name}" is still drawing · one at a time, so wait for it and then look at it`, pending: busy })
 
     /* THE TYPE SUPPLIES THE PLUMBING. An author picks one of the twenty-one and
@@ -2547,7 +2565,19 @@ async function route(req, res, p, url) {
      * rather than silently absent. */
     let row
     try {
-      row = await createUi({ ownerId: me.id, name, type: t ? t.name : '', title: b.title, description, w: width, h: height, core })
+      // title guarded at the route the way description already is: createUi's
+      // default parameter only fires on undefined, so a body carrying
+      // {"title": null} stored the literal four-character string "null"
+      row = await createUi({
+        ownerId: me.id,
+        name,
+        type: t ? t.name : '',
+        title: String(b.title || ''),
+        description,
+        w: width,
+        h: height,
+        core,
+      })
     } catch (e) {
       return send(res, 400, { error: String(e.message || e) })
     }
@@ -2579,7 +2609,14 @@ async function route(req, res, p, url) {
       })
       const buf = Buffer.from(out.b64, 'base64')
       const size = pngSizeBuf(buf.subarray(0, 24))
-      const saved = await setUiImage(me.id, row.name, buf, size.w || out.width, size.h || out.height)
+      /* THE PIXELLAB ID IS KEPT, and it never was. The column exists, createUi
+       * accepts it and has an on-conflict rule written to preserve it, and the
+       * generator returns it, and this route used only b64, width and height, so
+       * `pixellab_id` was the empty string on every row ever produced and
+       * `pixellabId` never appeared on the wire. Every other generated thing in
+       * this repo can be traced back to the spend it was paid for; chrome
+       * silently could not. */
+      const saved = await setUiImage(me.id, row.name, buf, size.w || out.width, size.h || out.height, out.uiAssetId)
       /* WHAT COMES BACK, AND NOT WHAT IT COST. The old page put the price under
        * the button as the last thing an author read, which is why it read as a
        * bill. What belongs there is this many faces, at this size, ready to be
@@ -2645,6 +2682,26 @@ async function route(req, res, p, url) {
     } catch (e) {
       return send(res, 403, { error: String(e.message || e) })
     }
+  }
+
+  /* THE AUTHOR'S OWN PICTURE, SCOPED TO THE ACCOUNT THAT DREW IT.
+   *
+   * The page fetched every piece through /api/v1/ui/<name>/image, which has no
+   * account in its path and resolves core-then-oldest across the whole platform.
+   * Names are unique per account only, so two people with a piece called
+   * `binder` were both shown one picture, stretched to the other row's size, and
+   * every rectangle they dragged was measured against art they never saw. This
+   * is the same route for the row this account actually owns. */
+  if (p.startsWith('/api/ui/') && p.endsWith('/image') && req.method === 'GET') {
+    const me = await currentUser(req)
+    if (!me) return send(res, 401, { error: 'sign in to see a piece' })
+    const buf = await ownedUiImage(me.id, p.slice('/api/ui/'.length, -'/image'.length))
+    if (!buf) return notFound(res)
+    res.setHeader('Content-Type', 'image/png')
+    // never cached, unlike the published route: this is the picture being marked
+    // up, and a redraw under the same name has to show through immediately
+    res.setHeader('Cache-Control', 'no-store')
+    return res.end(buf)
   }
 
   /* ---- the shared library, which is a COPY and says so --------------------
@@ -2823,7 +2880,14 @@ async function route(req, res, p, url) {
         // be deleted by its own export
         const outDirs = {}
         let metaFile = ''
-        for (const [k, arr] of Object.entries(s.dirs)) {
+        /* THE COMPOUND HEADINGS GO IN FIRST, AND THAT ORDER IS THE WHOLE FIX.
+         * See orderedHeadings in store/publish.mjs for what goes wrong when they
+         * do not: the game re-derives a resting heading with an endsWith scan,
+         * 'south-west-0.png' ends with 'west-0.png', and 17 of the hub's 38
+         * direction sets came out facing the wrong way. Written once there,
+         * because two publishers pack these sets. */
+        for (const k of orderedHeadings(Object.keys(s.dirs))) {
+          const arr = s.dirs[k]
           if (!Array.isArray(arr) || !arr[0]) continue
           /* EVERY frame of the heading, not the first one alone. A character is
            * a walk cycle, six frames to a heading, so keeping frame 0 handed the
@@ -3642,6 +3706,13 @@ async function readApi(req, res, p, url) {
       // and where the hull puts somebody down once they are ashore, which is an
       // anchor name inside that island rather than a point on the ocean
       at: m.at || '',
+      /* HOW CLOSE COUNTS AS ARRIVED, and this route dropped it. BerthPanel makes
+       * the author type it and cleanMark stores it, and then the one lookup
+       * built for a grape holding nothing but a name did not say it, so every
+       * island had to invent its own arrival tolerance and the number somebody
+       * typed did nothing. A hull moves in floats, so an exact-pixel test never
+       * fires and this is not optional. Zero means the caller decides. */
+      r: m.r ?? 0,
     })
     for (const p of w.places) {
       const b = berthOf(w.marks, p.name)
