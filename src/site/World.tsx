@@ -83,7 +83,14 @@ type Anchor = { name: string; kind: string; x: number; y: number; r?: number; to
 type MapRow = { slug: string; w: number; h: number; version: number | null; anchors?: Anchor[] }
 
 type Sel = { kind: 'place' | 'region' | 'mark'; i: number } | null
-type Hit = { kind: 'place' | 'berth' | 'approach' | 'size' | 'region' | 'mark'; i: number } | null
+/* WHICH CORNER OF A FOOTPRINT IS IN THE HAND. There was only ever one, and the
+ * note under gripsOf says what changed. */
+type Corner = 'nw' | 'ne' | 'sw' | 'se'
+/* the shape a corner asks the pointer to wear. Two glyphs for four corners,
+ * because a north west and a south east corner are pulled along the same
+ * diagonal and the cursor is a picture of that diagonal. */
+const CURSOR: Record<Corner, string> = { nw: 'nwse-resize', ne: 'nesw-resize', sw: 'nesw-resize', se: 'nwse-resize' }
+type Hit = { kind: 'place' | 'berth' | 'approach' | 'size' | 'region' | 'mark'; i: number; corner?: Corner } | null
 type Band = { x0: number; y0: number; x1: number; y1: number } | null
 /* `mark` is the tool Ash asked for and the one this page could not do. Every
  * point on the water had to be an island's berth or an island's approach, so a
@@ -150,6 +157,27 @@ const SEA_INK: Record<string, string> = {
   mist: '#3b4654',
   ambience: '#3a3252',
 }
+/* WHAT KIND OF POINT A FREE-STANDING MARK IS, AS A COLOUR.
+ *
+ * Every mark on the water was drawn in one salmon, so a berth, a landmark and
+ * the corner a crossing turns at were the same ring and the only way to tell
+ * them apart was to click each one and read the panel. The chart already inks a
+ * door differently from a spawn for exactly that reason.
+ *
+ * Three of these are deliberate copies of an ink already in use, so a spawn is
+ * the same blue whether it was drawn on a painting or dropped on open water,
+ * and a berth marked as a free point matches the gold diamond an island's own
+ * berth is drawn as. The fallback in inkFor covers a kind the server grows that
+ * this table has not heard of yet. */
+const MARK_INK: Record<string, string> = {
+  berth: '#f0c869' /* --acc-tool-lit, what a place's own berth is drawn in */,
+  approach: '#d4a53c' /* --acc-tool, what a place's own approach is drawn in */,
+  waypoint: CHART_MARK,
+  anchorage: '#6fc2a6' /* ANCHOR_INK.post, a place a thing is held */,
+  landmark: '#b07acc' /* ANCHOR_INK.trigger */,
+  spawn: '#7fa8d8' /* ANCHOR_INK.spawn, the same point on either surface */,
+}
+
 /* THE ANCHOR INKS ARE NOT WRITTEN HERE ANY MORE. They were, and the editor's
  * overlay had its own single pale iris for the same six kinds, so Panther's Maw
  * was orange on this page and lavender two clicks away in the tool that made
@@ -403,20 +431,40 @@ const skinBox = (p: Place, fit: Fit, sk: Skin) => {
   return { px: b.px + sk.x0 * b.rw, py: b.py + sk.y0 * b.rh, rw: (sk.x1 - sk.x0) * b.rw, rh: (sk.y1 - sk.y0) * b.rh }
 }
 
-/* THE CORNER YOU PULL, and there is exactly one of it.
+/* THE FOUR CORNERS YOU PULL, AND FOR A LONG TIME THERE WAS ONE.
  *
- * On the drawn coast, not on the raster, because the raster's corner is out in
- * the water on any map with transparent margin and Ash's rule is that the
+ * On the drawn coast, not on the raster, because the raster's corners are out
+ * in the water on any map with transparent margin and Ash's rule is that the
  * thing you can see is the thing you can grab.
  *
- * The other three corners are deliberately not handles. x,y is the origin
- * checkWorld measures a berth and a release radius from, so a north or west
- * handle would move the point every distance on this chart is quoted against
- * while you were only trying to change a size. */
-const gripOf = (p: Place, fit: Fit, sk: Skin) => {
+ * WHY THERE WAS ONE, and why that reason is now the arithmetic instead of the
+ * fence: x,y is the origin checkWorld measures a berth and a release radius
+ * from, so a north or west handle moves the point every distance on this chart
+ * is quoted against. So pulling a corner is written as a SCALE ABOUT THE CORNER
+ * YOU ARE NOT HOLDING, and everything the island owns goes through that one
+ * scale: x,y, the berth and the approach. The opposite corner stays on the
+ * pixel it was on, and the berth stays on the jetty it was aimed at, because
+ * the jetty is painted in the picture and the picture scaled the same way. The
+ * resize branch of move() is where that happens.
+ *
+ * FOUR TARGETS NEED ROOM TO BE FOUR TARGETS. Under this the hot zones touch and
+ * a press answers with whichever corner the loop reached first, which is a
+ * handle that resizes the opposite way to the one you grabbed. An island too
+ * small for that is moved and nudged, which is what the old single handle
+ * already did at the zoom floor. */
+const CORNERS: Corner[] = ['nw', 'ne', 'sw', 'se']
+const gripsOf = (p: Place, fit: Fit, sk: Skin): { corner: Corner; gx: number; gy: number }[] => {
   const b = skinBox(p, fit, sk)
-  return { gx: b.px + b.rw, gy: b.py + b.rh }
+  if (b.rw < GRIP_DROP || b.rh < GRIP * 2 + 4) return []
+  return CORNERS.map((c) => ({
+    corner: c,
+    gx: c === 'ne' || c === 'se' ? b.px + b.rw : b.px,
+    gy: c === 'sw' || c === 'se' ? b.py + b.rh : b.py,
+  }))
 }
+// which edges a corner owns, asked in three places and worth one reader
+const eastOf = (c: Corner) => c === 'ne' || c === 'se'
+const southOf = (c: Corner) => c === 'sw' || c === 'se'
 
 /* FIT WHAT IS ON THE WATER, NOT THE WATER.
  *
@@ -963,39 +1011,45 @@ function paint(c: CanvasRenderingContext2D, size: { w: number; h: number }, sc: 
       }
     }
 
-    /* THE CORNER YOU PULL, ON THE CORNER OF THE LINE YOU CAN SEE.
+    /* THE CORNERS YOU PULL, ON THE CORNERS OF THE LINE YOU CAN SEE.
      *
-     * It used to be drawn at the raster's corner while the selection outline
-     * was drawn round the paint, and the two diverge with zoom: 16 px apart at
-     * 2.6x, 103 px at 17x. So the square sat in open water below the island,
-     * the corner of the outline answered a press by MOVING the place, and the
-     * band that resized ran off the coast into the sea.
+     * The one that was here used to be drawn at the raster's corner while the
+     * selection outline was drawn round the paint, and the two diverge with
+     * zoom: 16 px apart at 2.6x, 103 px at 17x. So the square sat in open water
+     * below the island, the corner of the outline answered a press by MOVING
+     * the place, and the band that resized ran off the coast into the sea.
      *
-     * gripOf is the only thing that knows where this is, and under() asks the
-     * same function, so the picture and the hit test cannot drift again.
+     * gripsOf is the only thing that knows where these are, and under() asks
+     * the same function, so the picture and the hit test cannot drift again. It
+     * is also the one thing that decides whether an island is big enough to
+     * carry handles at all.
      *
-     * It is an outlined square with a corner mark in it rather than a filled
+     * Each is an outlined square with a corner mark in it rather than a filled
      * amber block, because the block was the loudest thing on the selection and
-     * a handle is the quietest thing you are meant to notice.
-     *
-     * AND IT IS NOT DRAWN ON AN ISLAND SMALLER THAN THE HANDLE. under() asks
-     * the same question before it answers a press, so an island out at the zoom
-     * floor is moved and never resized, which is the only thing a ten pixel
-     * footprint can honestly offer. */
-    if (on && rw >= GRIP_DROP) {
-      const { gx, gy } = gripOf(p, fit, sk)
+     * a handle is the quietest thing you are meant to notice. The mark opens
+     * OUTWARD, away from the island, so the square says which way it pulls. */
+    const hands = on ? gripsOf(p, fit, sk) : []
+    for (const { corner, gx, gy } of hands) {
       const g = GRIP - 1
+      const ex = eastOf(corner) ? 1 : -1
+      const sy = southOf(corner) ? 1 : -1
       c.fillStyle = PLATE
       c.fillRect(gx - g, gy - g, g * 2, g * 2)
       c.globalAlpha = 0.4 + 0.6 * warm
       c.strokeStyle = CHART_ARMED
       c.strokeRect(gx - g + 0.5, gy - g + 0.5, g * 2 - 1, g * 2 - 1)
       c.beginPath()
-      c.moveTo(gx - 3, gy + 3)
-      c.lineTo(gx + 3, gy + 3)
-      c.lineTo(gx + 3, gy - 3)
+      c.moveTo(gx - 3 * ex, gy + 3 * sy)
+      c.lineTo(gx + 3 * ex, gy + 3 * sy)
+      c.lineTo(gx + 3 * ex, gy - 3 * sy)
       c.stroke()
       c.globalAlpha = 1
+    }
+    const foot = hands.find((h) => h.corner === 'se')
+    if (foot) {
+      // beside the south east one, which is where a size readout has always
+      // sat and the corner least likely to have the rail behind it
+      const { gx, gy } = foot
       /* WHAT THE FOOTPRINT IS WORTH, WITH ITS UNIT.
        * It read "64×60" on the pixel art, which is a pair of integers in an
        * app whose other integers are pixels, world units and radii. Beside the
@@ -1031,10 +1085,13 @@ function paint(c: CanvasRenderingContext2D, size: { w: number; h: number }, sc: 
     const my = Y(k.y)
     const on = sel?.kind === 'mark' && sel.i === i
     const lit = on || (hover?.kind === 'mark' && hover.i === i)
+    // its own kind's ink, and gold only while it is the thing in your hand, the
+    // same rule the anchors on a painting follow two hundred lines up
+    const tint = on ? CHART_ARMED : inkFor(MARK_INK, k.kind)
     if (k.r) {
       c.beginPath()
       c.arc(mx, my, k.r * fit.s, 0, Math.PI * 2)
-      c.strokeStyle = on ? CHART_ARMED : CHART_MARK
+      c.strokeStyle = tint
       c.globalAlpha = lit ? 0.45 : 0.2
       c.setLineDash([3, 5])
       c.stroke()
@@ -1049,15 +1106,21 @@ function paint(c: CanvasRenderingContext2D, size: { w: number; h: number }, sc: 
     c.strokeStyle = PLATE
     c.stroke()
     c.lineWidth = on ? 2 : 1.4
-    c.strokeStyle = on ? CHART_ARMED : CHART_MARK
+    c.strokeStyle = tint
     c.stroke()
     c.lineWidth = 1
-    // the words, never the identifier. Ash asked for waypoints to carry labels
-    // and this is the surface that has to honour it. Above the ring and centred
-    // on it, the same place an anchor's name and a route's name sit, so a point
-    // on the water is captioned the way a point on a painting is.
+    /* the words, never the identifier. Ash asked for waypoints to carry labels
+     * and this is the surface that has to honour it. Above the ring and centred
+     * on it, the same place an anchor's name and a route's name sit, so a point
+     * on the water is captioned the way a point on a painting is.
+     *
+     * ABOVE, THEN BELOW, THEN DROPPED, which is what an island's name already
+     * does. Waypoints get dropped on top of each other by their nature, since
+     * the reason to place two is that a crossing turns twice, and two captions
+     * in the same forty pixels is two nobody can read. */
     c.font = LABEL(on ? LABEL_MAX - 3 : LABEL_MIN + 1)
-    plate(displayName(k, 'unnamed mark').text, mx, my - 10, on ? CHART_ARMED : CHART_MARK, { rim: on ? CHART_ARMED : CHART_MARK, keep: lit, mid: true })
+    const word = displayName(k, 'unnamed mark').text
+    plate(word, mx, my - 10, tint, { rim: tint, keep: lit, mid: true }) || plate(word, mx, my + 22, tint, { rim: tint, mid: true })
   }
 
   if (band) {
@@ -1118,18 +1181,16 @@ function under(doc: Doc, fit: Fit, sel: Sel, mx: number, my: number, skin: (p: P
   const Y = (y: number) => fit.oy + y * fit.s
   const near = (x: number, y: number, r: number) => Math.hypot(mx - X(x), my - Y(y)) <= r
 
-  /* THE CORNER, THROUGH THE FUNCTION THAT DRAWS IT.
+  /* THE CORNERS, THROUGH THE FUNCTION THAT DRAWS THEM.
    * This built its own corner out of the raw footprint while paint drew the
    * square on the painted coast, so the amber block you aimed at was 16 px
    * from the band that answered at 2.6x and 103 px from it at 17x. One
-   * reader, so a press and a picture cannot disagree about where a handle is. */
+   * reader, so a press and a picture cannot disagree about where a handle is,
+   * and the same reader decides when an island is too small to carry any. */
   const chosen = sel?.kind === 'place' ? doc.places[sel.i] : undefined
-  // and only while there is a handle drawn. rig() drops it under GRIP_DROP,
-  // where the square would be wider than the island, and a hot spot with no
-  // picture under it is the same lie the handle used to tell from 103 px away.
-  if (chosen && sel?.kind === 'place' && chosen.w * fit.s >= GRIP_DROP) {
-    const { gx, gy } = gripOf(chosen, fit, skin(chosen))
-    if (Math.abs(mx - gx) <= GRIP && Math.abs(my - gy) <= GRIP) return { kind: 'size', i: sel.i }
+  if (chosen && sel?.kind === 'place') {
+    for (const g of gripsOf(chosen, fit, skin(chosen)))
+      if (Math.abs(mx - g.gx) <= GRIP && Math.abs(my - g.gy) <= GRIP) return { kind: 'size', i: sel.i, corner: g.corner }
   }
   // a free-standing mark is a point and nothing else, so it sits with the other
   // points rather than with the islands. Ahead of them, because it is drawn
@@ -1161,6 +1222,12 @@ export default function World() {
   const [doc, setDoc] = useState<Doc | null>(null)
   const [states, setStates] = useState<string[]>([])
   const [kinds, setKinds] = useState<string[]>([])
+  /* WHAT A MARK IS ALLOWED TO BE, ASKED OF THE SERVER RATHER THAN GUESSED.
+   * cleanMark falls a kind it does not know back to `waypoint` without a word,
+   * so a list written here and grown there would silently rewrite an author's
+   * choice at the save. src/core/world.ts is the fallback and nothing more: it
+   * covers a deploy old enough to have no markKinds in its answer. */
+  const [markKinds, setMarkKinds] = useState<string[]>([])
   const [reg, setReg] = useState<Map<string, MapRow>>(new Map())
   const [why, setWhy] = useState('')
   const [sel, setSel] = useState<Sel>(null)
@@ -1170,7 +1237,7 @@ export default function World() {
   /* WHAT IS ACTUALLY IN THE HAND, as state and not as the ref the drag lives
    * in. The ref cannot make the cursor change, because writing a ref does not
    * render, so the shape was frozen for the whole of a press. */
-  const [hand, setHand] = useState<'' | 'pan' | 'place' | 'berth' | 'approach' | 'size' | 'mark'>('')
+  const [hand, setHand] = useState<'' | 'pan' | 'place' | 'berth' | 'approach' | 'mark' | Corner>('')
   const [band, setBand] = useState<Band>(null)
   /* WHERE THE ARMED TOOL'S ONE LINE IS DRAWN, which used to be the top centre of
    * the stage: measured 500 px from the button that armed it and 500 px from
@@ -1205,8 +1272,14 @@ export default function World() {
     dy: number
     mx: number
     my: number
-    w: number
-    h: number
+    /* THE ISLAND AS IT WAS WHEN THE CORNER WAS TAKEN HOLD OF, and a resize reads
+     * nothing else. It used to keep the width and the height and read the live
+     * x,y, which was safe only while a resize could not move x,y. Now that one
+     * can, a frame computed from the frame before it would feed its own rounding
+     * back in and the footprint would walk away from the cursor. Every frame is
+     * computed from the grab, so there is nothing to accumulate. */
+    p?: Place
+    corner?: Corner
   } | null>(null)
   const pan = useRef<{ mx: number; my: number; ox: number; oy: number; far: number } | null>(null)
   const bandFrom = useRef<{ x: number; y: number } | null>(null)
@@ -1246,12 +1319,13 @@ export default function World() {
   useEffect(() => {
     fetch('/api/world')
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`the ocean would not load (${r.status})`))))
-      .then((j: Doc & { states?: string[]; seaKinds?: string[] }) => {
+      .then((j: Doc & { states?: string[]; seaKinds?: string[]; markKinds?: string[] }) => {
         const fresh: Doc = { w: j.w, h: j.h, places: j.places || [], regions: j.regions || [], marks: j.marks, home: j.home || '' }
         saved.current = stamp(fresh)
         setDoc(fresh)
         setStates(j.states || [])
         setKinds(j.seaKinds || [])
+        setMarkKinds(j.markKinds || [])
       })
       .catch((e) => setWhy(String((e as Error).message || e)))
   }, [])
@@ -1535,6 +1609,15 @@ export default function World() {
     if (sel) panel.current?.scrollTo({ top: 0 })
   }, [sel?.kind, sel?.i])
 
+  /* AND A REFUSAL IS BROUGHT INTO VIEW, because it is drawn at the top of the
+   * same scroller. Two waypoints sharing a name is refused by the server, in
+   * words, and with an inspector open below a long island panel the sentence
+   * saying so was above the fold: the button said "save", then said "save"
+   * again, and nothing visible had changed. */
+  useEffect(() => {
+    if (problems.length) panel.current?.scrollTo({ top: 0 })
+  }, [problems])
+
   // once, when the water first arrives with something on it
   const opened = useRef(false)
   useEffect(() => {
@@ -1803,14 +1886,15 @@ export default function World() {
      * all three or checkWorld refuses the save with a duplicate. */
     if (tool === 'mark') {
       const taken = [...doc.places.map((p) => p.name), ...doc.regions.map((r) => r.name), ...(doc.marks || []).map((k) => k.name)]
+      const name = freeName('waypoint', taken)
       const made: WorldMark = {
-        name: freeName('waypoint', taken),
+        name,
         kind: 'waypoint',
         x: clamp(Math.round(w.x), 0, doc.w),
         y: clamp(Math.round(w.y), 0, doc.h),
         // a label from the start, so a mark never reaches a player as
         // `waypoint_1`. Ash, 2026-08-29: waypoints get labels too.
-        label: displayName({ name: freeName('waypoint', taken) }).text,
+        label: displayName({ name }).text,
         // the same order of size a berth sits at off a jetty, so arriving is not
         // an exact-pixel test on a hull that moves in floats
         r: 40,
@@ -1841,7 +1925,7 @@ export default function World() {
       setSel({ kind: 'mark', i: hit.i })
       setSure(false)
       const k = (doc.marks || [])[hit.i]
-      drag.current = { kind: 'mark', i: hit.i, dx: w.x - k.x, dy: w.y - k.y, mx, my, w: 0, h: 0 }
+      drag.current = { kind: 'mark', i: hit.i, dx: w.x - k.x, dy: w.y - k.y, mx, my }
       setHand('mark')
       remember()
       return
@@ -1858,8 +1942,10 @@ export default function World() {
      * ORIGIN, so the new width came out as the raw travel since the grab rather
      * than the old width plus it, and the footprint collapsed to its floor the
      * instant a corner was touched. */
-    drag.current = { kind: hit.kind, i: hit.i, dx: w.x - (from?.x ?? p.x), dy: w.y - (from?.y ?? p.y), mx, my, w: p.w, h: p.h }
-    setHand(hit.kind)
+    drag.current = { kind: hit.kind, i: hit.i, dx: w.x - (from?.x ?? p.x), dy: w.y - (from?.y ?? p.y), mx, my, p, corner: hit.corner }
+    // the cursor keeps the diagonal it was given, so the shape does not swap to
+    // a generic move the moment the hand closes on a corner
+    setHand(hit.kind === 'size' ? hit.corner || 'se' : hit.kind)
     remember()
   }
 
@@ -1894,10 +1980,17 @@ export default function World() {
     }
     const d = drag.current
     if (!d) {
-      // the same hit, held rather than replaced, or every pixel of pointer
-      // movement is a new object and a full repaint of the chart
+      /* the same hit, held rather than replaced, or every pixel of pointer
+       * movement is a new object and a full repaint of the chart.
+       *
+       * THE CORNER IS PART OF "THE SAME HIT". It was not, and with four handles
+       * that is a cursor that lies: measured, moving from the north west grip to
+       * the north east one kept the first object, because both are kind `size`
+       * on island 0, so the pointer went on promising the north west diagonal
+       * over a handle that pulls the other way. With one handle the field did
+       * not exist and the two-field comparison was complete. */
       const h = under(doc, fit, sel, mx, my, skin)
-      setHover((v) => (v?.kind === h?.kind && v?.i === h?.i ? v : h))
+      setHover((v) => (v?.kind === h?.kind && v?.i === h?.i && v?.corner === h?.corner ? v : h))
       // and the anchor the cursor would snap a berth to, lit while you decide
       const p = pick && place ? aimed(place, mx, my) : null
       setAim(p && place ? `${place.name}/${p.a.name}` : '')
@@ -1917,22 +2010,29 @@ export default function World() {
        * cursor and the handle read as something you steered rather than
        * something you held.
        *
-       * sk.x1 is the fraction of the footprint's screen width the drawn corner
-       * sits at, so one world unit of w carries the corner sk.x1 * fit.s
-       * pixels. Dividing the hand's travel by that is the corner tracking the
-       * cursor exactly. Dividing by the FOOTPRINT instead, which is what this
-       * did, overshoots by however much transparent margin the painting
+       * The DRAWN width is the fraction sk.x1 - sk.x0 of the footprint, so one
+       * world unit of w carries the corner (sk.x1 - sk.x0) * fit.s pixels.
+       * Dividing the hand's travel by that is the corner tracking the cursor
+       * exactly. Dividing by the FOOTPRINT instead, which is what this did
+       * first, overshoots by however much transparent margin the painting
        * carries: a third of it on the hub. */
-      const p0 = doc.places[d.i]
+      const p0 = d.p as Place
+      const now = doc.places[d.i]
+      if (!p0 || !now) return
       const m = p0.map ? reg.get(p0.map) : undefined
       const sk = skin(p0)
       const gain = e.shiftKey ? RESIZE_FINE : RESIZE_GAIN
-      // never zero, or a picture whose paint stops short of its own left edge
-      // would divide a whole drag by nothing and throw the footprint to its fence
-      const kx = Math.max(1e-3, sk.x1 * fit.s)
-      const ky = Math.max(1e-3, sk.y1 * fit.s)
-      const hx = (mx - d.mx) * gain
-      const hy = (my - d.my) * gain
+      const corner = d.corner || 'se'
+      const east = eastOf(corner)
+      const south = southOf(corner)
+      // never zero, or a picture whose paint is a hairline would divide a whole
+      // drag by nothing and throw the footprint to its fence
+      const kx = Math.max(1e-3, (sk.x1 - sk.x0) * fit.s)
+      const ky = Math.max(1e-3, (sk.y1 - sk.y0) * fit.s)
+      // a west or north handle grows the island as the hand travels the other
+      // way, so the reading is signed by which edges the corner owns
+      const hx = (mx - d.mx) * gain * (east ? 1 : -1)
+      const hy = (my - d.my) * gain * (south ? 1 : -1)
       // the handle honours the same lock the inspector does, so dragging a
       // footprint cannot quietly squash the painting inside it
       const held = lock && m && m.w > 0 && m.h > 0
@@ -1945,16 +2045,56 @@ export default function World() {
          * right each got half of what was asked and the corner sat off the
          * cursor in both. Projection puts it as close as the shape allows and
          * exactly under the cursor whenever the drag runs along the diagonal. */
-        const vx = kx * d.w
-        const vy = (ky * d.w * m.h) / m.w
+        const vx = kx * p0.w
+        const vy = (ky * p0.w * m.h) / m.w
         const k = (hx * vx + hy * vy) / Math.max(1e-6, vx * vx + vy * vy)
-        nw = side(d.w + d.w * k)
+        nw = side(p0.w + p0.w * k)
         nh = side((nw * m.h) / m.w)
       } else {
-        nw = side(d.w + hx / kx)
-        nh = side(d.h + hy / ky)
+        nw = side(p0.w + hx / kx)
+        nh = side(p0.h + hy / ky)
       }
-      if (nw !== p0.w || nh !== p0.h) edit(d.i, { w: nw, h: nh })
+
+      /* AND HERE IS WHY THERE ARE FOUR HANDLES AND THERE USED TO BE ONE.
+       *
+       * A resize is a SCALE ABOUT THE DRAWN CORNER YOU ARE NOT HOLDING. The pin
+       * is that corner in world units, and x,y, the berth and the approach all
+       * go through the one scale, because all three are points that belong to
+       * the island rather than to the water.
+       *
+       * x,y HAS TO MOVE for a north or west handle, and that is the objection
+       * this file used to record as a reason not to build them: it is the origin
+       * checkWorld measures the berth distance and the release radius from, so
+       * moving it silently would change what the save says about an island
+       * nobody touched the berth of. It does not move silently. The berth and
+       * the approach are carried by the same scale, so the distance between them
+       * and the origin changes only by the factor the island itself changed by,
+       * which is the honest answer: the jetty is painted INTO the picture, so a
+       * picture twice the size has its jetty twice as far from the origin, and a
+       * berth that stayed put would be a berth off the end of the dock.
+       *
+       * The two radii are NOT scaled. They are distances an author typed in
+       * world units and this is a size drag, not an edit of how far an island
+       * reaches. Both are drawn live from x,y while the corner is in the hand,
+       * along with the "berth 152 u" tether, so a resize that pulls the dock
+       * outside the discovery radius shows on the chart as it happens and
+       * checkWorld says it again at the save. */
+      const pinX = p0.x + (east ? sk.x0 : sk.x1) * p0.w
+      const pinY = p0.y + (south ? sk.y0 : sk.y1) * p0.h
+      const fx = nw / Math.max(1, p0.w)
+      const fy = nh / Math.max(1, p0.h)
+      const scaled = (q: Pt): Pt => ({ ...q, x: Math.round(pinX + (q.x - pinX) * fx), y: Math.round(pinY + (q.y - pinY) * fy) })
+      const nx = Math.round(pinX + (p0.x - pinX) * fx)
+      const ny = Math.round(pinY + (p0.y - pinY) * fy)
+      if (nw !== now.w || nh !== now.h || nx !== now.x || ny !== now.y)
+        edit(d.i, {
+          w: nw,
+          h: nh,
+          x: nx,
+          y: ny,
+          ...(p0.berth ? { berth: scaled(p0.berth) } : {}),
+          ...(p0.approach ? { approach: scaled(p0.approach) } : {}),
+        })
     }
   }
 
@@ -2093,14 +2233,20 @@ export default function World() {
        * thirty a second and a stack of thirty identical steps is an undo that
        * does nothing thirty times. */
       const step = e.key.startsWith('Arrow') ? (e.shiftKey ? NUDGE_FAR : 1) : 0
-      if (step && place && sel?.kind === 'place') {
+      if (step && sel && (place || spot)) {
         e.preventDefault()
         const now = performance.now()
         if (now - nudged.current > 600) remember()
         nudged.current = now
         const dx = e.key === 'ArrowRight' ? step : e.key === 'ArrowLeft' ? -step : 0
         const dy = e.key === 'ArrowDown' ? step : e.key === 'ArrowUp' ? -step : 0
-        shift(sel.i, place.x + dx, place.y + dy)
+        /* A MARK IS NUDGED THE WAY AN ISLAND IS, and it could not be. The whole
+         * reason the arrows are here is that at the zoom where a place fits the
+         * stage one screen pixel is a third of a world unit, so the hand cannot
+         * land on the unit you meant; a waypoint is a bare point with no
+         * footprint to aim by, which makes that worse rather than better. */
+        if (place && sel.kind === 'place') shift(sel.i, place.x + dx, place.y + dy)
+        else if (spot && sel.kind === 'mark') editMark(sel.i, { x: spot.x + dx, y: spot.y + dy })
       }
     }
     window.addEventListener('keydown', key)
@@ -2176,17 +2322,21 @@ export default function World() {
    * A region says pointer and not move, because a press on one SELECTS it and
    * nothing here drags a stretch of water. A cursor promising a move that no
    * press performs is the same lie the handle was telling. */
+  /* AND IT SAYS WHICH DIAGONAL. It answered nwse-resize on all four corners
+   * while there was one corner and that was correct; on four it would promise a
+   * north east handle pulls down and right, which is the opposite of what it
+   * does. Two glyphs, one per diagonal, out of the same table the press uses. */
   const grip =
     hand === 'pan'
       ? 'grabbing'
-      : hand === 'size'
-        ? 'nwse-resize'
+      : CURSOR[hand as Corner]
+        ? CURSOR[hand as Corner]
         : hand
           ? 'move'
           : pick || tool !== 'move'
             ? 'crosshair'
             : hover?.kind === 'size'
-              ? 'nwse-resize'
+              ? CURSOR[hover.corner || 'se']
               : hover?.kind === 'region'
                 ? 'pointer'
                 : hover
@@ -2386,7 +2536,14 @@ export default function World() {
               onDrop={() => dropRegion(sel.i)}
             />
           ) : spot && sel?.kind === 'mark' ? (
-            <MarkPanel m={spot} sure={sure} onSure={setSure} onEdit={(patch) => editMark(sel.i, patch)} onDrop={() => dropMark(sel.i)} />
+            <MarkPanel
+              m={spot}
+              kinds={markKinds.length ? markKinds : [...MARK_KINDS]}
+              sure={sure}
+              onSure={setSure}
+              onEdit={(patch) => editMark(sel.i, patch)}
+              onDrop={() => dropMark(sel.i)}
+            />
           ) : null}
 
           {/* THE ROSTER READS THE WAY A PERSON WOULD SAY IT.
@@ -2473,7 +2630,9 @@ export default function World() {
                           onClick={() => setSel({ kind: 'mark', i })}
                           title={`${said.text} · ${m.kind}${said.derived ? ' · no label yet, so the words were read off the address' : ''}`}
                         >
-                          <i style={{ background: 'var(--acc-mark)' }} />
+                          {/* the kind's own ink, the same square the chart draws
+                              the ring in, so a row and a mark match */}
+                          <i style={{ background: inkFor(MARK_INK, m.kind) }} />
                           <span className={'world-row-n' + (said.derived ? ' guessed' : '')}>{said.text}</span>
                           <span className="world-row-m">{m.name}</span>
                         </button>
@@ -2522,7 +2681,9 @@ function Key({ doc }: { doc: Doc }) {
   const rows: { ink: string; word: string }[] = []
   for (const s of [...new Set(doc.places.map((p) => p.state))]) rows.push({ ink: inkFor(STATE_INK, s), word: s })
   for (const k of [...new Set(doc.regions.map((r) => r.kind))]) rows.push({ ink: inkFor(SEA_INK, k), word: k })
-  if ((doc.marks || []).length) rows.push({ ink: CHART_MARK, word: 'waypoint' })
+  // one row per kind of mark actually dropped, not one row saying "waypoint"
+  // for a water carrying two anchorages and a landmark
+  for (const k of [...new Set((doc.marks || []).map((m) => m.kind))]) rows.push({ ink: inkFor(MARK_INK, k), word: k })
   if (!rows.length) return null
   return (
     <div className="world-key">
@@ -2616,12 +2777,14 @@ function Summary({ doc, span }: { doc: Doc; span: number }) {
  * the ocean could not author until now. */
 function MarkPanel({
   m,
+  kinds,
   sure,
   onSure,
   onEdit,
   onDrop,
 }: {
   m: WorldMark
+  kinds: string[]
   sure: boolean
   onSure: (v: boolean) => void
   onEdit: (patch: Partial<WorldMark>) => void
@@ -2633,8 +2796,11 @@ function MarkPanel({
     <div className="world-insp">
       <div className="world-head">
         <b className={said.derived ? 'guessed' : ''}>{said.text}</b>
+        {/* the kind this point actually is, and it said "waypoint" on all six.
+            A mark can be an anchorage or a landmark, and the word beside the
+            address is the one place the panel says which. */}
         <span className="world-code">
-          <i>waypoint</i> {m.name}
+          <i>{m.kind}</i> {m.name}
         </span>
       </div>
       <div className="world-set">
@@ -2666,10 +2832,13 @@ function MarkPanel({
           />
         </label>
         {!legal && <p className="world-bad">lower case, digits, underscores</p>}
+        {/* the kinds the SERVER allows, since cleanMark quietly rewrites one it
+            does not know back to `waypoint`. A list kept here would drift out of
+            step with that and take the author's choice with it. */}
         <label className="world-f">
           <span>kind</span>
           <select className="world-in" value={m.kind} onChange={(e) => onEdit({ kind: e.target.value as MarkKind })}>
-            {MARK_KINDS.map((k) => (
+            {kinds.map((k) => (
               <option key={k} value={k}>
                 {k}
               </option>

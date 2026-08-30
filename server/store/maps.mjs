@@ -187,6 +187,40 @@ export async function putDoc(mapId, docString) {
   const framings = Array.isArray(d.framings)
     ? d.framings.filter((f) => f && typeof f.name === 'string' && isFinite(Number(f.zoom)))
     : []
+  /* sets and racks, on the same terms. mask.ts has already dropped a member that
+   * is not a legal anchor name and a rack with two hooks numbered 3; the shape
+   * guard is repeated here because putDoc is reachable by a hand-written POST and
+   * mask.ts is not in front of it. A slot with no number is the one that has to
+   * go: the number IS the address, and a hook nothing can name is not a hook. */
+  const sets = Array.isArray(d.sets)
+    ? d.sets.filter((s) => s && typeof s.name === 'string' && Array.isArray(s.members))
+    : []
+  const racks = Array.isArray(d.racks)
+    ? d.racks
+        .filter((r) => r && typeof r.name === 'string' && Array.isArray(r.slots))
+        .map((r) => ({
+          ...r,
+          slots: r.slots.filter((s) => s && isFinite(Number(s.slot)) && typeof s.anchor === 'string' && s.anchor),
+        }))
+    : []
+  /* the exclusive variant sets and the placement group rows, on the same terms.
+   * mask.ts has already dropped a set with two states on one placement and a
+   * group row that says nothing but its own name; the shape guard is repeated
+   * for the reason the others are, that putDoc is reachable by a hand-written
+   * POST and mask.ts is not in front of it. A set with no anchor is the one that
+   * has to go: the anchor is the only address python can reach the set through,
+   * so a set without one is a set nobody can name. */
+  const variants = Array.isArray(d.variants)
+    ? d.variants
+        .filter((v) => v && typeof v.name === 'string' && typeof v.anchor === 'string' && v.anchor && Array.isArray(v.members))
+        .map((v) => ({
+          ...v,
+          members: v.members.filter((m) => m && typeof m.name === 'string' && typeof m.placement === 'string' && m.placement),
+        }))
+    : []
+  const assetGroups = Array.isArray(d.groups)
+    ? d.groups.filter((g) => g && typeof g.name === 'string' && g.name && (g.when || g.label))
+    : []
 
   /* IN THE SHA OR IT NEVER SAVES. A field left out of this list is a field the
    * four-second autosave decides is unchanged, so drawing a route and nothing
@@ -194,7 +228,7 @@ export async function putDoc(mapId, docString) {
   const rowSha = sha(
     JSON.stringify([
       w, h, d.base?.w ?? w, d.base?.h ?? h, d.base?.ox ?? 0, d.base?.oy ?? 0, d.spawn, d.assetNext, walk, props, occs,
-      paths, framings,
+      paths, framings, sets, racks, variants, assetGroups,
     ]) + assetsSha,
   )
   const cur = await one('select doc_sha from maps where id = $1', [mapId])
@@ -211,6 +245,8 @@ export async function putDoc(mapId, docString) {
          title = $19, class = $20, island_id = $21, meta = $22::jsonb,
          occs = $23::jsonb,
          paths = $24::jsonb, framings = $25::jsonb,
+         sets = $26::jsonb, racks = $27::jsonb,
+         variants = $28::jsonb, asset_groups = $29::jsonb,
          doc_sha = $12, updated_at = now()
        where id = $1`,
       [
@@ -250,6 +286,10 @@ export async function putDoc(mapId, docString) {
         JSON.stringify(occs),
         JSON.stringify(paths),
         JSON.stringify(framings),
+        JSON.stringify(sets),
+        JSON.stringify(racks),
+        JSON.stringify(variants),
+        JSON.stringify(assetGroups),
       ],
     )
     wrote.push(`doc ${(assetsJson.length / 1024).toFixed(1)}kb`)
@@ -373,6 +413,16 @@ export async function getDoc(mapId) {
     pathNext: (Array.isArray(m.paths) ? m.paths : []).reduce((a, p) => Math.max(a, Number(p.id) || 0), 0) + 1,
     framings: Array.isArray(m.framings) ? m.framings : [],
     framingNext: (Array.isArray(m.framings) ? m.framings : []).reduce((a, f) => Math.max(a, Number(f.id) || 0), 0) + 1,
+    sets: Array.isArray(m.sets) ? m.sets : [],
+    setNext: (Array.isArray(m.sets) ? m.sets : []).reduce((a, s) => Math.max(a, Number(s.id) || 0), 0) + 1,
+    racks: Array.isArray(m.racks) ? m.racks : [],
+    rackNext: (Array.isArray(m.racks) ? m.racks : []).reduce((a, r) => Math.max(a, Number(r.id) || 0), 0) + 1,
+    variants: Array.isArray(m.variants) ? m.variants : [],
+    variantNext: (Array.isArray(m.variants) ? m.variants : []).reduce((a, v) => Math.max(a, Number(v.id) || 0), 0) + 1,
+    /* the document calls them `groups` and the column is `asset_groups`, because
+     * GROUPS is a sql keyword and the schema now also has anchor sets to be
+     * confused with. The rename lives here, at the one boundary that crosses. */
+    groups: Array.isArray(m.asset_groups) ? m.asset_groups : [],
   })
 }
 
@@ -407,6 +457,21 @@ export async function syncEventsToAnchors(mapId, anchors) {
       const meta = { ...(a.meta || {}) }
       if (derived) meta.derived = true
       if (a.id != null) meta.docId = Number(a.id)
+      /* THE CONDITION THIS PLACE IS THERE UNDER, folded into the bag the way
+       * derived and docId already are. It has to ride here rather than in a
+       * column: the upsert below copies a fixed list of columns plus the whole
+       * bag, the game's readAnchors copies the identical way, and the publish
+       * projection does it a third time, so a top-level field on an anchor is
+       * dropped three times over while the bag arrives intact.
+       *
+       * mask.ts migrateEvent does the same fold in the browser, and this is the
+       * repeat for the reason every other shape guard in this file is repeated:
+       * putDoc is reachable by a hand-written POST and mask.ts is not in front
+       * of it. Without this line an author's barred door was a field the editor
+       * showed and the database never heard of. */
+      const when = typeof a.when === 'string' ? a.when.trim().slice(0, 240) : ''
+      if (when) meta.when = when
+      else delete meta.when
 
       const r = await c.query(
         `insert into anchors (map_id, name, kind, x, y, r, rect, stand, to_slug, to_anchor, placement_id, facing, label, meta)
@@ -465,6 +530,10 @@ export async function eventsFromAnchors(mapId) {
   return rows.map((a, i) => ({
     id: a.meta?.docId ?? i + 1,
     name: a.name,
+    // lifted back onto the field it was typed into, so the two can never
+    // disagree about what the author wrote. mask.ts migrateEvent does the same
+    // lift, and this is the half that runs before the browser sees the document.
+    ...(typeof a.meta?.when === 'string' && a.meta.when ? { when: a.meta.when } : {}),
     kind: a.kind,
     x: a.x,
     y: a.y,

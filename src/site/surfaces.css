@@ -232,6 +232,17 @@
   font: 400 var(--fs-micro) var(--font-mono);
   color: var(--ink-3);
 }
+/* THE WORD THAT SAYS THE MONO STRING BESIDE IT IS AN ADDRESS. One rule for
+   both places this page prints one, and the same treatment the editor's list
+   rows carry: the label face, so it reads as a word rather than as part of the
+   identifier, and --ink-off so the address stays the thing being read. */
+.surf-addr em,
+.surf-row-t i em {
+  font-family: var(--font-label);
+  font-style: normal;
+  font-size: var(--fs-fine);
+  color: var(--ink-off);
+}
 
 /* the panel itself, centred in whatever room is left and scrolled when there is
    not enough of it. Nothing here scales the canvas: the zoom is a whole number

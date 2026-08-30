@@ -18,10 +18,18 @@ import {
   migrateAnchor,
   migratePath,
   migrateFraming,
+  migrateAnchorSet,
+  migrateRack,
+  migrateVariantSet,
+  migrateGroup,
   shotZoom,
   shotsOntoMeta,
+  variantsOntoMeta,
+  lookNameFrom,
+  whenOf,
   anchorName,
   isAnchorName,
+  isLookName,
   isPlacementName,
   MAP_CLASSES,
   type Occluder,
@@ -36,6 +44,10 @@ import {
   type MapFraming,
   type PathMark,
   type PathKind,
+  type MapAnchorSet,
+  type MapRack,
+  type MapVariantSet,
+  type MapGroup,
 } from './mask'
 import { Walker, canStand, checkReach, type WalkCfg, type ReachResult } from './walk'
 /* the canvas is a surface a person reads, so it obeys the same law the panels
@@ -322,6 +334,32 @@ export interface EditorStatus {
   pathLegs: number
   framings: MapFraming[]
   framingSel: number
+  /* THE NAMED COLLECTIONS, and the missing names in the selected one.
+   *
+   * `setGaps` and `rackGaps` are the whole reason a set is worth authoring
+   * rather than typing five strings into python: MAPVIS can be asked whether the
+   * set is complete instead of one name at a time. Only the selected one is
+   * measured, exactly as pathBad only measures the selected route, because that
+   * is the one the panel has room to say it about.
+   *
+   * `anchorSetSel` is spelt the long way because `setSel` was already taken, by
+   * the method that selects several PLACEMENTS at once. Two different meanings of
+   * the word set in one class, and the shorter name belongs to the older one. */
+  sets: MapAnchorSet[]
+  anchorSetSel: number
+  setGaps: string[]
+  racks: MapRack[]
+  rackSel: number
+  rackGaps: string[]
+  /* THE NAMED EXCLUSIVE VARIANT SETS and the rows that say something about a
+   * placement group. `variantGaps` is the same idea as setGaps: the members of
+   * the selected set that name a placement this map does not have, measured for
+   * the selected one only because that is the one a panel has room to say it
+   * about. */
+  variants: MapVariantSet[]
+  variantSel: number
+  variantGaps: string[]
+  groups: MapGroup[]
   // the crop gesture: on while a rectangle is being dragged over a placement
   cropping: boolean
   cropKind: '' | 'crop' | 'area'
@@ -720,6 +758,8 @@ export class Editor {
     const c = this.cursor
     const lastOcc = this.selectedOcc()
     const selPath = this.pathSel ? this.doc.paths.find((p) => p.id === this.pathSel) : undefined
+    const selSet = this.anchorSetSel ? this.doc.sets.find((s) => s.id === this.anchorSetSel) : undefined
+    const selRack = this.rackSel ? this.doc.racks.find((r) => r.id === this.rackSel) : undefined
     return {
       x: c ? c[0] : -1,
       y: c ? c[1] : -1,
@@ -766,6 +806,16 @@ export class Editor {
       pathLegs: selPath ? legsOf(selPath).length : 0,
       framings: this.doc.framings,
       framingSel: this.framingSel,
+      sets: this.doc.sets,
+      anchorSetSel: this.anchorSetSel,
+      setGaps: selSet ? this.missingIn(selSet.members) : [],
+      racks: this.doc.racks,
+      rackSel: this.rackSel,
+      rackGaps: selRack ? this.missingIn(selRack.slots.map((s) => s.anchor)) : [],
+      variants: this.doc.variants,
+      variantSel: this.variantSel,
+      variantGaps: this.variantSel ? this.variantGaps(this.variantSel) : [],
+      groups: this.doc.groups,
       cropping: !!this.cropSt,
       // which of the two it is, so the hint on screen can say the right thing.
       // They are one state and two gestures: a crop takes an existing box in,
@@ -822,6 +872,9 @@ export class Editor {
     this.newPath = null
     this.pathSel = 0
     this.framingSel = 0
+    this.anchorSetSel = 0
+    this.rackSel = 0
+    this.variantSel = 0
     this.cancelPick()
     this.cancelCrop()
     this.hiddenGroups.clear()
@@ -2976,9 +3029,55 @@ export class Editor {
      * by an art nobody sets any more. */
     if (looks && looks.length) a.looks = looks.map((l) => ({ ...l }))
     else delete a.looks
+    this.nameLooks(a)
     this.restartLife()
     this.touched()
     return true
+  }
+
+  /* EVERY FACE GETS THE NAME IT ALREADY HAS, so `show(placement, state)` has a
+   * vocabulary the moment a sequence is made rather than on the day a control is
+   * built for it.
+   *
+   * The planner answers in names, and src/App.tsx:1924 resolves each one to an
+   * index and drops the word on the floor, so nothing downstream of the life
+   * panel has ever seen it. Recovering it from the url is exact rather than a
+   * guess: the face name and the library row name are both segments of the path
+   * server/store/platform.mjs built. See lookNameFrom in mask.ts.
+   *
+   * A NAME A PERSON TYPED IS NEVER OVERWRITTEN. This fills the blanks and stops.
+   *
+   * CONTROL NEEDED, and the fix that retires the derivation: App.tsx's
+   * lookOfState and lookOfItem at src/App.tsx:258 and 269 should carry the name
+   * they already hold (`name: f.name` and `name: it.name`), and the life panel's
+   * picture list wants a name field per face pre-filled with what landed here. */
+  private nameLooks(a: PlacedAsset) {
+    if (!isLookName(a.lookName)) {
+      const n = lookNameFrom(a)
+      if (n) a.lookName = n
+    }
+    for (const L of a.looks || []) {
+      if (isLookName(L.name)) continue
+      const n = lookNameFrom(L)
+      if (n) L.name = n
+    }
+    /* TWO FACES CANNOT SHARE ONE WORD. The library keeps one row per thing and a
+     * face belongs to the row that owns it, so a collision here means two
+     * different placements' pictures folded to the same string, and a name that
+     * resolves to two indices is a name python cannot use. The later one loses
+     * its name and keeps its slot, because the slot is the index and the index
+     * is what actually draws. */
+    const seen = new Set<string>()
+    for (let i = 0; i < 1 + (a.looks?.length || 0); i++) {
+      const cur = i === 0 ? a.lookName : a.looks![i - 1].name
+      if (!cur) continue
+      if (!seen.has(cur)) {
+        seen.add(cur)
+        continue
+      }
+      if (i === 0) delete a.lookName
+      else delete a.looks![i - 1].name
+    }
   }
   /* Which way a standing figure looks.
    *
@@ -3032,6 +3131,9 @@ export class Editor {
        * would export pictures no art index can ever reach. */
       if (looks && looks.length) a.looks = looks.map((l) => ({ ...l }))
       else delete a.looks
+      // the crowd's faces get their names the same way one placement's do, so a
+      // sequence made on twelve figures at once is addressable on all twelve
+      this.nameLooks(a)
     }
     this.restartLife()
     this.touched()
@@ -3594,6 +3696,9 @@ export class Editor {
   private newPath: Pt[] | null = null
   pathSel = 0
   framingSel = 0
+  anchorSetSel = 0
+  rackSel = 0
+  variantSel = 0
 
   /* Is there anywhere inside this ring a player could actually stand?
    *
@@ -3654,6 +3759,17 @@ export class Editor {
     const clean = anchorName(trimmed)
     if (!isAnchorName(clean)) return { ok: false, why: 'letters, digits and underscores, starting with a letter' }
     const free = this.freeAnchorName(clean, id)
+    /* EVERY COLLECTION THAT NAMES THIS ANCHOR COMES WITH IT. A set and a rack
+     * both hold anchor names, so renaming stele_2 would quietly drop it out of
+     * `steles` and leave a rack slot pointing at nothing, and the author would
+     * find out at publish or never. namePlacement already carries bindings over
+     * for the same reason. A delete deliberately does NOT do this: the name stays
+     * in the set, the publish gate refuses and says which one is missing, because
+     * deleting an anchor a set is built on is a thing an author should be told
+     * about rather than have tidied up behind them. */
+    const was = e.name
+    for (const s of this.doc.sets) s.members = s.members.map((m) => (m === was ? free : m))
+    for (const r of this.doc.racks) for (const sl of r.slots) if (sl.anchor === was) sl.anchor = free
     e.name = free
     // an author has now chosen it, so it is no longer a guess derived from a label
     if (e.meta?.derived) {
@@ -4256,6 +4372,479 @@ export class Editor {
     this.say(`${f.name} · ${at.x}, ${at.y} at ${f.zoom}x`)
   }
 
+  // ---- sets and racks: anchors addressed several at a time -----------------
+  /* A SET is `steles` meaning those five and `the_berths` meaning all of them on
+   * this map, so python iterates a collection instead of hard-coding five
+   * strings, and this tool can be asked whether the set is complete rather than
+   * one name at a time. A RACK is the same anchors given stable positions: the
+   * trophy wall, the banner wall, the three season tokens, the graduation front
+   * row, where the third hook has to be the third hook every run.
+   *
+   * ONE TALLY ACROSS BOTH, which is a departure from routes and shots. Those
+   * keep separate tallies because a route and a shot are different kinds of
+   * thing that nothing would ask for with one word. A set and a rack are both a
+   * named collection of this map's anchors, and the obvious python for either is
+   * one call taking one name, so letting `steles` be a set and a rack at once
+   * makes that call's answer depend on which lookup runs first. The same
+   * sentence store/world.mjs refuses a mark taking an island's name with.
+   *
+   * Z DOES NOT BRING EITHER BACK, exactly as it does not bring back a route or a
+   * shot: MaskDoc.snap was written before any of these lists existed and has
+   * nothing of them to restore. snap is still called so the stack stays in step
+   * and so these start working the day that function learns the fields. The
+   * guard on a delete is a two-click confirm on the button. */
+  freeCollectionName(want: string, exceptSet = 0, exceptRack = 0): string {
+    const base = anchorName(want)
+    const taken = new Set([
+      ...this.doc.sets.filter((s) => s.id !== exceptSet).map((s) => s.name),
+      ...this.doc.racks.filter((r) => r.id !== exceptRack).map((r) => r.name),
+    ])
+    if (!taken.has(base)) return base
+    for (let i = 2; ; i++) if (!taken.has(`${base}_${i}`)) return `${base}_${i}`
+  }
+
+  /* WHICH OF THESE NAMES IS NOT AN ANCHOR ON THIS MAP. The publish gate asks the
+   * same question of the database and refuses, and this is the same question
+   * asked while there is still somebody looking at the screen. Duplicates
+   * collapse, so a rack with two hooks on one missing anchor says the name once.
+   *
+   * CONTROLS NEEDED, and App.tsx is owned elsewhere this round. Three of them,
+   * all in the anchors panel where the routes and shots lists already live:
+   *
+   *   1. a sets list. A name field, and a button that puts the selected anchors
+   *      in, calling addSet / updateSet.
+   *   2. a racks list. A name field and one row per slot, each row an anchor
+   *      picker and its slot NUMBER shown read-only beside it, with a drag handle
+   *      that calls moveRackSlot. The number must never be an editable field and
+   *      must never renumber on reorder or delete: that is the whole guarantee.
+   *   3. on the anchor inspector, which set or rack this anchor belongs to, so an
+   *      author looking at stele_2 can see it is one of the five.
+   *
+   * All three want setGaps / rackGaps printed under the list in the same red the
+   * route checker uses, naming every anchor the collection asks for and this map
+   * does not have. */
+  missingIn(names: string[]): string[] {
+    const have = new Set(this.doc.events.map((e) => e.name))
+    const out: string[] = []
+    for (const n of names) if (!have.has(n) && !out.includes(n)) out.push(n)
+    return out
+  }
+
+  addSet(members: string[] = []): number {
+    this.doc.snap()
+    const id = this.doc.setNext
+    const s = migrateAnchorSet({ id, name: this.freeCollectionName(`set_${id}`), members } as MapAnchorSet)
+    if (!s) return 0
+    this.doc.setNext = id + 1
+    this.doc.sets.push(s)
+    this.anchorSetSel = id
+    this.touched()
+    this.say(`${s.name} · ${s.members.length} anchors · give it a name code can use`)
+    return id
+  }
+
+  /* Renaming refuses rather than corrects, the same as renameAnchor, renamePath
+   * and renameFraming, and for the one reason all four share: this string is
+   * what a member writes in python. */
+  renameSet(id: number, want: string): { ok: boolean; name?: string; why?: string } {
+    const s = this.doc.sets.find((q) => q.id === id)
+    if (!s) return { ok: false, why: 'gone' }
+    const trimmed = String(want || '').trim()
+    if (!trimmed) return { ok: false, why: 'a name is required · code addresses this' }
+    const clean = anchorName(trimmed)
+    if (!isAnchorName(clean)) return { ok: false, why: 'letters, digits and underscores, starting with a letter' }
+    const free = this.freeCollectionName(clean, id)
+    s.name = free
+    this.touched()
+    return { ok: true, name: free, why: free !== clean ? `taken · saved as ${free}` : undefined }
+  }
+
+  /* One typed edit to one set. Members go through migrateAnchorSet's own filter
+   * rather than a second copy of the rule here, so what a caller can put in is
+   * exactly what survives being saved and read back. */
+  updateSet(id: number, patch: { members?: string[]; label?: string | null; meta?: Record<string, unknown> | null }) {
+    const i = this.doc.sets.findIndex((q) => q.id === id)
+    if (i < 0) return
+    const s = this.doc.sets[i]
+    const next = migrateAnchorSet({
+      ...s,
+      ...(patch.members !== undefined ? { members: patch.members } : {}),
+      ...(patch.label !== undefined ? { label: patch.label || '' } : {}),
+      ...(patch.meta !== undefined ? { meta: patch.meta || undefined } : {}),
+    } as MapAnchorSet)
+    if (!next) return
+    this.doc.sets[i] = next
+    this.touched()
+  }
+
+  removeSet(id: number) {
+    const i = this.doc.sets.findIndex((q) => q.id === id)
+    if (i < 0) return
+    this.doc.snap()
+    const [s] = this.doc.sets.splice(i, 1)
+    if (this.anchorSetSel === id) this.anchorSetSel = 0
+    this.touched()
+    this.say(`removed the set ${s.name}`)
+  }
+
+  selectSet(id: number) {
+    if (this.anchorSetSel === id) return
+    this.anchorSetSel = id
+    this.dirty = true
+    this.emit()
+  }
+
+  addRack(anchors: string[] = []): number {
+    this.doc.snap()
+    const id = this.doc.rackNext
+    const r = migrateRack({
+      id,
+      name: this.freeCollectionName(`rack_${id}`),
+      // the numbers start at one and follow the order they were handed over in,
+      // which is the order they will fill in
+      slots: anchors.map((a, i) => ({ slot: i + 1, anchor: a })),
+      slotNext: anchors.length + 1,
+    } as MapRack)
+    if (!r) return 0
+    this.doc.rackNext = id + 1
+    this.doc.racks.push(r)
+    this.rackSel = id
+    this.touched()
+    this.say(`${r.name} · ${r.slots.length} slots · give it a name code can use`)
+    return id
+  }
+
+  renameRack(id: number, want: string): { ok: boolean; name?: string; why?: string } {
+    const r = this.doc.racks.find((q) => q.id === id)
+    if (!r) return { ok: false, why: 'gone' }
+    const trimmed = String(want || '').trim()
+    if (!trimmed) return { ok: false, why: 'a name is required · code addresses this' }
+    const clean = anchorName(trimmed)
+    if (!isAnchorName(clean)) return { ok: false, why: 'letters, digits and underscores, starting with a letter' }
+    const free = this.freeCollectionName(clean, 0, id)
+    r.name = free
+    this.touched()
+    return { ok: true, name: free, why: free !== clean ? `taken · saved as ${free}` : undefined }
+  }
+
+  /* A NEW SLOT TAKES THE NEXT NUMBER THIS RACK HAS NEVER HANDED OUT, and that is
+   * the whole stability guarantee in one line. It is not slots.length + 1, which
+   * would hand a fresh hook the number a deleted one used to answer to, so a
+   * save saying "slot 2 is filled" would light a different hook. */
+  addRackSlot(id: number, anchor: string, label = ''): number {
+    const r = this.doc.racks.find((q) => q.id === id)
+    if (!r || !isAnchorName(anchor)) return 0
+    const slot = r.slotNext
+    r.slots.push({ slot, anchor, ...(label.trim() ? { label } : {}) })
+    r.slotNext = slot + 1
+    this.touched()
+    return slot
+  }
+
+  updateRackSlot(id: number, slot: number, patch: { anchor?: string; label?: string | null }) {
+    const r = this.doc.racks.find((q) => q.id === id)
+    const s = r?.slots.find((q) => q.slot === slot)
+    if (!r || !s) return
+    // the anchor under a slot can be moved; the number over it never changes,
+    // because that number is what a save and a member's python are both holding
+    if (patch.anchor !== undefined && isAnchorName(patch.anchor)) s.anchor = patch.anchor
+    if (patch.label !== undefined) {
+      if (patch.label && patch.label.trim()) s.label = patch.label
+      else delete s.label
+    }
+    this.touched()
+  }
+
+  /* THE NUMBER IS RETIRED WITH THE SLOT. Nothing renumbers and nothing reuses
+   * it: a rack of five that loses its second hook is 1, 3, 4, 5, and the next
+   * hook added is 6. Anything else and every trophy after the deleted one is
+   * hanging somewhere else the next time the map is opened. */
+  removeRackSlot(id: number, slot: number) {
+    const r = this.doc.racks.find((q) => q.id === id)
+    if (!r) return
+    const i = r.slots.findIndex((q) => q.slot === slot)
+    if (i < 0) return
+    this.doc.snap()
+    r.slots.splice(i, 1)
+    this.touched()
+    this.say(`slot ${slot} is gone and its number is not handed out again`)
+  }
+
+  /* REORDER, WHICH MOVES A ROW AND NOT ITS ADDRESS. The list order is the order
+   * things arrive in; the slot number is where they land. Dragging the fourth
+   * banner to the front means it is hung first and it is still banner 4. */
+  moveRackSlot(id: number, slot: number, to: number) {
+    const r = this.doc.racks.find((q) => q.id === id)
+    if (!r) return
+    const i = r.slots.findIndex((q) => q.slot === slot)
+    if (i < 0) return
+    const at = clamp(Math.round(to), 0, r.slots.length - 1)
+    if (at === i) return
+    const [s] = r.slots.splice(i, 1)
+    r.slots.splice(at, 0, s)
+    this.touched()
+  }
+
+  removeRack(id: number) {
+    const i = this.doc.racks.findIndex((q) => q.id === id)
+    if (i < 0) return
+    this.doc.snap()
+    const [r] = this.doc.racks.splice(i, 1)
+    if (this.rackSel === id) this.rackSel = 0
+    this.touched()
+    this.say(`removed the rack ${r.name}`)
+  }
+
+  selectRack(id: number) {
+    if (this.rackSel === id) return
+    this.rackSel = id
+    this.dirty = true
+    this.emit()
+  }
+
+  // ---- variant sets, group conditions, and the names of faces ---------------
+  /* A VARIANT SET is one name resolving to one of several PLACEMENTS with at
+   * most one of them showing. Five docks, one per island state; a hearth lit and
+   * unlit; a ship and the empty berth it is not in. It is not `looks`, which is
+   * one placement wearing another face: §8.12's ship and empty water are two
+   * silhouettes with two footprints and two anchors, and drawing them as two
+   * frames of one sprite gives the empty berth the ship's collision.
+   *
+   * ONE TALLY WITH SETS AND RACKS, because it is the third named collection of
+   * this map's things and python calls all three with one word. See
+   * freeCollectionName: letting `the_berth` be a set and a variant set at once
+   * makes that call's answer depend on which lookup runs first.
+   *
+   * CONTROLS NEEDED, and App.tsx is owned elsewhere this round. Two, both in the
+   * anchors panel beside the sets and racks lists:
+   *
+   *   1. a variant sets list. A name field, an anchor picker, and one row per
+   *      member: a placement picker (the named placements only, which is what
+   *      `namedPlacements` below answers) and a state name field, calling
+   *      addVariantSet / addVariant / updateVariant / removeVariant. A radio down
+   *      the rows sets `initial`, and it must be able to be turned all the way
+   *      off, because nothing showing is a state an author chooses.
+   *   2. on the placement inspector, which set this placement is a member of and
+   *      under which state name, so somebody looking at `the_ship` can see it is
+   *      one of two and not scenery.
+   *
+   * Both want variantGaps printed under the list in the red the route checker
+   * uses: a member naming a placement this map does not have is the failure that
+   * reads on screen as the state simply not working. */
+  freeVariantName(want: string, exceptId = 0): string {
+    const base = anchorName(want)
+    const taken = new Set([
+      ...this.doc.sets.map((s) => s.name),
+      ...this.doc.racks.map((r) => r.name),
+      ...this.doc.variants.filter((v) => v.id !== exceptId).map((v) => v.name),
+    ])
+    if (!taken.has(base)) return base
+    for (let i = 2; ; i++) if (!taken.has(`${base}_${i}`)) return `${base}_${i}`
+  }
+
+  /* WHICH MEMBERS NAME A PLACEMENT THIS MAP DOES NOT HAVE. The same question the
+   * publish gate asks, asked while there is still somebody looking at the
+   * screen. Answered against the author names only, because that is what a set
+   * stores and what the game resolves it through. */
+  variantGaps(id: number): string[] {
+    const v = this.doc.variants.find((q) => q.id === id)
+    if (!v) return []
+    const have = new Set(this.doc.assets.filter((a) => a.name).map((a) => a.name as string))
+    const out: string[] = []
+    for (const m of v.members) if (!have.has(m.placement) && !out.includes(m.placement)) out.push(m.placement)
+    return out
+  }
+
+  /* every placement an author has named, which is the only pool a variant member
+   * can be picked from: an unnamed placement has no address for the set to hold */
+  namedPlacements(): { name: string; label: string }[] {
+    return this.doc.assets
+      .filter((a) => isPlacementName(a.name))
+      .map((a) => ({ name: a.name as string, label: assetLabel(a) }))
+  }
+
+  addVariantSet(anchor: string): number {
+    if (!isAnchorName(anchor)) return 0
+    const id = this.doc.variantNext++
+    const v = migrateVariantSet({
+      id,
+      name: this.freeVariantName(`${anchor}_state`),
+      anchor,
+      members: [],
+      initial: '',
+    } as MapVariantSet)
+    if (!v) return 0
+    this.doc.snap()
+    this.doc.variants.push(v)
+    this.variantSel = id
+    this.touched()
+    this.say(`variant set ${v.name} on ${anchor}`)
+    return id
+  }
+
+  updateVariantSet(id: number, patch: { name?: string; anchor?: string; label?: string | null; initial?: string }) {
+    const v = this.doc.variants.find((q) => q.id === id)
+    if (!v) return
+    if (patch.name !== undefined) v.name = this.freeVariantName(patch.name || v.name, id)
+    if (patch.anchor !== undefined && isAnchorName(patch.anchor)) v.anchor = patch.anchor
+    if (patch.label !== undefined) {
+      if (patch.label && patch.label.trim()) v.label = patch.label
+      else delete v.label
+    }
+    /* A STATE NAME NOTHING IS CALLED MEANS NOTHING IS SHOWING, and that is on
+     * purpose rather than a fallback to the first member. Showing an arbitrary
+     * placement because the initial was misspelt is a map that looks authored
+     * and is not; showing nothing is a mistake an author can see. */
+    if (patch.initial !== undefined) v.initial = v.members.some((m) => m.name === patch.initial) ? patch.initial : ''
+    this.touched()
+  }
+
+  addVariant(id: number, placement: string, name = ''): boolean {
+    const v = this.doc.variants.find((q) => q.id === id)
+    if (!v || !isPlacementName(placement)) return false
+    /* ONE PLACEMENT PER STATE, both ways round. Two states on one placement
+     * cannot be exclusive: setting either leaves the same sprite on screen and
+     * nothing downstream can say which state the set is in. */
+    if (v.members.some((m) => m.placement === placement)) return false
+    let want = anchorName(name || placement)
+    if (v.members.some((m) => m.name === want)) for (let i = 2; v.members.some((m) => m.name === `${want}_${i}`); i++) want = `${want}_${i}`
+    v.members.push({ name: want, placement })
+    // the first member showing by default, because a set built one row at a time
+    // with nothing selected reads as a set that does not work
+    if (!v.initial) v.initial = want
+    this.touched()
+    return true
+  }
+
+  updateVariant(id: number, name: string, patch: { name?: string; placement?: string; label?: string | null }) {
+    const v = this.doc.variants.find((q) => q.id === id)
+    const m = v?.members.find((q) => q.name === name)
+    if (!v || !m) return
+    if (patch.placement !== undefined && isPlacementName(patch.placement) && !v.members.some((q) => q !== m && q.placement === patch.placement))
+      m.placement = patch.placement
+    if (patch.name !== undefined) {
+      const want = anchorName(patch.name)
+      if (isAnchorName(want) && !v.members.some((q) => q !== m && q.name === want)) {
+        // the initial follows the rename, or an author renaming the state that
+        // was showing silently turns the whole set off
+        if (v.initial === m.name) v.initial = want
+        m.name = want
+      }
+    }
+    if (patch.label !== undefined) {
+      if (patch.label && patch.label.trim()) m.label = patch.label
+      else delete m.label
+    }
+    this.touched()
+  }
+
+  removeVariant(id: number, name: string) {
+    const v = this.doc.variants.find((q) => q.id === id)
+    if (!v) return
+    const i = v.members.findIndex((q) => q.name === name)
+    if (i < 0) return
+    this.doc.snap()
+    v.members.splice(i, 1)
+    if (v.initial === name) v.initial = ''
+    this.touched()
+  }
+
+  removeVariantSet(id: number) {
+    const i = this.doc.variants.findIndex((q) => q.id === id)
+    if (i < 0) return
+    this.doc.snap()
+    const [v] = this.doc.variants.splice(i, 1)
+    if (this.variantSel === id) this.variantSel = 0
+    this.touched()
+    this.say(`removed the variant set ${v.name}`)
+  }
+
+  selectVariantSet(id: number) {
+    if (this.variantSel === id) return
+    this.variantSel = id
+    this.dirty = true
+    this.emit()
+  }
+
+  /* THE CONDITION ON A GROUP, WHICH IS WHY A GROUP NOW HAS A ROW AT ALL.
+   *
+   * A dozen placements that are the same year's dressing share one condition,
+   * and copying the string onto each of them means the thirteenth is placed
+   * without it and nothing anywhere says so. The row is created on demand and
+   * removed again when it says nothing, so a map where nobody has typed a
+   * condition carries no group rows and exports byte for byte what it did.
+   *
+   * CONTROL NEEDED: a `when` field on the group header row in the layers list in
+   * App.tsx, beside the eye that hides a group, calling this. */
+  setGroupWhen(name: string, when: string) {
+    if (!name) return
+    const clean = String(when || '').trim().slice(0, 240)
+    const i = this.doc.groups.findIndex((g) => g.name === name)
+    this.doc.snap()
+    if (i < 0) {
+      if (clean) this.doc.groups.push({ name, when: clean })
+    } else if (clean) this.doc.groups[i].when = clean
+    else {
+      delete this.doc.groups[i].when
+      if (!this.doc.groups[i].label) this.doc.groups.splice(i, 1)
+    }
+    this.touched()
+    this.say(clean ? `${name} shows when ${clean}` : `${name} always shows`)
+  }
+
+  /* THE CONDITION ON ONE PLACEMENT, which beats its group's where both exist.
+   * CONTROL NEEDED: a `when` field on the placement inspector in App.tsx. */
+  setAssetWhen(ids: string[], when: string) {
+    const want = new Set(ids)
+    const picked = this.doc.assets.filter((a) => want.has(a.id))
+    if (!picked.length) return 0
+    const clean = String(when || '').trim().slice(0, 240)
+    this.doc.snap()
+    for (const a of picked) {
+      if (clean) a.when = clean
+      else delete a.when
+    }
+    this.touched()
+    return picked.length
+  }
+
+  /* THE CONDITION ON AN ANCHOR: a door barred until a cord is earned, a berth
+   * that does not exist until the ship is repaired. It goes through migrateEvent
+   * so the field and the meta bag it rides in cannot disagree.
+   * CONTROL NEEDED: a `when` field on the anchor inspector in App.tsx. */
+  setAnchorWhen(id: number, when: string) {
+    const e = this.doc.events.find((q) => q.id === id)
+    if (!e) return
+    this.doc.snap()
+    e.when = String(when || '').trim().slice(0, 240)
+    migrateAnchor(e)
+    this.touched()
+  }
+
+  /* WHAT A FACE IS CALLED, which is the whole of `show(placement, state)` having
+   * a vocabulary. Index 0 is the picture the placement was placed with and is
+   * named on the placement itself, because look 0 is not an AssetLook.
+   * CONTROL NEEDED: a name field per face in the life panel's picture list in
+   * App.tsx, pre-filled with what nameLooks derived. */
+  setLookName(id: string, index: number, name: string): boolean {
+    const a = this.doc.assets.find((q) => q.id === id)
+    if (!a) return false
+    const want = anchorName(name)
+    if (name && !isLookName(want)) return false
+    this.doc.snap()
+    if (index <= 0) {
+      if (name) a.lookName = want
+      else delete a.lookName
+    } else {
+      const L = a.looks && a.looks[index - 1]
+      if (!L) return false
+      if (name) L.name = want
+      else delete L.name
+    }
+    this.touched()
+    return true
+  }
+
   clearMask() {
     this.doc.clear()
     this.plates = null
@@ -4360,7 +4949,18 @@ export class Editor {
        * closed still shipped, at full opacity, with nothing anywhere saying so.
        * Turning a thing off and then finding it in the game is the worst kind
        * of surprise, because it reads as the tool ignoring you. */
-      assets: this.doc.assets.filter((a) => !this.hiddenGroups.has(a.group)),
+      /* THE CONDITION IS RESOLVED HERE, where the group table is. A placement's
+       * own `when` wins and otherwise it inherits its group's. The group row
+       * stays in map.json as the authoring record, and the resolved string rides
+       * the placement because the game's assets loop has a placement in hand and
+       * no group table beside it, and handing it one would be a second lookup
+       * for a value that cannot change after the export. */
+      assets: this.doc.assets
+        .filter((a) => !this.hiddenGroups.has(a.group))
+        .map((a) => {
+          const w = whenOf(a, this.doc.groups)
+          return w === (a.when || '') ? a : { ...a, when: w }
+        }),
       map: {
         id: this.sceneId,
         w: this.doc.W,
@@ -4423,11 +5023,14 @@ export class Editor {
           ...(e.placement ? { placement: e.placement } : {}),
           ...(e.facing ? { facing: e.facing } : {}),
           ...(e.label ? { label: e.label } : {}),
-          /* the bag, with every shot hung on this name folded into it. See
-           * shotsOntoMeta in mask.ts: the game reads a camera off the anchor and
-           * has never had a reader for the framings list below. */
+          /* the bag, with every shot AND every variant set hung on this name
+           * folded into it. See shotsOntoMeta and variantsOntoMeta in mask.ts:
+           * readAnchors in the game builds its anchor from a fixed list of
+           * top-level fields and then copies meta whole, so the bag is the only
+           * thing a new field can cross in. `when` is already inside it, put
+           * there by migrateEvent for the same reason. */
           ...(() => {
-            const m = shotsOntoMeta(this.doc.framings, e.name, e.meta)
+            const m = variantsOntoMeta(this.doc.variants, e.name, shotsOntoMeta(this.doc.framings, e.name, e.meta))
             return m ? { meta: m } : {}
           })(),
         })),
@@ -4499,6 +5102,83 @@ export class Editor {
               })),
             }
           : {}),
+        /* SETS AND RACKS, keyed by name and absent when nobody made one.
+         *
+         * NOTHING IN THE GAME READS EITHER YET, and that is written down here the
+         * way it is written down for `paths`, so the next session does not guess
+         * a shape and then have to unpick it. What is over there today, read
+         * before this was designed rather than assumed: AdventureGame's
+         * src/game/pmap/anchors.ts holds anchors in one flat map keyed by name and
+         * the only many-at-once question it can answer is `ofKind`; nothing groups
+         * anchors, nothing iterates a named collection, nothing indexes a slot;
+         * and every anchor-taking intent in src/vine/intents.ts takes a single
+         * `anchor: string`. `PlacedAsset.group` is declared at PmapScene.tsx:1119
+         * and never read, which is the shape of the same need on placements.
+         *
+         * So there was no running shape to match and these are the minimum that
+         * says the thing. The reader, when it is built, belongs in that same
+         * anchors.ts beside `get` and `ofKind`, because it is one more question
+         * about a map's anchors and that file is the one place that knows the
+         * anchor contract.
+         *
+         * The rack's `slot` number ships and the id does not, which is the
+         * opposite of what a route or a shot does with its counter. `slot` is the
+         * address: it is what hook[3] means, it is stable for the life of the map,
+         * and a save that says slot 3 is filled has to mean the same hook the next
+         * time the map is opened. See mask.ts for the whole of it. */
+        ...(this.doc.sets.length
+          ? {
+              sets: this.doc.sets.map((s) => ({
+                name: s.name,
+                ...(s.label ? { label: s.label } : {}),
+                members: s.members,
+                ...(s.meta && Object.keys(s.meta).length ? { meta: s.meta } : {}),
+              })),
+            }
+          : {}),
+        ...(this.doc.racks.length
+          ? {
+              racks: this.doc.racks.map((r) => ({
+                name: r.name,
+                ...(r.label ? { label: r.label } : {}),
+                slots: r.slots.map((s) => ({
+                  slot: s.slot,
+                  anchor: s.anchor,
+                  ...(s.label ? { label: s.label } : {}),
+                  ...(s.meta && Object.keys(s.meta).length ? { meta: s.meta } : {}),
+                })),
+                ...(r.meta && Object.keys(r.meta).length ? { meta: r.meta } : {}),
+              })),
+            }
+          : {}),
+        /* THE VARIANT SET LIST IS THE AUTHORING RECORD AND NOT THE SWITCH.
+         *
+         * Every set is also folded into its anchor's meta bag above, which is
+         * the only place the game can read one: readAnchors copies a fixed list
+         * of top-level fields plus the whole bag, so an array up here is dropped
+         * by the reader that already ships. This stays for the same reasons the
+         * shot list does, which is that it is what the panel edits, what reloads
+         * and what the api hands python, and because the anchor projection drops
+         * the labels a person reads. */
+        ...(this.doc.variants.length
+          ? {
+              variants: this.doc.variants.map((v) => ({
+                name: v.name,
+                anchor: v.anchor,
+                ...(v.label ? { label: v.label } : {}),
+                members: v.members,
+                initial: v.initial,
+                ...(v.meta && Object.keys(v.meta).length ? { meta: v.meta } : {}),
+              })),
+            }
+          : {}),
+        /* THE GROUP ROWS, which are the one place a condition shared by a dozen
+         * placements is written once. Every placement in assets.json already
+         * carries the resolved string, so a reader needs nothing from here; this
+         * is what an author edits and what a re-open reads back, and without it a
+         * reopened map would show a dozen placements each carrying a condition
+         * and no group that owns any of them. */
+        ...(this.doc.groups.length ? { groups: this.doc.groups } : {}),
       },
     }
   }
@@ -4800,7 +5480,10 @@ export class Editor {
          * anchors[] first because it is the richer shape and carries the
          * author-typed name; a bundle exported before anchors existed only has
          * events[], and those migrate into doors with a derived name. */
-        const exported = (s.map as { anchors?: unknown[]; events?: unknown[] } | undefined) || {}
+        const exported =
+          (s.map as
+            | { anchors?: unknown[]; events?: unknown[]; variants?: unknown[]; groups?: unknown[] }
+            | undefined) || {}
         const list = Array.isArray(exported.anchors) ? exported.anchors : exported.events
         if (Array.isArray(list) && list.length) {
           this.doc.events = list.map((e, i) =>
@@ -4808,6 +5491,22 @@ export class Editor {
           )
           this.doc.eventNext = this.doc.events.reduce((m, e) => Math.max(m, e.id), 0) + 1
         }
+        /* THE VARIANT SETS AND THE GROUP ROWS COME BACK TOO, or a reopen and a
+         * re-export deletes them: the placements would still carry their
+         * conditions and every set would be gone, which is the same silent loss
+         * `life` and `dirs` each shipped once. The id is not in the bundle
+         * because a name is the only identity across that boundary, so it is
+         * handed out again here the way an anchor's is. */
+        if (Array.isArray(exported.variants) && exported.variants.length) {
+          this.doc.variants = (exported.variants as MapVariantSet[])
+            .map((v, i) => migrateVariantSet({ ...(v as object), id: i + 1 } as MapVariantSet))
+            .filter((v): v is MapVariantSet => !!v)
+          this.doc.variantNext = this.doc.variants.reduce((m, v) => Math.max(m, v.id), 0) + 1
+        }
+        if (Array.isArray(exported.groups) && exported.groups.length)
+          this.doc.groups = (exported.groups as MapGroup[])
+            .map(migrateGroup)
+            .filter((g): g is MapGroup => !!g)
         got = true
       }
       // assets.json paths are bundle-relative (assets/foo.png); the bundle's
@@ -4903,6 +5602,12 @@ export class Editor {
           if (!look0) continue
           const base: PlacedAsset = {
             id,
+            /* THE AUTHOR'S OWN NAME FOR THIS THING, which this path dropped. It
+             * is the only address anything outside the map can hold: an anchor
+             * binds to it, a variant member names it, and the game keys its
+             * sprites by it. A reopen that loses it and re-exports turns every
+             * binding on the map into a name pointing at nothing. */
+            ...(isPlacementName(d.name) ? { name: String(d.name) } : {}),
             group: typeof d.group === 'string' && d.group ? d.group : 'props',
             ...look0,
             x,
@@ -4913,6 +5618,10 @@ export class Editor {
             rot: isFinite(Number(d.rot)) ? Number(d.rot) : 0,
             fx: !!d.flipX,
             fy: !!d.flipY,
+            // the condition, back exactly as it shipped. It was resolved off the
+            // group on the way out, and the group rows come back above, so
+            // whenOf answers the same string on the next export.
+            ...(typeof d.when === 'string' && d.when.trim() ? { when: String(d.when).trim() } : {}),
           }
           // how it MOVES comes back too, through the same guard every other
           // caller uses. Dropping it was what silently deleted every behaviour
@@ -4937,6 +5646,14 @@ export class Editor {
           const looks: AssetLook[] = []
           for (const L of Array.isArray(d.looks) ? d.looks.slice(0, LOOKS_MAX) : []) looks.push(readLook(L) || look0)
           if (looks.length) base.looks = looks
+          /* AND WHAT EACH FACE IS CALLED. One array indexed exactly the way art
+           * is, slot 0 being the placement's own picture, so the off-by-one is
+           * read here the same way it is written. An empty string is a face
+           * nobody named and holds its slot for the same reason a look that
+           * would not load holds its. */
+          const names = Array.isArray(d.lookNames) ? (d.lookNames as unknown[]) : []
+          if (isLookName(names[0])) base.lookName = names[0] as string
+          for (let i = 0; i < looks.length; i++) if (isLookName(names[i + 1])) looks[i].name = names[i + 1] as string
           out.push(base)
         }
         if (out.length) {

@@ -69,10 +69,29 @@ const doc = {
   assets: [
     // a placement with a NAME, which is the only address anything outside the
     // map can hold: the id beside it is a counter nobody chose
-    { id: 'a1', name: 'the_coach', group: 'people', kind: 'static', src: '/work/x/library/a/0.png', x: 20, y: 20, scale: 1, sx: 1, sy: 1, rot: 0, fx: false, fy: false },
+    /* NAMED FACES. `art` is an index and stays one, so these ride beside the
+     * index rather than instead of it: without them the only selector in the
+     * system is a life round a model wrote, and show(placement, state) has no
+     * vocabulary at all. Look 0's name lives on the placement, because look 0 is
+     * the placement's own picture and not an entry in `looks`. */
+    {
+      id: 'a1', name: 'the_coach', group: 'people', kind: 'static', src: '/work/x/library/a/0.png',
+      x: 20, y: 20, scale: 1, sx: 1, sy: 1, rot: 0, fx: false, fy: false,
+      lookName: 'standing',
+      looks: [{ kind: 'static', src: '/work/x/library/b/0.png', name: 'seated' }],
+    },
     { id: 'a2', group: 'props', kind: 'static', src: '/work/x/library/b/0.png', x: 30, y: 30, scale: 1, sx: 1, sy: 1, rot: 0, fx: false, fy: false },
+    /* TWO PLACEMENTS THAT TRADE PLACES, which is what a variant set is and what
+     * one placement wearing two faces cannot be: a ship and the empty water it
+     * is not in have two silhouettes, two footprints and two anchors. */
+    { id: 'a3', name: 'the_ship', group: 'dock', kind: 'static', src: '/work/x/library/c/0.png', x: 24, y: 22, scale: 1, sx: 1, sy: 1, rot: 0, fx: false, fy: false },
+    { id: 'a4', name: 'the_empty_berth', group: 'dock', kind: 'static', src: '/work/x/library/d/0.png', x: 24, y: 22, scale: 1, sx: 1, sy: 1, rot: 0, fx: false, fy: false },
+    /* A PLACEMENT WITH ITS OWN CONDITION, which must beat the group's, and one
+     * with none, which must inherit it. */
+    { id: 'a5', name: 'the_banner', group: 'year_two', kind: 'static', src: '/work/x/library/e/0.png', x: 12, y: 26, scale: 1, sx: 1, sy: 1, rot: 0, fx: false, fy: false, when: 'flag("banner_hung")' },
+    { id: 'a6', name: 'the_bunting', group: 'year_two', kind: 'static', src: '/work/x/library/f/0.png', x: 14, y: 26, scale: 1, sx: 1, sy: 1, rot: 0, fx: false, fy: false },
   ],
-  assetNext: 3,
+  assetNext: 7,
   events: [
     // bound to the placement BY ITS NAME, with the floor beside it marked and a
     // heading to face while standing there
@@ -81,8 +100,17 @@ const doc = {
     { id: 2, name: 'the_yard', kind: 'region', x: 10, y: 10, r: 8, to: '', label: '', rect: [4, 4, 36, 30] },
     // a hall is a place you are inside of, so the gate insists on a way out
     { id: 3, name: 'the_way_out', kind: 'door', x: 12, y: 12, r: 8, to: 'hub', toAnchor: 'panthers_maw', label: 'out' },
+    /* A DOOR THAT IS BARRED UNTIL SOMETHING HAPPENS, which is the case that
+     * proves the condition cannot only live on a placement: this anchor has no
+     * placement bound to it and still has to be able to be off. It rides the
+     * meta bag, because the anchors upsert, the game's readAnchors and the
+     * publish projection each copy a fixed list of columns plus the whole bag. */
+    { id: 4, name: 'the_barred_way', kind: 'door', x: 16, y: 12, r: 8, to: 'hub', toAnchor: 'panthers_maw', label: 'the barred way', when: 'cord("service")' },
+    // the anchor a variant set is addressed through, which is the only address
+    // python has for one: every world-touching intent takes an anchor name
+    { id: 5, name: 'the_berth', kind: 'point', x: 24, y: 22, r: 10, to: '', label: 'the berth' },
   ],
-  eventNext: 4,
+  eventNext: 6,
   occs: [{ id: 1, baseline: 41 }],
   occNext: 2,
   // the six numbers describing the body, none of them the defaults
@@ -121,6 +149,51 @@ const doc = {
     { id: 2, name: 'wide_on_the_coach', anchor: 'coach_post', dx: 0, dy: 0, zoom: 1, overFit: 1.18 },
   ],
   framingNext: 2,
+  /* A NAMED SET OF ANCHORS, so python iterates a collection instead of holding
+   * five hard-coded strings and never being able to tell whether that is all of
+   * them. Membership only: where the third one has to be the third one every run,
+   * that is a rack and not this. */
+  sets: [{ id: 1, name: 'the_stations', label: 'the stations', members: ['coach_post', 'the_yard'] }],
+  setNext: 2,
+  /* AN ORDERED RACK: the trophy wall, in miniature. The slot numbers are NOT
+   * array positions, and slot 2 is deliberately absent to prove it: this rack was
+   * authored with three hooks, the middle one was taken out, and the two that are
+   * left keep the numbers they were given. */
+  racks: [
+    {
+      id: 1,
+      name: 'the_trophy_wall',
+      label: 'the trophy wall',
+      slots: [
+        { slot: 1, anchor: 'coach_post', label: 'first place' },
+        { slot: 3, anchor: 'the_yard' },
+      ],
+      slotNext: 4,
+    },
+  ],
+  rackNext: 2,
+  /* A NAMED EXCLUSIVE VARIANT SET. One name resolving to one of several
+   * PLACEMENTS with at most one visible, so python sets a state and never has to
+   * know how many there are or switch the others off by hand. Five dock
+   * placements, one per island state, is the shape; two is enough to prove it. */
+  variants: [
+    {
+      id: 1,
+      name: 'the_berth_state',
+      anchor: 'the_berth',
+      label: 'the berth',
+      members: [
+        { name: 'empty', placement: 'the_empty_berth', label: 'no ship' },
+        { name: 'moored', placement: 'the_ship' },
+      ],
+      initial: 'empty',
+    },
+  ],
+  variantNext: 2,
+  /* A CONDITION ON A GROUP, so a dozen placements that are the same year's
+   * dressing are not a dozen copies of one string, and the thirteenth is not
+   * placed without it. */
+  groups: [{ name: 'year_two', label: 'second year dressing', when: 'year >= 2' }],
 }
 
 const owner = await one('select id from users order by created_at limit 1')
@@ -156,6 +229,35 @@ try {
    * integer locked at load, so 2.5 is exactly the value something downstream is
    * most tempted to round, and a pull-out shot cannot exist on integer notches. */
   eq('the shot keeps a zoom off the integer notches', bf?.zoom, 2.5)
+  const bs = back.sets?.find((s) => s.name === 'the_stations')
+  eq('the set survives the save', bs?.members, ['coach_post', 'the_yard'])
+  const br = back.racks?.find((r) => r.name === 'the_trophy_wall')
+  /* THE GAP IS THE POINT. A rack that came back as slots 1 and 2 would be a rack
+   * that renumbered itself around a deleted hook, and every trophy after the gap
+   * would hang somewhere else the next time the map was opened. */
+  eq('the rack keeps the slot numbers it was given, gap and all', br?.slots.map((s) => s.slot), [1, 3])
+  eq('and the counter does not hand out a number the wall has already used', br?.slotNext, 4)
+  /* THE FACE NAMES. Every one of these was resolved to an integer by the planner
+   * lane and thrown away, so a bundle addressed a picture by number and nothing
+   * outside life.ts could ask for one at all. The index is still the data; this
+   * is the word beside it. */
+  const bcoach = back.assets.find((a) => a.id === 'a1')
+  eq('the name of look 0 survives the save', bcoach?.lookName, 'standing')
+  eq('the name of the face it changes into survives the save', bcoach?.looks?.[0]?.name, 'seated')
+  eq('a placement condition survives the save', back.assets.find((a) => a.id === 'a5')?.when, 'flag("banner_hung")')
+  /* field by field, not whole, for the reason the world checks below give: this
+   * came back out of jsonb and postgres does not keep the key order it went in
+   * with */
+  eq('the group row survives the save', [back.groups?.[0]?.name, back.groups?.[0]?.when], ['year_two', 'year >= 2'])
+  /* THE ANCHOR'S CONDITION, which is the one with no column of its own: it rides
+   * anchors.meta because that is the only carrier the anchors upsert copies
+   * whole, and migrateEvent lifts it back onto the field so the panel sees it. */
+  const barred = back.events.find((e) => e.name === 'the_barred_way')
+  eq('an anchor condition survives the save, in the bag it has to ride in', barred?.meta?.when, 'cord("service")')
+  eq('and is lifted back onto the field the author typed it into', barred?.when, 'cord("service")')
+  const bv = back.variants?.find((v) => v.name === 'the_berth_state')
+  eq('the variant set survives the save', bv?.members.map((m) => m.placement), ['the_empty_berth', 'the_ship'])
+  eq('and the state it opens on', [bv?.anchor, bv?.initial], ['the_berth', 'empty'])
 
   // ---- 2. the gate, refusing things that can never work -------------------
   const anchors = [
@@ -201,9 +303,23 @@ try {
     occluders: doc.occs,
     class: 'hall',
   }
+  /* exactly what server/api.mjs writes into assets.json, including the two
+   * fields this round added to it: the resolved condition, and the face names
+   * indexed the way `art` indexes the pictures. Held in one place because the
+   * refusal test further down republishes and its refusal has to be about the
+   * anchor in the wall rather than about a variant set with nothing in it. */
+  const pubAssets = {
+    assets: [
+      { id: 'a1', name: 'the_coach', group: 'people', src: 'assets/a/0.png', x: 20, y: 20, scale: 1, lookNames: ['standing', 'seated'], looks: [{ src: 'assets/b/0.png' }] },
+      { id: 'a3', name: 'the_ship', group: 'dock', src: 'assets/c/0.png', x: 24, y: 22, scale: 1 },
+      { id: 'a4', name: 'the_empty_berth', group: 'dock', src: 'assets/d/0.png', x: 24, y: 22, scale: 1 },
+      { id: 'a5', name: 'the_banner', group: 'year_two', src: 'assets/e/0.png', x: 12, y: 26, scale: 1, when: 'flag("banner_hung")' },
+      { id: 'a6', name: 'the_bunting', group: 'year_two', src: 'assets/f/0.png', x: 14, y: 26, scale: 1, when: 'year >= 2' },
+    ],
+  }
   const pub = await publishBundle(SLUG, {
     mapJson: bundleMap,
-    assetsJson: { assets: [{ id: 'a1', name: 'the_coach', group: 'people', src: 'assets/a/0.png', x: 20, y: 20, scale: 1 }] },
+    assetsJson: pubAssets,
     images: { 'levels.png': levelsPNG },
     files: new Map(),
   })
@@ -231,6 +347,22 @@ try {
   const sf = (shipped.framings || []).find((f) => f.name === 'over_the_coach')
   eq('published shot', [sf?.anchor, sf?.dx, sf?.dy, sf?.zoom], ['coach_post', -12, -20, 2.5])
   eq('published entry framing', sf?.entry, true)
+
+  /* THE SET AND THE RACK, ALL THE WAY INTO THE PUBLISHED BUNDLE. Two exporters
+   * write these, bundle() in the browser and publishBundle here, and the two have
+   * diverged before: `placement` lived in the type, the form, the document and
+   * the table and was dropped by both, so one of the fifteen intents could not
+   * fire on any bundle this tool could produce. This is the fence for that. */
+  const ss = (shipped.sets || []).find((s) => s.name === 'the_stations')
+  eq('published set', ss?.members, ['coach_post', 'the_yard'])
+  eq('published set label', ss?.label, 'the stations')
+  const sr = (shipped.racks || []).find((r) => r.name === 'the_trophy_wall')
+  eq('published rack keeps its stable slot numbers', sr?.slots.map((s) => s.slot), [1, 3])
+  eq('published rack slot names its anchor and its own label', sr?.slots[0], {
+    slot: 1,
+    anchor: 'coach_post',
+    label: 'first place',
+  })
 
   /* THE SHOT WHERE THE CAMERA ACTUALLY LOOKS FOR IT, which is the fence this
    * whole check was missing. The array above is MAPVIS's authoring record and
@@ -269,7 +401,109 @@ try {
     : no(`provenance missing or wrong: ${JSON.stringify(shipped.provenance)}`)
 
   const shippedAssets = JSON.parse((await store().get(row.blob_prefix + 'assets.json')).toString('utf8'))
-  eq('published placement name', shippedAssets.assets?.[0]?.name, 'the_coach')
+  const byId = (id) => (shippedAssets.assets || []).find((a) => a.id === id)
+  eq('published placement name', byId('a1')?.name, 'the_coach')
+  /* THE FACE NAMES, ALL THE WAY TO THE BUNDLE, and indexed the way art indexes
+   * the pictures: slot 0 is the placement's own and slot 1 is looks[0]. life.ts
+   * is emphatic that art is an index and never a name, and it stays that way; a
+   * bundle that shipped these inside look 0 would have overwritten the
+   * placement's own name, because look 0 is spread into the entry. */
+  eq('published look names, indexed exactly as art is', byId('a1')?.lookNames, ['standing', 'seated'])
+  /* THE RESOLVED CONDITION ON EACH PLACEMENT. Its own beats the group's; a
+   * placement with none inherits the group's, which is the whole reason the
+   * carrier could not only be the placement. */
+  eq('a placement keeps its own condition', byId('a5')?.when, 'flag("banner_hung")')
+  eq('and one with none inherits the condition on its group', byId('a6')?.when, 'year >= 2')
+
+  /* THE VARIANT SET, ALL THE WAY IN, and in both shapes for the same reason the
+   * shots are: the array is the authoring record and the anchor's meta bag is
+   * what the game can actually read. readAnchors over there builds an Anchor
+   * from a fixed list of top-level fields and copies meta whole, so an array up
+   * top has no reader at all; PmapScene keys its sprites by placement name, so a
+   * state pointing at a name needs no new lookup. */
+  const sv = (shipped.variants || []).find((v) => v.name === 'the_berth_state')
+  eq('published variant set', sv?.members.map((m) => m.placement), ['the_empty_berth', 'the_ship'])
+  eq('published variant labels, which the projection drops', sv?.members[0]?.label, 'no ship')
+  const berth = (shipped.anchors || []).find((a) => a.name === 'the_berth')
+  eq('the set is on the anchor python addresses it through', berth?.meta?.variants?.the_berth_state, {
+    initial: 'empty',
+    members: [
+      { name: 'empty', placement: 'the_empty_berth' },
+      { name: 'moored', placement: 'the_ship' },
+    ],
+  })
+  /* THE GROUP ROWS SHIP TOO. Nothing has to read them, because every placement
+   * already carries the resolved string; without them a reopened map shows a
+   * dozen placements each carrying a condition and no group that owns any. */
+  eq('published group row', [shipped.groups?.[0]?.name, shipped.groups?.[0]?.when], ['year_two', 'year >= 2'])
+  /* AND THE ANCHOR'S OWN CONDITION, in the bag, beside the shots and under the
+   * docId that was already there. A door barred until a cord is earned has no
+   * placement to hang a condition on, which is the case that settles it. */
+  eq('the anchor condition reaches the bag the game reads', (shipped.anchors || []).find((a) => a.name === 'the_barred_way')?.meta?.when, 'cord("service")')
+  /* AND AN ANCHOR NOBODY HUNG A SET ON GROWS NOTHING, so a bundle with no
+   * variant sets on it stays byte for byte what it was. */
+  eq('an anchor with no set on it stays as it was', berth?.meta?.framings, undefined)
+
+  /* A SET NAMING AN ANCHOR THAT IS NOT HERE IS REFUSED, WITH THE NAME SAID.
+   *
+   * This is the whole argument for authoring a set instead of typing five strings
+   * into python. A grape iterating `steles` and silently getting four back is
+   * indistinguishable from five to everything downstream: the badge that fires on
+   * the set being complete never fires and nothing anywhere says why. So the
+   * count is checked once, here, where refusing costs a retry, rather than at
+   * runtime where it costs a student the beat.
+   *
+   * Written straight into the column rather than through putDoc, because putDoc
+   * also mirrors the anchors and this has to change one thing at a time. Put back
+   * immediately after, so section 4 below still finds the map it expects. */
+  const goodSets = (await one('select sets from maps where id = $1', [map.id])).sets
+  await q(`update maps set sets = $2::jsonb where id = $1`, [
+    map.id,
+    JSON.stringify([{ id: 1, name: 'the_stations', members: ['coach_post', 'a_stele_nobody_drew'] }]),
+  ])
+  let setRefused = ''
+  try {
+    await publishBundle(SLUG, {
+      mapJson: bundleMap,
+      assetsJson: { assets: [] },
+      images: { 'levels.png': levelsPNG },
+      files: new Map(),
+    })
+  } catch (e) {
+    setRefused = e.message
+  }
+  setRefused.includes('a_stele_nobody_drew') && setRefused.includes('the_stations')
+    ? ok('a set naming an anchor this map does not have is refused, and the refusal says which name')
+    : no(`a broken set published anyway: ${setRefused || 'no error'}`)
+  await q(`update maps set sets = $2::jsonb where id = $1`, [map.id, JSON.stringify(goodSets)])
+
+  /* AND THE SHAPE A GRAPE ACTUALLY ASKS IN. The bundle above is what the engine
+   * loads; this is what a member's python reads at author time, keyed by the name
+   * they typed, so `for a in self.anchors_in("the_stations")` is one call rather
+   * than a list-walk written slightly differently in every island. Booted in this
+   * process the way verify-api does, so it tests the working tree. */
+  {
+    const server = http.createServer((req, res) =>
+      api(req, res, () => {
+        res.statusCode = 404
+        res.end('not found')
+      }),
+    )
+    await new Promise((r) => server.listen(PORT, '127.0.0.1', r))
+    try {
+      const body = await (await fetch(`http://127.0.0.1:${PORT}/api/v1/maps/${SLUG}/sets`)).json()
+      eq('a grape looks a set up by the name its author typed', body.sets?.the_stations, {
+        label: 'the stations',
+        members: ['coach_post', 'the_yard'],
+      })
+      eq('and a rack comes back with the addresses, not with array positions', body.racks?.the_trophy_wall?.slots, [
+        { slot: 1, anchor: 'coach_post', label: 'first place' },
+        { slot: 3, anchor: 'the_yard' },
+      ])
+    } finally {
+      await new Promise((r) => server.close(r))
+    }
+  }
 
   // ---- 4. and the gate really does stop a publish -------------------------
   await q(`update anchors set x = 46, y = 20, r = 2 where map_id = $1 and name = 'coach_post'`, [map.id])
@@ -277,7 +511,7 @@ try {
   try {
     await publishBundle(SLUG, {
       mapJson: bundleMap,
-      assetsJson: { assets: [] },
+      assetsJson: pubAssets,
       images: { 'levels.png': levelsPNG },
       files: new Map(),
     })
@@ -373,7 +607,7 @@ try {
      * numbers since the first schema and never said any of them. */
     eq('the footprint is the painting', slot?.footprint, { w: W, h: H })
     eq('the canvas beside it', slot?.canvas, { w: W, h: H })
-    eq('and what it really costs to hold', slot?.placements, 2)
+    eq('and what it really costs to hold', slot?.placements, doc.assets.length)
     /* THE APPROACH SITS INSIDE THE BERTH over there. The chart drags them as two
      * independent marks, which is right for a pointer; the game reads
      * berth.approach and berth.at, and the game is the consumer. */
@@ -526,6 +760,9 @@ try {
         x: 1200,
         y: 400,
         facing: 'north',
+        // and the words a player is shown for it, which this route used to drop:
+        // an island holding only the address prints `zz_north_passage` at somebody
+        label: 'the north passage',
       })
     } finally {
       await new Promise((r) => server.close(r))

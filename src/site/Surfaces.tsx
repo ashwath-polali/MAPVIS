@@ -921,7 +921,13 @@ export default function Surfaces() {
                 <b className={displayName(cur).derived ? 'guessed' : undefined}>{displayName(cur).text}</b> ·{' '}
                 {cur.status || 'never generated'}
               </p>
-              <p className="surf-addr">{cur.name}</p>
+              {/* captioned, because a bare `dialogue_box` under a heading
+                  reads as a second, uglier name for the panel rather than as
+                  the string a grape passes. The editor's rows and /world's
+                  roster both put the same word over the same kind of string. */}
+              <p className="surf-addr">
+                <em>code</em> {cur.name}
+              </p>
               {cur.description && <p className="surf-say">{cur.description}</p>}
               <p className="surf-say">
                 Drag a rectangle on the panel to mark where the game puts a piece of text, a number, a bar, a button, an
@@ -953,7 +959,7 @@ export default function Surfaces() {
                   <span className="surf-row-t">
                     <b className={displayName(s).derived ? 'guessed' : undefined}>{displayName(s).text}</b>
                     <i>
-                      {s.name} · {s.kind}
+                      <em>code</em> {s.name} · {s.kind}
                     </i>
                   </span>
                   <span className="surf-row-m">
@@ -998,8 +1004,15 @@ function NewSurface({
   return (
     <div className="surf-make">
       <span className="surf-lab">a new surface</span>
+      {/* THE SAME TWO CAPTIONS THE EDITOR'S ANCHOR FORM WEARS, because these
+          are the same two fields. `dialogue_box` sat in the box with the word
+          "name" over it and nothing saying the underscored string is what code
+          addresses rather than a second name for the panel, while the editor
+          two clicks away says "name · what code calls it" and /world's
+          inspector heads the pair "what code addresses". Three surfaces, one
+          habit. */}
       <label className="surf-f">
-        <span>name</span>
+        <span>name · what code calls it</span>
         <input
           /* an empty box is not a wrong answer, it is a box nobody has typed
              in yet, and marking it in sealing wax before the first keystroke
@@ -1016,7 +1029,7 @@ function NewSurface({
       {!legal && form.name !== '' && <p className="surf-bad">lower case letters, digits and underscores, starting with a letter</p>}
       {clash && <p className="surf-bad">there is already a surface called {form.name}</p>}
       <label className="surf-f">
-        <span>title</span>
+        <span>title · what a person reads</span>
         <input className="surf-in" value={form.title} maxLength={120} placeholder="the dialogue box" onChange={(e) => onSet({ title: e.target.value })} />
       </label>
       <label className="surf-f">
@@ -1049,9 +1062,14 @@ function NewSurface({
         <span>match the look of</span>
         <select className="surf-in" value={form.style} onChange={(e) => onSet({ style: e.target.value })}>
           <option value="">nothing · let it decide</option>
+          {/* the roster hands back `title || slug`, and every map whose title
+              is machine-filled with its own slug therefore listed as
+              `panther-maw` in this menu. displayName unpacks that back into
+              words, which is the same call the dashboard and the ocean make,
+              so a map is called one thing everywhere. */}
           {maps.map((m) => (
             <option key={m.slug} value={m.slug}>
-              {m.title}
+              {readable({ name: m.slug, title: m.title })}
             </option>
           ))}
         </select>

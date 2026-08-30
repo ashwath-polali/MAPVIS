@@ -1,0 +1,32 @@
+-- Anchors addressed several at a time: a named set, and an ordered rack.
+--
+-- Both come out of the authoring sweep's §6. An anchor could only ever be
+-- addressed one name at a time, so a grape wanting the five steles hard-codes
+-- five strings and neither side can say whether that is all of them, and the
+-- trophy wall (the banner wall, the three season tokens, the graduation front
+-- row) had no way to say that the third hook is the third hook every run.
+--
+--   sets   unordered membership. `steles` meaning those five, `the_berths`
+--          meaning every one on this map. Answers "is this one of them" and
+--          "how many are there", which is what makes completeness checkable.
+--   racks  ordered positions with stable addresses. Each slot carries a number
+--          handed out once from the rack's own counter and never reused, so
+--          deleting the second hook of five leaves 1, 3, 4, 5 and the next one
+--          added is 6. An array position would renumber and every trophy after
+--          the deleted one would silently hang somewhere else.
+--
+-- jsonb on the map for the same reason `assets`, `paths` and `framings` are:
+-- genuinely nested, small, always read with the map, so one row stays one query.
+-- A set is a handful of names and a rack a handful of small objects; neither is
+-- ever queried across maps. Both default to empty, which is what every map that
+-- already exists ships.
+--
+-- THE MEMBERS ARE ANCHOR NAMES AND NOT IDS, and there is deliberately no foreign
+-- key to the anchors table. The document is where an anchor is authored and the
+-- table is a mirror of it (see syncEventsToAnchors), so a constraint here would
+-- refuse a save whose anchors have not been mirrored yet, in the middle of a
+-- four-second autosave. The check runs at publish instead, where it can refuse
+-- with the missing name in the sentence and nothing has been written yet.
+
+alter table maps add column if not exists sets  jsonb not null default '[]'::jsonb;
+alter table maps add column if not exists racks jsonb not null default '[]'::jsonb;

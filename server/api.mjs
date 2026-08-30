@@ -73,7 +73,7 @@ import {
 import { publishBundle, publishedMap, publishHistory, hotGet, hotPut } from './store/publish.mjs'
 import { store } from './store/blobs.mjs'
 import { q, one, many } from './db/pool.mjs'
-import { newToken, hashToken, isPlacementName } from './store/crypto.mjs'
+import { newToken, hashToken, isPlacementName, isAnchorName } from './store/crypto.mjs'
 import { listMaps } from './store/maps.mjs'
 import { ask, plannerReady, NoPlanner } from './store/planner.mjs'
 import { withRequest, request } from './store/ctx.mjs'
@@ -2838,6 +2838,28 @@ async function route(req, res, p, url) {
       // STATES_MAX extras, because a round is at most that many states and each
       // of them can name one picture that is not look 0. See STATES_MAX.
       for (const L of Array.isArray(a.looks) ? a.looks.slice(0, STATES_MAX) : []) looks.push(packLook(L) || look0)
+      /* WHAT EACH FACE IS CALLED, in one array indexed exactly the way `art`
+       * indexes the pictures: slot 0 is the placement's own and slot 1 is
+       * looks[0]. life.ts is emphatic that art is "an INDEX and never a name",
+       * and it stays that way; this rides beside it so `show(placement, state)`
+       * finally has a vocabulary to select from, and nothing that reads by index
+       * can tell the difference.
+       *
+       * NOT PACKED INSIDE look0. look0 is spread into this entry, so a `name` on
+       * it would land on top of the placement's own name three lines above and
+       * the map's whole addressing system would come out holding the name of a
+       * picture. One array, one indexing law, no collision.
+       *
+       * An empty string is a face nobody named and HOLDS ITS SLOT, for the same
+       * reason a look that would not load holds its: dropping one shifts every
+       * later name onto the wrong index. Absent entirely when nothing here is
+       * named, so a bundle from a map with no vocabulary grows no field. */
+      const names = [
+        isAnchorName(a.lookName) ? String(a.lookName) : '',
+        ...(Array.isArray(a.looks) ? a.looks.slice(0, STATES_MAX) : []).map((L) =>
+          L && isAnchorName(L.name) ? String(L.name) : '',
+        ),
+      ]
       outAssets.push({
         id: String(a.id),
         /* the author's own name for this thing, when they gave it one. It is
@@ -2847,11 +2869,18 @@ async function route(req, res, p, url) {
          * Absent on scenery, which is nearly everything. */
         ...(isPlacementName(a.name) ? { name: String(a.name) } : {}),
         group: String(a.group || 'props'),
+        /* WHEN THIS THING IS THERE AT ALL. Already resolved by editor.ts
+         * bundle() against the map's group rows, because that is the side that
+         * holds them, so what arrives here is the one string that ships. MAPVIS
+         * never reads inside it: it declares the condition and python decides
+         * what it means. */
+        ...(typeof a.when === 'string' && a.when.trim() ? { when: a.when.trim().slice(0, 240) } : {}),
         ...look0,
         x,
         y,
         ...tf,
         ...(looks.length ? { looks } : {}),
+        ...(names.some((n) => n) ? { lookNames: names } : {}),
       })
     }
     /* THE SAME COUNT OUT AS IN, or no bundle at all.
@@ -3462,7 +3491,12 @@ async function readApi(req, res, p, url) {
     // marks last, so a free-standing mark wins a name a place also carries.
     // checkWorld refuses that collision at the save, so this only decides what
     // an older row that predates the check does.
-    for (const m of w.marks) out[m.name] = { kind: m.kind, x: m.x, y: m.y, facing: m.facing || '' }
+    /* THE LABEL RIDES ALONG, and it was the one field this route dropped. The
+     * column, cleanMark and the chart's inspector all carry it, so a grape
+     * sailing to a mark could hold the address and had no way at all to get the
+     * words a player should be shown for it, which leaves an island printing
+     * `north_passage` at somebody. */
+    for (const m of w.marks) out[m.name] = { kind: m.kind, x: m.x, y: m.y, facing: m.facing || '', label: m.label || '' }
     return send(res, 200, { marks: out })
   }
 
@@ -3526,6 +3560,44 @@ async function readApi(req, res, p, url) {
         ...(a.meta?.derived ? { derived: true } : {}),
       })),
     })
+  }
+
+  /* THE NAMED COLLECTIONS, FLAT, WHICH IS THE SHAPE A GRAPE ACTUALLY WANTS.
+   *
+   * The same call /api/v1/world/marks makes and for the same reason: a member
+   * holds a name and nothing else. `for stele in self.anchors_in("steles")` beats
+   * five hard-coded strings, and it is the only way the map can ever say there
+   * are six of them now. Keyed by the name the author typed, so the lookup is
+   * done here once rather than as a slightly different loop in every island,
+   * written in MicroPython in a worker.
+   *
+   * SETS AND RACKS COME BACK TOGETHER because they share one namespace: a name is
+   * either a set or a rack and never both, which is what lets a grape ask for one
+   * by name without also having to say which list to look in.
+   *
+   * Live from the row rather than from a published version, exactly as the
+   * registry and the ocean above are: an author fixing a set and re-running their
+   * python should see the fix, and a member's island is edited far more often
+   * than it is published. */
+  if (sub === 'sets' || sub === 'racks') {
+    const m = await one('select id, sets, racks from maps where slug = $1', [slug])
+    if (!m) return send(res, 404, { error: `no map ${slug}` })
+    const sets = {}
+    for (const s of Array.isArray(m.sets) ? m.sets : [])
+      sets[s.name] = { ...(s.label ? { label: s.label } : {}), members: Array.isArray(s.members) ? s.members : [] }
+    const racks = {}
+    for (const r of Array.isArray(m.racks) ? m.racks : [])
+      racks[r.name] = {
+        ...(r.label ? { label: r.label } : {}),
+        // ordered as the author laid them out, which is the order things arrive
+        // in, while `slot` is the address that never moves
+        slots: (Array.isArray(r.slots) ? r.slots : []).map((s) => ({
+          slot: Number(s.slot),
+          anchor: s.anchor,
+          ...(s.label ? { label: s.label } : {}),
+        })),
+      }
+    return send(res, 200, { slug, sets, racks })
   }
 
   if (sub === 'versions') return send(res, 200, { slug, versions: await publishHistory(slug) })

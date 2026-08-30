@@ -86,7 +86,21 @@ export const saveScene = (id: string, image: string) => jpost<{ url: string }>('
 // absent in bundles exported before they existed.
 export interface SavedAssetEntry {
   id?: string
+  /* what the AUTHOR called this thing. The id beside it is a counter MAPVIS made
+   * up and does not survive a delete and a re-place, so this is the only address
+   * an anchor binding, a variant member or a member's python can hold. */
+  name?: string
   group?: string
+  /* WHEN THIS THING IS THERE AT ALL, resolved at export from the placement's own
+   * condition or its group's. An opaque string: MAPVIS declares it and python
+   * decides what it means. */
+  when?: string
+  /* what each face is called, indexed exactly the way `art` indexes them, so
+   * slot 0 is the placement's own picture and slot 1 is looks[0]. An empty
+   * string is a face nobody named and holds its slot, because dropping one would
+   * shift every later index down. Absent when nothing on this placement is
+   * named, which is every bundle exported before it existed. */
+  lookNames?: string[]
   src?: string
   frames?: string[]
   fps?: number
@@ -100,7 +114,7 @@ export interface SavedAssetEntry {
   /* the extra appearances a sequence switches to, index 1 and up, each written
    * in the same shape as the entry itself. Absent on everything that does not
    * change, and a reader that has never heard of them draws the entry. */
-  looks?: { src?: string; frames?: string[]; fps?: number; dirs?: Record<string, string[]> }[]
+  looks?: { src?: string; frames?: string[]; fps?: number; dirs?: Record<string, string[]>; name?: string }[]
   x?: number
   y?: number
   scale?: number

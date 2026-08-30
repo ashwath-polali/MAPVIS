@@ -463,6 +463,40 @@ function Sec({ children }: { children: ReactNode }) {
   return <div className="asec">{children}</div>
 }
 
+/* THE LINE UNDER A DATA ROW'S NAME, WHICH IS THE ONE PLACE THIS TOOL PRINTS A
+ * PYTHON IDENTIFIER AT A PERSON.
+ *
+ * Two things were wrong with it and they were the same thing. `panthers_maw`
+ * was printed bare, with nothing saying that the underscored string is what
+ * code calls the door rather than a second, uglier name for it, while the
+ * roster on /world puts a "code name" header over its own column and the form
+ * two blocks up says "name · what code calls it". And it was joined to its
+ * destination by a raw →, a font glyph in a list where every other mark is
+ * drawn.
+ *
+ * Then the whole line ellipsised. Measured on the hub at 141px: the door read
+ * "panthers_maw → pant…", the route lost "both ways" and the shot lost both
+ * the anchor it hangs on and the fact that it is the arrival view. An address
+ * a person cannot finish reading is worth nothing, so the pairs WRAP. A data
+ * row is allowed to be two lines tall; a truncated identifier is not allowed
+ * at all. Each pair is one flex item, so a break never lands inside a name.
+ *
+ * A null caption is for a part that says what it is on its own: "3 pts" and
+ * "arrival" do not need a word in front of them and "the_dock_walk" does. */
+function Addr({ parts }: { parts: [string | null, string][] }) {
+  return (
+    <i>
+      {parts.map(([cap, val], k) => (
+        <span key={k}>
+          {cap ? <em>{cap}</em> : null}
+          {cap ? ' ' : null}
+          {val}
+        </span>
+      ))}
+    </i>
+  )
+}
+
 // one collapsed line of keys at the foot of a panel, instead of a standing
 // block of text nobody reads twice
 function Keys({ lines }: { lines: string[] }) {
@@ -4512,9 +4546,9 @@ export default function App() {
               <span className="row-ic">
                 <Icon name={ANCHOR_ICON[ev.kind]} />
               </span>
-              {/* the NAME leads, because that is what a member types. Where it
-                  goes sits on the line under it, not behind it: trailing it in
-                  the same 162px box cut "→ panther-maw" down to "→ pan…". */}
+              {/* the NAME leads, because that is what a player is told the
+                  door is. Its address and where it goes sit on the line under
+                  it, captioned, in Addr above. */}
               <span className="ev-name">
                 {/* THE WORDS LEAD AND THE ADDRESS FOLLOWS, and it used to be
                     the address on its own. `panthers_maw` is what a member
@@ -4531,16 +4565,15 @@ export default function App() {
                     The form says that one, on the name field, where it is. */}
                 <b className={displayName(ev).derived ? 'guessed' : undefined}>{displayName(ev).text}</b>
                 {ev.kind === 'door' ? (
-                  <i>
-                    {ev.name}
-                    {' → '}
-                    {ev.to || '?'}
-                    {ev.toAnchor ? ` · ${ev.toAnchor}` : ''}
-                  </i>
+                  <Addr
+                    parts={[
+                      ['code', ev.name],
+                      ['to', ev.to || 'nowhere yet'],
+                      ...(ev.toAnchor ? ([['at', ev.toAnchor]] as [string, string][]) : []),
+                    ]}
+                  />
                 ) : (
-                  <i>
-                    {ev.name} · {ev.kind}
-                  </i>
+                  <Addr parts={[['code', ev.name], [null, ev.kind]]} />
                 )}
               </span>
               <button
@@ -4802,11 +4835,14 @@ export default function App() {
                     `the_dock_walk` is the address, not the name, and printing
                     it as the heading was the last place in the tool doing it */}
                 <b className={displayName(p).derived ? 'guessed' : undefined}>{displayName(p).text}</b>
-                <i>
-                  {p.name} · {p.points.length} pts
-                  {p.closed ? ' · loop' : ''}
-                  {p.twoWay ? ' · both ways' : ''}
-                </i>
+                <Addr
+                  parts={[
+                    ['code', p.name],
+                    [null, `${p.points.length} pts`],
+                    ...(p.closed ? ([[null, 'loop']] as [null, string][]) : []),
+                    ...(p.twoWay ? ([[null, 'both ways']] as [null, string][]) : []),
+                  ]}
+                />
               </span>
               <button
                 className={'arow-x' + (armed === 'pathrow:' + p.id ? ' armed' : '')}
@@ -5014,10 +5050,13 @@ export default function App() {
               </span>
               <span className="ev-name">
                 <b className={displayName(f).derived ? 'guessed' : undefined}>{displayName(f).text}</b>
-                <i>
-                  {f.name} · {f.anchor || `${f.x}, ${f.y}`}
-                  {f.entry ? ' · arrival' : ''}
-                </i>
+                <Addr
+                  parts={[
+                    ['code', f.name],
+                    f.anchor ? ['on', f.anchor] : ['at', `${f.x}, ${f.y}`],
+                    ...(f.entry ? ([[null, 'arrival']] as [null, string][]) : []),
+                  ]}
+                />
               </span>
               <button
                 className={'arow-x' + (armed === 'shotrow:' + f.id ? ' armed' : '')}

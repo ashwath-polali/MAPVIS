@@ -76,6 +76,44 @@ const shotsOntoMeta = (framings, anchor, meta) => {
   return { ...(had || {}), framings: set, framing: { ...one(def), name: def.name } }
 }
 
+/* VARIANT SETS FOLDED ONTO THE ANCHOR THEY HANG ON, and the same deliberate
+ * second copy shotsOntoMeta is, for the same reason: this file is node ESM
+ * reading postgres and src/core/mask.ts is browser TypeScript reading a
+ * document, and neither can import the other without dragging half a build into
+ * the wrong process. The two exporters have diverged before. If either half
+ * changes, change both, and the fence that catches it is
+ * server/db/verify-authoring.mjs, which publishes a map and reads the projection
+ * back out of the bundle.
+ *
+ * WHY THE BAG AND NOT A TOP-LEVEL FIELD. Read off the running game before it was
+ * written: AdventureGame's src/game/pmap/anchors.ts builds its Anchor from a
+ * fixed list of top-level fields and then copies `meta` whole, so anything new at
+ * the top level is dropped by the reader that already ships. PmapScene keys every
+ * placement into `placedById` by both its MAPVIS id and its author name, and
+ * `show(anchor, visible)` resolves `anchor.placement` through that map. So a set
+ * written as states pointing at placement NAMES needs no new reader shape and no
+ * new lookup over there, only a loop.
+ *
+ * NO DEFAULT IS INVENTED HERE, which is the difference from a shot. A missing
+ * shot has to fall back to something or the camera is dead. A set whose `initial`
+ * is empty means nothing is showing, and that is a state an author chose. */
+const variantsOntoMeta = (variants, anchor, meta) => {
+  const all = Array.isArray(variants) ? variants : []
+  const mine = all.filter((v) => v && v.anchor === anchor)
+  const had = meta && typeof meta === 'object' && Object.keys(meta).length ? meta : null
+  if (!mine.length) return had || undefined
+  const set = {}
+  for (const v of mine)
+    set[v.name] = {
+      initial: typeof v.initial === 'string' ? v.initial : '',
+      members: (Array.isArray(v.members) ? v.members : []).map((m) => ({ name: m.name, placement: m.placement })),
+    }
+  /* MERGED, NEVER SWAPPED IN, exactly as the shots are. An anchor already
+   * carries docId, derived, and now `when`, and replacing the bag would take all
+   * three out. */
+  return { ...(had || {}), variants: set }
+}
+
 /* WHAT A PLACEMENT STANDS ON, MEASURED OFF ITS OWN ART.
  *
  * A published placement used to carry no collision shape at all, so the walk
@@ -363,7 +401,8 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
    * and never said, so the engine guesses it from the border on every map. */
   const props = await one(
     `select m.title, m.class, m.island_id, m.meta, m.char_h, m.char_hip, m.char_hipdy, m.speed, m.yscale, m.step_tol,
-            m.base_w, m.base_h, m.base_ox, m.base_oy, m.paths, m.framings, m.cover_fact,
+            m.base_w, m.base_h, m.base_ox, m.base_oy, m.paths, m.framings, m.sets, m.racks,
+            m.variants, m.asset_groups, m.cover_fact,
             u.email as owner_email
      from maps m join users u on u.id = m.owner_id where m.id = $1`,
     [m.id],
@@ -465,6 +504,83 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
           })),
         }
       : {}),
+    /* THE NAMED COLLECTIONS OF ANCHORS, from the row for the same reason
+     * everything else here comes from the row: a stale tab must not be able to
+     * republish a set somebody edited four seconds ago.
+     *
+     * TWO EXPORTERS, AND THEY HAVE DIVERGED BEFORE. The other half of this is
+     * bundle() in src/core/editor.ts and the shape below is the same shape, field
+     * for field. `placement` is the standing reminder: it lived in the type, the
+     * form, the document and the table, and was dropped by BOTH exporters, so the
+     * `show` intent could not fire on any bundle MAPVIS was able to produce.
+     *
+     * NOTHING IN THE GAME READS EITHER YET. Written down rather than left for the
+     * next session: AdventureGame's src/game/pmap/anchors.ts keys anchors by name
+     * and can only ask `ofKind` about several at once, nothing there groups
+     * anchors or indexes a slot, and every anchor-taking intent in
+     * src/vine/intents.ts takes one `anchor: string`. There was no running shape
+     * to match, so this is the minimum that says the thing, and the reader belongs
+     * in that anchors.ts beside `get` and `ofKind` when it is built.
+     *
+     * A RACK SHIPS ITS SLOT NUMBERS AND NOT ITS ID, which is the opposite of what
+     * a route or a shot does with a counter. `slot` is the address: it is what
+     * hook[3] means, it is handed out once and never reused, and a save that says
+     * slot 3 is filled has to mean the same hook every run. */
+    ...(Array.isArray(props?.sets) && props.sets.length
+      ? {
+          sets: props.sets.map((s) => ({
+            name: s.name,
+            ...(s.label ? { label: s.label } : {}),
+            members: Array.isArray(s.members) ? s.members : [],
+            ...(s.meta && Object.keys(s.meta).length ? { meta: s.meta } : {}),
+          })),
+        }
+      : {}),
+    ...(Array.isArray(props?.racks) && props.racks.length
+      ? {
+          racks: props.racks.map((r) => ({
+            name: r.name,
+            ...(r.label ? { label: r.label } : {}),
+            slots: (Array.isArray(r.slots) ? r.slots : []).map((s) => ({
+              slot: Number(s.slot),
+              anchor: s.anchor,
+              ...(s.label ? { label: s.label } : {}),
+              ...(s.meta && Object.keys(s.meta).length ? { meta: s.meta } : {}),
+            })),
+            ...(r.meta && Object.keys(r.meta).length ? { meta: r.meta } : {}),
+          })),
+        }
+      : {}),
+    /* THE VARIANT SET LIST IS THE AUTHORING RECORD AND NOT THE SWITCH. Every set
+     * is also folded into its anchor's meta bag below, which is the only place
+     * the game can read one. This array stays for the reason the shot list does:
+     * it is what the panel edits, what the api hands python, and it carries the
+     * labels a person reads, which the projection drops. */
+    ...(Array.isArray(props?.variants) && props.variants.length
+      ? {
+          variants: props.variants.map((v) => ({
+            name: v.name,
+            anchor: v.anchor,
+            ...(v.label ? { label: v.label } : {}),
+            members: (Array.isArray(v.members) ? v.members : []).map((m) => ({
+              name: m.name,
+              placement: m.placement,
+              ...(m.label ? { label: m.label } : {}),
+            })),
+            initial: typeof v.initial === 'string' ? v.initial : '',
+            ...(v.meta && Object.keys(v.meta).length ? { meta: v.meta } : {}),
+          })),
+        }
+      : {}),
+    /* THE GROUP ROWS, which are the one place a condition shared by a dozen
+     * placements is written once. Every placement in assets.json already carries
+     * the resolved string, put there by editor.ts bundle() where the rows live,
+     * so no reader needs this; it is what an author edits and what a re-open
+     * reads back, and without it a reopened map shows a dozen placements each
+     * carrying a condition and no group that owns any of them. */
+    ...(Array.isArray(props?.asset_groups) && props.asset_groups.length
+      ? { groups: props.asset_groups }
+      : {}),
     anchors: anchors.map((a) => ({
       name: a.name,
       kind: a.kind,
@@ -487,7 +603,7 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
        * below: the game reads a camera off the anchor and has never had a reader
        * for the framings array above. */
       ...(() => {
-        const meta = shotsOntoMeta(props?.framings, a.name, a.meta)
+        const meta = variantsOntoMeta(props?.variants, a.name, shotsOntoMeta(props?.framings, a.name, a.meta))
         return meta ? { meta } : {}
       })(),
     })),
@@ -530,6 +646,80 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
       `the door "${a.name}" arrives at "${a.toAnchor}" on ${a.to}, and nothing there is called that. ` +
         `That map has: ${names.slice(0, 8).join(', ')}${names.length > 8 ? `, and ${names.length - 8} more` : ''}.`,
     )
+  }
+
+  /* A SET OR A RACK NAMING AN ANCHOR THAT IS NOT HERE.
+   *
+   * The whole reason a set is worth authoring rather than typing five strings
+   * into python is that completeness becomes a question somebody can be asked,
+   * and this is where it gets asked with something at stake. A member's grape
+   * iterating `steles` and silently getting four of them back is the failure
+   * this refuses: four steles look exactly like five to everything downstream,
+   * the badge that fires on the set being complete never fires, and nothing
+   * anywhere says why.
+   *
+   * Checked against `map.anchors`, which IS what is about to ship, and not
+   * against the rows it came from. Same rule the gate above states: the rows are
+   * snake_case, the bundle is camelCase, and a check reading the wrong one of
+   * those passes everything by comparing fields that are always undefined.
+   *
+   * THE MISSING NAME IS IN THE SENTENCE. A refusal that says "a set is broken"
+   * sends an author back to read five names off a screen; one that says which
+   * name is missing is a fix. */
+  {
+    const have = new Set(map.anchors.map((a) => a.name))
+    const missing = (names) => [...new Set(names.filter((n) => !have.has(n)))]
+    for (const s of map.sets || []) {
+      const gone = missing(s.members)
+      if (gone.length)
+        problems.push(
+          `the set "${s.name}" names ${gone.length === 1 ? 'an anchor' : 'anchors'} this map does not have: ` +
+            `${gone.join(', ')}. Either add ${gone.length === 1 ? 'it' : 'them'} or take ` +
+            `${gone.length === 1 ? 'it' : 'them'} out of the set.`,
+        )
+    }
+    /* A VARIANT SET IS CHECKED AGAINST THE PLACEMENTS AND NOT THE ANCHORS, which
+     * is why it has its own pass. A member names a placement by the author name,
+     * and a name nothing on the map answers to reads on screen as the state
+     * simply not working: the set switches, nothing appears, and there is no
+     * error anywhere. The anchor the set hangs on is checked too, because a set
+     * projected onto a name that is not there lands in no bag at all and the
+     * whole set is silently absent from the bundle. */
+    const named = new Set(
+      (assetsJson?.assets || []).map((a) => a && a.name).filter((n) => typeof n === 'string' && n),
+    )
+    for (const v of map.variants || []) {
+      if (!have.has(v.anchor))
+        problems.push(
+          `the variant set "${v.name}" hangs on the anchor "${v.anchor}", and this map has no anchor called that. ` +
+            `A set is addressed through its anchor, so this one would ship where nothing can reach it.`,
+        )
+      const lost = [...new Set(v.members.map((m) => m.placement).filter((n) => !named.has(n)))]
+      if (lost.length)
+        problems.push(
+          `the variant set "${v.name}" names ${lost.length === 1 ? 'a placement' : 'placements'} this map does not have: ` +
+            `${lost.join(', ')}. Either name the placement in the editor or take ` +
+            `${lost.length === 1 ? 'it' : 'them'} out of the set.`,
+        )
+      if (v.initial && !v.members.some((m) => m.name === v.initial))
+        problems.push(
+          `the variant set "${v.name}" opens on the state "${v.initial}" and has no member called that, ` +
+            `so the map would open with nothing showing there.`,
+        )
+    }
+    for (const r of map.racks || []) {
+      const gone = missing(r.slots.map((s) => s.anchor))
+      if (gone.length) {
+        // the slot NUMBER is named beside the anchor, because that is the address
+        // the author is holding: "slot 3 is empty" is actionable, "the rack is
+        // broken" is not
+        const where = r.slots.filter((s) => gone.includes(s.anchor)).map((s) => `slot ${s.slot} · ${s.anchor}`)
+        problems.push(
+          `the rack "${r.name}" has ${where.length === 1 ? 'a slot' : 'slots'} on ${where.length === 1 ? 'an anchor' : 'anchors'} ` +
+            `this map does not have: ${where.join(', ')}.`,
+        )
+      }
+    }
   }
   if (problems.length)
     throw new Error(

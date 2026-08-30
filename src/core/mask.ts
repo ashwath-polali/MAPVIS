@@ -88,6 +88,23 @@ export interface PlacedAsset {
   /* the extra appearances a sequence switches to, index 1 and up. Absent on
    * everything that does not change. */
   looks?: AssetLook[]
+  /* WHAT LOOK 0 IS CALLED, which cannot live on AssetLook because look 0 is not
+   * one of those. The placement's own src / frames / dirs ARE look 0 and `looks`
+   * holds 1 and up, so a name for the picture a thing was placed with has
+   * nowhere else to go. Without it the vocabulary is half a vocabulary: an
+   * author could name the boulder and not the troll it turns back into. */
+  lookName?: string
+  /* WHEN THIS THING IS THERE AT ALL, declared here and decided somewhere else.
+   *
+   * MAPVIS says the condition, python says what it means. This tool has no run
+   * state, no year, no flags, and no idea what `cord_earned` is, and putting an
+   * evaluator here would move half the game's progression rules into a map
+   * editor. So it is an opaque string the bundle carries to whoever can answer
+   * it, and MAPVIS never looks inside it.
+   *
+   * A placement with none is always there, which is every placement on every map
+   * that exists today. */
+  when?: string
 }
 
 /* ONE APPEARANCE of a placement: exactly the four fields that say what to draw.
@@ -100,6 +117,87 @@ export interface AssetLook {
   frames?: string[]
   fps?: number
   dirs?: Record<string, string[]>
+  /* WHAT A PERSON CALLS THIS FACE, and the vocabulary `show(placement, state)`
+   * never had to select from.
+   *
+   * The index stays the data. life.ts documents `art` as "an INDEX and never a
+   * name", clamped 0 to 7, because lifeAt runs for every placement on every
+   * frame and a name would be a search where a number is a lookup. The planner
+   * already answers in names and server/api.mjs resolves each one to an integer
+   * before the row is saved, so by the time a look reaches here the word the
+   * author used is gone and a bundle addresses a face by number alone.
+   *
+   * This is that word, kept BESIDE the index and never instead of it. The
+   * positional packing is untouched: a look that will not load still holds its
+   * slot, art still counts 0, 1, 2 through the same list, and anything reading
+   * by index cannot tell the difference. */
+  name?: string
+}
+
+/* THE NAME OF A FACE OR A SET STATE, and it is deliberately the anchor rule.
+ *
+ * A look name is a python string rather than an identifier, so a looser rule
+ * would work, and one namespace shape across every name in this tool is worth
+ * more than that freedom. Library rows arrive hyphenated (`boulder-2` from the
+ * exporter's own collision suffix), so a name derived from one is folded through
+ * anchorName first rather than refused, which is what stops the derivation
+ * silently dropping half the vocabulary it was written to supply. */
+export const isLookName = (s: unknown): s is string =>
+  typeof s === 'string' && /^[a-z][a-z0-9_]{0,47}$/.test(s)
+
+/* THE NAME A PICTURE ALREADY HAS, read off the url it lives at.
+ *
+ * The planner names every look and App.tsx resolves that name to an index at
+ * src/App.tsx:1924 and then throws the word away, so nothing downstream of the
+ * life panel has ever seen it. Until that panel hands the word over, this
+ * recovers it from the one place it is still written down: the path.
+ *
+ * Two shapes, both built by server/store/platform.mjs and neither of them a
+ * guess. A face is /work/<slug>/states/<item>/<face>/[<heading>/]<n>.png, so the
+ * name is the segment two past `states`. A library row is
+ * /work/<slug>/library/<name>.png or /work/<slug>/library/<name>/... , so it is
+ * the segment one past `library`. Anything else answers nothing, because a wrong
+ * name is worse than no name once python is writing against it.
+ *
+ * NOT assetLabel: that one takes the second-to-last segment for anything with
+ * dirs, which on a face is the HEADING. It answered `south` for every one of
+ * them, which is the same bug that turned 38 of the hub's figures round. */
+export function lookNameFrom(look: {
+  src?: string
+  frames?: string[]
+  dirs?: Record<string, string[]>
+}): string | undefined {
+  const url =
+    look.src ||
+    (look.frames && look.frames[0]) ||
+    (look.dirs && Object.values(look.dirs).find((v) => v && v.length)?.[0]) ||
+    ''
+  const parts = String(url).split('?')[0].split('/').filter(Boolean)
+  const si = parts.lastIndexOf('states')
+  const raw =
+    si >= 0 && parts[si + 2]
+      ? parts[si + 2]
+      : (() => {
+          const li = parts.lastIndexOf('library')
+          return li >= 0 && parts[li + 1] ? parts[li + 1].replace(/\.png$/i, '') : ''
+        })()
+  if (!raw) return undefined
+  const n = anchorName(decodeURIComponent(raw))
+  return isLookName(n) ? n : undefined
+}
+
+/* EVERY FACE THIS PLACEMENT HAS, BY NAME, indexed exactly the way `art` indexes
+ * them: slot 0 is the placement's own picture, slot 1 is looks[0]. An empty
+ * string is a face nobody named, and it holds its slot for the same reason a
+ * look that would not load holds its slot. Answers an empty array when nothing
+ * anywhere is named, so a bundle from a map with no vocabulary grows no field. */
+export function lookNames(a: {
+  lookName?: string
+  looks?: { name?: string }[]
+}): string[] {
+  const out = [isLookName(a.lookName) ? a.lookName : '']
+  for (const L of a.looks || []) out.push(isLookName(L?.name) ? (L.name as string) : '')
+  return out.some((n) => n) ? out : []
 }
 
 /* look 0 is the placement itself, so index 1 is looks[0]. That off-by-one lives
@@ -134,6 +232,18 @@ export function migrateAsset(a: PlacedAsset): PlacedAsset {
   a.fx = !!a.fx
   a.fy = !!a.fy
   a.scale = a.sx
+  /* THE FACE NAMES, DROPPED RATHER THAN CORRECTED, exactly the way the placement
+   * name above is. A name a person did not type is a name their python will call
+   * and miss on, and a look with no name is still perfectly drawable by index.
+   * The look itself is never removed here: art counts through the slots, so
+   * dropping one shifts every later face down and a troll/boulder/troll round
+   * draws its third picture where its second belongs. */
+  if (!isLookName(a.lookName)) delete a.lookName
+  for (const L of a.looks || []) if (L && !isLookName(L.name)) delete L.name
+  // an opaque string MAPVIS never reads. Whitespace-only is nothing, because a
+  // condition of " " would refuse a placement for ever with nothing to read
+  if (typeof a.when !== 'string' || !a.when.trim()) delete a.when
+  else a.when = a.when.trim().slice(0, 240)
   return a
 }
 
@@ -213,8 +323,27 @@ export interface MapAnchor {
   facing?: string
   /* what a player reads. NOT the identity. */
   label: string
-  /* author key/values a grape can read */
+  /* author key/values a grape can read, and the bag every boundary copies whole.
+   * The `when` comment below is the reason it has to keep existing: the anchors
+   * upsert, readAnchors in the game and the publish projection each copy a fixed
+   * list of top-level fields plus all of meta, so this is what carries anything
+   * new across intact. */
   meta?: Record<string, unknown>
+  /* WHEN THIS PLACE IS THERE AT ALL, and the reason the carrier could not stay
+   * on the placement alone. A door barred until a cord is earned and a berth
+   * that does not exist until the ship has been repaired are conditions on the
+   * NAME, not on any picture: the anchor may have no placement bound to it and
+   * still need to be off. Same contract as PlacedAsset.when, declared by MAPVIS
+   * and decided by python, and MAPVIS never looks inside the string.
+   *
+   * IT RIDES IN THE META BAG ACROSS EVERY BOUNDARY, and that is not a shortcut.
+   * The anchors table's upsert column list, the game's readAnchors and the
+   * publish projection each copy a fixed set of top-level fields plus the whole
+   * of `meta`, so a new top-level field is dropped three times over while the
+   * bag arrives intact. That is the framings lesson, paid for once already.
+   * migrateEvent below folds this into meta and lifts it back out, so the field
+   * and the bag can never disagree about what the author typed. */
+  when?: string
 }
 
 /* Kept so nothing that still says MapEvent has to change. */
@@ -329,6 +458,29 @@ export function migrateEvent(e: MapAnchor & { type?: string }): MapAnchor {
   if (!isAnchorName(e.name)) {
     e.name = anchorName(e.label || `${e.kind}_${e.id}`)
     e.meta = { ...(e.meta || {}), derived: true }
+  }
+  /* THE CONDITION, FOLDED INTO THE BAG AND LIFTED BACK OUT OF IT.
+   *
+   * Both directions, in one place, because the field and the bag must never
+   * disagree about what the author typed. Going out: syncEventsToAnchors copies
+   * a fixed list of columns plus the whole of meta, so a top-level `when` never
+   * reaches postgres and is gone by the next open. Coming in: eventsFromAnchors
+   * hands the bag back and nothing else knows to look inside it, so an anchor
+   * that has been round the database once would come back with no condition and
+   * the panel would show it as unconditional. */
+  const bagWhen = e.meta && typeof (e.meta as { when?: unknown }).when === 'string'
+    ? String((e.meta as { when?: string }).when)
+    : ''
+  const when = (typeof e.when === 'string' && e.when.trim() ? e.when : bagWhen).trim().slice(0, 240)
+  if (when) {
+    e.when = when
+    e.meta = { ...(e.meta || {}), when }
+  } else {
+    delete e.when
+    if (e.meta && 'when' in e.meta) {
+      const { when: _drop, ...rest } = e.meta as Record<string, unknown>
+      e.meta = rest
+    }
   }
   delete (e as { type?: string }).type
   return e
@@ -470,6 +622,293 @@ export interface MapFraming {
   meta?: Record<string, unknown>
 }
 
+/* A NAMED SET OF ANCHORS. `steles` meaning those five, `the_berths` meaning
+ * every one on this map.
+ *
+ * WHAT THE GAME DOES WITH ONE TODAY: nothing, and nothing like it. Read before
+ * this was written rather than assumed. AdventureGame's src/game/pmap/anchors.ts
+ * holds every anchor in one flat map keyed by name, and the only question it can
+ * answer about several at once is `ofKind`, which is the tool's own vocabulary
+ * and not the author's. Nothing groups anchors, nothing iterates a named
+ * collection, and no intent in src/vine/intents.ts takes anything but a single
+ * `anchor: string`. So a grape that wants the five steles hard-codes five
+ * strings, and neither side can say whether that is all of them.
+ *
+ * MEMBERSHIP, NOT ORDER. A set answers "is this one of them" and "how many are
+ * there". Where the third one has to be the third one every run, that is a rack
+ * below and not this.
+ *
+ * AN EMPTY SET IS KEPT, unlike a one-point path, which is dropped. A path with
+ * one point is not a line at all; a set with no members is an author who has
+ * named the thing before drawing the anchors, and iterating it yields nothing,
+ * which is a correct answer rather than a broken one. */
+export interface MapAnchorSet {
+  id: number
+  /* author-typed, python-shaped, and unique across sets AND racks. See
+   * freeCollectionName in editor.ts for why those two share one tally. */
+  name: string
+  /* what a person reads, the same split anchors make between name and label */
+  label?: string
+  /* anchor names. Not ids: an anchor's id is a document counter that does not
+   * survive being deleted and placed again, and the name is the only thing a
+   * member's python can hold. */
+  members: string[]
+  meta?: Record<string, unknown>
+}
+
+/* ONE POSITION IN A RACK, and `slot` is its address for the whole life of the
+ * map.
+ *
+ * WHY THIS NUMBER IS NOT AN ARRAY POSITION. The whole demand is that the third
+ * hook is the third hook every run. An index into `slots` renumbers the moment
+ * somebody deletes the second hook, so every trophy after it moves one place
+ * left, a save that says "slot 3 is filled" now means a different hook, and
+ * nothing anywhere says so. So each slot carries a number assigned once from the
+ * rack's own counter and never reused: delete slot 2 of five and the rack is
+ * 1, 3, 4, 5, and the next one added is 6.
+ *
+ * WHY IT IS CALLED `slot` AND NOT `id`. A path and a shot both carry an `id`
+ * which is deliberately stripped at the bundle boundary, because across that
+ * boundary a name is the only identity there is. This one is the opposite: it
+ * ships, and it is what `hook[3]` means. Naming it `id` would put it in the
+ * class of fields a reader is meant to drop.
+ *
+ * THE ANCHOR IS REQUIRED. "Each empty or filled" is about whether a thing has
+ * arrived, which is run state and belongs to python. The position itself is a
+ * place on a wall, so a slot with nowhere to be is not a slot. */
+export interface RackSlot {
+  slot: number
+  anchor: string
+  label?: string
+  meta?: Record<string, unknown>
+}
+
+/* AN ORDERED SLOT RACK: the trophy wall, the banner wall, the three season
+ * tokens, the graduation front row.
+ *
+ * The reverse of a group. A group is things that exist acting as one; a rack is
+ * one authored empty position per thing that does not exist yet, and the filling
+ * of it is the only progression readout in the game that is not a number on a
+ * panel.
+ *
+ * ARRAY ORDER IS ARRIVAL ORDER AND THE SLOT NUMBER IS THE ADDRESS. The two are
+ * separate on purpose. Things arrive in the order the list is written, so an
+ * author who wants the first trophy on the left end drags it to the front;
+ * `hook[3]` still means the slot numbered 3 wherever it now sits in the list. */
+export interface MapRack {
+  id: number
+  name: string
+  label?: string
+  slots: RackSlot[]
+  /* the next slot number this rack will hand out. Stored rather than computed
+   * from the highest one present, so a number is never reused after a delete. */
+  slotNext: number
+  meta?: Record<string, unknown>
+}
+
+/* A saved set, made safe. A member that is not a legal anchor name is dropped
+ * rather than carried: it can never resolve, and the publish gate that refuses a
+ * set naming a missing anchor would then be refusing over a string nobody typed
+ * into the members list on purpose. A duplicate is dropped for the same reason a
+ * duplicate anchor name is, and it is what makes "the set is complete" a
+ * countable question. */
+export function migrateAnchorSet(s: MapAnchorSet): MapAnchorSet | null {
+  if (!s || !isAnchorName(s.name)) return null
+  const seen = new Set<string>()
+  const members: string[] = []
+  for (const m of Array.isArray(s.members) ? s.members : []) {
+    const n = String(m)
+    if (!isAnchorName(n) || seen.has(n)) continue
+    seen.add(n)
+    members.push(n)
+  }
+  return {
+    id: Math.round(Number(s.id)) || 0,
+    name: s.name,
+    ...(typeof s.label === 'string' && s.label.trim() ? { label: String(s.label) } : {}),
+    members,
+    ...(s.meta && typeof s.meta === 'object' ? { meta: s.meta } : {}),
+  }
+}
+
+/* A saved rack, made safe. Two hooks numbered 3 is not a rack, so the second one
+ * loses: an address that resolves to two positions is worse than a missing
+ * position, because nothing downstream can tell which one it got. slotNext comes
+ * back at least one past the highest number present, so a hand-edited save can
+ * never hand out a number that is already on the wall. */
+export function migrateRack(r: MapRack): MapRack | null {
+  if (!r || !isAnchorName(r.name)) return null
+  const seen = new Set<number>()
+  const slots: RackSlot[] = []
+  let high = 0
+  for (const s of Array.isArray(r.slots) ? r.slots : []) {
+    if (!s || !isFinite(Number(s.slot)) || !isAnchorName(String(s.anchor))) continue
+    const slot = Math.round(Number(s.slot))
+    if (slot < 1 || seen.has(slot)) continue
+    seen.add(slot)
+    high = Math.max(high, slot)
+    slots.push({
+      slot,
+      anchor: String(s.anchor),
+      ...(typeof s.label === 'string' && s.label.trim() ? { label: String(s.label) } : {}),
+      ...(s.meta && typeof s.meta === 'object' ? { meta: s.meta } : {}),
+    })
+  }
+  return {
+    id: Math.round(Number(r.id)) || 0,
+    name: r.name,
+    ...(typeof r.label === 'string' && r.label.trim() ? { label: String(r.label) } : {}),
+    slots,
+    slotNext: Math.max(high + 1, Math.round(Number(r.slotNext)) || 1),
+    ...(r.meta && typeof r.meta === 'object' ? { meta: r.meta } : {}),
+  }
+}
+
+/* ONE STATE OF A VARIANT SET: a word, and the placement that is showing while
+ * that word is the answer. */
+export interface MapVariant {
+  /* what python sets. Folded through the same rule every other name in this
+   * tool goes through, because one namespace shape beats four. */
+  name: string
+  /* WHICH PLACEMENT, BY ITS AUTHOR NAME and never by its id. The id is a counter
+   * MAPVIS made up that does not survive a delete and a re-place, which is the
+   * same reason an anchor binds by name. The game resolves both, so a name is
+   * the half that stays true. */
+  placement: string
+  /* what a person reads in the panel. Never the identity. */
+  label?: string
+}
+
+/* A NAMED EXCLUSIVE VARIANT SET: one name, several PLACEMENTS, at most one of
+ * them visible.
+ *
+ * NOT ONE PLACEMENT WEARING ANOTHER FACE. That is `looks` and `art`, it is
+ * already built, and it is the wrong tool here. §8.12's ship and empty berth is
+ * the case that settles it: a ship at a dock and the empty water where it is not
+ * are two objects with different silhouettes, different footprints and different
+ * anchors, and drawing them as two frames of one sprite would give the empty
+ * berth the ship's collision and the ship the berth's y-sort. A face swap is one
+ * thing changing; this is two things trading places.
+ *
+ * WHAT IT BUYS: python sets a state without knowing how many faces exist. Five
+ * dock placements, one per island state, and a grape writes the word rather than
+ * showing one and hiding four by hand, which is the version that ships with the
+ * fifth `show` forgotten and two docks on screen at once.
+ *
+ * IT HANGS ON AN ANCHOR, AND THAT IS REQUIRED. The anchor namespace is the only
+ * addressing system the running game has: every intent in src/vine/intents.ts
+ * that touches the world takes `anchor: string`, `show` resolves an anchor to
+ * `a.placement` and then to a sprite, and readAnchors carries an anchor's meta
+ * bag across intact. A set with nowhere to be addressed from is a set nobody can
+ * name, so the anchor it hangs on is where it is published to. Several sets may
+ * share one anchor, keyed by name, exactly as several shots may.
+ *
+ * The state a run OPENS on is `initial`, and empty is a legal answer: an author
+ * who wants nothing showing until the story says otherwise says so here rather
+ * than shipping a placement they then have to hide on the first frame. */
+export interface MapVariantSet {
+  id: number
+  name: string
+  /* the anchor this set is addressed through and published onto */
+  anchor: string
+  label?: string
+  members: MapVariant[]
+  /* the member showing before anything sets it. '' means none of them. */
+  initial: string
+  meta?: Record<string, unknown>
+}
+
+/* A saved variant set, made safe.
+ *
+ * A member naming a placement twice is dropped, because two states pointing at
+ * one placement cannot be exclusive: setting either one leaves the same sprite
+ * on screen and nothing downstream can say which state it is in. A duplicate
+ * state name goes for the reason a duplicate anchor name does. An `initial`
+ * naming a member that is not in the list falls back to nothing rather than to
+ * the first one: showing an arbitrary member is worse than showing none, because
+ * none is a state an author can see is wrong.
+ *
+ * A set with fewer than two members is KEPT. One member is an author part way
+ * through building the second, and it still answers correctly. */
+export function migrateVariantSet(v: MapVariantSet): MapVariantSet | null {
+  if (!v || !isAnchorName(v.name) || !isAnchorName(String(v.anchor))) return null
+  const names = new Set<string>()
+  const places = new Set<string>()
+  const members: MapVariant[] = []
+  for (const m of Array.isArray(v.members) ? v.members : []) {
+    if (!m) continue
+    const name = isLookName(m.name) ? m.name : anchorName(String(m.name || ''))
+    if (!isLookName(name) || names.has(name)) continue
+    if (!isPlacementName(m.placement) || places.has(m.placement)) continue
+    names.add(name)
+    places.add(m.placement)
+    members.push({
+      name,
+      placement: m.placement,
+      ...(typeof m.label === 'string' && m.label.trim() ? { label: String(m.label) } : {}),
+    })
+  }
+  return {
+    id: Math.round(Number(v.id)) || 0,
+    name: v.name,
+    anchor: String(v.anchor),
+    ...(typeof v.label === 'string' && v.label.trim() ? { label: String(v.label) } : {}),
+    members,
+    initial: names.has(String(v.initial)) ? String(v.initial) : '',
+    ...(v.meta && typeof v.meta === 'object' ? { meta: v.meta } : {}),
+  }
+}
+
+/* A GROUP OF PLACEMENTS, WHICH ALREADY EXISTED AS A STRING AND NOW HAS A ROW.
+ *
+ * Every placement carries `group`, the editor hides and shows by it, and there
+ * was nowhere to say anything ABOUT one. That matters for exactly one field so
+ * far: a dozen placements that are the same year's dressing share one condition,
+ * and copying that string onto each of them means the thirteenth is added
+ * without it and nothing anywhere says so.
+ *
+ * The name IS the group string on the placements. There is no id, because
+ * `a.group` is the join and adding a second identity would let a placement point
+ * at a group that has been renamed out from under it. */
+export interface MapGroup {
+  name: string
+  /* what a person reads. The group string itself is what the panel shows today
+   * and it is often a machine word like `props`. */
+  label?: string
+  /* the condition every placement in this group inherits. Same contract as
+   * PlacedAsset.when: MAPVIS declares it, python decides what it means, and a
+   * placement's own `when` wins where it has one. */
+  when?: string
+}
+
+/* A saved group, made safe. The name is a placement's `group` string rather than
+ * an anchor name, and those have always been free text (`props`, `effects`,
+ * `people`), so it is folded rather than refused: refusing would silently drop
+ * the condition off every group that was made before this existed. A group
+ * carrying nothing at all is dropped, because a row that says only its own name
+ * is what every placement already says. */
+export function migrateGroup(g: MapGroup): MapGroup | null {
+  if (!g || typeof g.name !== 'string' || !g.name.trim()) return null
+  const when = typeof g.when === 'string' ? g.when.trim().slice(0, 240) : ''
+  const label = typeof g.label === 'string' ? g.label.trim() : ''
+  if (!when && !label) return null
+  return {
+    name: g.name.trim().slice(0, 48),
+    ...(label ? { label } : {}),
+    ...(when ? { when } : {}),
+  }
+}
+
+/* THE CONDITION A PLACEMENT ACTUALLY SHIPS WITH: its own if it has one, its
+ * group's otherwise. Resolved here rather than in the game, because the game's
+ * assets loop has a placement in hand and no group table beside it, and handing
+ * it one would be a second lookup for a string that never changes after export. */
+export function whenOf(a: { when?: string; group?: string }, groups: MapGroup[]): string {
+  if (typeof a.when === 'string' && a.when.trim()) return a.when.trim()
+  const g = groups.find((q) => q.name === a.group)
+  return g && g.when ? g.when : ''
+}
+
 /* THE GAME'S OWN PULL-OUT CONSTANT, and MAPVIS carries it because MAPVIS is the
  * one that moves. The consumer computes its opening scale as
  * `max(1, floor(min(sw / W, sh / H))) * 1.18` and then multiplies a framing's
@@ -528,6 +967,41 @@ export function shotsOntoMeta(
   return { ...(meta || {}), framings: set, framing: { ...one(def), name: def.name } }
 }
 
+/* VARIANT SETS FOLDED ONTO THE ANCHOR THEY HANG ON, for the same reason the
+ * shots above are, and read off the running game before it was written.
+ *
+ * WHAT THE GAME READS TODAY. src/game/pmap/anchors.ts:readAnchors builds its
+ * Anchor from a fixed list of top-level fields and then copies `meta` whole, so
+ * a new top-level field on an anchor is thrown away by the reader that already
+ * ships. src/game/pmap/PmapScene.tsx keys every placement into `placedById` by
+ * BOTH its MAPVIS id and its author name, and `show(anchor, visible)` resolves
+ * `anchor.placement` through that map. So the two things the consumer can
+ * already do are: read an anchor's bag, and turn a placement name into a sprite.
+ * A set written as { state: placement-name } inside the bag needs neither a new
+ * reader shape nor a new lookup, only a loop.
+ *
+ * MERGED, NEVER SWAPPED IN, the same as the shots: panthers_maw on the real hub
+ * carries docId and derived, and the game writes `derived` itself.
+ *
+ * MAPVIS DOES NOT PICK A DEFAULT HERE, and that is the difference from a shot. A
+ * missing shot has to fall back to something or the camera is dead; a set with
+ * `initial` empty means nothing is showing, which is a state an author chose. */
+export function variantsOntoMeta(
+  variants: MapVariantSet[],
+  anchor: string,
+  meta?: Record<string, unknown>,
+): Record<string, unknown> | undefined {
+  const mine = variants.filter((v) => v.anchor === anchor)
+  if (!mine.length) return meta && Object.keys(meta).length ? meta : undefined
+  const set: Record<string, unknown> = {}
+  for (const v of mine)
+    set[v.name] = {
+      initial: v.initial,
+      members: v.members.map((m) => ({ name: m.name, placement: m.placement })),
+    }
+  return { ...(meta || {}), variants: set }
+}
+
 /* only the keys that came back as real numbers, so a corrupt or hand-edited
  * save cannot put NaN into the walk law and stop a character moving at all */
 const numbersOnly = (o: Partial<WalkCfg>): Partial<WalkCfg> => {
@@ -567,6 +1041,20 @@ export class MaskDoc {
   pathNext = 1
   framings: MapFraming[] = []
   framingNext = 1
+  /* the named collections of anchors, which belong to the map for the same
+   * reason: they are made of this map's names and nothing outside it can hold
+   * them. A set is unordered membership, a rack is addressed positions. */
+  sets: MapAnchorSet[] = []
+  setNext = 1
+  racks: MapRack[] = []
+  rackNext = 1
+  /* the named exclusive variant sets, and the rows that say something about a
+   * placement group. Both belong to the map for the reason the collections above
+   * do: they are made of this map's own names and nothing outside it can hold
+   * them. */
+  variants: MapVariantSet[] = []
+  variantNext = 1
+  groups: MapGroup[] = []
   spawn: Pt
   // boundary growth: bw/bh is the base painting's own size (set once at
   // construction), ox/oy is how far that base sits inside the grown canvas.
@@ -1156,6 +1644,13 @@ export class MaskDoc {
       pathNext: this.pathNext,
       framings: this.framings,
       framingNext: this.framingNext,
+      sets: this.sets,
+      setNext: this.setNext,
+      racks: this.racks,
+      rackNext: this.rackNext,
+      variants: this.variants,
+      variantNext: this.variantNext,
+      groups: this.groups,
     })
   }
   private pack(): string {
@@ -1186,6 +1681,13 @@ export class MaskDoc {
           pathNext?: number
           framings?: MapFraming[]
           framingNext?: number
+          sets?: MapAnchorSet[]
+          setNext?: number
+          racks?: MapRack[]
+          rackNext?: number
+          variants?: MapVariantSet[]
+          variantNext?: number
+          groups?: MapGroup[]
         }
         /* the saved baselines go in FIRST, because unpack() only invents them
          * when there are none, which is exactly the guard that has to see them
@@ -1220,6 +1722,28 @@ export class MaskDoc {
           Number(d.framingNext) > 0
             ? Math.round(Number(d.framingNext))
             : this.framings.reduce((m, f) => Math.max(m, f.id), 0) + 1
+        /* the same treatment for the two collections, and for the same reason: a
+         * set naming something that is not an anchor name at all, or a rack with
+         * two hooks numbered 3, has to come back as data or not at all. */
+        this.sets = Array.isArray(d.sets) ? d.sets.map(migrateAnchorSet).filter((s): s is MapAnchorSet => !!s) : []
+        this.setNext =
+          Number(d.setNext) > 0 ? Math.round(Number(d.setNext)) : this.sets.reduce((m, s) => Math.max(m, s.id), 0) + 1
+        this.racks = Array.isArray(d.racks) ? d.racks.map(migrateRack).filter((r): r is MapRack => !!r) : []
+        this.rackNext =
+          Number(d.rackNext) > 0 ? Math.round(Number(d.rackNext)) : this.racks.reduce((m, r) => Math.max(m, r.id), 0) + 1
+        /* and the variant sets, on the same terms. A set whose members all name
+         * the same placement, or whose initial names a member that is not in the
+         * list, has to come back as data or not at all: an exclusive set that is
+         * not exclusive is worse than none, because every state leaves the same
+         * sprite on screen and nothing can tell which one it is in. */
+        this.variants = Array.isArray(d.variants)
+          ? d.variants.map(migrateVariantSet).filter((v): v is MapVariantSet => !!v)
+          : []
+        this.variantNext =
+          Number(d.variantNext) > 0
+            ? Math.round(Number(d.variantNext))
+            : this.variants.reduce((m, v) => Math.max(m, v.id), 0) + 1
+        this.groups = Array.isArray(d.groups) ? d.groups.map(migrateGroup).filter((g): g is MapGroup => !!g) : []
         if (!this.unpack(String(d.m || ''))) return false
         // v2 assets carry only `scale`; the migration fills the transform
         this.assets = Array.isArray(d.assets) ? d.assets.map(migrateAsset) : []

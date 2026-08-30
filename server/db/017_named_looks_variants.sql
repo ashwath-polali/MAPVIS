@@ -1,0 +1,61 @@
+-- Named faces, exclusive variant sets, and a condition that is not only on a
+-- placement. The fifth item of the authoring sweep's §9.
+--
+-- WHAT NEEDED A COLUMN AND WHAT DID NOT, because three of these four fields ride
+-- storage that already exists and adding a column for them would be adding a
+-- column nothing writes:
+--
+--   a look's name   rides `maps.assets`, which is the whole placement document
+--                   as jsonb. A face name sits on the placement's own `lookName`
+--                   and on each entry of `looks`, so it is saved and read back by
+--                   the same statement that already saves the pictures.
+--   a placement's   the same. `assets` carries `when` beside `life`, and the
+--   condition       export resolves the group's onto it on the way out.
+--   an anchor's     rides `anchors.meta`. It has to: syncEventsToAnchors copies a
+--   condition       fixed list of columns plus the whole bag, the game's
+--                   readAnchors does the identical thing, and the publish
+--                   projection does it a third time, so a new top-level field on
+--                   an anchor is dropped three times over while the bag arrives
+--                   intact. mask.ts migrateEvent folds the field into the bag and
+--                   lifts it back out, so the two cannot disagree.
+--
+-- These two are the ones with nowhere to live.
+--
+--   variants      the named exclusive variant sets. One name resolving to one of
+--                 several PLACEMENTS with at most one visible, so python sets a
+--                 state without knowing how many faces exist or switching the
+--                 other four off by hand. Five dock placements, one per island
+--                 state. It is deliberately not `looks`: §8.12's ship and empty
+--                 berth are two silhouettes with two footprints and two anchors,
+--                 and one sprite wearing two frames would give the empty berth
+--                 the ship's collision.
+--   asset_groups  the rows that say something about a placement group. `group`
+--                 has always been a bare string on each placement with nowhere
+--                 to say anything about one, which matters for exactly one field
+--                 so far: a dozen placements that are the same year's dressing
+--                 share one condition, and copying that string onto each of them
+--                 means the thirteenth is placed without it and nothing says so.
+--
+-- jsonb on the map for the same reason `assets`, `paths`, `framings`, `sets` and
+-- `racks` are: genuinely nested, small, always read with the map, so one row
+-- stays one query. Neither is ever queried across maps. Both default to empty,
+-- which is what every map that already exists ships.
+--
+-- NOT NAMED `groups`: GROUPS is a keyword in the window-frame clause, and a
+-- column that has to be quoted in half the places it appears is a column
+-- somebody will eventually forget to quote. `asset_groups` also says which kind
+-- of group it is, which matters in a schema that now also has anchor sets.
+--
+-- THE MEMBERS ARE PLACEMENT NAMES AND NOT IDS, and there is deliberately no
+-- foreign key: a placement id is a counter that does not survive a delete and a
+-- re-place, and the placements live inside a jsonb column on this same row
+-- anyway. The check that every member resolves runs at publish, where it can
+-- refuse with the missing name in the sentence and nothing has been written yet.
+alter table maps add column if not exists variants     jsonb not null default '[]'::jsonb;
+alter table maps add column if not exists asset_groups jsonb not null default '[]'::jsonb;
+
+-- Written down where the next person querying anchors will read it, because a
+-- condition living in a bag rather than a column is exactly the kind of thing a
+-- schema hides. See mask.ts MapAnchor.when for the whole of why.
+comment on column anchors.meta is
+  'the author bag, copied whole by every boundary. Carries `when`, the condition this place is there under, and `variants`, the exclusive variant sets hung on this anchor. Both are projections: the editable record is maps.variants and the document''s own anchor field.';
