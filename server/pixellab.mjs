@@ -218,18 +218,32 @@ export async function mapObject({ description, w, h, view = 'low top-down', seed
  * what it costs. If /v2/ui-assets turns out to be named something else, the
  * poll loop and the download are still right and only the two strings move.
  *
- * IT IS EXPENSIVE, and that is the reason nothing calls it speculatively. The
- * tooling prices a panel at 20 to 40 generations, which is the pro character
- * bracket rather than the one-generation bracket map objects sit in. One panel
- * is worth several dozen props.
+ * IT IS THE EXPENSIVE ONE, in the pro bracket rather than the one-generation
+ * bracket map objects sit in, and that is the reason nothing calls it
+ * speculatively and why one press draws one piece. The number is not put in
+ * front of an author: telling somebody what a press costs before telling them
+ * what they get is why the old page read as a bill.
  *
  * The size is aspect-gated and the two maxima DO NOT COMBINE: 688 is only
  * reachable with a 16:9 partner and 512 only as a square, so 688x512 resolves
  * to 4:3 and is refused. That refusal arrives after the request has been sent,
  * which is the same trap the odd-canvas 422 was on map-objects, so the fit
  * happens here where it costs nothing.
+ *
+ * BOTH SIDES START AT 192 and that floor changes what a piece is, rather than
+ * being an inconvenience. A season token is about 24 pixels across and an
+ * advance cue is smaller, so neither can be asked for at its own size: the
+ * existing crest-panther.png is 128x128 and could not be regenerated today. So
+ * anything under the floor is drawn as a SHEET, one legal canvas holding a grid
+ * of faces cut by marked rectangles, which is also the only way the faces of
+ * one family come back the same weight. server/store/ui.mjs carries which of
+ * the twenty-one types that applies to.
+ *
+ * Exported because the store checks the canvas BEFORE the press rather than
+ * after it, and a second copy of these five pairs would be five numbers that
+ * disagree with the generator the first time one is edited.
  */
-const UI_GATES = [
+export const UI_GATES = [
   [16 / 9, 688, 384],
   [9 / 16, 384, 688],
   [4 / 3, 600, 448],
@@ -237,7 +251,7 @@ const UI_GATES = [
   [1, 512, 512],
 ]
 
-function fitUi(w, h) {
+export function fitUi(w, h) {
   const want = Math.max(1, Number(w) || 256) / Math.max(1, Number(h) || 256)
   // nearest gate by ratio, because the caller asked for a shape rather than for
   // one of five names and should get the closest legal one
@@ -264,7 +278,18 @@ export async function uiAsset({ description, width = 256, height = 256, palette,
   }
   if (palette) req.color_palette = String(palette).slice(0, 120)
   if (Array.isArray(elements) && elements.length) req.elements = elements.map((s) => String(s).slice(0, 40)).filter(Boolean)
-  if (Array.isArray(pieces) && pieces.length) req.pieces = pieces
+  /* ONE PRESS DRAWS ONE PIECE (Ash, 2026-08-30), and the refusal is here as
+   * well as at the route because this is the line that spends the money. A
+   * batch is the shape that turns one bad prompt into five bad pictures and
+   * leaves nobody looking at the first one before the second is paid for.
+   *
+   * `pieces` used to be accepted here and never sent by anything, which is the
+   * half-plumbed pattern docs/AUTHORING.md names: a field a caller could fill
+   * and no form could reach. It reaches now, and it carries at most one. */
+  if (Array.isArray(pieces) && pieces.length) {
+    if (pieces.length > 1) throw new Error(`one press draws one piece, and this asked for ${pieces.length}`)
+    req.pieces = pieces
+  }
   /* THE STRONGEST LEVER THIS ENDPOINT HAS, and the one measured true elsewhere.
    * A style image transfers palette, outline, detail and shading, which is
    * exactly what makes a panel look like it belongs to the island under it. It

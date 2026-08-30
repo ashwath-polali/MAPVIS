@@ -60,15 +60,28 @@ import {
   listUi,
   getUiByName,
   createUi,
-  setUiSlots,
+  setUiRegions,
   setUiImage,
   failUi,
   removeUi,
+  publishUi,
+  pendingUi,
   readyUi,
   readyUiByName,
   uiImage,
-  SLOT_KINDS,
-  SLOT_ALIGNS,
+  legalCanvas,
+  pieceType,
+  PIECE_TYPES,
+  CORE_NAMES,
+  REGION_KINDS,
+  REGION_ALIGNS,
+  REGION_VALIGNS,
+  PICTURE_FITS,
+  FILL_AXES,
+  FILL_MODES,
+  REPEAT_MODES,
+  TEXT_WRAPS,
+  TEXT_OVERFLOWS,
 } from './store/ui.mjs'
 import { publishBundle, publishedMap, publishHistory, hotGet, hotPut } from './store/publish.mjs'
 import { store } from './store/blobs.mjs'
@@ -166,7 +179,16 @@ async function styleRef(slug) {
  * resolves a missing one through safeId to 'untitled', which is a real map
  * somebody may own. Exempt from the MAP gate and guarded by a signed-in check
  * of their own, exactly the way the world write is. */
-const OPEN_POSTS = new Set(['/api/stop', '/api/propose', '/api/world', '/api/ui/generate', '/api/ui/slots', '/api/ui/remove'])
+const OPEN_POSTS = new Set([
+  '/api/stop',
+  '/api/propose',
+  '/api/world',
+  '/api/ui/generate',
+  '/api/ui/regions',
+  '/api/ui/slots',
+  '/api/ui/publish',
+  '/api/ui/remove',
+])
 
 /* THE OCEAN BELONGS TO ONE ACCOUNT, because there is one ocean.
  *
@@ -2426,44 +2448,107 @@ async function route(req, res, p, url) {
     }
   }
 
-  /* THE FURNITURE THE GAME DRAWS OVER A MAP, and the marks inside it.
+  /* THE UI LIBRARY: the shelf of drawn pieces the game's interface is made of.
    *
-   * A picture of a page is not a page. Without slots saying where the number
-   * goes, where the bar fills and where the button is, every drawn surface
-   * arrives with a second half typed by hand into vine source, which is the
-   * same defect as a hand-typed camera number: a fact about a picture kept
-   * somewhere the picture cannot correct it. server/store/ui.mjs holds the
-   * rules; these four routes are the only way in.
+   * A picture of a page is not a page. Without the marks saying where the text
+   * goes, where the bar fills, where the button is and how deep the frame edge
+   * runs, every drawn surface arrives with a second half typed by hand into
+   * game source, which is the same defect as a hand-typed camera number: a fact
+   * about a picture kept somewhere the picture cannot correct it.
    *
-   * All of them want an account rather than a map, because a dialogue box
-   * belongs to the game and not to the hub. */
+   * docs/UI-KIT.md is the authority and server/store/ui.mjs holds the rules.
+   * These routes are the only way in, and all of them want an ACCOUNT rather
+   * than a map, because a dialogue box belongs to the game and not to the hub.
+   *
+   * The word on the wire is `region` and never `slot`. A WorldSlot is an
+   * island's berth on the sea and PmapScene reads it about thirty times, so a
+   * UI rectangle called a slot costs a session the first time somebody greps.
+   */
   if (p === '/api/ui' && req.method === 'GET') {
     const me = await currentUser(req)
-    // signed out is not an error here, it is simply an account with no surfaces
-    return send(res, 200, { ui: me ? await listUi(me.id) : [], kinds: SLOT_KINDS, aligns: SLOT_ALIGNS })
+    /* THE TYPE LIST GOES OUT WITH THE SHELF, because a library that opens with
+     * a text box assumes the author already knows what a dialogue box is made
+     * of, and the game's own record has that written down in twenty-one places.
+     * A type carries its preset and its region vocabulary, so the page fills
+     * the marks in rather than making somebody rediscover them by dragging six
+     * unlabelled rectangles. */
+    return send(res, 200, {
+      ui: me ? await listUi(me.id) : [],
+      types: PIECE_TYPES,
+      core: CORE_NAMES,
+      pending: me ? await pendingUi(me.id) : null,
+      kinds: REGION_KINDS,
+      aligns: REGION_ALIGNS,
+      valigns: REGION_VALIGNS,
+      fits: PICTURE_FITS,
+      fillAxes: FILL_AXES,
+      fillModes: FILL_MODES,
+      repeats: REPEAT_MODES,
+      wraps: TEXT_WRAPS,
+      overflows: TEXT_OVERFLOWS,
+      gates: legalCanvas(512, 512).gates,
+      floor: 192,
+    })
   }
 
   if (p === '/api/ui/generate' && req.method === 'POST') {
     const me = await currentUser(req)
-    if (!me) return send(res, 401, { error: 'sign in to draw a surface' })
+    if (!me) return send(res, 401, { error: 'sign in to draw a piece' })
     const b = await body(req)
     const name = String(b.name || '').trim()
     const description = String(b.description || '').trim()
-    if (!description) return send(res, 400, { error: 'no description' })
+    if (!description) return send(res, 400, { error: 'say what the piece is before drawing it' })
+
+    /* ONE PRESS DRAWS ONE PIECE (Ash, 2026-08-30). He judges each one before
+     * the next is asked for, so a batch is not a convenience here, it is the
+     * shape that turns one bad prompt into five bad pictures with nobody having
+     * looked at the first. Two ways to ask for more than one and both refused:
+     * a list in the body, and a second press while one is still drawing. */
+    const asked = [b.pieces, b.names, b.batch].find(Array.isArray)
+    if (asked && asked.length > 1)
+      return send(res, 400, {
+        error: `one press draws one piece, and this asked for ${asked.length} · they get judged one at a time, so the next one starts after this one is looked at`,
+      })
+    const busy = await pendingUi(me.id)
+    if (busy && busy.name !== name)
+      return send(res, 409, { error: `"${busy.name}" is still drawing · one at a time, so wait for it and then look at it`, pending: busy })
+
+    /* THE TYPE SUPPLIES THE PLUMBING. An author picks one of the twenty-one and
+     * describes the piece; the canvas, the generator's element list and the
+     * region vocabulary come from the preset rather than from a form somebody
+     * fills in twice. An unknown type, and the two named so nobody generates
+     * them, are refused inside createUi before anything is spent. */
+    const t = pieceType(b.type)
+    if (b.type && !t) return send(res, 400, { error: `there is no piece type called "${b.type}"` })
+    const width = Number(b.width) || t?.w || 0
+    const height = Number(b.height) || t?.h || 0
+
+    /* THE GATE IS CHECKED BEFORE THE PRESS AND NOT AFTER IT. The maxima do not
+     * combine, so 688x512 reads as 4:3 and comes back refused with the money
+     * already committed. Both sides also start at 192, which is why anything
+     * smaller is a sheet of faces rather than its own generation. */
+    const gate = legalCanvas(width, height)
+    if (!gate.ok)
+      return send(res, 400, {
+        error: `${width}x${height} is not a size this can be drawn at · the nearest legal canvas is ${gate.width}x${gate.height}`,
+        canvas: gate,
+      })
+
+    /* WHO MAY MINT CORE CHROME. The kit is one set for the whole game and a
+     * member piece may only add, so `core` is not a flag anybody can set on
+     * their own shelf: it belongs to the one account the game reads chrome
+     * from, which is the same account the ocean belongs to and is configured in
+     * the same place. Everyone else gets an additive piece, which is the whole
+     * of what they are meant to be making. */
+    const core = !!b.core && (await ownsOcean(req))
+
     /* THE ROW EXISTS BEFORE THE PICTURE DOES, because this call takes a minute
      * and a half and something has to be poll-able for that minute and a half.
      * It is also what makes a spend that produced nothing visible afterwards
      * rather than silently absent. */
     let row
     try {
-      row = await createUi({
-        ownerId: me.id,
-        name,
-        title: b.title,
-        description,
-        w: b.width,
-        h: b.height,
-      })
+      row = await createUi({ ownerId: me.id, name, type: t ? t.name : '', title: b.title, description, w: width, h: height, core })
     } catch (e) {
       return send(res, 400, { error: String(e.message || e) })
     }
@@ -2475,35 +2560,56 @@ async function route(req, res, p, url) {
       try {
         styleImageBase64 = (await styleRef(String(b.style))).base64
       } catch (e) {
+        await failUi(me.id, row.name)
         return send(res, 400, { error: `style "${b.style}": ${String(e.message || e).slice(0, 160)}` })
       }
     }
     try {
       const out = await pixellab.uiAsset({
         description,
-        width: b.width,
-        height: b.height,
+        width,
+        height,
         palette: b.palette,
-        elements: Array.isArray(b.elements) ? b.elements : null,
+        // the preset's own list, overridable by an author who has a reason.
+        // Several types deliberately send none: a band with furniture
+        // scaffolded onto it is not a band.
+        elements: Array.isArray(b.elements) ? b.elements : t?.elements || null,
+        pieces: asked && asked.length === 1 ? asked : null,
         styleImageBase64,
         name: row.name,
       })
       const buf = Buffer.from(out.b64, 'base64')
       const size = pngSizeBuf(buf.subarray(0, 24))
       const saved = await setUiImage(me.id, row.name, buf, size.w || out.width, size.h || out.height)
-      return send(res, 200, { ui: { name: saved.name, w: saved.w, h: saved.h, status: saved.status } })
+      /* WHAT COMES BACK, AND NOT WHAT IT COST. The old page put the price under
+       * the button as the last thing an author read, which is why it read as a
+       * bill. What belongs there is this many faces, at this size, ready to be
+       * cut. */
+      return send(res, 200, {
+        ui: { name: saved.name, type: saved.type, w: saved.w, h: saved.h, status: saved.status },
+        cut: t ? { tier: t.tier, faces: t.faces, regions: t.regions } : null,
+      })
     } catch (e) {
       await failUi(me.id, row.name)
       return send(res, 502, { error: String(e.message || e).slice(0, 300) })
     }
   }
 
-  if (p === '/api/ui/slots' && req.method === 'POST') {
+  /* THE MARKS AND THE MEASUREMENT, SAVED TOGETHER.
+   *
+   * One call because they are checked against each other: an edge number is
+   * only legal against the picture the regions sit on, and two requests would
+   * let the pair go inconsistent between them.
+   *
+   * `/api/ui/slots` is the old path kept alive so the page that still calls it
+   * does not break on the day this lands. It is not the word on the wire and it
+   * goes when that page does. */
+  if ((p === '/api/ui/regions' || p === '/api/ui/slots') && req.method === 'POST') {
     const me = await currentUser(req)
-    if (!me) return send(res, 401, { error: 'sign in to mark a surface' })
+    if (!me) return send(res, 401, { error: 'sign in to mark a piece' })
     const b = await body(req)
     try {
-      return send(res, 200, await setUiSlots(me.id, String(b.name || ''), b.slots))
+      return send(res, 200, await setUiRegions(me.id, String(b.name || ''), b.regions || b.slots, b.slices))
     } catch (e) {
       // refused where it is written, naming what is wrong, rather than found by
       // a member whose number prints half off the panel
@@ -2511,11 +2617,34 @@ async function route(req, res, p, url) {
     }
   }
 
+  /* SAYING A PIECE IS FINISHED, which is a different fact from its picture
+   * having arrived. A ground piece with no edge numbers is refused here,
+   * because those four numbers are the entire thing the game can consume:
+   * without them the consumer falls back to squashing the whole painting into
+   * whatever box the element happens to be. */
+  if (p === '/api/ui/publish' && req.method === 'POST') {
+    const me = await currentUser(req)
+    if (!me) return send(res, 401, { error: 'sign in to publish a piece' })
+    const b = await body(req)
+    try {
+      return send(res, 200, await publishUi(me.id, String(b.name || '')))
+    } catch (e) {
+      return send(res, 400, { error: String(e.message || e), problems: e.problems || [] })
+    }
+  }
+
   if (p === '/api/ui/remove' && req.method === 'POST') {
     const me = await currentUser(req)
-    if (!me) return send(res, 401, { error: 'sign in to remove a surface' })
+    if (!me) return send(res, 401, { error: 'sign in to remove a piece' })
     const b = await body(req)
-    return send(res, (await removeUi(me.id, String(b.name || ''))) ? 200 : 404, { removed: String(b.name || '') })
+    const name = String(b.name || '')
+    try {
+      // core chrome may only be removed by the account it belongs to, because
+      // deleting the dialogue box is the loudest way to override it
+      return send(res, (await removeUi(me.id, name, { core: await ownsOcean(req) })) ? 200 : 404, { removed: name })
+    } catch (e) {
+      return send(res, 403, { error: String(e.message || e) })
+    }
   }
 
   /* ---- the shared library, which is a COPY and says so --------------------
@@ -3500,22 +3629,33 @@ async function readApi(req, res, p, url) {
     return send(res, 200, { marks: out })
   }
 
-  /* THE CHROME, and the marks inside it.
+  /* THE CHROME, WITH ITS SLICES, ITS REGIONS AND ITS FACES.
    *
-   * The half of a drawn surface that is not the png. A grape asking where the
-   * speaker's name goes gets an answer from the surface itself rather than from
-   * a number somebody typed into vine source, which is the whole reason slots
-   * exist. Served live rather than from a published version, the same way the
-   * maps registry and the ocean are, because chrome has no publish step.
+   * The half of a drawn piece that is not the png, and the shape is
+   * docs/UI-KIT.md section 3 verbatim: `{ src, w, h, slice, scale, fill,
+   * repeat }` beside the named rectangles. Written to match what the game can
+   * consume rather than what is convenient to publish, and the unit is source
+   * pixels because that is the only thing CSS border-image and Pixi
+   * NineSliceSprite agree on.
+   *
+   * A grape asking where the speaker's name goes gets an answer from the piece
+   * itself rather than from a number somebody typed into game source, which is
+   * the whole reason regions exist. Served live rather than from a published
+   * version, the same way the maps registry and the ocean are.
+   *
+   * `published` rides along rather than filtering, because a piece whose
+   * picture has arrived is worth serving to an editor while its measurement is
+   * still being made, and a consumer that will only depend on a finished piece
+   * has the flag to check.
    *
    * A name is unique per ACCOUNT and there is no account in this path, so two
-   * people naming a surface `dialogue_box` collide here and the older row wins.
-   * Survivable because the game reads chrome from one account, and written down
-   * rather than left to whichever row came back first. */
+   * people naming a piece `dialogue_box` collide here. CORE WINS, then the
+   * oldest, which is the only ordering consistent with core chrome never being
+   * overridable. Survivable because the game reads chrome from one account. */
   if (kind === 'ui') {
     if (!slugRaw) return send(res, 200, { ui: await readyUi() })
     const surface = await readyUiByName(slugRaw)
-    if (!surface) return send(res, 404, { error: `no surface ${slugRaw}` })
+    if (!surface) return send(res, 404, { error: `no piece ${slugRaw}` })
     if (!sub) return send(res, 200, surface)
     if (sub === 'image') {
       const buf = await uiImage(slugRaw)

@@ -17,7 +17,7 @@ import { gateMap } from '../store/gate.mjs'
 import { store } from '../store/blobs.mjs'
 import { getWorld, saveWorld, composition } from '../store/world.mjs'
 import { putLibraryFrames, copyLibraryItem } from '../store/platform.mjs'
-import { createUi, setUiSlots, getUiByName, removeUi } from '../store/ui.mjs'
+import { createUi, setUiRegions, setUiImage, getUiByName, removeUi, publishUi, pieceType, PIECE_TYPES } from '../store/ui.mjs'
 import { encodePNG } from '../sheet.mjs'
 import { api } from '../api.mjs'
 import { q, one, closeDb } from './pool.mjs'
@@ -794,16 +794,17 @@ try {
     await q('select pg_advisory_unlock($1)', [WORLD_LOCK])
   }
 
-  // ---- 6. the chrome, and one kit shared across maps -----------------------
-  /* A PICTURE OF A PAGE IS NOT A PAGE. A generated dialogue box with no slots
-   * is a wallpaper: the vine still has to be told where the name prints and
-   * where the button is, and those numbers end up typed into vine source where
-   * the picture cannot correct them. So the marks are the deliverable, and this
-   * is the fence saying a mark survives being saved and read back.
+  // ---- 6. the ui library, and one kit shared across maps -------------------
+  /* A PICTURE OF A PAGE IS NOT A PAGE. A generated dialogue box with no marks
+   * is a wallpaper: the game still has to be told where the name prints, where
+   * the button is and how deep the frame edge runs, and those numbers end up
+   * typed into game source where the picture cannot correct them. So the marks
+   * are the deliverable, and this is the fence saying one survives being saved
+   * and read back.
    *
    * Nothing here generates anything. The picture is a solid colour written by
    * this file, because the only thing being tested is whether an authored value
-   * reaches the other end, and a real surface costs 20 to 40 generations. */
+   * reaches the other end. */
   const solidPNG = (w, h, r, g, b) => {
     const rgba = Buffer.alloc(w * h * 4)
     for (let i = 0; i < w * h; i++) {
