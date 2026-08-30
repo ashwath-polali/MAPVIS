@@ -346,7 +346,20 @@ export const UI_ELEMENTS = [
  * after an author has pressed and watched a row fail. */
 const PIECE_KINDS = { rounded_rect: ['x', 'y', 'w', 'h'], circle: ['x', 'y', 'r'], polygon: ['x', 'y', 'r', 'sides'] }
 
-export async function uiAsset({ description, width = 256, height = 256, palette, elements, pieces, styleImageBase64, seed, name }) {
+/* THE BODY, BUILT WITHOUT SENDING IT, and the split exists so a spend is never
+ * what tells anybody what the request looked like.
+ *
+ * Ash spent about 280 generations on 2026-08-30 rediscovering one recipe, and
+ * the two that produced it, `elements` and `style_image`, are both fields a
+ * caller could silently omit: work/.kit/panel.png is a paid picture whose only
+ * defect is that the call dropped the element list. There was no way to look at
+ * a request before paying for it, so the only instrument was the picture.
+ *
+ * Everything up to the post lives here and uiAsset calls it, so a dry run and a
+ * real one cannot diverge: it is not a second copy of the assembly, it IS the
+ * assembly. It also needs no token, so it answers on a machine with no key.
+ */
+export function uiAssetBody({ description, width = 256, height = 256, palette, elements, pieces, styleImageBase64, seed, name }) {
   const say = String(description || '').trim()
   if (!say) throw new Error('a surface needs a description')
   const size = fitUi(width, height)
@@ -425,7 +438,11 @@ export async function uiAsset({ description, width = 256, height = 256, palette,
   if (styleImageBase64) req.style_image = { type: 'base64', base64: String(styleImageBase64), format: 'png' }
   if (seed != null) req.seed = seed
   if (name) req.name = String(name).slice(0, 60)
+  return req
+}
 
+export async function uiAsset(ask) {
+  const req = uiAssetBody(ask)
   const out = await call('POST', '/v2/create-ui-asset', req)
   const id = out.ui_asset_id
   if (!id) throw new Error('the surface was queued without an id to collect it from')
@@ -460,8 +477,11 @@ export async function uiAsset({ description, width = 256, height = 256, palette,
       return {
         b64: (await fetchPNG(j.image_url)).toString('base64'),
         uiAssetId: String(id),
-        width: Number(j.size?.width) || size.width,
-        height: Number(j.size?.height) || size.height,
+        // off the request that was actually sent rather than off what the caller
+        // asked for, because uiAssetBody fits the canvas to an aspect gate and
+        // 688x512 leaves here as 600x448
+        width: Number(j.size?.width) || req.image_size.width,
+        height: Number(j.size?.height) || req.image_size.height,
       }
     }
   }

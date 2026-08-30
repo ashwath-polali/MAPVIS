@@ -2537,6 +2537,19 @@ async function route(req, res, p, url) {
     const description = String(b.description || '').trim()
     if (!description) return send(res, 400, { error: 'say what the piece is before drawing it' })
 
+    /* A DRY RUN COSTS NOTHING AND ANSWERS THE ONLY QUESTION WORTH ASKING FIRST.
+     *
+     * About 280 generations went on 2026-08-30 rediscovering one recipe, and the
+     * instrument the whole time was the returned picture. work/.kit/panel.png is
+     * a paid roll whose single defect is that the call dropped `elements`, which
+     * is a fact visible in the request body a second before the money leaves.
+     *
+     * So this runs the router and hands back the EXACT body uiAsset would post,
+     * built by the same function that builds the real one, and posts nothing. It
+     * takes no pending lock and writes no row, because a dry run that made the
+     * account busy would be a spend in every way except the picture. */
+    const dry = b.dry === true || b.dry === 'true'
+
     /* ONE PRESS DRAWS ONE PIECE (Ash, 2026-08-30). He judges each one before
      * the next is asked for, so a batch is not a convenience here, it is the
      * shape that turns one bad prompt into five bad pictures with nobody having
@@ -2555,7 +2568,7 @@ async function route(req, res, p, url) {
      * concurrent pixellab spends on one row, and whichever answered last won.
      * The stuck-process case the exemption was reaching for is already covered:
      * pendingUi only sees a row younger than ten minutes. */
-    const busy = await pendingUi(me.id)
+    const busy = dry ? null : await pendingUi(me.id)
     if (busy)
       return send(res, 409, { error: `"${busy.name}" is still drawing · one at a time, so wait for it and then look at it`, pending: busy })
 
@@ -2588,6 +2601,120 @@ async function route(req, res, p, url) {
      * of what they are meant to be making. */
     const core = !!b.core && (await ownsOcean(req))
 
+    /* THE STYLE REFERENCE IS CHOSEN BY THE SERVER, FROM THE TYPE.
+     *
+     * It used to be a map slug an author typed, which is the strongest lever
+     * this endpoint has and was reachable by exactly nobody: the page has no
+     * field for it, so every piece ever drawn here went out with no reference
+     * at all. A map's painting is also the wrong picture for chrome anyway. The
+     * right one is the chrome the game ALREADY SHIPS and Ash already accepted,
+     * and public/chrome holds it, picked by piece type in ui.mjs.
+     *
+     * A named map still wins if one is passed, because that is a deliberate
+     * answer from somebody who had a reason, and the page has a select for it
+     * with a tooltip saying what a painting can and cannot hand over. It is the
+     * ONE way this call can end up carrying material that is not the type's, so
+     * whichever file went out is named in the answer either way.
+     *
+     * Resolved before the row exists, so the dry run reaches it without writing
+     * anything and a bad slug is a 400 rather than a failed row. */
+    let style = chromeStyle(t ? t.name : '')
+    if (b.style) {
+      try {
+        const m = await styleRef(String(b.style))
+        style = { file: String(b.style), path: '', base64: m.base64, w: m.w, h: m.h }
+      } catch (e) {
+        return send(res, 400, { error: `style "${b.style}": ${String(e.message || e).slice(0, 160)}` })
+      }
+    }
+
+    /* THE TWO LEVERS COME OFF THE TYPE AND A CALLER CANNOT DROP EITHER.
+     *
+     * `elements` used to read `Array.isArray(b.elements) ? b.elements : t?.elements`
+     * and the style used to be omittable the same way, which is exactly how
+     * work/.kit/panel.png was paid for: a call with no element list and the
+     * wrong reference art, from a prompt that was otherwise good. Measured over
+     * five rolls, `elements` is the lever that decides SHAPE and `style_image`
+     * is the lever that decides MATERIAL, and words decide neither, so neither
+     * is a thing a body may turn off.
+     *
+     * A type that deliberately sends no list, which is every sheet, is reported
+     * rather than left to look like a dropped field. Same for a missing
+     * reference: said out loud, because "no reference" is why the colours
+     * drifted and an author who is not told reads it as a bad prompt. */
+    const elements = t?.elements || null
+    const levers = {
+      elements,
+      elementsWhy: t?.elementsWhy || '',
+      styleRef: style ? style.file : '',
+      ...(elements ? {} : { noElements: t ? t.elementsWhy || 'this type sends no element list' : 'no type, so no element list' }),
+      ...(style ? {} : { noStyleRef: 'no reference art for this type, so nothing carries the material and only the words do' }),
+    }
+
+    /* CLAUDE WRITES THE PROMPT, WITH EVERYTHING THIS PROCESS KNOWS IN FRONT OF
+     * IT, and this line is the whole point of the route. What goes over is the
+     * author's sentence, the type's tier and stretch and canvas and region
+     * vocabulary and caution, the nine-slice law, this account's existing shelf
+     * so a second piece matches the first, and the picture of the chrome the
+     * game already ships. All of it already existed here and none of it left
+     * the process.
+     *
+     * It is not a gate. With no claude the author's own words still go to
+     * pixellab, and the answer says out loud that nobody wrote the prompt. */
+    const shelf = await listUi(me.id)
+
+    /* THE ONE PLACE THE ASK IS ASSEMBLED, so a dry run and a real one cannot
+     * disagree about what would have been sent. A dry run built from a second
+     * copy of these fields proves nothing about the copy that spends. */
+    const askFor = (plan, pieceName) => ({
+      description: plan.description,
+      width,
+      height,
+      // the router's palette, unless an author named one by hand. It is a
+      // separate field on the endpoint rather than words in the description,
+      // so it is answered separately.
+      palette: b.palette || plan.palette || null,
+      // the type's own list and nothing else. An author override lived here and
+      // is gone: it is one of the two levers that decide whether a picture is
+      // usable, and work/.kit/panel.png is what a dropped one costs.
+      elements,
+      /* ONLY `pieces` IS A SHAPE TEMPLATE, and this took whichever of the
+       * three arrays happened to be present. `names` and `batch` are lists of
+       * NAMES, so a caller sending one had its strings forwarded as the
+       * generator's shape list, where every entry is refused three times over
+       * as "not a valid dictionary" and the author is told nothing they can
+       * act on. Those two are counted for the one-press refusal above and are
+       * not content. */
+      pieces: Array.isArray(b.pieces) && b.pieces.length === 1 ? b.pieces : null,
+      // the same picture the router looked at. Two levers and they do
+      // different jobs: this one carries material and no layout, the words
+      // carry layout and cannot carry a palette.
+      styleImageBase64: style ? style.base64 : undefined,
+      name: pieceName,
+    })
+
+    if (dry) {
+      const plan = await chromePlan({ ask: description, t, width, height, shelf, style, job: `ui:dry:${name || t?.name || 'piece'}` })
+      const wire = pixellab.uiAssetBody(askFor(plan, name || t?.name || 'piece'))
+      /* THE PICTURE IS REPLACED BY ITS LENGTH. A base64 png is 60 to 200 KB of
+       * one unreadable line, and printing it buries the six fields somebody is
+       * dry-running to check. What matters about style_image is that it is
+       * there, that it is a Base64Image and which file it came off, and all
+       * three survive this. */
+      const body = wire.style_image
+        ? { ...wire, style_image: { ...wire.style_image, base64: `<${wire.style_image.base64.length} chars of ${style.file}>` } }
+        : wire
+      return send(res, 200, {
+        dry: true,
+        piece: { name: name || '', type: t ? t.name : '', tier: t ? t.tier : '', w: width, h: height },
+        ...levers,
+        routed: plan.routed,
+        note: plan.note,
+        ...(plan.routed ? {} : { degraded: plan.degraded, why: plan.why }),
+        body,
+      })
+    }
+
     /* THE ROW EXISTS BEFORE THE PICTURE DOES, because this call takes a minute
      * and a half and something has to be poll-able for that minute and a half.
      * It is also what makes a spend that produced nothing visible afterwards
@@ -2610,74 +2737,10 @@ async function route(req, res, p, url) {
     } catch (e) {
       return send(res, 400, { error: String(e.message || e) })
     }
-    /* THE STYLE REFERENCE IS CHOSEN BY THE SERVER, FROM THE TYPE.
-     *
-     * It used to be a map slug an author typed, which is the strongest lever
-     * this endpoint has and was reachable by exactly nobody: the page has no
-     * field for it, so every piece ever drawn here went out with no reference
-     * at all. A map's painting is also the wrong picture for chrome anyway. The
-     * right one is the chrome the game ALREADY SHIPS and Ash already accepted,
-     * and public/chrome holds it, picked by piece type in ui.mjs.
-     *
-     * A named map still wins if one is passed, because that is a deliberate
-     * answer from somebody who had a reason. Nobody has one yet. */
-    let style = chromeStyle(t ? t.name : '')
-    if (b.style) {
-      try {
-        const m = await styleRef(String(b.style))
-        style = { file: String(b.style), path: '', base64: m.base64, w: m.w, h: m.h }
-      } catch (e) {
-        await failUi(me.id, row.name)
-        return send(res, 400, { error: `style "${b.style}": ${String(e.message || e).slice(0, 160)}` })
-      }
-    }
 
-    /* CLAUDE WRITES THE PROMPT, WITH EVERYTHING THIS PROCESS KNOWS IN FRONT OF
-     * IT, and this line is the whole point of the route. What goes over is the
-     * author's sentence, the type's tier and stretch and canvas and region
-     * vocabulary and caution, the nine-slice law, this account's existing shelf
-     * so a second piece matches the first, and the picture of the chrome the
-     * game already ships. All of it already existed here and none of it left
-     * the process.
-     *
-     * It is not a gate. With no claude the author's own words still go to
-     * pixellab, and the answer says out loud that nobody wrote the prompt. */
-    const plan = await chromePlan({
-      ask: description,
-      t,
-      width,
-      height,
-      shelf: await listUi(me.id),
-      style,
-      job: `ui:${row.name}`,
-    })
+    const plan = await chromePlan({ ask: description, t, width, height, shelf, style, job: `ui:${row.name}` })
     try {
-      const out = await pixellab.uiAsset({
-        description: plan.description,
-        width,
-        height,
-        // the router's palette, unless an author named one by hand. It is a
-        // separate field on the endpoint rather than words in the description,
-        // so it is answered separately.
-        palette: b.palette || plan.palette || null,
-        // the preset's own list, overridable by an author who has a reason.
-        // Several types deliberately send none: a band with furniture
-        // scaffolded onto it is not a band.
-        elements: Array.isArray(b.elements) ? b.elements : t?.elements || null,
-        /* ONLY `pieces` IS A SHAPE TEMPLATE, and this took whichever of the
-         * three arrays happened to be present. `names` and `batch` are lists of
-         * NAMES, so a caller sending one had its strings forwarded as the
-         * generator's shape list, where every entry is refused three times over
-         * as "not a valid dictionary" and the author is told nothing they can
-         * act on. Those two are counted for the one-press refusal above and are
-         * not content. */
-        pieces: Array.isArray(b.pieces) && b.pieces.length === 1 ? b.pieces : null,
-        // the same picture the router looked at. Two levers and they do
-        // different jobs: this one carries material and no layout, the words
-        // carry layout and cannot carry a palette.
-        styleImageBase64: style ? style.base64 : undefined,
-        name: row.name,
-      })
+      const out = await pixellab.uiAsset(askFor(plan, row.name))
       const buf = Buffer.from(out.b64, 'base64')
       const size = pngSizeBuf(buf.subarray(0, 24))
       /* THE PIXELLAB ID IS KEPT, and it never was. The column exists, createUi
@@ -2705,7 +2768,10 @@ async function route(req, res, p, url) {
         routed: plan.routed,
         prompt: plan.description,
         note: plan.note,
-        styleRef: plan.styleFile,
+        // which levers actually went out, on every answer. A dropped element
+        // list is invisible in a returned picture until somebody has spent
+        // enough of them to see the pattern, which is what 2026-08-30 was.
+        ...levers,
         ...(plan.routed ? {} : { degraded: plan.degraded, why: plan.why }),
       })
     } catch (e) {
@@ -6694,6 +6760,9 @@ const CHROME_DIR = path.join(ROOT, 'public', 'chrome')
  * An author reading "no reference" knows why the colours drifted. */
 export function chromeStyle(type) {
   const file = chromeRef(type)
+  // the two types named so nobody generates them answer null rather than a
+  // fallback, and path.join on a null is a throw rather than a missing reference
+  if (!file) return null
   const full = path.join(CHROME_DIR, file)
   try {
     const buf = fs.readFileSync(full)
@@ -6805,9 +6874,40 @@ export function chromeFinal({ subject, style, t }) {
    * the two fields exist. Both failed rolls had the law in front of the person
    * writing the prompt and both dropped it, and a dropped nine-slice law is not
    * a slightly worse picture, it is a picture the game cannot cut. */
-  const law = t && t.tier === 'ground' ? ' ' + GROUND_CLAUSE : ''
+  /* THE MIDDLE SENTENCE IS DROPPED ON THE ONE PIECE THAT HAS NO MIDDLE. Reading
+   * the twelve grounds side by side made it visible: highlight_edge is drawn
+   * with its centre empty, fill:false, because the map shows through it, and the
+   * code-owned law was telling it to paint one plain surface in there. Two
+   * instructions that cannot both be obeyed is how a generator picks. */
+  const law = t && t.tier === 'ground' ? ' ' + (t.fill === false ? RING_CLAUSE : GROUND_CLAUSE) : ''
   const alone = 'the piece alone as a cut-out on a fully transparent background, no lettering of any kind'
-  const tail = `${alone}.${law}`
+  /* THE CLAUSE THAT SEPARATED THE GOOD ROLL FROM THE UNUSABLE ONE, and it is
+   * here rather than in the model's answer for the same reason the law is.
+   *
+   * dialogue_box_v3 came back a kit with the hero panel running off the top of
+   * the canvas. v4 differed by an element list AND by a description saying one
+   * single complete piece, centred, margin on every side, nothing touching the
+   * edge. A model asked to hold seven rules drops one, and the one dropped twice
+   * already was about the frame, so this is not left to it.
+   *
+   * Split in two, because a sheet is not one piece and telling it to be one
+   * would refuse the grid that IS the deliverable. The half both tiers share is
+   * the crop, which is the half v3 actually died of. */
+  const whole =
+    t && t.tier === 'sheet'
+      ? ' Every face is drawn complete and entirely inside the image, evenly spaced with clear margin on every side, ' +
+        'nothing touching the edge of the image and nothing cut off by it.'
+      : ' One single complete piece, centred, with margin on every side, nothing touching the edge of the image and ' +
+        'nothing cut off by it.'
+  /* AND THE INTERIOR NAMED BY CODE. work/.kit/panel.png is the reason: its
+   * prompt said parchment out loud, in a sentence a model wrote, and the picture
+   * came back brown wood. On a noun pixellab holds a prior for, words lose, so
+   * one more adjective in the subject is not the answer. What this buys is that
+   * the phrase is in the same fixed place on every roll of the type, next to the
+   * clauses that already survive truncation, rather than wherever an answer put
+   * it. The reference png is the lever that actually carries material. */
+  const inside = t && t.material ? ` The surface inside the frame is ${t.material}.` : ''
+  const tail = `${alone}.${whole}${inside}${law}`
   /* THE SUBJECT IS WHAT GETS CUT, NEVER THE TAIL, and the ordinary slice at the
    * end had it backwards. The clauses code owns sit last, so on a long answer a
    * flat truncation takes off the nine-slice law and the transparency, which is
@@ -6831,6 +6931,15 @@ const CHROME_PROMPT_MAX = 2000
 const GROUND_CLAUSE =
   'Ornament only in the four corners. The four edges are plain even runs of one material with ' +
   'nothing centred on them. The middle is one plain surface with nothing drawn in it.'
+
+/* The same law for the one ground drawn round a hole. Its two halves about the
+ * corners and the edges are unchanged, because a ring is nine-sliced like every
+ * other ground; only the sentence about the middle is replaced, since the
+ * middle is the game and anything painted there is paint over Ash's art. */
+const RING_CLAUSE =
+  'Ornament only in the four corners. The four edges are plain even runs of one material with ' +
+  'nothing centred on them. The middle is completely empty and fully transparent, a hole right ' +
+  'through the picture, with nothing drawn inside the frame at all.'
 
 /* `think` is runPlanner, and it is a parameter for one reason: the fence in
  * verify-authoring.mjs has to prove this router writes the type's constraints
@@ -6873,9 +6982,19 @@ export async function chromePlan({ ask, t, width, height, shelf, style, job, thi
   } catch (e) {
     return {
       routed: false,
-      // the author's own words, unchanged, which is what this route did for
-      // every piece it ever drew
-      description: raw,
+      /* THE CODE-OWNED TAIL RIDES EVEN WITH NOBODY TO WRITE THE PROMPT, and it
+       * used to be the bare `raw` string here.
+       *
+       * The whole reason the router answers two fields is so a model cannot
+       * drop the clauses the picture is unusable without. A model being ABSENT
+       * dropped all of them: the four words an author typed went out with no
+       * nine-slice law, no transparency, no single-complete-piece and no
+       * interior, which is a strictly worse prompt than the same four words
+       * with a tail on them and costs exactly the same to send.
+       *
+       * The degrade is still honest and still says so. What it no longer does
+       * is throw away the part that never needed claude in the first place. */
+      description: chromeFinal({ subject: raw, style: '', t }),
       palette: '',
       note: '',
       styleFile: style ? style.file : '',

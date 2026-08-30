@@ -17,10 +17,25 @@ import { gateMap } from '../store/gate.mjs'
 import { store } from '../store/blobs.mjs'
 import { getWorld, saveWorld, composition, withWorld, worldIdFor, worldByPubId, GAME_WORLD } from '../store/world.mjs'
 import { putLibraryFrames, copyLibraryItem } from '../store/platform.mjs'
-import { createUi, setUiRegions, setUiImage, getUiByName, removeUi, publishUi, readyUi, pieceType, PIECE_TYPES } from '../store/ui.mjs'
-import { uiAsset } from '../pixellab.mjs'
+// ownedUiImage is read at 1655 and was never imported, so the whole file threw
+// a ReferenceError there and every check after it never ran
+import {
+  createUi,
+  setUiRegions,
+  setUiImage,
+  getUiByName,
+  ownedUiImage,
+  removeUi,
+  publishUi,
+  readyUi,
+  pieceType,
+  chromeRef,
+  legalCanvas,
+  PIECE_TYPES,
+} from '../store/ui.mjs'
+import { uiAsset, uiAssetBody, UI_ELEMENTS } from '../pixellab.mjs'
 import { encodePNG } from '../sheet.mjs'
-import { api, chromePrompt, chromePlan, chromeStyle } from '../api.mjs'
+import { api, chromePrompt, chromePlan, chromeStyle, chromeFinal } from '../api.mjs'
 import { NoPlanner } from '../store/planner.mjs'
 import { q, one, closeDb } from './pool.mjs'
 import http from 'node:http'
@@ -1522,7 +1537,16 @@ try {
         throw new NoPlanner('none')
       },
     })
-    eq('with no claude the author own sentence goes out unchanged', [down.routed, down.description], [false, 'a wooden dialogue box'])
+    /* WITH NO CLAUDE THE AUTHOR'S OWN SENTENCE GOES OUT, and it USED to go out
+     * bare. It carries the code-owned tail now: nobody wrote the prompt, but the
+     * clauses that never needed a model are not thrown away with the one that
+     * could not be reached. */
+    down.routed === false && down.description.startsWith('a wooden dialogue box.')
+      ? ok('with no claude the author own sentence is what is described, unrewritten')
+      : no(`the degraded prompt was not the author's own words: ${down.description.slice(0, 120)}`)
+    down.description.includes('One single complete piece, centred') && down.description.includes('Ornament only in the four corners')
+      ? ok('and the tail code owns rides anyway, because a missing model is not a reason to send a prompt with no rules in it')
+      : no(`a degraded prompt went out with no code-owned clauses on it: ${down.description}`)
     down.why?.includes('no claude key') && down.why?.includes('none of the type rules in it')
       ? ok('and the answer says plainly that nobody wrote this prompt, so a worse result has a reason')
       : no(`the degrade was silent: ${down.why || 'nothing said'}`)
@@ -1541,6 +1565,153 @@ try {
     relayDown.why?.includes('no linked machine')
       ? ok('a laptop being closed reads as a closed laptop rather than as a missing key')
       : no(`a relay degrade said the wrong thing: ${relayDown.why}`)
+  }
+
+  /* ---- 5.8 THE TWO LEVERS, ON EVERY TYPE, WITHOUT SPENDING ---------------
+   *
+   * Ash spent about 280 generations on 2026-08-30 rediscovering one recipe, and
+   * work/.kit/ holds the whole of the evidence:
+   *
+   *   v2  elements ['window'], no style image -> one clean centred panel, wrong
+   *       material
+   *   v3  style image, no elements            -> right material, but a KIT with
+   *       the hero panel cropped off the top of the canvas
+   *   v4  both, plus a description saying one single complete piece, centred,
+   *       margin on every side                -> the good one
+   *   panel.png  a good routed prompt naming parchment out loud, from a call
+   *       that DROPPED elements and used the wrong reference art -> a brown kit
+   *
+   * So `elements` decides SHAPE, `style_image` decides MATERIAL, and words
+   * decide neither. Both are fields a caller could omit, and panel.png is what
+   * one omission cost. This is the fence saying neither can be dropped and that
+   * the clauses code owns survive to the wire.
+   *
+   * NOTHING HERE SPENDS AND NOTHING HERE CALLS CLAUDE. uiAssetBody builds the
+   * request without posting it and needs no token, and the planner is the same
+   * stub the section above uses. */
+  {
+    // the size the body carries has to be one the endpoint will accept, and the
+    // maxima do not combine: 688x512 reads as 4:3 and is refused AFTER the money
+    // is committed
+    const legalCanvasOk = (s) => {
+      const g = legalCanvas(s?.width, s?.height)
+      return g.ok && s.width >= 192 && s.height >= 192
+    }
+    const think = async () =>
+      JSON.stringify({
+        result: JSON.stringify({
+          subject: 'A carved walnut frame with rope trim and brass corner rivets',
+          style: 'chunky pixels, muted walnut and brass palette, dark brown outline, lit upper left, shaded right',
+          palette: 'muted walnut brown and tarnished brass',
+          note: 'matched the shipped chrome',
+        }),
+      })
+
+    /* EVERY GENERATED TYPE HAS A REFERENCE, and eight of the twelve grounds did
+     * not: they fell through a default nobody had looked at. A default is not
+     * the same as a decision, and the difference is invisible from here unless
+     * it is asserted, so the table is asked directly. */
+    const generated = PIECE_TYPES.filter((t) => t.tier !== 'none')
+    const refless = generated.filter((t) => !chromeStyle(t.name))
+    refless.length
+      ? no(`${refless.length} type(s) have no material reference on disk: ${refless.map((t) => t.name).join(', ')}`)
+      : ok(`all ${generated.length} generated types name a reference file that exists`, generated.length)
+    // and the two named so nobody generates them carry none, rather than a
+    // fallback that would read as a decision somebody made
+    PIECE_TYPES.filter((t) => t.tier === 'none').every((t) => !t.styleRef && !chromeRef(t.name))
+      ? ok('a type nobody may generate carries no reference, so no field on it pretends to be read')
+      : no('a type that is never drawn was given reference art')
+
+    /* AND EVERY GROUND CARRIES AN ELEMENT LIST, because a ground with none is
+     * the v3 failure: a kit with the piece cropped off the top. A sheet carries
+     * none on purpose, and the two cases have to be told apart by the code
+     * rather than by whoever is reading it. */
+    const groundless = PIECE_TYPES.filter((t) => t.tier === 'ground' && !(t.elements || []).length)
+    groundless.length
+      ? no(`${groundless.length} ground(s) send no element list, which is the roll that came back a cropped kit: ${groundless.map((t) => t.name).join(', ')}`)
+      : ok('every ground sends an element list, which is the lever that decides one piece against a kit')
+    const strayEl = PIECE_TYPES.flatMap((t) => (t.elements || []).filter((e) => !UI_ELEMENTS.includes(e)).map((e) => `${t.name}:${e}`))
+    strayEl.length
+      ? no(`an element name the generator does not have would reach the handler and be paid for: ${strayEl.join(', ')}`)
+      : ok('every element name on the table is one the endpoint actually scaffolds from')
+    PIECE_TYPES.filter((t) => t.tier === 'sheet').every((t) => !t.elements && t.elementsWhy)
+      ? ok('a sheet sends no list and says why, because a grid of loose parts is what a sheet IS')
+      : no('a sheet either carries an element list or does not say why it has none')
+
+    /* FOUR TYPES THROUGH THE WHOLE PATH, one per tier plus the two the recipe
+     * was learned on. What is asserted is the request body, because the body is
+     * what is paid for and everything before it is a claim about the body. */
+    const wireFor = async (typeName) => {
+      const t = pieceType(typeName)
+      const style = chromeStyle(typeName)
+      const plan = await chromePlan({ ask: 'the piece', t, width: t.w, height: t.h, shelf: [], style, think })
+      return {
+        t,
+        style,
+        plan,
+        req: uiAssetBody({
+          description: plan.description,
+          width: t.w,
+          height: t.h,
+          palette: plan.palette,
+          elements: t.elements,
+          styleImageBase64: style ? style.base64 : undefined,
+          name: typeName,
+        }),
+      }
+    }
+    for (const typeName of ['panel', 'dialogue_box', 'plank', 'cover_plate']) {
+      const { t, style, req } = await wireFor(typeName)
+      const has = (what, cond) => (cond ? ok(`${typeName}: ${what}`) : no(`${typeName}: ${what} · NOT true of the body that would be sent`))
+      has('the element list rides, so the shape is forced rather than asked for', JSON.stringify(req.elements) === JSON.stringify(t.elements))
+      has('the reference rides as a Base64Image, so the material transfers', req.style_image?.type === 'base64' && req.style_image.base64 === style.base64)
+      has(`its material reference is ${t.styleRef}`, style.file === t.styleRef)
+      has('the canvas is inside an aspect gate, so it is not refused after the money is committed', legalCanvasOk(req.image_size))
+      // the three clauses code owns, which is the whole reason chromeFinal
+      // exists: a model that writes the joined sentence can drop any of them
+      has('nothing may touch the edge of the image, which is what v3 died of', req.description.includes('nothing touching the edge of the image'))
+      has(
+        t.tier === 'sheet' ? 'every face is complete and inside the canvas' : 'it is one single complete piece, centred',
+        req.description.includes(t.tier === 'sheet' ? 'Every face is drawn complete' : 'One single complete piece, centred'),
+      )
+      has('it is a cut-out with no lettering on it', req.description.includes('fully transparent background') && req.description.includes('no lettering'))
+      if (t.material)
+        has(`the interior is named by code as ${t.material}`, req.description.includes(`The surface inside the frame is ${t.material}.`))
+      if (t.tier === 'ground') has('the nine-slice law is attached', req.description.includes('Ornament only in the four corners'))
+      else has('no nine-slice law on something that is never cut into nine', !req.description.includes('Ornament only in the four corners'))
+      has('and the description fits the endpoint ceiling', req.description.length <= 2000)
+    }
+
+    /* AND THE ONE GROUND WITH NO MIDDLE IS NOT TOLD TO PAINT ONE. highlight_edge
+     * is drawn round a hole because the map shows through it, and the law was
+     * telling it to fill the centre with one plain surface. Two instructions
+     * that cannot both be obeyed is a picture the generator decides. */
+    {
+      const ring = chromeFinal({ subject: 'a ring', style: 'chunky pixels', t: pieceType('highlight_edge') })
+      ring.includes('Ornament only in the four corners') &&
+      ring.includes('completely empty and fully transparent') &&
+      !ring.includes('The middle is one plain surface')
+        ? ok('the piece drawn round a hole keeps the corner and edge law and is told its middle is a hole')
+        : no(`the ring was told to paint a middle it does not have: ${ring.slice(-260)}`)
+      const solid = chromeFinal({ subject: 'a panel', style: 'chunky pixels', t: pieceType('panel') })
+      solid.includes('The middle is one plain surface') && !solid.includes('completely empty and fully transparent')
+        ? ok('and every other ground still gets the plain middle a sentence prints on')
+        : no('the ring clause leaked onto a ground whose middle holds text')
+    }
+
+    /* THE TAIL SURVIVES A SUBJECT THAT TRIES TO FILL THE WHOLE BUDGET. The
+     * subject is what gets cut and the clauses code owns sit last, so a long
+     * answer must lose words about wood grain rather than the rule the picture
+     * cannot be used without. */
+    {
+      const long = chromeFinal({ subject: 'walnut '.repeat(600), style: 'chunky pixels, muted', t: pieceType('panel') })
+      long.length <= 2000 &&
+      long.includes('One single complete piece, centred') &&
+      long.includes('The surface inside the frame is plain cream parchment.') &&
+      long.includes('Ornament only in the four corners')
+        ? ok('a subject long enough to fill the budget loses its own words and never the code-owned tail')
+        : no(`the tail was truncated off a long subject: ...${long.slice(-160)}`)
+    }
   }
 
   // ---- 6. the ui library, and one kit shared across maps -------------------

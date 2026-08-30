@@ -107,8 +107,57 @@ const int = (v, d) => (isFinite(Number(v)) ? Math.max(1, Math.round(Number(v))) 
  *
  * `order` is Ash's generation order from 2026-08-30 and it is data rather than
  * a gate, because he judges between each one and a queue that enforced a
- * sequence would be arguing with him. */
-const T = (t) => ({ elements: null, faces: [], facesFree: false, regions: [], fill: true, order: 99, ...t })
+ * sequence would be arguing with him.
+ *
+ * ---- THE RECIPE, MEASURED OVER FIVE ROLLS ON 2026-08-30 ------------------
+ *
+ * Four pictures sit in work/.kit/ and they are the whole of the evidence:
+ *
+ *   dialogue_box_v2  elements ['window'], NO style image
+ *                    -> one clean centred panel, wrong material, generic brown
+ *   dialogue_box_v3  style image, NO elements
+ *                    -> right material, but it came back a KIT of loose parts
+ *                       with the hero panel CROPPED off the top of the canvas
+ *   dialogue_box_v4  style image AND elements ['window'] AND a description
+ *                    saying one single complete piece, centred, margin on every
+ *                    side, nothing touching the edge
+ *                    -> the good one
+ *   panel            routed through claude, prompt excellent and naming
+ *                    parchment out loud, but the CALL dropped `elements` and
+ *                    sent the wrong reference art
+ *                    -> a brown kit with no parchment in it anywhere
+ *
+ * SO: `elements` is the lever that decides SHAPE, one complete piece versus a
+ * cropped kit. `style_image` is the lever that decides MATERIAL. WORDS DECIDE
+ * NEITHER. The panel roll proves that half on its own: the word "parchment" was
+ * in the prompt and the picture has none.
+ *
+ * This repo already carries the same law written down for maps: on a noun
+ * pixellab holds a strong prior for, words lose. Levers beat adjectives. The
+ * three fields below are the levers, so they live on the TYPE where no caller
+ * can drop one, rather than in a body a page fills in.
+ *
+ *   elements   what forces the shape. ['window'] is the measured one for a
+ *              ground and every ground takes it unless the endpoint has a name
+ *              for that exact piece.
+ *   styleRef   which shipped file in public/chrome is this type's MATERIAL, by
+ *              filename, matched on what the picture is made of rather than on
+ *              what it is shaped like.
+ *   material   what the INTERIOR is made of when it differs from the frame.
+ *              Appended by code, because "parchment" written by a model into a
+ *              subject is exactly what panel.png had. */
+const T = (t) => ({
+  elements: null,
+  elementsWhy: '',
+  styleRef: null,
+  material: null,
+  faces: [],
+  facesFree: false,
+  regions: [],
+  fill: true,
+  order: 99,
+  ...t,
+})
 
 export const PIECE_TYPES = [
   // ---- the twelve grounds --------------------------------------------------
@@ -120,7 +169,20 @@ export const PIECE_TYPES = [
     stretch: 'both',
     w: 448,
     h: 448,
-    elements: ['panel'],
+    /* IT WAS `panel` AND THAT IS THE ROLL THAT FAILED. work/.kit/panel.png is a
+     * brown kit with no parchment: the call dropped the list entirely, so that
+     * picture does not clear the endpoint's own element name either way, and
+     * `panel` in a ui generator's vocabulary is a flat sub-plate rather than a
+     * framed thing you open. `window` is the one value measured to return a
+     * single complete centred piece, so the piece that is literally a window on
+     * the game takes it. */
+    elements: ['window'],
+    elementsWhy: 'a panel is a framed thing the player opens, which is what window returns as one complete piece',
+    // the honey plank frame round a big clean paper field, which is this type's
+    // own caution said in a picture: the middle is empty paper. Not the dialogue
+    // box, whose anchors and cabochons are a speaker's furniture.
+    styleRef: 'panel-paper-wood.png',
+    material: 'plain cream parchment',
     what: 'The frame that holds everything the player opens.',
     why:
       'Eleven surfaces in the record are this one piece with different things inside it: the Handbook binder, the year sheet, the pause sheet, settings, the wardrobe, the yearbook spread, the graded frame, the result and review cards, the crash card, the ceremony card and the chart. The diploma is folded in as a painted variant because it stretches the same way and takes the same slice record.',
@@ -142,7 +204,12 @@ export const PIECE_TYPES = [
     stretch: 'both',
     w: 688,
     h: 384,
+    // the pair that drew v4, unchanged. This is the only row in the table whose
+    // three levers are measured on a picture rather than reasoned from one.
     elements: ['window'],
+    elementsWhy: 'measured on dialogue_box_v4, the roll that worked',
+    styleRef: 'dialogue-box.png',
+    material: 'aged cream parchment, lightly mottled',
     what: 'Every line from every source, said by anybody.',
     why:
       'Ash ruled on 2026-08-28 that the cutscene overlay and the HUD dialogue collapse into one component, and the record names three more renderers that must become this piece rather than a fourth: the year-start card, the beat say card and the graduation advance card.',
@@ -169,10 +236,22 @@ export const PIECE_TYPES = [
     stretch: 'x',
     w: 688,
     h: 192,
+    /* IT CARRIED NO ELEMENTS AND THE REASON HAS BEEN OVERTAKEN. The old caution
+     * said the named parts would scaffold furniture onto a band, which was a
+     * theory. The kit that came back from dialogue_box_v3 is a measurement, and
+     * it says the alternative to a scaffolded band is not a plain band, it is
+     * eighteen loose plates with the band cropped off the top. */
+    elements: ['window'],
+    elementsWhy: 'without a list the endpoint returns a kit, which was measured on v3, and a cropped band is worse than a framed one',
+    // the calm honey plank, deliberately NOT dialogue-box.png. A band exists
+    // because nothing is talking, and handing it the speaker's own material is
+    // how it comes back reading as a dialogue box.
+    styleRef: 'panel-paper-wood.png',
+    material: 'plain cream parchment',
     what: 'A strip along the bottom edge that spans the window, reports its height and dismisses itself.',
     why:
       'The objective line and the place card are one surface with two consumers, and neither may be a dialogue box: a box is a person talking, and nothing is talking. The strip chrome of a scored frame is the same piece.',
-    caution: 'No generator elements. This is a painted band and the named parts would scaffold furniture onto it.',
+    caution: 'It must not read as a dialogue box. Nothing is talking, so no speaker furniture: no name plate, no portrait hole and no advance cue on it.',
     regions: [
       { name: 'title', kind: 'text', required: true },
       { name: 'subtitle', kind: 'text', required: false },
@@ -186,6 +265,19 @@ export const PIECE_TYPES = [
     stretch: 'x',
     w: 384,
     h: 192,
+    /* NOT `button`, even though the press area is required on it. A plaque is a
+     * name plate the world hangs on something and a button is a control that
+     * moves when pressed, and the endpoint's `button` element draws the second
+     * one. `window` gives the framed plate with a plain middle a label prints
+     * into. */
+    elements: ['window'],
+    elementsWhy: 'a name plate is a framed plate rather than a control that depresses, so window and not button',
+    // matched at CONTROL SCALE. button-wood.png is a small walnut plate with a
+    // beaded inner line and a parchment face, which is the plaque's material and
+    // its size at once. The two big panels are a room's worth of frame at this
+    // size.
+    styleRef: 'button-wood.png',
+    material: 'plain cream parchment',
     what: 'A label ground with fixed ends and a middle that repeats.',
     why:
       'Six surfaces are this one piece: the world prompt, the name plaque on the dialogue box, the cutscene gate prompt, the beat place strip, the class bay name plate and the verification code plaque.',
@@ -207,7 +299,15 @@ export const PIECE_TYPES = [
     stretch: 'x',
     w: 512,
     h: 384,
+    // the one type the endpoint has an exact name for, so the name wins over the
+    // measured default: this piece IS a button
     elements: ['button'],
+    elementsWhy: 'the endpoint has a name for this exact piece',
+    // its own shipped art. button-wood.png carries painted lettering, which the
+    // prompt refuses in words and nothing refuses in pixels, so a plank that
+    // comes back with letters on it is this reference and not a bad prompt.
+    styleRef: 'button-wood.png',
+    material: 'plain cream parchment',
     // three faces stacked, because 12.13 specifies the pressed state moves 2px
     // down and loses its shadow, and a disabled state has to read as not-yet
     // rather than as refused
@@ -230,6 +330,12 @@ export const PIECE_TYPES = [
     stretch: 'x',
     w: 384,
     h: 192,
+    elements: ['window'],
+    elementsWhy: 'a well is a frame with a middle, and window is the measured value that returns one complete piece',
+    // the dark walnut rounded square with a thin rope line and a paper field
+    // inside it. Nearest thing on the shelf to a hole rather than a raised plate.
+    styleRef: 'panel-square.png',
+    material: 'sunken cream parchment',
     what: 'An inset well that takes typed characters.',
     why:
       'A hole rather than a raised thing, and it carries an error line. The handle box, the six-box verification code, the number field and the one item in a beat where a student writes rather than picks are all this piece.',
@@ -248,6 +354,16 @@ export const PIECE_TYPES = [
     stretch: 'both',
     w: 448,
     h: 600,
+    /* THE RISKIEST ROW IN THE TABLE AND IT IS SAID OUT LOUD. `window` forces ONE
+     * complete piece and this type owes TWO faces in one drawing, so the lever
+     * and the type pull against each other. The list stays, because the failure
+     * without one is a kit with the hero cropped and that loses both faces
+     * rather than one. If a socket comes back with only the empty face on it,
+     * this line is why and the answer is a sheet tier, not a longer sentence. */
+    elements: ['window'],
+    elementsWhy: 'window forces one complete piece and this type owes two faces, so it is the one ground where the lever and the type disagree',
+    styleRef: 'panel-square.png',
+    material: 'plain cream parchment',
     faces: ['empty', 'filled'],
     what: 'An empty place that says something goes here, and the thing that lands in it.',
     why: 'The season column on the year sheet, the sticker page, the drop target of the shared drag, and the match target that is consumed when used. 5.5 is the reason this is a type at all: the current one is a menu and the intended one is an object.',
@@ -263,6 +379,15 @@ export const PIECE_TYPES = [
     w: 688,
     h: 192,
     elements: ['health_bar'],
+    elementsWhy: 'the endpoint has a name for this exact piece',
+    // the walnut and brass of panel-square.png, which is the only shipped
+    // material with rivets and a rope line on it. No bar art ships, so this is
+    // the nearest material rather than a match.
+    styleRef: 'panel-square.png',
+    /* NO INTERIOR PHRASE. A gauge's middle is a channel a fill runs along, not a
+     * surface a sentence prints on, so naming parchment here would paper over
+     * the one part of the piece that has to read as empty. */
+    material: null,
     faces: ['track'],
     what: 'A track and a fill that must be separable.',
     why:
@@ -282,6 +407,10 @@ export const PIECE_TYPES = [
     w: 384,
     h: 688,
     elements: ['toolbar'],
+    elementsWhy: 'a toolbar is the endpoint\'s word for a track holding a run of entries',
+    styleRef: 'panel-square.png',
+    // a rail's middle is where entries mount, so it stays bare wood
+    material: null,
     what: 'A track holding a run of entries that changes length as entries arrive and leave.',
     why:
       'A HUD complete before the player has earned any of it is a prototype tell, so this has to read as finished at two entries and at three. The HUD corner stack, the planner token rail, the sticker strip and the trophy wall are all this.',
@@ -300,6 +429,11 @@ export const PIECE_TYPES = [
     w: 512,
     h: 192,
     elements: ['tab'],
+    elementsWhy: 'the endpoint has a name for this exact piece',
+    // same family and same scale as the plank, and a tab that does not match the
+    // plank beside it in the Handbook is the thing a shelf exists to prevent
+    styleRef: 'button-wood.png',
+    material: 'plain cream parchment',
     faces: ['on', 'off'],
     what: 'A two-state selectable repeated along an edge.',
     why: 'The Handbook tab row, the yearbook year spine with a trailing dot on a turned year, and the settings tabs.',
@@ -318,6 +452,13 @@ export const PIECE_TYPES = [
     w: 448,
     h: 600,
     elements: ['avatar'],
+    elementsWhy: 'the endpoint has a name for this exact piece',
+    styleRef: 'panel-square.png',
+    /* NO INTERIOR PHRASE, and this one would actively hurt. The middle is an
+     * aperture a drawn person is composited into, so parchment behind them is a
+     * sheet of paper the game then covers, and whatever shows round the edges is
+     * wrong. */
+    material: null,
     what: 'A fixed aperture with a picture in it, bottom-anchored rather than centred.',
     why:
       'The portrait is a field on DialogueLine, on the say step, on ui.dialogue, on the say intent, in IntentWorld.say and twice in contract.ts, carried by eight files and drawn by none until recently. The wardrobe preview, the yearbook photo mount, the showdown opponent, the clip poster and the YOU pin circle are the same hole.',
@@ -335,6 +476,13 @@ export const PIECE_TYPES = [
     stretch: 'both',
     w: 512,
     h: 512,
+    // a window is literally a frame you see through, which is the one element
+    // name that agrees with fill:false instead of fighting it
+    elements: ['window'],
+    elementsWhy: 'a window is a frame seen through, which is the only element name that agrees with an empty centre',
+    styleRef: 'panel-square.png',
+    // its middle is the map. Anything named here is paint over Ash's art.
+    material: null,
     // THE ONE PIECE DRAWN WITH ITS CENTRE EMPTY. The painting dims and one
     // anchor's region stays lit; the dim is engine geometry and only the lit
     // region's edge is drawn. A filled centre here would paint over the art.
@@ -345,7 +493,21 @@ export const PIECE_TYPES = [
     regions: [],
   }),
 
-  // ---- the six sheets ------------------------------------------------------
+  /* ---- the six sheets, WHERE THE FAILURE MODE IS THE DELIVERABLE ----------
+   *
+   * Every sheet below sends NO elements, and that is the one place in this file
+   * where dropping the lever is right rather than the bug it is everywhere else.
+   *
+   * dialogue_box_v3 asked with no list and came back a KIT: a grid of loose
+   * parts, evenly spaced, all at one weight, on transparent. That is a defect
+   * when one complete panel was wanted and it is the exact definition of a
+   * sheet. So the endpoint's own no-elements behaviour is what these six are
+   * for, and asking for `icon_button` on a chip would force ONE complete icon
+   * button out of a type whose whole job is a plate family drawn in one job.
+   *
+   * The half of v3 that stays a danger is the CROP: its hero panel ran off the
+   * top of the canvas. A sheet has no hero, so nothing here is oversized on its
+   * own, and the tail clause code appends refuses the edge in words as well. */
   T({
     name: 'chip',
     label: 'Chip sheet',
@@ -354,7 +516,13 @@ export const PIECE_TYPES = [
     stretch: 'none',
     w: 384,
     h: 384,
-    elements: ['icon_button'],
+    // it WAS ['icon_button'], which forces one complete control out of a type
+    // that exists to draw a family of them at one weight
+    elements: null,
+    elementsWhy: 'a sheet wants the endpoint\'s own no-elements behaviour, which is a grid of matched loose parts',
+    // control scale, and the plate this sheet is drawing a family of
+    styleRef: 'button-wood.png',
+    material: null,
     faces: ['plate'],
     facesFree: true,
     what: 'The small fixed control, plate and icon drawn separately.',
@@ -370,6 +538,14 @@ export const PIECE_TYPES = [
     stretch: 'none',
     w: 384,
     h: 384,
+    elements: null,
+    elementsWhy: 'a sheet wants the endpoint\'s own no-elements behaviour, which is a grid of matched loose parts',
+    /* THE ONLY SELF-CONTAINED MARK ON THE SHELF. crest-panther.png is 128x128
+     * with no frame, no wood and no paper on it, so it is the one reference that
+     * carries a mark's material without handing a small token a panel's frame to
+     * copy. All five mark sheets take it for that one reason. */
+    styleRef: 'crest-panther.png',
+    material: null,
     faces: ['fall', 'winter', 'spring', 'spent', 'ghost'],
     what: 'The season token, one face per season plus spent and the ghost that draws at zero.',
     why:
@@ -384,6 +560,10 @@ export const PIECE_TYPES = [
     stretch: 'none',
     w: 512,
     h: 512,
+    elements: null,
+    elementsWhy: 'a sheet wants the endpoint\'s own no-elements behaviour, which is a grid of matched loose parts',
+    styleRef: 'crest-panther.png',
+    material: null,
     facesFree: true,
     what: 'A family of marks told apart by silhouette rather than by hue.',
     why:
@@ -398,6 +578,10 @@ export const PIECE_TYPES = [
     stretch: 'none',
     w: 384,
     h: 192,
+    elements: null,
+    elementsWhy: 'a sheet wants the endpoint\'s own no-elements behaviour, which is a grid of matched loose parts',
+    styleRef: 'crest-panther.png',
+    material: null,
     facesFree: true,
     what: 'The small animated mark that says the surface wants a press, as a strip of frames.',
     why:
@@ -412,6 +596,10 @@ export const PIECE_TYPES = [
     stretch: 'none',
     w: 384,
     h: 384,
+    elements: null,
+    elementsWhy: 'a sheet wants the endpoint\'s own no-elements behaviour, which is a grid of matched loose parts',
+    styleRef: 'crest-panther.png',
+    material: null,
     faces: ['mark'],
     facesFree: true,
     what: 'An applied mark that lands on top of something.',
@@ -427,6 +615,10 @@ export const PIECE_TYPES = [
     stretch: 'none',
     w: 384,
     h: 192,
+    elements: null,
+    elementsWhy: 'a sheet wants the endpoint\'s own no-elements behaviour, which is a grid of matched loose parts',
+    styleRef: 'crest-panther.png',
+    material: null,
     faces: ['chevron', 'trail_dot', 'bearing', 'pin_tail', 'pin_plate'],
     facesFree: true,
     what: 'The world-space marker family.',
@@ -445,6 +637,19 @@ export const PIECE_TYPES = [
     stretch: 'none',
     w: 688,
     h: 384,
+    /* A PAINTING STILL NEEDS THE SHAPE LEVER. It is not nine-sliced, so nothing
+     * here is about corners, but the alternative to a list is still a kit and a
+     * kit is not a cover plate. chart-cover.png is itself one complete framed
+     * illustration with rollers down its two sides, so `window` is describing
+     * what the shipped one already is. */
+    elements: ['window'],
+    elementsWhy: 'the alternative to a list is a kit, and a kit is not a painting',
+    // the one painted whole that ships: a chart on parchment between two wooden
+    // rollers, sage sea, compass rose
+    styleRef: 'chart-cover.png',
+    // its middle IS the illustration, so naming a surface there would flatten
+    // the one type whose centre is meant to be busy
+    material: null,
     what: 'A full-bleed illustration with a title over a place name, a filling bar and one real BLHS fact under it.',
     why:
       'It is the first one that gets made twenty times by twenty people, which is exactly why it is a type with a fixed region layout rather than twenty freehand pictures.',
@@ -457,7 +662,11 @@ export const PIECE_TYPES = [
     ],
   }),
 
-  // ---- the two named so nobody generates them ------------------------------
+  /* ---- the two named so nobody generates them -----------------------------
+   * No levers on either, and that is not an omission. createUi refuses tier
+   * `none` before anything is spent, so a list and a reference on these two
+   * would be three fields nothing can ever read, which is the half-plumbed
+   * shape docs/AUTHORING.md names. */
   T({
     name: 'sign',
     label: 'Sign',
@@ -590,27 +799,49 @@ const TIER_LAW = {
  * same defect as an author pasting a prompt: it works when the person doing it
  * already knows the answer, which is the one case that never needed the tool.
  *
- * The mapping is by what the piece IS, not by what it is called. Anything with
- * a drawn frame round it takes a drawn frame; the small marks take the crest,
- * which is the only self-contained emblem in the set at that scale; the painted
- * whole takes the one painted whole that exists. */
-const CHROME_REFS = {
-  dialogue_box: 'dialogue-box.png',
-  panel: 'panel-paper-wood.png',
-  cover_plate: 'chart-cover.png',
-  plank: 'button-wood.png',
-  tab: 'button-wood.png',
-  chip: 'button-wood.png',
-  pip: 'crest-panther.png',
-  icon_set: 'crest-panther.png',
-  cue: 'crest-panther.png',
-  stamp: 'crest-panther.png',
-  pointer: 'crest-panther.png',
-}
-// everything else is a wooden ground with no paper in it
+ * The mapping is by what the piece is MADE OF, not by what it is called and not
+ * by what it is shaped like. A style image transfers material and no layout at
+ * all, so shape is the one thing it cannot carry and matching on it is matching
+ * on the field that does not travel.
+ *
+ * IT LIVES ON THE TYPE NOW, as `styleRef`, and it was a second table keyed by
+ * type name beside the twenty-one types. Two lists about the same rows are two
+ * lists that disagree the first time one is edited, and eight of the twelve
+ * grounds were not in the old one at all: they fell through a default and
+ * nobody had looked at the file they were getting.
+ *
+ * What each of the six actually is, read off the pixels rather than off its
+ * filename, because the names are not descriptions:
+ *
+ *   dialogue-box.png     dark walnut, carved scrollwork, twisted rope, turquoise
+ *                        cabochons and copper rivets in the corners, anchors,
+ *                        aged mottled parchment. The most ornate thing shipped.
+ *   panel-paper-wood.png honey oak planks, rope curls at the corners, a big
+ *                        clean cream parchment field. The calm one.
+ *   panel-square.png     dark walnut rounded square, brass rivets, a thin rope
+ *                        line, cream parchment. NOT bare wood: the old comment
+ *                        here said "no paper in it" and the picture has paper.
+ *   button-wood.png      a small walnut plate with a beaded inner line and a
+ *                        parchment face, at control scale. Carries painted
+ *                        lettering, which nothing in pixels refuses.
+ *   crest-panther.png    a 128x128 black panther head. The only self-contained
+ *                        mark: no frame, no wood, no paper.
+ *   chart-cover.png      a sea chart on parchment between two wooden rollers.
+ *                        The only painted whole.
+ *
+ * The fallback is for a row whose type is blank, which is a member's untyped
+ * piece and nothing in the twenty-one. Every one of the twenty-one answers from
+ * its own row. */
 const CHROME_FALLBACK = 'panel-square.png'
 
-export const chromeRef = (type) => CHROME_REFS[String(type || '')] || CHROME_FALLBACK
+export const chromeRef = (type) => {
+  const t = pieceType(type)
+  // a type that deliberately has none answers null rather than the fallback, so
+  // the caller can say "no reference" out loud instead of quietly sending the
+  // wrong wood. Only the two ungenerated types are in that case.
+  if (t) return t.styleRef
+  return CHROME_FALLBACK
+}
 
 /* THE TYPE, WRITTEN OUT FOR A READER THAT IS NOT THE PAGE.
  *
@@ -670,10 +901,26 @@ export function typeBrief(t, { width, height, shelf = [] } = {}) {
       `Nothing in your description draws the contents of those: no lettering, no numbers, no portrait, no icons. The picture is the empty furniture and the game fills it.`,
     )
   else lines.push(``, `No rectangles are marked on this one, so it is the whole picture and nothing is drawn into it.`)
+  /* THE TWO LEVERS, SAID TO THE MODEL AS LEVERS. The router keeps writing
+   * "parchment" into a subject and getting brown wood back, because on a noun
+   * pixellab holds a prior for, words lose. So the model is told which parts of
+   * this it is NOT responsible for: the shape is already forced by the element
+   * list and the material is already carried by the reference png, and a
+   * sentence spent re-asking for either is a sentence not spent on the piece. */
   if (Array.isArray(t.elements) && t.elements.length)
     lines.push(
       ``,
-      `The generator is being told to scaffold this from its own "${t.elements.join('", "')}" element, which forces ONE complete centred piece instead of a sheet of loose parts. Write for that.`,
+      `THE SHAPE IS ALREADY FORCED, so do not spend words on it. The generator is being told to scaffold this from its own "${t.elements.join('", "')}" element, and that is what returns ONE complete centred piece instead of a sheet of loose parts with the piece cropped off the top. Measured over five rolls: sending that list is the only thing that decides it, and no wording does.`,
+    )
+  else if (t.tier === 'sheet')
+    lines.push(
+      ``,
+      `NO ELEMENT LIST GOES OUT WITH THIS ONE, and that is deliberate. Left to itself the generator returns a grid of evenly spaced loose parts at one weight on transparent, which is a defect on a panel and is exactly what a sheet is. Write for that grid.`,
+    )
+  if (t.material)
+    lines.push(
+      ``,
+      `ITS INSIDE SURFACE IS ${String(t.material).toUpperCase()}, and code appends that to the prompt whatever you write, so it does not need saying twice. What it needs from you is the FRAME: the material round the outside, how it is worn, and where the ornament sits.`,
     )
   const drawn = shelf.filter((u) => u && u.status === 'ready' && u.description)
   if (drawn.length)
