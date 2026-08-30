@@ -12,7 +12,7 @@
   height: clamp(200px, 32svh, 330px);
   margin-bottom: clamp(16px, 1.6vw, 24px);
   overflow: hidden;
-  border: 1px solid #1a2027;
+  border: var(--hair) solid #1a2027;
   background: #06080b;
   text-decoration: none;
   color: inherit;
@@ -45,25 +45,32 @@
   align-content: center;
   gap: 7px;
   padding: 0 clamp(20px, 4vw, 52px);
-  max-width: 46ch;
+  /* NOT A ch MEASURE, and it was 46ch. `ch` is the width of a zero in the
+     element's own font, and this box had no font of its own: the document
+     carried none, so it was measuring in Times New Roman like everything else.
+     Setting one stack globally narrowed every ch by a third at a stroke,
+     because Archivo Narrow is condensed, and the map's name started breaking
+     at its hyphen. A box holding a 2.4rem heading and a 10px mono readout has
+     no single character measure anyway, so it is given a width. */
+  max-width: min(440px, 46%);
 }
 .lead-when {
-  font: 400 10px var(--font-mono);
+  font: 400 var(--fs-micro) var(--font-mono);
   letter-spacing: 0.06em;
-  color: #7d8794;
+  color: var(--ink-3);
 }
 .lead-say h1 {
   margin: 0;
   font: 500 clamp(1.5rem, 3vw, 2.4rem) / 1.05 var(--font-label);
   letter-spacing: -0.02em;
-  color: #fff;
+  color: var(--ink);
 }
 .lead-nums {
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
-  font: 400 11px var(--font-mono);
-  color: #8d97a4;
+  font: 400 var(--fs-fine) var(--font-mono);
+  color: var(--ink-2);
 }
 .lead-hit {
   position: absolute;
@@ -78,24 +85,24 @@
   margin-top: 8px;
 }
 .lead-go {
-  font: 600 11px var(--font-label);
+  font: 600 var(--fs-fine) var(--font-label);
   letter-spacing: 0.18em;
   text-transform: uppercase;
-  color: #fff;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.4);
+  color: var(--ink);
+  border-bottom: var(--hair) solid rgba(255, 255, 255, 0.4);
   justify-self: start;
   padding-bottom: 3px;
   transition: border-color 200ms ease;
 }
 .lead-go:hover {
-  border-color: #fff;
+  border-color: var(--ink);
 }
 .lead-go.alt {
-  color: #9fd8c0;
+  color: var(--acc-live);
   border-color: rgba(159, 216, 192, 0.4);
 }
 .lead-go.alt:hover {
-  border-color: #9fd8c0;
+  border-color: var(--acc-live);
 }
 
 .blank {
@@ -109,11 +116,11 @@
   margin: 0;
   font: 500 2rem var(--font-label);
   letter-spacing: -0.02em;
-  color: #e6e9ee;
+  color: var(--ink);
 }
 .blank p {
   margin: 0;
-  color: #8d97a4;
+  color: var(--ink-2);
   line-height: 1.55;
 }
 .blank .sheet-btn {
@@ -157,36 +164,36 @@
 }
 .sheet.danger h2 {
   margin: 0 0 10px;
-  font: 500 17px var(--font-label);
+  font: 500 var(--fs-title) var(--font-label);
 }
 .sheet.danger h2 b,
 .sheet.danger p b {
-  color: #ff8d80;
+  color: var(--acc-stop-lit);
   font-weight: 500;
 }
 .sheet.danger p {
   margin: 0 0 16px;
-  font: 400 12.5px/1.55 var(--font-label);
+  font: 400 var(--fs-small)/1.55 var(--font-label);
   color: #8b95a2;
 }
 .sheet-pw {
   width: 100%;
   padding: 9px 11px;
   background: #0b0e13;
-  border: 1px solid #262f39;
-  border-radius: 3px;
-  color: #e6e9ee;
-  font: 400 13px var(--font-mono);
+  border: var(--hair) solid var(--edge);
+  border-radius: var(--r);
+  color: var(--ink);
+  font: 400 var(--fs-body) var(--font-mono);
 }
 .sheet-pw:focus {
   outline: none;
-  border-color: #3d7f6a;
+  border-color: var(--acc-live);
 }
 .sheet-err {
   margin: 10px 0 0 !important;
-  color: #ff8d80 !important;
+  color: var(--acc-stop-lit) !important;
   font-family: var(--font-mono) !important;
-  font-size: 11.5px !important;
+  font-size: var(--fs-small) !important;
 }
 .sheet-acts {
   display: flex;
@@ -197,9 +204,9 @@
 .sheet-no,
 .sheet-yes {
   padding: 8px 14px;
-  border-radius: 3px;
-  font: 400 12px var(--font-label);
-  cursor: pointer;
+  border-radius: var(--r);
+  font: 400 var(--fs-small) var(--font-label);
+  cursor: var(--cur-do);
   transition:
     background-color 140ms ease,
     border-color 140ms ease,
@@ -207,24 +214,24 @@
 }
 .sheet-no {
   background: transparent;
-  border: 1px solid #2a333d;
-  color: #97a1ad;
+  border: var(--hair) solid #2a333d;
+  color: var(--ink-2);
 }
 .sheet-no:hover {
   border-color: #3a454f;
-  color: #e6e9ee;
+  color: var(--ink);
 }
 .sheet-yes {
   background: #7a2a24;
-  border: 1px solid #a33a31;
-  color: #ffe4e0;
+  border: var(--hair) solid var(--acc-stop);
+  color: var(--acc-stop-lit);
 }
 .sheet-yes:hover:not(:disabled) {
-  background: #a33a31;
+  background: var(--acc-stop);
 }
 .sheet-yes:disabled {
   opacity: 0.45;
-  cursor: not-allowed;
+  cursor: var(--cur-no);
 }
 
 .sheet {
@@ -232,8 +239,8 @@
   max-height: 90svh;
   overflow-y: auto;
   background: #10141a;
-  border: 1px solid #232b34;
-  color: #e6e9ee;
+  border: var(--hair) solid var(--edge);
+  color: var(--ink);
   font-family: var(--font-label);
   animation: sheet-in 260ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
@@ -252,51 +259,51 @@
   gap: 16px;
   padding: 20px 22px 16px;
   background: #10141a;
-  border-bottom: 1px solid #1c232b;
+  border-bottom: var(--hair) solid #1c232b;
 }
 .sheet h2 {
   margin: 0;
-  font: 500 18px var(--font-label);
+  font: 500 var(--fs-title) var(--font-label);
   letter-spacing: -0.01em;
 }
 .sheet-who {
-  font: 400 11px var(--font-mono);
-  color: #6f7885;
+  font: 400 var(--fs-fine) var(--font-mono);
+  color: var(--ink-3);
 }
 .sheet-x {
   width: 26px;
   height: 26px;
-  font-size: 19px;
+  font-size: var(--fs-title);
   line-height: 1;
-  color: #6f7885;
+  color: var(--ink-3);
   background: none;
   border: 0;
-  cursor: pointer;
+  cursor: var(--cur-do);
 }
 .sheet-x:hover {
-  color: #fff;
+  color: var(--ink);
 }
 .sheet section {
   padding: 18px 22px;
-  border-bottom: 1px solid #1c232b;
+  border-bottom: var(--hair) solid #1c232b;
 }
 .sheet h3 {
   margin: 0 0 12px;
-  font: 600 10px var(--font-label);
+  font: 600 var(--fs-micro) var(--font-label);
   letter-spacing: 0.2em;
   text-transform: uppercase;
-  color: #6f7885;
+  color: var(--ink-3);
 }
 .sheet-note {
   margin: 0;
-  font-size: 12.5px;
+  font-size: var(--fs-small);
   line-height: 1.5;
-  color: #7d8794;
+  color: var(--ink-3);
 }
 .sheet-bad {
   margin: 8px 0 0;
-  font-size: 12.5px;
-  color: #d0785f;
+  font-size: var(--fs-small);
+  color: var(--acc-mark);
 }
 .sheet footer {
   padding: 16px 22px 20px;
@@ -311,7 +318,7 @@
   flex: none;
 }
 .dot.on {
-  background: #6fbf9d;
+  background: var(--acc-live);
   box-shadow: 0 0 0 3px rgba(111, 191, 157, 0.16);
 }
 
@@ -329,21 +336,21 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  font-size: 13px;
+  font-size: var(--fs-body);
 }
 .works li.off span:nth-child(2) {
-  color: #6f7885;
+  color: var(--ink-3);
 }
 .works-note,
 .machines-when {
   margin-left: auto;
-  font: 400 11px var(--font-mono);
-  color: #6f7885;
+  font: 400 var(--fs-fine) var(--font-mono);
+  color: var(--ink-3);
 }
 
 .key {
   padding: 14px 0;
-  border-top: 1px solid #1a2027;
+  border-top: var(--hair) solid #1a2027;
 }
 .key:first-of-type {
   border-top: 0;
@@ -354,7 +361,7 @@
   align-items: center;
   gap: 9px;
   margin-bottom: 5px;
-  font-size: 13.5px;
+  font-size: var(--fs-body);
 }
 .key-row {
   display: flex;
@@ -365,53 +372,53 @@
   flex: 1;
   min-width: 0;
   padding: 8px 10px;
-  font: 400 12.5px var(--font-label);
-  color: #e6e9ee;
+  font: 400 var(--fs-small) var(--font-label);
+  color: var(--ink);
   background: #0b0e13;
-  border: 1px solid #232b34;
+  border: var(--hair) solid var(--edge);
   outline: none;
   transition: border-color 180ms ease;
 }
 .key-row input:focus {
-  border-color: #3a4652;
+  border-color: var(--edge);
 }
 
 .sheet-btn {
   padding: 8px 14px;
-  font: 600 11.5px var(--font-label);
+  font: 600 var(--fs-small) var(--font-label);
   letter-spacing: 0.04em;
   color: #0b0e13;
   background: #d8dee6;
   border: 0;
-  cursor: pointer;
+  cursor: var(--cur-do);
   transition:
     background 160ms ease,
     opacity 160ms ease;
 }
 .sheet-btn:hover:not(:disabled) {
-  background: #fff;
+  background: var(--ink);
 }
 .sheet-btn:disabled {
   opacity: 0.35;
-  cursor: default;
+  cursor: var(--cur-no);
 }
 .sheet-btn.quiet {
-  color: #8d97a4;
+  color: var(--ink-2);
   background: none;
-  border: 1px solid #232b34;
+  border: var(--hair) solid var(--edge);
 }
 .sheet-btn.quiet:hover:not(:disabled) {
-  color: #fff;
+  color: var(--ink);
   background: none;
-  border-color: #3a4652;
+  border-color: var(--edge);
 }
 .sheet-btn.danger {
-  color: #d0785f;
+  color: var(--acc-mark);
   background: none;
-  border: 1px solid #3a2823;
+  border: var(--hair) solid #3a2823;
 }
 .sheet-btn.danger:hover {
-  color: #fff;
+  color: var(--ink);
   background: #7a3a2a;
 }
 
@@ -421,19 +428,19 @@
   margin-top: 12px;
   padding: 12px 14px;
   background: #0b0e13;
-  border-left: 2px solid #6fbf9d;
+  border-left: 2px solid var(--acc-live);
 }
 .minted code {
-  font: 400 11px var(--font-mono);
-  color: #9fd8c0;
+  font: 400 var(--fs-fine) var(--font-mono);
+  color: var(--acc-live);
   word-break: break-all;
 }
 
 .spend li {
   display: flex;
   gap: 12px;
-  font: 400 11.5px var(--font-mono);
-  color: #8d97a4;
+  font: 400 var(--fs-small) var(--font-mono);
+  color: var(--ink-2);
 }
 .spend li span:nth-child(2) {
   margin-left: auto;
@@ -441,7 +448,7 @@
 .spend-cost {
   min-width: 56px;
   text-align: right;
-  color: #e6e9ee;
+  color: var(--ink);
 }
 .spend-total {
   display: flex;
@@ -449,12 +456,12 @@
   gap: 10px;
   margin-top: 12px;
   padding-top: 10px;
-  border-top: 1px solid #1a2027;
-  font: 400 11.5px var(--font-mono);
-  color: #6f7885;
+  border-top: var(--hair) solid #1a2027;
+  font: 400 var(--fs-small) var(--font-mono);
+  color: var(--ink-3);
 }
 .spend-total b {
-  color: #e6e9ee;
+  color: var(--ink);
   font-weight: 500;
 }
 
@@ -465,7 +472,7 @@
   grid-template-rows: auto 1fr;
   height: 100svh;
   background: #06080b;
-  color: #e6e9ee;
+  color: var(--ink);
   font-family: var(--font-label);
 }
 .play-bar {
@@ -476,29 +483,29 @@
 }
 .play-back,
 .play-edit {
-  font: 500 12.5px var(--font-label);
-  color: #8d97a4;
+  font: 500 var(--fs-small) var(--font-label);
+  color: var(--ink-2);
   background: none;
   border: 0;
   padding: 0;
-  cursor: pointer;
+  cursor: var(--cur-do);
   text-decoration: none;
   transition: color 180ms ease;
 }
 .play-back:hover,
 .play-edit:hover {
-  color: #fff;
+  color: var(--ink);
 }
 .play-edit {
   margin-left: auto;
 }
 .play-name {
-  font: 500 14px var(--font-label);
-  color: #e6e9ee;
+  font: 500 var(--fs-lead) var(--font-label);
+  color: var(--ink);
 }
 .play-meta {
-  font: 400 10.5px var(--font-mono);
-  color: #5b6470;
+  font: 400 var(--fs-fine) var(--font-mono);
+  color: var(--ink-3);
 }
 .play-empty {
   display: grid;
@@ -515,7 +522,7 @@
 }
 .play-empty p {
   margin: 0;
-  color: #8d97a4;
+  color: var(--ink-2);
 }
 
 /* ---- one loading mark, everywhere -----------------------------------------
@@ -550,15 +557,15 @@
   place-items: center;
   gap: 16px;
   min-height: 46vh;
-  color: #6f7885;
-  font: 400 11px var(--font-mono);
+  color: var(--ink-3);
+  font: 400 var(--fs-fine) var(--font-mono);
   letter-spacing: 0.08em;
 }
 
 /* the key each field wants, said plainly beside what it does */
 .key-api {
-  font: 400 11px var(--font-mono);
-  color: #6f7885;
+  font: 400 var(--fs-fine) var(--font-mono);
+  color: var(--ink-3);
 }
 .key-top .dot { margin-left: auto; }
 
@@ -596,8 +603,8 @@
   place-content: center;
   justify-items: center;
   gap: 14px;
-  color: #6f7885;
-  font: 400 11px var(--font-mono);
+  color: var(--ink-3);
+  font: 400 var(--fs-fine) var(--font-mono);
   letter-spacing: 0.08em;
 }
 .walk-over.bad { color: #d0785f; }
@@ -606,8 +613,8 @@
   justify-content: space-between;
   gap: 16px;
   padding: 12px clamp(16px, 3vw, 32px) 16px;
-  font: 400 10.5px var(--font-mono);
-  color: #4d5661;
+  font: 400 var(--fs-fine) var(--font-mono);
+  color: var(--ink-off);
 }
 .walk-hint .on { color: #e6e9ee; }
 
@@ -617,17 +624,17 @@
   display: flex;
   gap: 2px;
   padding: 2px;
-  border: 1px solid #23282f;
-  border-radius: 3px;
+  border: var(--hair) solid #23282f;
+  border-radius: var(--r);
 }
 .walk-cam button {
   appearance: none;
   border: 0;
   background: transparent;
-  cursor: pointer;
+  cursor: var(--cur-do);
   padding: 3px 10px;
-  border-radius: 2px;
-  color: #4d5661;
+  border-radius: var(--r-tight);
+  color: var(--ink-off);
   font: inherit;
   letter-spacing: 0.08em;
   transition: color 120ms ease, background-color 120ms ease;
@@ -635,6 +642,6 @@
 .walk-cam button:hover { color: #97a1ad; }
 .walk-cam button.on {
   background: #1b2027;
-  color: #e6e9ee;
+  color: var(--ink);
 }
 .walk-cam button:focus-visible { outline: 1px solid #3d7f6a; outline-offset: 1px; }

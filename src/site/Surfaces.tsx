@@ -23,6 +23,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, go } from './router'
 import { useSession } from './session'
 import { anchorName, isAnchorName } from '../core/mask'
+import { displayName, readable } from '../core/naming'
 import './surfaces.css'
 
 /* What a slot can BE comes down with the listing, the way the ocean's island
@@ -58,28 +59,48 @@ type Surface = {
 type Hit = { kind: 'slot' | 'size'; i: number } | null
 type Band = { x0: number; y0: number; x1: number; y1: number } | null
 
+/* THE TOKENS, WRITTEN OUT, because a 2d context cannot read a custom property.
+ * That is the one exception world.css already carves for its own chart, and the
+ * rule that comes with it is that every value here NAMES the token it mirrors,
+ * so a token that moves can be followed here instead of quietly drifting off it.
+ * Two of these had already drifted: the status green was #4f9b84 where
+ * --acc-live is #6fbf9d, and the fallback was --ink-edge, which tokens.css says
+ * in capitals is not a text colour. */
+const TOK = {
+  tool: '#d4a53c', // --acc-tool
+  toolLit: '#f0c869', // --acc-tool-lit
+  live: '#6fbf9d', // --acc-live
+  stop: '#b04a2f', // --acc-stop
+  ink: '#e6e9ee', // --ink
+  ink3: '#7d8ea1', // --ink-3, and the floor for anything with words in it
+  void: '#070b11', // --void
+  panel: '#10141a', // --panel
+} as const
+
 /* ONE INK PER KIND, so a panel with fifteen marks on it can be read without
  * clicking any of them. Gold is the button, because a button is the one slot
- * the player presses and gold is what the tool uses when it is talking. */
+ * the player presses and gold is what the tool uses when it is talking. The
+ * three that are not accents are a categorical set, the way the level colours
+ * are: they mean "a different kind", not "good" or "armed". */
 const KIND_INK: Record<string, string> = {
   text: '#8fa6bb',
-  number: '#4f9b84',
-  bar: '#b04a2f',
-  button: '#d4a53c',
+  number: TOK.live,
+  bar: TOK.stop,
+  button: TOK.tool,
   icon: '#6f8296',
   image: '#6d5f9e',
 }
 /* the status names come from the server, so anything it invents later still
  * draws in the fallback rather than vanishing off the rail */
 const STATUS_INK: Record<string, string> = {
-  pending: '#d4a53c',
-  drawing: '#d4a53c',
-  ready: '#4f9b84',
-  done: '#4f9b84',
-  failed: '#b04a2f',
-  error: '#b04a2f',
+  pending: TOK.tool,
+  drawing: TOK.tool,
+  ready: TOK.live,
+  done: TOK.live,
+  failed: TOK.stop,
+  error: TOK.stop,
 }
-const inkFor = (m: Record<string, string>, k: string) => m[k] || '#5b6470'
+const inkFor = (m: Record<string, string>, k: string) => m[k] || TOK.ink3
 
 const LABEL = '500 11px "Archivo Narrow", sans-serif'
 const MONO = '400 9px "Martian Mono", monospace'
@@ -187,9 +208,9 @@ function paint(
      * from a dark painted one, and a slot marked over the hole is a slot the
      * player never sees. */
     const cell = 8
-    c.fillStyle = '#0b0f15'
+    c.fillStyle = TOK.void
     c.fillRect(0, 0, W, H)
-    c.fillStyle = '#0e141c'
+    c.fillStyle = TOK.panel
     for (let y = 0; y < H; y += cell) {
       for (let x = ((y / cell) % 2) * cell; x < W; x += cell * 2) c.fillRect(x, y, cell, cell)
     }
@@ -201,9 +222,9 @@ function paint(
     // the frame a surface has before it has a picture. Slots get marked on this
     // exactly as they do on the art, because the size is known from the moment
     // the surface is asked for and the layout does not have to wait on paint.
-    c.fillStyle = '#0b111a'
+    c.fillStyle = TOK.panel
     c.fillRect(0, 0, W, H)
-    c.strokeStyle = 'rgba(212,165,60,0.06)'
+    c.strokeStyle = TOK.tool + '11'
     c.beginPath()
     for (let x = 16; x < s.w; x += 16) {
       c.moveTo(Math.round(x * z) + 0.5, 0)
@@ -215,7 +236,9 @@ function paint(
     }
     c.stroke()
     c.font = LABEL
-    c.fillStyle = '#5b6470'
+    // --ink-3 and not --ink-edge. This is a sentence somebody reads, and the
+    // edge step is 3.3:1, under the floor for text.
+    c.fillStyle = TOK.ink3
     const say = 'nothing painted here yet'
     c.fillText(say, (W - c.measureText(say).width) / 2, H / 2 - 4)
     c.font = MONO
@@ -237,7 +260,7 @@ function paint(
     c.globalAlpha = lit ? 0.3 : 0.16
     c.fillRect(bx, by, bw, bh)
     c.globalAlpha = 1
-    c.strokeStyle = on ? '#f0c869' : tint
+    c.strokeStyle = on ? TOK.toolLit : tint
     c.lineWidth = on ? 2 : 1
     c.strokeRect(bx + 0.5, by + 0.5, bw, bh)
     c.lineWidth = 1
@@ -246,13 +269,18 @@ function paint(
      * painting under it here and plain text over a bright panel is unreadable
      * at exactly the moment you need to know which slot you are looking at */
     c.font = LABEL
-    const tw = c.measureText(sl.name).width
+    // WORDS ON THE PLATE, NOT THE IDENTIFIER. It drew `hp_bar` over the
+    // painting, which is the one thing Ash ruled out on every surface. The
+    // identifier is still on the roster row and in the field being typed into,
+    // which is where somebody checking the spelling is looking.
+    const say = readable(sl)
+    const tw = c.measureText(say).width
     const above = by >= 16
     const ly = above ? by - 15 : by + 1
-    c.fillStyle = 'rgba(7,11,17,0.78)'
+    c.fillStyle = TOK.void + 'c7'
     c.fillRect(bx, ly, tw + 8, 14)
-    c.fillStyle = on ? '#f0c869' : '#d8e3ee'
-    c.fillText(sl.name, bx + 4, ly + 11)
+    c.fillStyle = on ? TOK.toolLit : TOK.ink
+    c.fillText(say, bx + 4, ly + 11)
     if (bh > 30 && bw > 40) {
       c.font = MONO
       c.fillStyle = tint
@@ -260,14 +288,14 @@ function paint(
     }
 
     if (on) {
-      c.fillStyle = '#f0c869'
+      c.fillStyle = TOK.toolLit
       c.fillRect(bx + bw - 4, by + bh - 4, 8, 8)
     }
   }
 
   if (band) {
     c.setLineDash([4, 3])
-    c.strokeStyle = '#4f9b84'
+    c.strokeStyle = TOK.live
     c.strokeRect(
       Math.min(band.x0, band.x1) * z,
       Math.min(band.y0, band.y1) * z,
@@ -277,7 +305,7 @@ function paint(
     c.setLineDash([])
   }
 
-  c.strokeStyle = 'rgba(212,165,60,0.45)'
+  c.strokeStyle = TOK.tool + '73'
   c.strokeRect(0.5, 0.5, W - 1, H - 1)
 }
 
@@ -786,7 +814,7 @@ export default function Surfaces() {
       </header>
 
       <div className="surf-body">
-        <aside className="surf-rail">
+        <aside className="surf-rail sparse">
           <button className={'surf-new' + (making ? ' on' : '')} onClick={() => setMaking(true)}>
             + new surface
           </button>
@@ -797,14 +825,25 @@ export default function Surfaces() {
               onClick={() => choose(a.name)}
             >
               <i style={{ background: inkFor(STATUS_INK, a.status) }} />
-              <span className="surf-row-n">
-                {a.title || a.name}
+              {/* `a.title || a.name` printed `dialogue_box` on the shelf for
+                  every surface nobody had titled. displayName reads the title
+                  when there is one and unpacks the identifier when there is
+                  not, and the underline says which of the two happened. */}
+              <span className={'surf-row-n' + (displayName(a).derived ? ' guessed' : '')}>
+                {displayName(a).text}
                 {stashed.includes(a.name) ? ' ·' : ''}
               </span>
               <span className="surf-row-m">{a.status || 'no picture'}</span>
             </button>
           ))}
-          {!assets.length && <p className="surf-note">No surfaces yet. A panel is one press of the generator, and it costs.</p>}
+          {/* the shared empty state, so a rail with nothing in it reads the
+              same here as it does in the editor and out on the ocean */}
+          {!assets.length && (
+            <div className="nothing">
+              <p className="nothing-say">no surfaces yet</p>
+              <p className="nothing-do">a panel is one press, and it costs</p>
+            </div>
+          )}
         </aside>
 
         <div className="surf-stage" ref={stage}>
@@ -875,9 +914,14 @@ export default function Surfaces() {
           ) : cur ? (
             <div className="surf-insp">
               <span className="surf-lab">the surface</span>
+              {/* the words, then the address under them, which is the same
+                   two-line shape every list in the editor uses for a thing that
+                   has both. It printed `dialogue_box` as the heading. */}
               <p className="surf-say">
-                <b>{cur.name}</b> · {cur.status || 'never generated'}
+                <b className={displayName(cur).derived ? 'guessed' : undefined}>{displayName(cur).text}</b> ·{' '}
+                {cur.status || 'never generated'}
               </p>
+              <p className="surf-addr">{cur.name}</p>
               {cur.description && <p className="surf-say">{cur.description}</p>}
               <p className="surf-say">
                 Drag a rectangle on the panel to mark where the game puts a piece of text, a number, a bar, a button, an
@@ -894,7 +938,7 @@ export default function Surfaces() {
                 </div>
               ) : (
                 <button className="surf-btn danger" onClick={() => setSure(true)}>
-                  delete {cur.name}
+                  delete {readable(cur)}
                 </button>
               )}
             </div>
@@ -906,7 +950,12 @@ export default function Surfaces() {
               {slots.map((s, i) => (
                 <button key={i} className={'surf-row' + (pick === i ? ' on' : '')} onClick={() => setPick(i)}>
                   <i style={{ background: inkFor(KIND_INK, s.kind) }} />
-                  <span className="surf-row-n">{s.name}</span>
+                  <span className="surf-row-t">
+                    <b className={displayName(s).derived ? 'guessed' : undefined}>{displayName(s).text}</b>
+                    <i>
+                      {s.name} · {s.kind}
+                    </i>
+                  </span>
                   <span className="surf-row-m">
                     {s.w}×{s.h}
                   </span>

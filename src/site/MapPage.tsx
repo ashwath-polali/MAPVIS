@@ -9,6 +9,7 @@
  */
 import { useEffect, useState } from 'react'
 import { go } from './router'
+import { displayName } from '../core/naming'
 import { Walk } from './Walk'
 
 type Manifest = { slug: string; version: number; map: { w: number; h: number } }
@@ -45,7 +46,7 @@ export default function MapPage({ slug }: { slug: string }) {
     return (
       <div className="playing">
         <div className="play-empty">
-          <h1>{slug} will not open.</h1>
+          <h1>{displayName(slug).text} will not open.</h1>
           <p>{why || 'Open it in the editor and export it, then it can be walked.'}</p>
           <button className="sheet-btn" onClick={() => go('/')}>
             Back
@@ -60,7 +61,11 @@ export default function MapPage({ slug }: { slug: string }) {
         <button className="play-back" onClick={() => go('/')}>
           ← back
         </button>
-        <span className="play-name">{slug}</span>
+        {/* the slug is the address in the url and in every link on this page; it is
+            not the map's name, and this bar was printing it as though it were */}
+        <span className="play-name" title={slug}>
+          {displayName(slug).text}
+        </span>
         {man && (
           <span className="play-meta">
             {man.map.w}&times;{man.map.h} · v{man.version}

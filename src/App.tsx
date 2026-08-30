@@ -24,7 +24,34 @@ const ANCHOR_WHAT: Record<AnchorKind, string> = {
   spawn: 'where the player begins, or arrives from a door',
   trigger: 'a spot that fires once when it is reached',
 }
+
+/* THE MARK EACH KIND WEARS IN THE LIST, from the one drawn set.
+ *
+ * Every anchor row wore a raw ⏻ typed into the markup, which is a font's power
+ * symbol doing duty as "door" beside eleven pictograms somebody drew, and it
+ * said the same thing about a region and a spawn as about a door. A kind is the
+ * most useful fact on the row, so the tile carries it. */
+const ANCHOR_ICON: Record<AnchorKind, IconName> = {
+  point: 'pin',
+  region: 'rect',
+  door: 'door',
+  post: 'flag',
+  spawn: 'walk',
+  trigger: 'trigger',
+}
+
+/* what a route's kind means, said once and read by the chips in the form and by
+ * the tooltip on the row, so the two cannot drift into two answers */
+const PATH_WHAT: Record<(typeof PATH_KINDS)[number], string> = {
+  walk: 'a body walks it, so every leg is held to ground it can stand on',
+  sail: 'it leaves the floor on purpose · no ground check',
+  camera: 'a camera move · no feet, so nothing to check',
+}
 import { Help } from './ui/Help'
+/* what a person reads, given a thing whose `name` is a python identifier. This
+   is the surface that CREATES those identifiers, which makes it the last place
+   that should have been printing one where a name belongs. */
+import { displayName, readable } from './core/naming'
 import { computeRegions } from './core/regions'
 import { debase } from './core/debase'
 import { bitify, bitFactor } from './core/bitify'
@@ -376,20 +403,43 @@ function TickPct({ value }: { value: number }) {
   return <>{shown.toFixed(1)}</>
 }
 
-// one row in a step panel: a big target, a plain label, one line under it,
-// the key shown on hover
+/* ONE ROW: a target, its word, and the tile that says what kind of thing it is.
+ *
+ * THE DESCRIPTION IS NOT STANDING TEXT ANY MORE, and this is the change that
+ * gave the rail its height back. Measured on step 4: 144 words in a 272px
+ * column, of which about eight were data. Every control carried a permanent
+ * full sentence set at the same weight as the control it explained, so the
+ * column read as prose with buttons in it rather than as a list of things to
+ * press, and the rail wanted 1073px inside 690px.
+ *
+ * The line between what stays and what goes is not "long" versus "short". It is
+ * whether the sentence is TRUE ALL THE TIME or true only right now. "closes 1px
+ * seams between shapes" is true whether or not you are looking at it, so it
+ * belongs on hover. "right-click or esc cancels" only exists because you armed
+ * the tool a second ago and the map is waiting for a click, so it stays on
+ * screen where it can be obeyed. `on` is exactly that distinction and it was
+ * already being passed, so nothing new has to be remembered at the call site.
+ *
+ * A caller with a description worth keeping either way passes `keep`. */
 function Row(props: {
   icon?: IconName
   label: string
   desc?: string
+  keep?: boolean
   kbd?: string
   on?: boolean
   disabled?: boolean
   onClick?: () => void
   children?: ReactNode
 }) {
+  const live = !!props.desc && (props.on || props.keep)
   return (
-    <button className={'row' + (props.on ? ' on' : '')} onClick={props.onClick} disabled={props.disabled}>
+    <button
+      className={'row' + (props.on ? ' on' : '')}
+      onClick={props.onClick}
+      disabled={props.disabled}
+      data-tip={!live && props.desc ? props.desc : undefined}
+    >
       {props.icon && (
         <span className="row-ic">
           <Icon name={props.icon} />
@@ -400,7 +450,7 @@ function Row(props: {
           {props.label}
           {props.kbd && <kbd>{props.kbd}</kbd>}
         </span>
-        {props.desc && <span className="row-desc">{props.desc}</span>}
+        {live && <span className="row-desc">{props.desc}</span>}
       </span>
       {props.children}
     </button>
@@ -468,6 +518,10 @@ function NumField(props: {
   value: number
   dp?: number
   step?: number
+  /* what the field means, when its name does not already say it. On hover, not
+     under the block: six of these used to share one twenty-six word sentence
+     three lines tall that only restated the six labels. */
+  tip?: string
   onCommit: (v: number) => void
 }) {
   const [txt, setTxt] = useState('')
@@ -475,7 +529,7 @@ function NumField(props: {
   const cancel = useRef(false)
   const shown = live ? txt : props.dp ? props.value.toFixed(props.dp) : String(Math.round(props.value))
   return (
-    <label className="numf">
+    <label className="numf" data-tip={props.tip}>
       <span>{props.label}</span>
       <input
         type="number"
@@ -3885,6 +3939,10 @@ export default function App() {
               ? `click fills · right-click clears · ${st.regions} regions`
               : 'regions not ready'
         }
+        // it stays on screen because it is not standing prose: it is a live
+        // count and, when the worker has not answered, the reason the tool
+        // cannot do the thing the row is offering
+        keep
         kbd="u"
         on={tool === 'region'}
         onClick={() => ed?.setTool('region')}
@@ -4080,29 +4138,40 @@ export default function App() {
           * room can be is 688 divided by twice the speed, so this is the number
           * under the rest of them. */}
       <Sec>the body it is drawn for</Sec>
+      {/* THE SENTENCE UNDER THIS BLOCK IS GONE. It was twenty-six words
+          explaining six fields that are already called height, speed, hip out,
+          hip up, squash and step, so it spent three lines of a 272px column
+          restating the labels. What a field means that its name does not say
+          now lives on the field, on hover, where somebody who does not know can
+          ask and somebody who does is not charged for it. */}
       <div className="walkcfg">
         <NumField
           label="height"
+          tip="how tall the body is in painting pixels · 18 is a person on an island map"
           value={st?.walk.charH ?? 18}
           onCommit={(v) => ed?.setWalk({ charH: v })}
         />
         <NumField
           label="speed"
+          tip="painting pixels a second · the map's width over twice this is how long it takes to cross"
           value={st?.walk.speed ?? 34}
           onCommit={(v) => ed?.setWalk({ speed: v })}
         />
         <NumField
           label="hip out"
+          tip="how far to each side the two floor probes sit, so a body cannot walk with one foot in the sea"
           value={st?.walk.hip ?? 2}
           onCommit={(v) => ed?.setWalk({ hip: v })}
         />
         <NumField
           label="hip up"
+          tip="how far above the feet those probes sit"
           value={st?.walk.hipDY ?? 1}
           onCommit={(v) => ed?.setWalk({ hipDY: v })}
         />
         <NumField
           label="squash"
+          tip="how much shorter a step north is than a step east, because the ground is seen at an angle"
           value={st?.walk.yScale ?? 0.72}
           dp={2}
           step={0.02}
@@ -4110,13 +4179,10 @@ export default function App() {
         />
         <NumField
           label="step"
+          tip="the biggest level change a body can climb without stairs"
           value={st?.walk.near ?? 10}
           onCommit={(v) => ed?.setWalk({ near: v })}
         />
-      </div>
-      <div className="doorhint">
-        how tall a body is, how fast it goes, how far its hips reach, how much the ground is squashed, and how big
-        a level change it can take
       </div>
       <Sec>check the ground</Sec>
       <Row
@@ -4254,7 +4320,7 @@ export default function App() {
                 <optgroup label="named">
                   {bindTargets.named.map((a) => (
                     <option key={a.id} value={a.name as string}>
-                      {a.name}
+                      {readable(a)} · {a.name}
                     </option>
                   ))}
                 </optgroup>
@@ -4421,35 +4487,60 @@ export default function App() {
             <div
               key={ev.id}
               className={'evrow' + (doorEdit === ev.id ? ' sel' : '')}
+              /* WHAT THIS KIND OF ANCHOR DOES, which is the one thing about the
+                 row that is nowhere on screen, and then where it goes in full,
+                 because a 272px column genuinely does cut that line. The
+                 tooltip here used to be a native `title` holding a verbatim
+                 copy of the row's own two visible lines and nothing else, so
+                 hovering read back exactly what the pointer was sitting on. */
+              data-tip={
+                `${ANCHOR_WHAT[ev.kind]} · ${ev.r}px reach` +
+                (ev.kind === 'door'
+                  ? ` · leads to ${ev.to || 'nowhere yet'}${ev.toAnchor ? `, arriving at ${ev.toAnchor}` : ''}`
+                  : '')
+              }
               onClick={() => {
                 setDoorNew(false)
                 setDoorEdit(doorEdit === ev.id ? 0 : ev.id)
               }}
             >
-              <span className="ev-glyph">⏻</span>
+              {/* the tile, and the same 26px tile an action row wears. It was a
+                  bare ⏻ typed straight into the markup, which is a font's power
+                  symbol standing in for "door" next to eleven drawn pictograms,
+                  and it started the words at x=43 where every action row starts
+                  them at x=59. */}
+              <span className="row-ic">
+                <Icon name={ANCHOR_ICON[ev.kind]} />
+              </span>
               {/* the NAME leads, because that is what a member types. Where it
                   goes sits on the line under it, not behind it: trailing it in
-                  the same 162px box cut "→ panther-maw" down to "→ pan…" and
-                  hovering answered nothing, so the title carries the whole
-                  string as well. */}
-              <span
-                className="ev-name"
-                title={
-                  ev.name +
-                  (ev.kind === 'door'
-                    ? ` → ${ev.to || '?'}${ev.toAnchor ? ` · ${ev.toAnchor}` : ''}`
-                    : ` · ${ev.kind}`)
-                }
-              >
-                <b className={ev.meta?.derived === true ? 'guessed' : undefined}>{ev.name}</b>
+                  the same 162px box cut "→ panther-maw" down to "→ pan…". */}
+              <span className="ev-name">
+                {/* THE WORDS LEAD AND THE ADDRESS FOLLOWS, and it used to be
+                    the address on its own. `panthers_maw` is what a member
+                    types, which is why it is still on the line below, but it is
+                    not what the door is called and this row was the only place
+                    it was ever seen. displayName takes the label the author
+                    typed for the player, and unpacks the identifier when nobody
+                    has typed one yet. */}
+                {/* the mark says THESE WORDS were not typed, and nothing else.
+                    `ev.meta.derived` was being read into it too, which is a
+                    different fact: that the python IDENTIFIER was invented from
+                    an old door's label. A door with a label somebody wrote came
+                    out dotted for a defect in a field the row does not show.
+                    The form says that one, on the name field, where it is. */}
+                <b className={displayName(ev).derived ? 'guessed' : undefined}>{displayName(ev).text}</b>
                 {ev.kind === 'door' ? (
                   <i>
-                    {'→ '}
+                    {ev.name}
+                    {' → '}
                     {ev.to || '?'}
                     {ev.toAnchor ? ` · ${ev.toAnchor}` : ''}
                   </i>
                 ) : (
-                  <i>{ev.kind}</i>
+                  <i>
+                    {ev.name} · {ev.kind}
+                  </i>
                 )}
               </span>
               <button
@@ -4528,13 +4619,7 @@ export default function App() {
                 key={k}
                 className={'kbtn' + (editingPath.kind === k ? ' on' : '')}
                 onClick={() => ed?.updatePath(editingPath.id, { kind: k })}
-                data-tip={
-                  k === 'walk'
-                    ? 'a body walks it, so every leg is held to ground it can stand on'
-                    : k === 'sail'
-                      ? 'it leaves the floor on purpose · no ground check'
-                      : 'a camera move · no feet, so nothing to check'
-                }
+                data-tip={PATH_WHAT[k]}
               >
                 {k}
               </button>
@@ -4613,22 +4698,39 @@ export default function App() {
               data-tip="names a waypoint, so a cutscene beat can wait for it instead of for a number of seconds"
               onClick={() => ed?.addPathMark(editingPath.id, 0)}
             >
+              <Icon name="mark" />
               add a mark
             </button>
           </div>
+          {/* A MARK NOW CARRIES BOTH STRINGS, the same split every anchor makes.
+              Ash, 2026-08-29: humans see labels, waypoints get labels too. It
+              had `name` alone, so the canvas captioned a waypoint
+              `at_the_doorway` and this list said the same, which is the one
+              thing the two-field design was paid for to stop. */}
           {(editingPath.marks || []).map((m, i) => (
-            <div className="anchspot" key={i}>
+            <div className="markrow" key={i}>
               <input
                 className="anchname"
                 value={m.name}
                 placeholder="at_the_doorway"
+                data-tip="what code waits for"
                 onChange={(e) => ed?.updatePathMark(editingPath.id, i, { name: e.target.value })}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === 'Escape') e.currentTarget.blur()
                 }}
                 spellCheck={false}
               />
-              <div className="doorrad">
+              <input
+                value={m.label ?? ''}
+                placeholder={displayName(m).text}
+                data-tip="what a person reads · blank unpacks the name above"
+                onChange={(e) => ed?.updatePathMark(editingPath.id, i, { label: e.target.value })}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === 'Escape') e.currentTarget.blur()
+                }}
+                spellCheck={false}
+              />
+              <div className="doorrad" data-tip="which waypoint it names">
                 <button className="mbtn" onClick={() => ed?.updatePathMark(editingPath.id, i, { at: m.at - 1 })}>
                   −
                 </button>
@@ -4673,6 +4775,13 @@ export default function App() {
             <div
               key={p.id}
               className={'evrow' + (pathEdit === p.id ? ' sel' : '')}
+              /* what the route's KIND means, which decides whether a leg over
+                 water is a defect or the whole point, and is the one thing
+                 about the row not printed on it. Where the points ARE follows,
+                 because "3 pts" says how many and never says where. */
+              data-tip={
+                `${PATH_WHAT[p.kind]} · from ${p.points[0]?.join(', ')} to ${p.points[p.points.length - 1]?.join(', ')}`
+              }
               onClick={() => {
                 const open = pathEdit === p.id ? 0 : p.id
                 setPathEdit(open)
@@ -4685,14 +4794,16 @@ export default function App() {
                 ed?.selectFraming(0)
               }}
             >
-              <span className="ev-glyph">⤳</span>
-              <span
-                className="ev-name"
-                title={`${p.name} · ${p.points.length} pts${p.closed ? ' · loop' : ''}${p.twoWay ? ' · both ways' : ''}`}
-              >
-                <b>{p.name}</b>
+              <span className="row-ic">
+                <Icon name="route" />
+              </span>
+              <span className="ev-name">
+                {/* the same two lines a door row has, and for the same reason:
+                    `the_dock_walk` is the address, not the name, and printing
+                    it as the heading was the last place in the tool doing it */}
+                <b className={displayName(p).derived ? 'guessed' : undefined}>{displayName(p).text}</b>
                 <i>
-                  {p.points.length} pts
+                  {p.name} · {p.points.length} pts
                   {p.closed ? ' · loop' : ''}
                   {p.twoWay ? ' · both ways' : ''}
                 </i>
@@ -4721,12 +4832,16 @@ export default function App() {
       <Sec>shots</Sec>
       <Row
         icon="eye"
-        label={editingDoor ? `save this view on ${editingDoor.name}` : 'save this view as a shot'}
+        label={editingDoor ? `save this view on ${readable(editingDoor)}` : 'save this view as a shot'}
         desc={
           editingDoor
             ? 'the offset from that anchor, so the shot travels when it does'
             : 'open an anchor above first, or it stores raw numbers'
         }
+        // and this one, because it says what pressing WILL DO in the state the
+        // panel is actually in. A shot saved on no anchor stores raw pixels
+        // that re-break the next time the painting is cut.
+        keep
         onClick={() => {
           const id = ed?.armFraming(editingDoor?.name ?? '')
           if (id) {
@@ -4774,7 +4889,7 @@ export default function App() {
               <option value="">no anchor · a point on the map</option>
               {doors.map((d) => (
                 <option key={d.id} value={d.name}>
-                  {d.name}
+                  {readable(d)} · {d.name}
                 </option>
               ))}
               {/* an anchor that has been renamed or deleted under the shot is
@@ -4873,6 +4988,16 @@ export default function App() {
             <div
               key={f.id}
               className={'evrow' + (shotEdit === f.id ? ' sel' : '')}
+              /* WHAT A SHOT IS, and what the word `arrival` on the line below
+                 means, which is exactly the question the old tooltip refused to
+                 answer by repeating the line instead */
+              data-tip={
+                (f.entry
+                  ? 'the view a player gets on arriving in this map'
+                  : 'a saved camera position a cutscene can cut to') +
+                ` · ${f.zoom}x, ` +
+                (f.anchor ? `travels with ${f.anchor}` : `pinned to ${f.x}, ${f.y}`)
+              }
               onClick={() => {
                 const open = shotEdit === f.id ? 0 : f.id
                 setShotEdit(open)
@@ -4884,14 +5009,13 @@ export default function App() {
                 ed?.selectPath(0)
               }}
             >
-              <span className="ev-glyph">▣</span>
-              <span
-                className="ev-name"
-                title={`${f.name} · ${f.anchor || `${f.x}, ${f.y}`}${f.entry ? ' · arrival' : ''}`}
-              >
-                <b>{f.name}</b>
+              <span className="row-ic">
+                <Icon name="shot" />
+              </span>
+              <span className="ev-name">
+                <b className={displayName(f).derived ? 'guessed' : undefined}>{displayName(f).text}</b>
                 <i>
-                  {f.anchor || `${f.x}, ${f.y}`}
+                  {f.name} · {f.anchor || `${f.x}, ${f.y}`}
                   {f.entry ? ' · arrival' : ''}
                 </i>
               </span>
@@ -5556,7 +5680,7 @@ export default function App() {
       )}
       <div className="fxpal">
         {mapPal.map((c) => (
-          <span key={c} style={{ background: c }} title={c} />
+          <span key={c} style={{ background: c }} data-tip={c} />
         ))}
       </div>
       <label className="slider fxslider">
@@ -6359,7 +6483,9 @@ export default function App() {
             <button
               key={i}
               className={'scenerow' + (off ? ' off' : '')}
-              title={it.prompt}
+              /* the whole ask, because the row shows the first line of it and a
+                 scene item is picked by what was asked for */
+              data-tip={it.prompt}
               onClick={() =>
                 setSceneOff((prev) => {
                   const n = new Set(prev)
@@ -6446,7 +6572,7 @@ export default function App() {
                 key={i}
                 type="color"
                 value={c}
-                title={c}
+                data-tip={c}
                 aria-label={'colour ' + (i + 1)}
                 onChange={(ev) => setFxColor(i, ev.target.value)}
               />
@@ -6566,7 +6692,11 @@ export default function App() {
             <button
               key={a.at + i}
               className="askrow"
-              title={'made ' + a.name}
+              /* WHAT PRESSING IT DOES. It said `made <name>` and the name is
+                 already printed on the row's second line, which is the same
+                 tooltip disease the anchor list had: a box under the pointer
+                 repeating the words the pointer is sitting on. */
+              data-tip="puts this ask back in the box, to edit and run again"
               onClick={() => {
                 if (a.kind === 'effect') {
                   setMakeWhat('effect')
@@ -6866,7 +6996,11 @@ export default function App() {
           {panels[step]}
         </aside>
 
-        <div className="stage" onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
+        {/* the step rides on the stage so the cursor can say what this canvas
+            is for. On export it is a picture of what is about to be written and
+            nothing on it answers a click, and it was still wearing the
+            crosshair that means "draw here". */}
+        <div className="stage" data-step={step} onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
           <canvas ref={canvasRef} />
           {!has && <p className="empty">drop a png here, or generate one in load</p>}
           {st?.walking && <div className="walkbadge">walk test · wasd moves · space stops</div>}

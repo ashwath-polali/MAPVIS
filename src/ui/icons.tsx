@@ -26,6 +26,10 @@ export type IconName =
   | 'check'
   | 'door'
   | 'pencil'
+  | 'route'
+  | 'shot'
+  | 'mark'
+  | 'trigger'
   | 'align-l'
   | 'align-hc'
   | 'align-r'
@@ -172,13 +176,55 @@ const D: Record<IconName, ReactNode> = {
       <path d="M2.4 12.5c1.4 0 1.4-1.3 2.8-1.3s1.4 1.3 2.7 1.3 1.4-1.3 2.8-1.3 1.4 1.3 2.7 1.3" />
     </>
   ),
-  /* a drawn panel with a line of words in it, which is what a ui surface is:
-   * the frame the game speaks through, not a generic rectangle */
+  /* THE NINE SLICE, which is what a ui surface actually is: a frame with fixed
+   * corners and edges that stretch. It was a rectangle with two lines of words
+   * ruled inside it, and every icon set on earth draws a message that way, so
+   * the link to /surfaces read as "messages" to everybody who looked at it. The
+   * corner ticks are the thing no message icon has. */
   surface: (
     <>
-      <rect x="2.6" y="3.6" width="10.8" height="8.8" rx="0.8" />
-      <path d="M4.8 7.2h6.4" />
-      <path d="M4.8 9.6h3.8" />
+      <rect x="2.2" y="3" width="11.6" height="10" rx="1" />
+      <path d="M5.2 5.4H4.6v1M11.4 5.4h.6v1M5.2 10.6H4.6v-1M11.4 10.6h.6v-1" />
+    </>
+  ),
+  /* A ROUTE: a line with its waypoints on it and a head where it ends. The list
+   * row used to wear a raw ⤳, which is a glyph from a font rather than a mark
+   * from this set, and it sat next to drawn pictograms. */
+  route: (
+    <>
+      <path d="M2.6 11.8c2.6 0 2.2-4.4 4.8-4.4s2.2 3 4.4 3" />
+      <circle cx="2.6" cy="11.8" r="1.15" />
+      <circle cx="7.4" cy="7.4" r="1.15" />
+      <path d="M13.4 10.4l-1.9-1 .3 2.2z" fill="currentColor" stroke="none" />
+    </>
+  ),
+  /* A SHOT: the same camera body and lens stub the canvas draws for a framing,
+   * so the row and the mark on the map are recognisably one thing. */
+  shot: (
+    <>
+      <rect x="2.6" y="5.4" width="8.4" height="6.2" rx="1" />
+      <path d="M11 7.4l2.6-1.4v6l-2.6-1.4z" />
+      <circle cx="5.2" cy="8.5" r="1.1" />
+    </>
+  ),
+  /* A TIMING MARK on a route: the ring the canvas draws round a named waypoint,
+   * with the line running through it. */
+  mark: (
+    <>
+      <path d="M2.4 8h2.6M11 8h2.6" />
+      <circle cx="8" cy="8" r="2.9" />
+    </>
+  ),
+  /* A TRIGGER: a point, and the ripple it fires when something reaches it. It
+   * is its own mark rather than borrowing `sparkle`, which already means
+   * "remove specks" two steps away. */
+  trigger: (
+    <>
+      <circle cx="8" cy="8" r="1.4" fill="currentColor" stroke="none" />
+      <path d="M10.6 5.4a3.7 3.7 0 010 5.2" />
+      <path d="M12.7 3.3a6.6 6.6 0 010 9.4" />
+      <path d="M5.4 10.6a3.7 3.7 0 010-5.2" />
+      <path d="M3.3 12.7a6.6 6.6 0 010-9.4" />
     </>
   ),
   eye: (

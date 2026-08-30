@@ -8,9 +8,16 @@
  * app.css comes LAST so the editor's own surface wins inside the editor. The
  * two stylesheets share almost no selectors, and the ones they do share are
  * scoped: the site lives under .site, the tool does not.
+ *
+ * tokens.css comes FIRST and is the only file allowed to decide what a size, a
+ * grey or an edge is. Everything after it aliases those names. First rather
+ * than last on purpose: a later :root wins, so a sheet below that redeclares
+ * --ink with its own hex silently turns the layer off, and the fix is to notice
+ * it in this list.
  */
 import { createRoot } from 'react-dom/client'
 import Shell from './site/Shell'
+import './site/tokens.css'
 import './site/site.css'
 import './site/arrive.css'
 import './site/landing.css'

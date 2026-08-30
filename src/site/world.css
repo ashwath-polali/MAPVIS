@@ -14,7 +14,17 @@
  *
  * FOUR TYPE SIZES AND FOUR SPACINGS, and there were nine of each. A panel with
  * nine sizes in it does not read as a form, it reads as a document that grew.
- * Everything below is 9, 10, 11.5 or 12, and 4, 8, 12 or 18 apart.
+ * The spacings are still 4, 8, 12 or 18 apart. The sizes are no longer this
+ * page's business: it names a step from the scale in tokens.css, so a tenth
+ * size cannot be invented here without inventing it for the whole app.
+ *
+ * AND NO HEX AT ALL. The rule above was written and then five raw colours were
+ * left in anyway: a sunk surface at #0d1219, a scrollbar hover at #38434f, and
+ * three rgba washes carrying the wax and the gold at hand-picked alphas. Every
+ * one of them is now a color-mix over a token, so moving --acc-stop moves the
+ * refusal wash with it instead of leaving a stale tint behind. The canvas is the
+ * one exception and it is fenced inside World.tsx, because a 2d context cannot
+ * read a custom property.
  *
  * Loaded from World.tsx rather than from main.tsx, because this route is one
  * page and nobody who never opens it should pay for the rules.
@@ -22,12 +32,25 @@
 
 .world {
   /* the page's own line and surface, named once. Ten hard-coded near-identical
-     greys is how a panel edge ends up a shade off the panel edge beside it. */
-  --wl: #141c26;
-  --wl-lit: #29323d;
-  --sunk: #0d1219;
-  --say: #7d8ea1;
-  --quiet: #5b6470;
+     greys is how a panel edge ends up a shade off the panel edge beside it.
+
+     THEY ARE ALIASES NOW. Naming them once inside this page fixed the ten
+     greys and left the page free to pick the wrong five, which it did:
+     --quiet was #5b6470 at 3.29:1 and it was carrying the back arrow, the zoom
+     readout, every section header and the id column, all between 9 and 11px.
+     None of those are large text, so none of them get the 3:1 exemption. */
+  --wl: var(--edge);
+  --wl-lit: var(--edge-ctl);
+  /* a well sunk into the page. A surface, not a line, and it was #0d1219: a
+     sixth grey with no relation to the five above it. Mixed out of the two
+     tokens either side of it, so it can never drift off them again. */
+  --sunk: color-mix(in srgb, var(--void) 82%, var(--line));
+  --say: var(--ink-2);
+  --quiet: var(--ink-3);
+  /* what a plate over the water is filled with. The chart writes the same wash
+     into its canvas by hand and the two have to agree, or a toast floating over
+     the chart reads as a different program's window. */
+  --glass: color-mix(in srgb, var(--void) 88%, transparent);
 
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
@@ -55,7 +78,7 @@
   border: 2px solid var(--void);
 }
 .world *::-webkit-scrollbar-thumb:hover {
-  background: #38434f;
+  background: var(--edge-lit);
 }
 .world *::-webkit-scrollbar-track {
   background: transparent;
@@ -68,25 +91,25 @@
   align-items: center;
   gap: 18px;
   padding: 10px clamp(12px, 2vw, 22px);
-  border-bottom: 1px solid var(--wl);
+  border-bottom: var(--hair) solid var(--wl);
 }
 .world-back {
   width: 24px;
   height: 24px;
-  font: 500 14px var(--font-label);
+  font: 500 var(--fs-lead) var(--font-label);
   color: var(--quiet);
   background: none;
   border: 0;
   padding: 0;
-  cursor: pointer;
+  cursor: var(--cur-do);
   transition: color var(--t-fast) var(--ease-out);
 }
 .world-back:hover {
   color: var(--ink-on-sea);
 }
 .world-name {
-  font: 700 11px var(--font-label);
-  letter-spacing: 0.32em;
+  font: 700 var(--fs-fine) var(--font-label);
+  letter-spacing: var(--track-wide);
   text-transform: uppercase;
   color: var(--ink-on-sea);
 }
@@ -95,17 +118,17 @@
   align-items: center;
   gap: 4px;
   margin-left: auto;
-  font: 400 10px var(--font-mono);
+  font: 400 var(--fs-micro) var(--font-mono);
   color: var(--quiet);
 }
 .world-num {
   width: 56px;
   padding: 4px 6px;
-  font: 400 10px var(--font-mono);
+  font: 400 var(--fs-micro) var(--font-mono);
   color: var(--say);
   background: var(--sunk);
-  border: 1px solid var(--wl);
-  border-radius: 2px;
+  border: var(--hair) solid var(--wl);
+  border-radius: var(--r-tight);
   outline: none;
   transition: border-color var(--t-fast) var(--ease-out), color var(--t-fast) var(--ease-out);
 }
@@ -122,17 +145,17 @@
   gap: 1px;
   padding: 1px;
   background: var(--wl);
-  border-radius: 3px;
+  border-radius: var(--r);
 }
 .world-tool {
   padding: 5px 13px;
-  font: 500 11.5px var(--font-label);
+  font: 500 var(--fs-small) var(--font-label);
   letter-spacing: 0.06em;
   color: var(--quiet);
   background: var(--void);
   border: 0;
-  border-radius: 2px;
-  cursor: pointer;
+  border-radius: var(--r-tight);
+  cursor: var(--cur-do);
   transition: color var(--t-fast) var(--ease-out), background-color var(--t-fast) var(--ease-out);
 }
 .world-tool:hover {
@@ -145,14 +168,14 @@
 }
 .world-save {
   padding: 5px 16px;
-  font: 600 11.5px var(--font-label);
+  font: 600 var(--fs-small) var(--font-label);
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--gold-lit);
   background: none;
-  border: 1px solid color-mix(in srgb, var(--gold) 40%, transparent);
-  border-radius: 3px;
-  cursor: pointer;
+  border: var(--hair) solid color-mix(in srgb, var(--gold) 40%, transparent);
+  border-radius: var(--r);
+  cursor: var(--cur-do);
   transition: all var(--t-fast) var(--ease-out);
 }
 .world-save:hover:not(:disabled) {
@@ -161,9 +184,9 @@
   border-color: var(--gold);
 }
 .world-save:disabled {
-  color: #4a5563;
+  color: var(--ink-off);
   border-color: var(--wl);
-  cursor: default;
+  cursor: var(--cur-no);
 }
 
 /* ---- the chart ----------------------------------------------------------- */
@@ -195,28 +218,36 @@
   touch-action: none;
 }
 
-/* the armed tool's one line, and it only exists while a tool is armed. It is
-   the one place on the chart that speaks, so it is the one place that is
-   gold. */
+/* THE ARMED TOOL'S ONE LINE, AND IT FOLLOWS THE HAND.
+ *
+ * It was pinned to the top centre of the stage. Measured on a 1076 wide stage:
+ * that put it 500 px from the button that armed the tool and 500 px from the
+ * water the click has to land on, and it sat on top of the zoom cluster while
+ * it was there. An instruction you have to look away from the work to read is
+ * an instruction nobody reads twice.
+ *
+ * So World.tsx writes --hx and --hy from the pointer while a tool is armed, and
+ * this sits just off the cursor. The fallback pair is the top left of the
+ * stage, next to the tool group that armed it, for the moment before the
+ * pointer has come over the water at all. */
 .world-hint {
   position: absolute;
-  left: 50%;
-  top: 12px;
-  transform: translateX(-50%);
+  left: var(--hx, 14px);
+  top: var(--hy, 12px);
   margin: 0;
-  padding: 4px 12px;
-  font: 400 11.5px var(--font-label);
+  padding: 3px 10px;
+  font: 400 var(--fs-small) var(--font-label);
   color: var(--gold-lit);
-  background: color-mix(in srgb, var(--gold) 9%, rgba(7, 11, 17, 0.88));
-  border: 1px solid color-mix(in srgb, var(--gold) 26%, transparent);
-  border-radius: 3px;
+  background: color-mix(in srgb, var(--gold) 9%, var(--glass));
+  border: var(--hair) solid color-mix(in srgb, var(--gold) 26%, transparent);
+  border-radius: var(--r);
+  white-space: nowrap;
   pointer-events: none;
   animation: world-said 220ms var(--ease-out);
 }
 @keyframes world-said {
   from {
     opacity: 0;
-    transform: translate(-50%, -5px);
   }
 }
 
@@ -232,33 +263,33 @@
   align-items: center;
   gap: 2px;
   padding: 3px;
-  background: rgba(7, 11, 17, 0.84);
-  border: 1px solid var(--wl);
-  border-radius: 3px;
+  background: var(--glass);
+  border: var(--hair) solid var(--wl);
+  border-radius: var(--r);
 }
 .world-zbtn {
   min-width: 24px;
   height: 22px;
   padding: 0 4px;
-  font: 500 12px var(--font-label);
+  font: 500 var(--fs-small) var(--font-label);
   color: var(--say);
   background: none;
   border: 0;
-  border-radius: 2px;
-  cursor: pointer;
+  border-radius: var(--r-tight);
+  cursor: var(--cur-do);
   transition: color var(--t-fast) var(--ease-out), background-color var(--t-fast) var(--ease-out);
 }
 .world-zbtn.wide {
   padding: 0 9px;
-  font-size: 11.5px;
+  font-size: var(--fs-small);
 }
 .world-zbtn:hover:not(:disabled) {
   color: var(--ink-on-sea);
   background: var(--sunk);
 }
 .world-zbtn:disabled {
-  color: #333c47;
-  cursor: default;
+  color: var(--ink-off);
+  cursor: var(--cur-no);
 }
 .world-zbtn.on {
   color: var(--gold-lit);
@@ -267,29 +298,30 @@
 .world-zread {
   min-width: 42px;
   text-align: center;
-  font: 400 10px var(--font-mono);
+  font: 400 var(--fs-micro) var(--font-mono);
   color: var(--quiet);
 }
 
 /* ---- the panel ----------------------------------------------------------- */
 
+/* the layout comes from .sparse in tokens.css, which is a flex column so the
+   empty state can claim the leftover height instead of the panel ending in
+   700px of nothing. This adds the surface and the padding and nothing else. */
 .world-side {
   overflow-y: auto;
-  padding: 14px 14px 40px;
-  border-left: 1px solid var(--wl);
-  display: grid;
-  align-content: start;
+  padding: 14px 14px 24px;
+  border-left: var(--hair) solid var(--wl);
   gap: 12px;
 }
 .world-lab {
-  font: 600 9px var(--font-label);
-  letter-spacing: 0.2em;
+  font: 600 var(--fs-micro) var(--font-label);
+  letter-spacing: var(--track-label);
   text-transform: uppercase;
   color: var(--quiet);
 }
 .world-note {
   margin: 0;
-  font: 400 11.5px var(--font-label);
+  font: 400 var(--fs-small) var(--font-label);
   color: var(--quiet);
 }
 
@@ -300,43 +332,139 @@
   display: grid;
   gap: 4px;
   padding: 8px 12px;
-  border-left: 2px solid var(--wax);
-  background: rgba(176, 74, 47, 0.08);
+  border-left: calc(var(--hair) * 2) solid var(--wax);
+  background: color-mix(in srgb, var(--wax) 8%, transparent);
 }
 .world-warns {
   border-left-color: var(--gold);
-  background: rgba(212, 165, 60, 0.07);
+  background: color-mix(in srgb, var(--gold) 7%, transparent);
 }
 .world-refused p,
 .world-warns p {
   margin: 0;
-  font: 400 11.5px var(--font-label);
+  font: 400 var(--fs-small) var(--font-label);
   line-height: 1.45;
   color: var(--ink-on-sea);
 }
 
 .world-insp {
   display: grid;
-  gap: 8px;
+  gap: 7px;
   padding-bottom: 12px;
-  border-bottom: 1px solid var(--wl);
+  border-bottom: var(--hair) solid var(--wl);
+}
+
+/* WHAT THIS PANEL IS ABOUT, IN WORDS, WITH THE ADDRESS UNDER IT.
+ *
+ * The heading was the literal word "island" on every island, so the panel never
+ * said which one, and the only place the name appeared was inside the name
+ * field where it is the ADDRESS. Ash, 2026-08-29: humans see labels. So the
+ * words go up top and the identifier goes under them in mono, marked as the
+ * code name, because the author writing a grape still has to type it. */
+.world-head {
+  display: grid;
+  gap: 2px;
+  padding-bottom: 2px;
+}
+.world-head b {
+  font: 600 var(--fs-lead) var(--font-label);
+  line-height: var(--lh-tight);
+  color: var(--ink-on-sea);
+}
+.world-code {
+  font: 400 var(--fs-micro) var(--font-mono);
+  color: var(--quiet);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* the word in front of an address, so a monospace string on screen is never
+   just loose. It reads "code name the_hub", which is what it is. */
+.world-code i {
+  font-style: normal;
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--ink-off);
+}
+
+/* THE FOUR THINGS SOMEBODY ACTUALLY DOES, ABOVE THE FOLD.
+ *
+ * Measured: the inspector ran 856 px inside a 719 px column, so setting a berth,
+ * which is the whole reason this page draws the paintings at all, was below the
+ * fold behind eleven number fields. The acts come first and the fields follow
+ * them, and the fields are grouped so the column is a form you scan rather than
+ * a column you hunt down. */
+.world-acts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px;
+}
+/* a group of fields under one word, so eleven inputs read as four things */
+.world-set {
+  display: grid;
+  gap: 5px;
+  padding: 7px 8px;
+  background: var(--sunk);
+  border: var(--hair) solid var(--wl);
+  border-radius: var(--r);
+}
+.world-set > .world-lab {
+  margin-bottom: -2px;
+}
+/* THE GROUPS THAT FOLD, and only the ones nobody opens twice.
+   The painting, the radii and the mooring are three things an author sets once
+   and then leaves, and all three sitting open is most of the 856 px. What is
+   open by default is what is unfinished: a slot with no map opens the painting,
+   a place with a berth opens the mooring. */
+details.world-set > summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  list-style: none;
+  padding: 1px 0;
+}
+details.world-set > summary::-webkit-details-marker {
+  display: none;
+}
+details.world-set > summary::after {
+  content: '';
+  flex: none;
+  width: 5px;
+  height: 5px;
+  margin-left: auto;
+  border-right: var(--hair) solid var(--edge-ctl);
+  border-bottom: var(--hair) solid var(--edge-ctl);
+  transform: rotate(45deg) translate(-2px, -2px);
+  transition: transform var(--t-fast) var(--ease-out);
+}
+details.world-set[open] > summary::after {
+  transform: rotate(-135deg) translate(-1px, -1px);
+}
+details.world-set > summary:hover {
+  color: var(--ink-on-sea);
+}
+details.world-set[open] {
+  gap: 6px;
+}
+details.world-set[open] > summary {
+  margin-bottom: 2px;
 }
 .world-f {
   display: grid;
   gap: 3px;
 }
 .world-f > span {
-  font: 400 10px var(--font-mono);
+  font: 400 var(--fs-micro) var(--font-mono);
   color: var(--quiet);
 }
 .world-in {
   width: 100%;
   padding: 5px 8px;
-  font: 400 12px var(--font-label);
+  font: 400 var(--fs-small) var(--font-label);
   color: var(--ink-on-sea);
   background: var(--sunk);
-  border: 1px solid var(--wl);
-  border-radius: 2px;
+  border: var(--hair) solid var(--wl);
+  border-radius: var(--r-tight);
   outline: none;
   transition: border-color var(--t-fast) var(--ease-out);
 }
@@ -351,7 +479,7 @@
 }
 .world-bad {
   margin: 0;
-  font: 400 10px var(--font-mono);
+  font: 400 var(--fs-micro) var(--font-mono);
   color: var(--wax);
 }
 .world-pair {
@@ -363,9 +491,9 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font: 400 11.5px var(--font-label);
+  font: 400 var(--fs-small) var(--font-label);
   color: var(--quiet);
-  cursor: pointer;
+  cursor: var(--cur-do);
   transition: color var(--t-fast) var(--ease-out);
 }
 .world-check:hover {
@@ -376,7 +504,7 @@
   width: 12px;
   height: 12px;
   accent-color: var(--gold);
-  cursor: pointer;
+  cursor: var(--cur-do);
 }
 .world-mark {
   display: flex;
@@ -389,18 +517,18 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font: 400 10px var(--font-mono);
+  font: 400 var(--fs-micro) var(--font-mono);
   color: var(--say);
 }
 
 .world-btn {
   padding: 5px 12px;
-  font: 500 11.5px var(--font-label);
+  font: 500 var(--fs-small) var(--font-label);
   color: var(--say);
   background: none;
-  border: 1px solid var(--wl);
-  border-radius: 3px;
-  cursor: pointer;
+  border: var(--hair) solid var(--wl);
+  border-radius: var(--r);
+  cursor: var(--cur-do);
   text-decoration: none;
   transition: all var(--t-fast) var(--ease-out);
 }
@@ -409,25 +537,33 @@
   border-color: var(--wl-lit);
 }
 .world-btn:disabled {
-  color: #333c47;
-  cursor: default;
+  color: var(--ink-off);
+  cursor: var(--cur-no);
 }
 .world-btn.small {
   padding: 3px 9px;
-  font-size: 11.5px;
+  font-size: var(--fs-small);
 }
 .world-btn.on {
   color: var(--gold-lit);
   border-color: color-mix(in srgb, var(--gold) 45%, transparent);
   background: color-mix(in srgb, var(--gold) 10%, transparent);
 }
+/* THE ONE CONTROL HERE THAT DESTROYS SOMETHING, AND IT LOOKS LIKE IT AT REST.
+ *
+ * "remove the_hub" was drawn at --quiet on the neutral border, which is exactly
+ * the row above it and the row below it, and only went red once a pointer was
+ * already on it. A control that reveals what it is after you have reached for
+ * it has told you too late. It carries the wax at rest now and the lit edge
+ * once armed, which is the pair tokens.css names for precisely this. */
 .world-btn.danger {
-  color: var(--quiet);
+  color: var(--acc-stop-lit);
+  border-color: color-mix(in srgb, var(--acc-stop) 55%, transparent);
 }
 .world-btn.danger:hover {
-  color: #ff6b5e;
-  border-color: #6d2b26;
-  background: rgba(40, 12, 10, 0.6);
+  color: var(--acc-stop-lit);
+  border-color: var(--acc-stop-edge);
+  background: color-mix(in srgb, var(--acc-stop) 22%, transparent);
 }
 /* the second half of removing something. Two buttons, the safe one last, so
    the hand that was already moving lands on "keep". */
@@ -446,12 +582,12 @@
 }
 .world-fbtn {
   height: 26px;
-  font: 400 13px var(--font-label);
+  font: 400 var(--fs-body) var(--font-label);
   color: var(--quiet);
   background: var(--sunk);
-  border: 1px solid var(--wl);
-  border-radius: 2px;
-  cursor: pointer;
+  border: var(--hair) solid var(--wl);
+  border-radius: var(--r-tight);
+  cursor: var(--cur-do);
   transition: all var(--t-fast) var(--ease-out);
 }
 .world-fbtn:hover {
@@ -464,6 +600,47 @@
   background: color-mix(in srgb, var(--gold) 10%, transparent);
 }
 
+/* WHAT IS ON THIS CHART, SAID ONCE, IN A RAIL THAT WAS OTHERWISE AIR.
+ *
+ * Measured: 290 by 719 holding a heading and one 15 px row. The empty state in
+ * tokens.css answers a rail with NOTHING in it; this answers the case /world is
+ * actually in, which is a chart with one island on it and a column of nothing
+ * under it. Counts, the water's own extent, and the things checkWorld would
+ * complain about at the save, so the rail earns its border. */
+.world-sum {
+  display: grid;
+  gap: 5px;
+  padding: 9px 10px;
+  background: var(--sunk);
+  border: var(--hair) solid var(--wl);
+  border-radius: var(--r);
+}
+.world-sum-r {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font: 400 var(--fs-small) var(--font-label);
+  color: var(--say);
+}
+.world-sum-r > span:first-child {
+  flex: 1;
+  color: var(--quiet);
+}
+.world-sum-r b {
+  font: 400 var(--fs-micro) var(--font-mono);
+  color: var(--ink-on-sea);
+}
+/* what is not finished yet, in the words the save will use. Gold, because it is
+   the tool speaking about work left rather than a refusal. */
+.world-sum-todo {
+  margin: 0;
+  padding-top: 5px;
+  border-top: var(--hair) solid var(--wl);
+  font: 400 var(--fs-small) var(--font-label);
+  line-height: var(--lh);
+  color: var(--gold-lit);
+}
+
 .world-roster {
   display: grid;
   gap: 1px;
@@ -471,6 +648,31 @@
 }
 .world-roster .world-lab {
   margin-bottom: 4px;
+}
+/* ONE COLUMN, ONE MEANING, and it took a group heading to get there.
+ *
+ * The right hand column printed a map slug on an island row and a KIND on a
+ * water row, so the same 42 px of the rail meant two unrelated things one line
+ * apart. What is uniform across an island, a stretch of water and a waypoint is
+ * the address python holds, so that is what the column is, and what kind of
+ * thing a row is now comes from the group it sits in. */
+.world-grp {
+  display: grid;
+  gap: 1px;
+  margin-top: 8px;
+}
+.world-grp:first-of-type {
+  margin-top: 0;
+}
+.world-cols {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 0 7px 3px;
+  border-bottom: var(--hair) solid var(--wl);
+}
+.world-cols .world-lab:first-child {
+  flex: 1;
 }
 .world-row {
   display: flex;
@@ -480,8 +682,8 @@
   background: none;
   border: 0;
   border-left: 2px solid transparent;
-  border-radius: 0 2px 2px 0;
-  cursor: pointer;
+  border-radius: 0 var(--r-tight) var(--r-tight) 0;
+  cursor: var(--cur-do);
   text-align: left;
   transition: background-color var(--t-fast) var(--ease-out), border-color var(--t-fast) var(--ease-out);
 }
@@ -496,19 +698,24 @@
   flex: none;
   width: 7px;
   height: 7px;
-  border-radius: 1px;
+  border-radius: var(--r-tight);
 }
 .world-row-n {
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font: 500 11.5px var(--font-label);
+  font: 500 var(--fs-small) var(--font-label);
   color: var(--ink-on-sea);
 }
+/* the address, and only ever the address */
 .world-row-m {
   flex: none;
-  font: 400 10px var(--font-mono);
+  max-width: 46%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 400 var(--fs-micro) var(--font-mono);
   color: var(--quiet);
 }
 
@@ -528,6 +735,41 @@
   margin: 0;
   max-width: 44ch;
   color: var(--quiet);
+}
+
+/* THE LEGEND, AND IT IS ALSO THE RAIL'S FLOOR.
+   Measured with one island on the water: 183 px of content in a 719 px column,
+   so three quarters of the rail was air with a border down one side. margin-top
+   auto against the .sparse flex column puts this at the bottom, which is what
+   turns a hole into a floor. It is not filler: the roster's swatches were the
+   one thing on this page that encoded meaning as colour with nothing anywhere
+   saying what the colours were. */
+.world-key {
+  display: grid;
+  gap: 6px;
+  margin-top: auto;
+  padding-top: 14px;
+  border-top: var(--hair) solid var(--wl);
+}
+.world-key-rows {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+.world-key-r {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--quiet);
+  font-size: var(--fs-small);
+}
+/* the same 7px square the roster draws, because a legend that does not match
+   the mark it explains is a second mark to learn */
+.world-key-r i {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  border-radius: var(--r-tight);
 }
 
 /* the same answer the rest of the site gives. The chart's own easing is turned

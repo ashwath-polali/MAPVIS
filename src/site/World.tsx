@@ -31,6 +31,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, go } from './router'
 import { useSession } from './session'
 import { anchorName, isAnchorName } from '../core/mask'
+import { ANCHOR_INK, inkFor } from '../core/ink'
+import { displayName } from '../core/naming'
+import { MARK_KINDS, isMarkName, type MarkKind, type WorldMark } from '../core/world'
 import './world.css'
 
 type Pt = { x: number; y: number; facing?: string; at?: string }
@@ -61,14 +64,17 @@ type Place = {
   meta?: Record<string, unknown>
 }
 type Region = { name: string; kind: string; rect: [number, number, number, number]; label?: string }
-/* marks is carried and never read here. The world row grew a third list while
- * this page was open, and a save that posts only what it knows about is a save
- * that deletes everything it does not, so it rides along untouched rather than
- * being dropped on the floor by a page that has no control for it. */
+/* marks is AUTHORED here now, and for two revisions it was carried untouched by
+ * a page that had no control for it: first as `unknown`, then typed and drawn
+ * on the roster but read-only. Ash, 2026-08-29, asked for marks to be easy to
+ * add, and the only way to make one was as an island's berth or an island's
+ * approach, which is not a free-standing point at all. The toolbar has a
+ * waypoint on it and this list is what it writes.
+ * src/core/world.ts holds the shape and the name rule. */
 /* `home` is the slot a run with no vessel record starts in and the one a
  * graduate is handed back to. One name for the whole ocean, and the game had it
  * as a constant because nothing here could say it. */
-type Doc = { w: number; h: number; places: Place[]; regions: Region[]; marks?: unknown; home?: string }
+type Doc = { w: number; h: number; places: Place[]; regions: Region[]; marks?: WorldMark[]; home?: string }
 
 /* What the registry hands back for one map. The x,y on an anchor is in that
  * map's OWN pixel raster, the same raster scene.png is published at, which is
@@ -76,25 +82,66 @@ type Doc = { w: number; h: number; places: Place[]; regions: Region[]; marks?: u
 type Anchor = { name: string; kind: string; x: number; y: number; r?: number; to?: string; label?: string }
 type MapRow = { slug: string; w: number; h: number; version: number | null; anchors?: Anchor[] }
 
-type Sel = { kind: 'place' | 'region'; i: number } | null
-type Hit = { kind: 'place' | 'berth' | 'approach' | 'size' | 'region'; i: number } | null
+type Sel = { kind: 'place' | 'region' | 'mark'; i: number } | null
+type Hit = { kind: 'place' | 'berth' | 'approach' | 'size' | 'region' | 'mark'; i: number } | null
 type Band = { x0: number; y0: number; x1: number; y1: number } | null
-type Tool = 'move' | 'place' | 'sea'
+/* `mark` is the tool Ash asked for and the one this page could not do. Every
+ * point on the water had to be an island's berth or an island's approach, so a
+ * corner a sail leg turns at, which belongs to neither island it sits between,
+ * had nowhere to be authored. It is free standing: no map, no footprint, no
+ * owner, just a name a grape can sail to. */
+type Tool = 'move' | 'place' | 'sea' | 'mark'
 type Pick = '' | 'berth' | 'approach'
 type Fit = { s: number; ox: number; oy: number }
+
+/* ---- THE ONLY HEX IN THIS FILE, AND THE REASON IT IS ALLOWED ---------------
+ *
+ * A 2d context takes a css colour string and cannot read a custom property, so
+ * a canvas is the one surface a token layer cannot reach. Everything the chart
+ * draws is therefore written out, HERE, in one block, and each line names the
+ * token it is a copy of. If a token moves, these move with it and nothing else
+ * in this file has to be looked at.
+ *
+ * The rule that makes this a fence rather than an excuse: no colour is written
+ * anywhere below this block. Before, the tool's own gold appeared as '#f0c869'
+ * in nine separate draw calls and the dark rim behind every word appeared as
+ * 'rgba(7,11,17,0.9)' in seven, so a change to either meant finding sixteen
+ * literals by eye.
+ */
+const CHART_VOID = '#070b11' /* --void */
+const CHART_SEA_FILL = '#0b111a' /* the water itself, one step off --void */
+const CHART_INK = '#e6e9ee' /* --ink */
+const CHART_QUIET = '#7d8ea1' /* --ink-3, the text floor */
+const CHART_EDGE = '#5b6470' /* --ink-edge. NOT TEXT: a tick, a boundary */
+const CHART_ARMED = '#f0c869' /* --acc-tool-lit */
+const CHART_TOOL = '#d4a53c' /* --acc-tool */
+const CHART_MARK = '#d0785f' /* --acc-mark */
+const CHART_STOP = '#b04a2f' /* --acc-stop */
+const CHART_LIVE = '#4f9b84' /* --acc-live, sunk to sit under a painting */
+const CHART_DEEP = '#8a6a1f' /* --acc-tool-deep */
+/* THE GRATICULE, AND IT WAS THE ONE THAT WAS WRONG FOR ITS OWN REASON. It was
+ * #1a1c1c, a neutral charcoal with no blue in it, ruled over water at #0b111a,
+ * so a warm grey mesh sat on a cold ground and read as something laid on top of
+ * the chart rather than as the chart's own ruling. It is a lift of the water's
+ * hue now, in two weights, because a graticule is the sea drawn lighter. */
+const CHART_SEA_MINOR = 'rgba(122,164,204,0.07)'
+const CHART_SEA_MAJOR = 'rgba(122,164,204,0.17)'
+/* what a word on the water sits on. --void at the alpha that survives a lit
+ * volcano underneath it, measured against the hub's own painting. */
+const PLATE = 'rgba(7,11,17,0.84)'
 
 /* ONE INK PER STATE, and the ramp is the journey: unknown is cold and grey,
  * the one you are in is gold, the one that is over goes back down to a dull
  * bronze. The names come from the server, not from here, so a state added there
  * still draws with the fallback rather than disappearing. */
 const STATE_INK: Record<string, string> = {
-  rumour: '#5b6470',
-  rising: '#b04a2f',
+  rumour: CHART_EDGE,
+  rising: CHART_STOP,
   misty: '#6f8296',
   discovered: '#8fa6bb',
-  available: '#4f9b84',
-  active: '#d4a53c',
-  completed: '#8a6a1f',
+  available: CHART_LIVE,
+  active: CHART_TOOL,
+  completed: CHART_DEEP,
 }
 const SEA_INK: Record<string, string> = {
   sailable: '#1d2c3c',
@@ -103,28 +150,66 @@ const SEA_INK: Record<string, string> = {
   mist: '#3b4654',
   ambience: '#3a3252',
 }
-/* the six anchor kinds mask.ts allows, each its own ink, because the whole
- * reason to draw them here is to tell a door apart from a spawn at a glance
- * while you are aiming a berth at one of them */
-const ANCHOR_INK: Record<string, string> = {
-  door: '#e2734a',
-  post: '#6fc2a6',
-  spawn: '#7fa8d8',
-  trigger: '#b07acc',
-  region: '#d4a53c',
-  point: '#c8d2dd',
-}
-const inkFor = (m: Record<string, string>, k: string) => m[k] || '#5b6470'
+/* THE ANCHOR INKS ARE NOT WRITTEN HERE ANY MORE. They were, and the editor's
+ * overlay had its own single pale iris for the same six kinds, so Panther's Maw
+ * was orange on this page and lavender two clicks away in the tool that made
+ * it. src/core/ink.ts is the one table both canvases read; it keeps the same
+ * promise this block does, that every hex names the token it copies. */
 
-const LABEL = '500 11px "Archivo Narrow", sans-serif'
-const MONO = '400 9px "Martian Mono", monospace'
-const TINY = '400 8.5px "Martian Mono", monospace'
+/* THE CHART'S TYPE, AS THREE JOBS RATHER THAN THREE ARBITRARY SIZES.
+ *
+ * A canvas takes a css font string and cannot read a custom property, so the
+ * numbers have to be written here. They are the tokens.css steps by hand:
+ * --fs-fine, --fs-micro and one below the scale that only a chart is allowed,
+ * because a plate on a fourteen pixel island cannot carry a ten pixel word.
+ * label() takes a size, so the name on an island grows with the island. */
+const LABEL = (px: number) => `500 ${px}px "Archivo Narrow", sans-serif`
+const MONO = '400 10px "Martian Mono", monospace'
+const TINY = '400 9px "Martian Mono", monospace'
 const PAD = 36
+
+/* HOW BIG A NAME ON THE WATER IS ALLOWED TO GET.
+ *
+ * It was a flat 11 px at every zoom, which is two failures in one direction. At
+ * the floor the hub is ten screen pixels across and "The Hub" was fifty, so the
+ * word was physically larger than the island it names and the chart read as a
+ * list of captions. Zoomed to 17x the same word sat on a six hundred pixel
+ * painting looking like a tooltip that had come loose.
+ *
+ * So it follows the island: a fraction of the drawn width, fenced at both ends.
+ * Under LABEL_DROP the island is too small to hold a word at all and only the
+ * one under the hand is named, which is also the collision fix that costs
+ * nothing. */
+const LABEL_MIN = 10
+const LABEL_MAX = 17
+const LABEL_DROP = 30
+/* AND HOW SMALL AN ISLAND CAN GET BEFORE THE TOOL STOPS DRAWING ITS HANDLES ON
+ * IT. Measured at the zoom floor: the hub is ten screen pixels across and the
+ * selection put a sixteen pixel grip square, a "64 × 60 u" plate and a "berth
+ * 152 u" plate around it, so three pieces of chrome, each wider than the thing
+ * they belong to, piled into sixty pixels of water. The name and the ring say
+ * what is selected out there. The handles are for a footprint you can actually
+ * pull a corner off, which is why the floor is a few times the grip and not one
+ * grip: a corner is only a corner when it is somewhere other than the middle. */
+const GRIP_DROP = 44
+// a fifth of the drawn width, fenced. A fifth is not arithmetic, it is what
+// puts a five letter name across about the width of the island it names.
+const nameAt = (rw: number) => Math.round(clamp(rw * 0.2, LABEL_MIN, LABEL_MAX))
 
 // as far out as fitting the whole ocean, and as far in as one painted pixel
 // filling a fat screen pixel. Anything past that is not more information.
 const MAX_S = 48
 const SNAP = 11
+
+/* THE ZOOM LADDER, AND IT IS NOT A MULTIPLIER.
+ *
+ * Each press was a fixed factor, so the readout walked 1.6, 2.6, 4.1, 6.6: no
+ * 2, no 4, no 8, and no way to land on a round number by pressing a button. A
+ * chart's zoom is a ladder of stops you can name, the way every drawing program
+ * has one. The floor is whatever fits the whole ocean, so the stops below 1 are
+ * there for a big ocean on a small stage and are skipped when they are out of
+ * reach. */
+const STOPS = [0.125, 0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48]
 
 /* ONE SIZE EVERY NEW ISLAND IS BORN AT.
  *
@@ -141,16 +226,23 @@ const ISLAND_DEFAULT = 96
 const ISLAND_MIN = 16
 const ISLAND_MAX = 1024
 
-/* HOW MUCH THE FOOTPRINT MOVES FOR A DRAG THE WIDTH OF THE ISLAND: half, and
- * a shifted eighth for the last few units.
+/* ONE TO ONE, WITH A GEARED MODE ON SHIFT.
  *
- * The delta behind it is measured in SCREEN pixels over the island's SCREEN
- * size. Measured in world units, which is what the old branch did, the same
- * hand movement was worth five times more with the whole ocean on the stage
- * than it was zoomed in on a jetty, so the handle behaved differently
- * depending on where you happened to be looking. */
-const RESIZE_GAIN = 0.5
-const RESIZE_FINE = 0.12
+ * This was 0.5, and measured: a 300 px drag off the handle left the drawn
+ * corner 242 px from the cursor, so the thing in your hand was not the thing
+ * moving. Ash's ruling is that the grip sits under the cursor. That is direct
+ * manipulation and it is what the gain of 1 buys: you are holding the corner
+ * rather than steering it from a distance.
+ *
+ * Shift is the gradual mode he also asked for, so both instructions are on the
+ * record and neither was dropped. It is the same gearing the old default had,
+ * moved to where it belongs: the last few units of a footprint, where one
+ * world unit at 17x is seventeen screen pixels and the hand cannot land on one.
+ *
+ * The delta is measured in SCREEN pixels and divided back through the zoom, so
+ * the same hand movement does the same thing wherever you are looking. */
+const RESIZE_GAIN = 1
+const RESIZE_FINE = 0.2
 // the grab radius of the corner handle, and half the square it is drawn as, so
 // the hot spot and the picture of it cannot drift apart
 const GRIP = 9
@@ -174,6 +266,29 @@ const grat = (s: number) => {
   while (v * s < 46) v *= 2
   return v
 }
+/* AND HOW OFTEN A LINE IS A HEAVY ONE.
+ *
+ * It was one weight at one pitch, so the grid was a bathroom tile and gave the
+ * eye nothing to count in. Every fourth line is drawn heavier and carries its
+ * own coordinate, which is what turns a mesh into a graticule: a distance is
+ * counted in majors and read off the number, instead of counted in eighty
+ * identical squares. Four and not five or ten, because the pitch is a power of
+ * two and only a power of two divides it without a fraction appearing in the
+ * label. */
+const MAJOR = 4
+
+/* WHAT WOULD GO TO THE SERVER, AS ONE STRING.
+ *
+ * "dirty" was a flag that only ever went up, so stepping back to exactly the
+ * document the server holds still left the button offering to post it, and the
+ * beforeunload guard still stopped a tab closing over nothing. Comparing is
+ * the only version of this that can be right, and the document is a couple of
+ * dozen small objects, so it costs nothing to compare it whole.
+ *
+ * MARKS ARE IN IT NOW. They were left out because nothing on this page could
+ * change one, and the waypoint tool is exactly that thing: leaving them out
+ * would mean placing a waypoint left the save button reading "saved". */
+const stamp = (d: Doc) => JSON.stringify({ w: d.w, h: d.h, places: d.places, regions: d.regions, marks: d.marks || [], home: d.home || '' })
 
 const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi : v)
 const side = (n: number) => clamp(Math.round(n), ISLAND_MIN, ISLAND_MAX)
@@ -242,6 +357,65 @@ const skinOf = (key: string, img: HTMLImageElement): Skin => {
   }
   skins.set(key, out)
   return out
+}
+
+/* ---- ONE GEOMETRY, READ THE SAME WAY BY THE DRAWING AND BY THE HIT TEST ----
+ *
+ * The footprint and the skin lived inside paint(), so under() had to build its
+ * own and it built the wrong rectangle: the grip was drawn on the painting's opaque
+ * corner in one place and answered a press at the raster's corner in the
+ * other. Measured 16 px apart at 2.6x and 103 px apart at 17x, which is a
+ * handle floating in open water below the island while the corner you can see
+ * quietly drags the whole place instead. Nothing computes a corner privately
+ * any more. */
+type Art = Map<string, HTMLImageElement>
+
+// the published picture this place draws with, or '' when there is no map or
+// nothing has been published for it yet
+const artKey = (p: Place, reg: Map<string, MapRow>) => {
+  const m = p.map ? reg.get(p.map) : undefined
+  return m && m.version ? `${p.map}@${m.version}` : ''
+}
+
+// where the paint sits inside the raster. The whole raster is the honest
+// answer while the picture is still loading, which is also what an empty slot
+// gets, because a position holding no bundle has no coast to draw round.
+const skinAt = (p: Place, reg: Map<string, MapRow>, art: Art): Skin => {
+  const key = artKey(p, reg)
+  const img = key ? art.get(key) : undefined
+  if (!img || !img.complete || !img.naturalWidth) return WHOLE
+  return skinOf(key, img)
+}
+
+/* THE FOOTPRINT ON SCREEN, floored at three pixels. The floor is not cosmetic:
+ * out at full extent an island is a couple of pixels across and a handle
+ * smaller than its own outline is a handle nobody can land on. */
+const boxOf = (p: Place, fit: Fit) => ({
+  px: fit.ox + p.x * fit.s,
+  py: fit.oy + p.y * fit.s,
+  rw: Math.max(3, p.w * fit.s),
+  rh: Math.max(3, p.h * fit.s),
+})
+
+// and the part of it the eye reads as the island
+const skinBox = (p: Place, fit: Fit, sk: Skin) => {
+  const b = boxOf(p, fit)
+  return { px: b.px + sk.x0 * b.rw, py: b.py + sk.y0 * b.rh, rw: (sk.x1 - sk.x0) * b.rw, rh: (sk.y1 - sk.y0) * b.rh }
+}
+
+/* THE CORNER YOU PULL, and there is exactly one of it.
+ *
+ * On the drawn coast, not on the raster, because the raster's corner is out in
+ * the water on any map with transparent margin and Ash's rule is that the
+ * thing you can see is the thing you can grab.
+ *
+ * The other three corners are deliberately not handles. x,y is the origin
+ * checkWorld measures a berth and a release radius from, so a north or west
+ * handle would move the point every distance on this chart is quoted against
+ * while you were only trying to change a size. */
+const gripOf = (p: Place, fit: Fit, sk: Skin) => {
+  const b = skinBox(p, fit, sk)
+  return { gx: b.px + b.rw, gy: b.py + b.rh }
 }
 
 /* FIT WHAT IS ON THE WATER, NOT THE WATER.
@@ -319,7 +493,6 @@ const anchorAt = (p: Place, m: MapRow, a: Anchor) => ({
 
 /* ---- the chart ----------------------------------------------------------- */
 
-type Art = Map<string, HTMLImageElement>
 type Scene = {
   doc: Doc
   fit: Fit
@@ -333,6 +506,20 @@ type Scene = {
   warm: number
 }
 
+/* A WORD ON THE WATER GETS A PLATE, NOT A RIM.
+ *
+ * Every name on this chart was drawn as fill-over-stroke: a three pixel dark
+ * outline round each glyph and the colour inside it. On open water that is
+ * fine. On a painting it is not, and this chart's whole point is that the
+ * paintings are drawn: "Panther's Maw" was 8.5 px salmon strokes over a lit
+ * volcano and could not be read at 2.6x or at 17x.
+ *
+ * A plate is a filled box behind the word. It costs one measureText and it is
+ * the difference between a label and a smear. The rim stays for a bare number
+ * out in open water, where a box would be heavier than the thing it carries. */
+type Box = { x: number; y: number; w: number; h: number }
+const overlaps = (a: Box, b: Box) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h
+
 function paint(c: CanvasRenderingContext2D, size: { w: number; h: number }, sc: Scene) {
   const { doc, fit, sel, hover, band, reg, art, marks, aim, warm } = sc
   const X = (x: number) => fit.ox + x * fit.s
@@ -343,39 +530,95 @@ function paint(c: CanvasRenderingContext2D, size: { w: number; h: number }, sc: 
   const say = (t: string, x: number, y: number, fill: string) => {
     c.lineJoin = 'round'
     c.lineWidth = 3
-    c.strokeStyle = 'rgba(7,11,17,0.9)'
+    c.strokeStyle = PLATE
     c.strokeText(t, x, y)
     c.lineWidth = 1
     c.fillStyle = fill
     c.fillText(t, x, y)
   }
 
-  c.fillStyle = '#070b11'
+  /* EVERY LABEL LAID THIS FRAME, so the next one can be told to go somewhere
+   * else. Two names stacked on each other is two names nobody can read, and
+   * with the paintings drawn at chart scale it happens the moment two islands
+   * sit within a footprint of each other. */
+  const laid: Box[] = []
+
+  /* the plate itself. `anchor` says which corner of the box the x,y is, so a
+   * caller can hang a label off the left of a mark or the right of one without
+   * measuring the text twice. Returns false when the words were dropped rather
+   * than drawn, so a caller that wants to try a second position can. */
+  const plate = (t: string, x: number, y: number, fill: string, opt?: { rim?: string; mid?: boolean; keep?: boolean }) => {
+    const pad = 4
+    const m = c.measureText(t)
+    const h = Math.round((m.actualBoundingBoxAscent || 8) + 5)
+    const bx = Math.round((opt?.mid ? x - m.width / 2 : x) - pad)
+    const by = Math.round(y - h + 2)
+    const box = { x: bx, y: by, w: Math.round(m.width) + pad * 2, h: h + 3 }
+    if (!opt?.keep && laid.some((b) => overlaps(box, b))) return false
+    laid.push(box)
+    c.fillStyle = PLATE
+    c.beginPath()
+    // 4, which is --r and what the editor's own plate() rounds a caption to. It
+    // was 2 here, so the same door's name was a slightly sharper pill on the
+    // chart than in the tool that made it, for no reason but two authors.
+    c.roundRect(box.x, box.y, box.w, box.h, 4)
+    c.fill()
+    if (opt?.rim) {
+      c.strokeStyle = opt.rim
+      c.lineWidth = 1
+      c.stroke()
+    }
+    c.fillStyle = fill
+    c.fillText(t, box.x + pad, y)
+    return true
+  }
+
+  c.fillStyle = CHART_VOID
   c.fillRect(0, 0, size.w, size.h)
-  c.fillStyle = '#0b111a'
+  c.fillStyle = CHART_SEA_FILL
   c.fillRect(X(0), Y(0), doc.w * fit.s, doc.h * fit.s)
 
-  // the graticule, which is the whole reason this reads as a chart and not as
-  // a dark box with rectangles on it. Only the part of it the stage can see:
-  // at full zoom the whole ocean is 4096/8 lines and drawing them all is work
-  // thrown away against the clip.
+  /* THE GRATICULE, IN TWO WEIGHTS AND THE WATER'S OWN HUE.
+   *
+   * It is the whole reason this reads as a chart and not as a dark box with
+   * rectangles on it, and one uniform weight at one pitch is the version of it
+   * that reads as tiling. Every fourth line is heavier and carries the world
+   * coordinate it stands on, so a berth 152 units off a jetty can be counted
+   * off the chart rather than trusted to a number in a form.
+   *
+   * Only the part of it the stage can see: at full zoom the whole ocean is
+   * 4096/8 lines and drawing them all is work thrown away against the clip. */
   const step = grat(fit.s)
   const gx0 = Math.max(0, Math.floor((0 - fit.ox) / fit.s / step) * step)
   const gx1 = Math.min(doc.w, (size.w - fit.ox) / fit.s)
   const gy0 = Math.max(0, Math.floor((0 - fit.oy) / fit.s / step) * step)
   const gy1 = Math.min(doc.h, (size.h - fit.oy) / fit.s)
-  c.strokeStyle = 'rgba(212,165,60,0.075)'
-  c.lineWidth = 1
-  c.beginPath()
-  for (let x = Math.max(step, gx0); x < gx1; x += step) {
-    c.moveTo(Math.round(X(x)) + 0.5, Math.max(0, Y(0)))
-    c.lineTo(Math.round(X(x)) + 0.5, Math.min(size.h, Y(doc.h)))
+  const big = step * MAJOR
+  const top = Math.max(0, Y(0))
+  const bot = Math.min(size.h, Y(doc.h))
+  const lft = Math.max(0, X(0))
+  const rgt = Math.min(size.w, X(doc.w))
+  for (const heavy of [false, true]) {
+    c.strokeStyle = heavy ? CHART_SEA_MAJOR : CHART_SEA_MINOR
+    c.lineWidth = 1
+    c.beginPath()
+    for (let x = Math.max(step, gx0); x < gx1; x += step) {
+      if (x % big === 0 !== heavy) continue
+      c.moveTo(Math.round(X(x)) + 0.5, top)
+      c.lineTo(Math.round(X(x)) + 0.5, bot)
+    }
+    for (let y = Math.max(step, gy0); y < gy1; y += step) {
+      if (y % big === 0 !== heavy) continue
+      c.moveTo(lft, Math.round(Y(y)) + 0.5)
+      c.lineTo(rgt, Math.round(Y(y)) + 0.5)
+    }
+    c.stroke()
   }
-  for (let y = Math.max(step, gy0); y < gy1; y += step) {
-    c.moveTo(Math.max(0, X(0)), Math.round(Y(y)) + 0.5)
-    c.lineTo(Math.min(size.w, X(doc.w)), Math.round(Y(y)) + 0.5)
-  }
-  c.stroke()
+  // and what the heavy ones stand on, along the two edges the eye starts at
+  c.font = TINY
+  c.fillStyle = CHART_EDGE
+  for (let x = Math.max(big, Math.ceil(gx0 / big) * big); x < gx1; x += big) c.fillText(String(x), Math.round(X(x)) + 3, Math.max(top + 10, 10))
+  for (let y = Math.max(big, Math.ceil(gy0 / big) * big); y < gy1; y += big) c.fillText(String(y), Math.max(lft + 3, 3), Math.round(Y(y)) - 3)
 
   // sea regions sit under everything, because they are what the water IS and
   // an island is a thing on top of it
@@ -394,8 +637,10 @@ function paint(c: CanvasRenderingContext2D, size: { w: number; h: number }, sc: 
     c.strokeStyle = tint
     c.strokeRect(rx + 0.5, ry + 0.5, rw, rh)
     c.setLineDash([])
-    c.font = MONO
-    say(`${r.name} · ${r.kind}`, rx + 6, ry + 13, 'rgba(216,227,238,0.6)')
+    // the words a person reads, then the kind. A stretch of water carries the
+    // same name/label split an island does and this printed the identifier.
+    c.font = LABEL(11)
+    plate(`${displayName(r, 'unnamed water').text} · ${r.kind}`, rx + 6, ry + 15, CHART_INK, { rim: tint })
   }
 
   /* TWO PASSES OVER THE ISLANDS, and the split is the point.
@@ -405,33 +650,11 @@ function paint(c: CanvasRenderingContext2D, size: { w: number; h: number }, sc: 
    * trying to drag. One pass had the rectangle drawn over its own release ring
    * already; with a whole painting in that rectangle it would have swallowed the
    * marks outright. */
-  /* THE FOOTPRINT ON SCREEN, THROUGH ONE READER.
-   *
-   * The drawing floored the rectangle at three pixels and the hit test did
-   * not, so a long way out the gold square you could see and the square that
-   * answered a press were in different places. Both go through this now. */
-  const boxOf = (p: Place) => ({
-    px: X(p.x),
-    py: Y(p.y),
-    rw: Math.max(3, p.w * fit.s),
-    rh: Math.max(3, p.h * fit.s),
-  })
-
-  // and the part of it the eye reads as the island: the painted pixels when
-  // the picture is here, the whole footprint when it is not
-  const skinIn = (p: Place, key: string, img?: HTMLImageElement) => {
-    const b = boxOf(p)
-    if (!img || !img.complete || !img.naturalWidth) return b
-    const s = skinOf(key, img)
-    return { px: b.px + s.x0 * b.rw, py: b.py + s.y0 * b.rh, rw: (s.x1 - s.x0) * b.rw, rh: (s.y1 - s.y0) * b.rh }
-  }
-
   const shot = (i: number) => {
     const p = doc.places[i]
-    const m = p.map ? reg.get(p.map) : undefined
-    const key = m && m.version ? `${p.map}@${m.version}` : ''
+    const key = artKey(p, reg)
     const img = key ? art.get(key) : undefined
-    const { px, py, rw, rh } = boxOf(p)
+    const { px, py, rw, rh } = boxOf(p, fit)
     const on = sel?.kind === 'place' && sel.i === i
     const lit = on || (hover?.i === i && hover.kind !== 'region')
     const tint = inkFor(STATE_INK, p.state)
@@ -475,9 +698,9 @@ function paint(c: CanvasRenderingContext2D, size: { w: number; h: number }, sc: 
      *
      * An empty slot keeps the dashed line, because it is a position the chart
      * is holding open and not a coast anybody has painted. */
-    const seen = skinIn(p, key, img)
+    const seen = skinBox(p, fit, skinAt(p, reg, art))
     c.setLineDash(p.map ? [] : [4, 3])
-    c.strokeStyle = on ? '#f0c869' : tint
+    c.strokeStyle = on ? CHART_ARMED : tint
     c.globalAlpha = on ? 0.55 + 0.45 * warm : lit ? 0.85 : 0.6
     c.lineWidth = on ? 1 + warm : 1
     c.strokeRect(seen.px + 0.5, seen.py + 0.5, seen.rw, seen.rh)
@@ -489,20 +712,36 @@ function paint(c: CanvasRenderingContext2D, size: { w: number; h: number }, sc: 
   const rig = (i: number) => {
     const p = doc.places[i]
     const m = p.map ? reg.get(p.map) : undefined
-    const key = m && m.version ? `${p.map}@${m.version}` : ''
+    const key = artKey(p, reg)
     const img = key ? art.get(key) : undefined
     const drawn = !!img?.naturalWidth
     const on = sel?.kind === 'place' && sel.i === i
     const lit = on || (hover?.i === i && hover.kind !== 'region')
     const tint = inkFor(STATE_INK, p.state)
-    const { px, py, rw, rh } = boxOf(p)
-    const seen = skinIn(p, key, img)
+    const { px, py, rw, rh } = boxOf(p, fit)
+    const sk = skinAt(p, reg, art)
+    const seen = skinBox(p, fit, sk)
+
+    /* ---- THE SELECTION, AS ONE TREATMENT ------------------------------------
+     *
+     * WHAT WAS HERE, counted off a screenshot at 2.6x: a plus sign at the
+     * origin, four corner ticks that were three different glyphs because the
+     * grip square covered one of them and the cross covered another, a leader
+     * line drawn in the STATE ink so it came out teal on an available island
+     * while everything else on the selection was amber, and two bare integers,
+     * 64x60 and 152, sitting on the pixel art with nothing saying what either
+     * of them measured. Six marks, four hues, no words.
+     *
+     * The rule now is one hue and one voice. Everything the tool draws about
+     * the thing you have selected is amber, quiet, and carries its own unit.
+     * The state ink keeps the coast outline and the ring and nothing else,
+     * because those two are about what the island IS rather than about what you
+     * are doing to it. */
 
     /* THE RING IS DRAWN FROM x,y AND NOT FROM THE MIDDLE OF THE RECTANGLE.
      * checkWorld measures the berth distance with hypot(berth - x,y), so a ring
      * drawn around the centre would be a picture of a rule nobody enforces and
-     * an author would trust it and get a warning anyway. The cross under it
-     * says where the number is measured from. */
+     * an author would trust it and get a warning anyway. */
     c.beginPath()
     c.arc(px, py, p.release * fit.s, 0, Math.PI * 2)
     c.strokeStyle = tint
@@ -512,54 +751,21 @@ function paint(c: CanvasRenderingContext2D, size: { w: number; h: number }, sc: 
     c.setLineDash([])
     c.globalAlpha = 1
 
-    /* THE CROSS ONLY WHILE THE ISLAND IS UNDER THE HAND.
+    /* THE FOOTPRINT, ONLY WHILE IT IS THE THING IN YOUR HAND, AND AS ONE SHAPE.
      *
-     * Once the outline moved onto the painting, this was a plus sign floating
-     * in open water a long way above the coast, because x,y is the corner of
-     * the raster and the raster carries transparent margin along its top. On an
-     * island nobody is working on, the ring is already centred on it and that is
-     * enough; the corner ticks below say the rest. */
-    if (lit) {
-      c.strokeStyle = tint
-      c.globalAlpha = on ? 1 : 0.6
-      c.beginPath()
-      c.moveTo(px - 5, py)
-      c.lineTo(px + 5, py)
-      c.moveTo(px, py - 5)
-      c.lineTo(px, py + 5)
-      c.stroke()
-      c.globalAlpha = 1
-    }
-
-    /* THE FOOTPRINT, ONLY WHILE IT IS THE THING IN YOUR HAND.
-     *
-     * Four corner ticks rather than a rectangle. The rectangle is what a berth
-     * distance and a release radius are measured against, so it has to be
-     * visible while you are sizing one, and it is the wrong thing to have a
-     * hard line around the rest of the time because the coast is inside it. */
+     * A whole dashed rectangle rather than four hand-drawn corner brackets. The
+     * brackets were the same idea and they could not survive the grip and the
+     * cross being drawn over two of them; a rectangle has no corners to lose.
+     * It is what a berth distance and a release radius are measured against, so
+     * it has to be visible while one is being set and wrong to have around the
+     * rest of the time, because the coast is inside it. */
     if (on) {
-      const t = Math.min(11, rw / 3, rh / 3)
-      c.strokeStyle = '#f0c869'
-      c.globalAlpha = 0.45 * warm
-      c.beginPath()
-      for (const [cx, sx] of [
-        [px, 1],
-        [px + rw, -1],
-      ] as const)
-        for (const [cy, sy] of [
-          [py, 1],
-          [py + rh, -1],
-        ] as const) {
-          c.moveTo(cx + sx * t, cy)
-          c.lineTo(cx, cy)
-          c.lineTo(cx, cy + sy * t)
-        }
-      c.stroke()
+      c.strokeStyle = CHART_ARMED
+      c.globalAlpha = 0.4 * warm
+      c.setLineDash([3, 4])
+      c.strokeRect(Math.round(px) + 0.5, Math.round(py) + 0.5, Math.round(rw), Math.round(rh))
+      c.setLineDash([])
       c.globalAlpha = 1
-      // and what it is worth, once, so release and berth have a size beside
-      // them rather than being two numbers in a form
-      c.font = TINY
-      say(`${p.w}×${p.h}`, px + rw + 6, py + rh + 4, 'rgba(240,200,105,0.75)')
     }
 
     /* THE MARKS THE MAP ITSELF CARRIES, which is the thing a berth is aimed at.
@@ -589,15 +795,31 @@ function paint(c: CanvasRenderingContext2D, size: { w: number; h: number }, sc: 
         c.beginPath()
         c.arc(ax, ay, hot ? 6 : 3.6, 0, Math.PI * 2)
         c.lineWidth = 3
-        c.strokeStyle = 'rgba(7,11,17,0.9)'
+        c.strokeStyle = PLATE
         c.stroke()
         c.lineWidth = hot ? 2 : 1.4
-        c.strokeStyle = hot ? '#f0c869' : ink
+        c.strokeStyle = hot ? CHART_ARMED : ink
         c.stroke()
         c.lineWidth = 1
+        /* AN ANCHOR'S NAME, ON A PLATE, AND ONLY WHERE ONE CAN BE READ.
+         *
+         * "Panther's Maw" was 8.5 px of salmon stroke-and-fill laid straight on
+         * a lit volcano, which is the single worst-off word on this page. It
+         * gets the same plate every other name gets, at a size that follows the
+         * island, and it gives way when something is already there: nine doors
+         * on one map is nine labels that would otherwise stack into a block.
+         *
+         * ABOVE THE MARK AND CENTRED ON IT, which is where the editor hangs the
+         * same word for the same anchor. It used to sit off the right of the
+         * dot here and above it there, so the one mark a person follows from
+         * the tool that made it to the chart that places it moved as they
+         * crossed. Two surfaces, one habit. */
         if (named || hot) {
-          c.font = TINY
-          say(a.label || a.name, ax + 8, ay + 3, hot ? '#f0c869' : ink)
+          c.font = LABEL(nameAt(rw))
+          // rimmed in the mark's own ink whether it is hot or not, which is
+          // what the editor draws. A rim only on hover meant a door was a
+          // bordered pill in one tool and a bare one in the other.
+          plate(displayName(a).text, ax, ay - 8, hot ? CHART_ARMED : ink, { rim: hot ? CHART_ARMED : ink, keep: hot, mid: true })
         }
       }
     }
@@ -610,25 +832,42 @@ function paint(c: CanvasRenderingContext2D, size: { w: number; h: number }, sc: 
      * transparent margin along its top, so on an island nobody is touching this
      * was a faint diagonal that began in open water well off the coast. The
      * diamond at the far end already says where the berth is. */
-    for (const k of lit ? [p.approach, p.berth] : []) {
+    for (const [what, k] of lit ? ([['approach', p.approach], ['berth', p.berth]] as const) : []) {
       if (!k) continue
+      /* THE LEADER IS AMBER, AND IT WAS THE STATE TINT.
+       * The hub is `available`, whose ink is #4f9b84, so the one line the tool
+       * draws to say "this mooring belongs to that island" came out teal and ran
+       * straight across the painting while the diamond at its far end, the grip,
+       * the footprint and the outline were all amber. A leader is the tool
+       * talking about the selection, so it takes the selection's hue. */
       c.beginPath()
       c.moveTo(px, py)
       c.lineTo(X(k.x), Y(k.y))
-      c.strokeStyle = tint
-      c.globalAlpha = 0.35
+      c.strokeStyle = CHART_TOOL
+      c.globalAlpha = on ? 0.55 : 0.3
+      c.setLineDash([2, 3])
       c.stroke()
+      c.setLineDash([])
       c.globalAlpha = 1
-      /* HOW LONG THE TETHER IS, ON THE TETHER.
-       * checkWorld measures a berth against the release radius and both are in
-       * world units, and there was nothing anywhere on this page saying what a
-       * world unit looks like. The number on the line it belongs to costs one
-       * label and answers it where you are already looking. */
-      if (on) {
+      /* HOW LONG THE TETHER IS, WITH A WORD AND A UNIT ON IT.
+       * It read "152". Not what it measured, not from where, not in what. Both
+       * bare integers on this chart came from the same habit of drawing the
+       * number and assuming the picture said the rest. checkWorld measures a
+       * berth against the discovery radius and both are in world units, so the
+       * label says which mooring and says "u". */
+      // and only where the island is big enough to be worth measuring against.
+      // At the floor the tether is four pixels long and this plate is fifty.
+      if (on && rw >= GRIP_DROP) {
         c.font = TINY
         // two thirds of the way out rather than halfway, because halfway on a
         // short tether is on top of the island the tether starts at
-        say(String(Math.round(Math.hypot(k.x - p.x, k.y - p.y))), px + (X(k.x) - px) * 0.66 + 5, py + (Y(k.y) - py) * 0.66 - 3, 'rgba(216,227,238,0.5)')
+        plate(
+          `${what} ${Math.round(Math.hypot(k.x - p.x, k.y - p.y))} u`,
+          px + (X(k.x) - px) * 0.66,
+          py + (Y(k.y) - py) * 0.66,
+          CHART_ARMED,
+          { mid: true },
+        )
       }
     }
     if (p.approach) {
@@ -637,10 +876,10 @@ function paint(c: CanvasRenderingContext2D, size: { w: number; h: number }, sc: 
       c.beginPath()
       c.arc(ax, ay, 5, 0, Math.PI * 2)
       c.lineWidth = 3.4
-      c.strokeStyle = 'rgba(7,11,17,0.9)'
+      c.strokeStyle = PLATE
       c.stroke()
       c.lineWidth = 1.4
-      c.strokeStyle = '#8fa6bb'
+      c.strokeStyle = CHART_TOOL
       c.stroke()
       c.lineWidth = 1
     }
@@ -660,10 +899,10 @@ function paint(c: CanvasRenderingContext2D, size: { w: number; h: number }, sc: 
         c.moveTo(bx, by)
         c.lineTo(bx + dx * 15, by + dy * 15)
         c.lineWidth = 4
-        c.strokeStyle = 'rgba(7,11,17,0.9)'
+        c.strokeStyle = PLATE
         c.stroke()
         c.lineWidth = 1.6
-        c.strokeStyle = '#f0c869'
+        c.strokeStyle = CHART_ARMED
         c.stroke()
         c.lineWidth = 1
       }
@@ -675,10 +914,10 @@ function paint(c: CanvasRenderingContext2D, size: { w: number; h: number }, sc: 
       c.closePath()
       c.lineWidth = 3.4
       c.lineJoin = 'round'
-      c.strokeStyle = 'rgba(7,11,17,0.9)'
+      c.strokeStyle = PLATE
       c.stroke()
       c.lineWidth = 1
-      c.fillStyle = '#f0c869'
+      c.fillStyle = CHART_ARMED
       c.fill()
     }
 
@@ -690,35 +929,87 @@ function paint(c: CanvasRenderingContext2D, size: { w: number; h: number }, sc: 
      * One line, not two. The slug went under the title on every island at every
      * zoom, which is a second row of type on a chart whose whole job is to be
      * looked at; it is in the panel and the roster already. */
-    const title = p.title || p.name
-    const above = seen.py - 7 > 22
-    const ly = above ? seen.py - 7 : seen.py + seen.rh + 14
-    // the state, as a chip, once the footprint stopped being a slab of state
-    // ink you could read it off. Only where a painting took that job away.
-    const chip = drawn ? 11 : 0
-    if (chip) {
-      c.fillStyle = 'rgba(7,11,17,0.9)'
-      c.fillRect(seen.px - 1, ly - 9, 9, 9)
-      c.fillStyle = tint
-      c.fillRect(seen.px, ly - 8, 7, 7)
-    }
-    c.font = LABEL
-    say(title, seen.px + chip, ly, on ? '#f0c869' : '#d8e3ee')
-
-    /* THE CORNER YOU PULL, drawn where under() looks for it.
+    /* the words drawn beside the island. `p.title || p.name` fell through to
+       the raw identifier and painted `the_hub` across the chart; displayName
+       unpacks it into words instead, and it is the same call the roster in the
+       rail makes, so the label on the water and the row in the panel can never
+       disagree about what a place is called. */
+    const title = displayName(p, 'unnamed').text
+    /* AND IT IS DROPPED WHEN THE ISLAND CANNOT CARRY IT.
      *
-     * It was a flat 8px square with no rim, on a painting, at the one corner
-     * where the coast usually is, and the test that answered it used a raw
-     * footprint the drawing had already floored. Same reader, same size, and a
-     * dark rim so it survives whatever colour it lands on. */
-    if (on) {
+     * At the zoom floor the hub is ten screen pixels across and "The Hub" at a
+     * flat 11 px was fifty, so the caption was five times the size of the thing
+     * it captioned and the chart read as a page of labels with specks under
+     * them. Under LABEL_DROP only the island under the hand is named, which is
+     * the honest answer at that zoom and is also why two labels can never
+     * stack out there. */
+    if (rw >= LABEL_DROP || lit) {
+      const fs = nameAt(rw)
+      c.font = LABEL(fs)
+      // the state, as a chip, once the footprint stopped being a slab of state
+      // ink you could read it off. Only where a painting took that job away.
+      const chip = drawn ? fs : 0
+      const above = seen.py - 7 > 22
+      const ly = above ? seen.py - 7 : seen.py + seen.rh + fs + 4
+      // above first, then below, then give up. A name in the wrong place is
+      // recoverable by moving the chart; two names on top of each other is not.
+      const put =
+        plate(title, seen.px + chip, ly, on ? CHART_ARMED : CHART_INK, { rim: on ? CHART_ARMED : undefined, keep: on }) ||
+        plate(title, seen.px + chip, seen.py + seen.rh + fs + 4, on ? CHART_ARMED : CHART_INK)
+      if (put && chip) {
+        const cy = laid[laid.length - 1].y
+        c.fillStyle = tint
+        c.fillRect(seen.px - 1, cy + 3, fs - 5, fs - 5)
+      }
+    }
+
+    /* THE CORNER YOU PULL, ON THE CORNER OF THE LINE YOU CAN SEE.
+     *
+     * It used to be drawn at the raster's corner while the selection outline
+     * was drawn round the paint, and the two diverge with zoom: 16 px apart at
+     * 2.6x, 103 px at 17x. So the square sat in open water below the island,
+     * the corner of the outline answered a press by MOVING the place, and the
+     * band that resized ran off the coast into the sea.
+     *
+     * gripOf is the only thing that knows where this is, and under() asks the
+     * same function, so the picture and the hit test cannot drift again.
+     *
+     * It is an outlined square with a corner mark in it rather than a filled
+     * amber block, because the block was the loudest thing on the selection and
+     * a handle is the quietest thing you are meant to notice.
+     *
+     * AND IT IS NOT DRAWN ON AN ISLAND SMALLER THAN THE HANDLE. under() asks
+     * the same question before it answers a press, so an island out at the zoom
+     * floor is moved and never resized, which is the only thing a ten pixel
+     * footprint can honestly offer. */
+    if (on && rw >= GRIP_DROP) {
+      const { gx, gy } = gripOf(p, fit, sk)
       const g = GRIP - 1
-      c.fillStyle = 'rgba(7,11,17,0.85)'
-      c.fillRect(px + rw - g, py + rh - g, g * 2, g * 2)
-      c.fillStyle = '#f0c869'
-      c.globalAlpha = 0.35 + 0.65 * warm
-      c.fillRect(px + rw - g + 2, py + rh - g + 2, g * 2 - 4, g * 2 - 4)
+      c.fillStyle = PLATE
+      c.fillRect(gx - g, gy - g, g * 2, g * 2)
+      c.globalAlpha = 0.4 + 0.6 * warm
+      c.strokeStyle = CHART_ARMED
+      c.strokeRect(gx - g + 0.5, gy - g + 0.5, g * 2 - 1, g * 2 - 1)
+      c.beginPath()
+      c.moveTo(gx - 3, gy + 3)
+      c.lineTo(gx + 3, gy + 3)
+      c.lineTo(gx + 3, gy - 3)
+      c.stroke()
       c.globalAlpha = 1
+      /* WHAT THE FOOTPRINT IS WORTH, WITH ITS UNIT.
+       * It read "64×60" on the pixel art, which is a pair of integers in an
+       * app whose other integers are pixels, world units and radii. Beside the
+       * handle, because the only time this is on screen is while somebody is
+       * pulling the handle and that is where they are looking.
+       *
+       * FLIPPED TO THE OTHER SIDE WHEN IT WOULD RUN OFF THE STAGE. Drag an
+       * island toward the rail and the reading of the size you are dragging it
+       * to went under the panel, which is the one moment it is needed. */
+      c.font = TINY
+      const worth = `${p.w} × ${p.h} u`
+      const wide = c.measureText(worth).width + 8
+      const right = gx + GRIP + 3
+      plate(worth, right + wide > size.w ? gx - GRIP - 3 - wide : right, gy + GRIP + 5, CHART_ARMED, { keep: true })
     }
   }
 
@@ -728,62 +1019,123 @@ function paint(c: CanvasRenderingContext2D, size: { w: number; h: number }, sc: 
   // and the island's name is a button nobody would press twice.
   for (let i = 0; i < doc.places.length; i++) rig(i)
 
+  /* THE FREE-STANDING MARKS, which had no picture at all.
+   *
+   * A waypoint belongs to no island, so nothing in the two passes above ever
+   * drew one: they were saved, validated, namespaced against every island, and
+   * invisible. A ring with a bar through it, because it is neither a berth,
+   * which is a diamond, nor an anchor on a painting, which is a dot. */
+  for (let i = 0; i < (doc.marks || []).length; i++) {
+    const k = (doc.marks as WorldMark[])[i]
+    const mx = X(k.x)
+    const my = Y(k.y)
+    const on = sel?.kind === 'mark' && sel.i === i
+    const lit = on || (hover?.kind === 'mark' && hover.i === i)
+    if (k.r) {
+      c.beginPath()
+      c.arc(mx, my, k.r * fit.s, 0, Math.PI * 2)
+      c.strokeStyle = on ? CHART_ARMED : CHART_MARK
+      c.globalAlpha = lit ? 0.45 : 0.2
+      c.setLineDash([3, 5])
+      c.stroke()
+      c.setLineDash([])
+      c.globalAlpha = 1
+    }
+    c.beginPath()
+    c.arc(mx, my, 5.5, 0, Math.PI * 2)
+    c.moveTo(mx - 8, my)
+    c.lineTo(mx + 8, my)
+    c.lineWidth = 3.4
+    c.strokeStyle = PLATE
+    c.stroke()
+    c.lineWidth = on ? 2 : 1.4
+    c.strokeStyle = on ? CHART_ARMED : CHART_MARK
+    c.stroke()
+    c.lineWidth = 1
+    // the words, never the identifier. Ash asked for waypoints to carry labels
+    // and this is the surface that has to honour it. Above the ring and centred
+    // on it, the same place an anchor's name and a route's name sit, so a point
+    // on the water is captioned the way a point on a painting is.
+    c.font = LABEL(on ? LABEL_MAX - 3 : LABEL_MIN + 1)
+    plate(displayName(k, 'unnamed mark').text, mx, my - 10, on ? CHART_ARMED : CHART_MARK, { rim: on ? CHART_ARMED : CHART_MARK, keep: lit, mid: true })
+  }
+
   if (band) {
     c.setLineDash([4, 3])
-    c.strokeStyle = '#4f9b84'
+    c.strokeStyle = CHART_TOOL
     c.strokeRect(X(Math.min(band.x0, band.x1)), Y(Math.min(band.y0, band.y1)), Math.abs(band.x1 - band.x0) * fit.s, Math.abs(band.y1 - band.y0) * fit.s)
     c.setLineDash([])
   }
 
-  // the edge of the world last, over everything, so an island hanging off it
-  // is unmistakable
-  c.strokeStyle = 'rgba(212,165,60,0.45)'
+  /* the edge of the world last, over everything, so an island hanging off it
+   * is unmistakable. In --ink-edge and not in gold: gold is the tool speaking
+   * about the thing you have armed, and where the water stops is a fact of the
+   * document that is true whether anything is selected or not. */
+  c.strokeStyle = CHART_EDGE
+  c.lineWidth = 1
   c.strokeRect(X(0) + 0.5, Y(0) + 0.5, doc.w * fit.s, doc.h * fit.s)
   c.font = MONO
-  say('0,0', X(0), Y(0) - 6, '#6f7885')
+  say('0,0', X(0), Y(0) - 6, CHART_QUIET)
   const end = `${doc.w},${doc.h}`
-  say(end, X(doc.w) - c.measureText(end).width, Y(doc.h) + 14, '#6f7885')
+  say(end, X(doc.w) - c.measureText(end).width, Y(doc.h) + 14, CHART_QUIET)
 
-  /* THE RULER, WHICH IS ONE GRATICULE SQUARE WIDE.
+  /* THE RULER, WHICH IS ONE GRATICULE SQUARE WIDE, AND IT SAYS SO.
    *
-   * Release is 160 and a berth sits a few dozen units off a jetty, and there
-   * was nothing anywhere on this page that said how far that is. The bar is
-   * exactly one grid square, so the grid becomes the ruler repeated and a
-   * distance can be counted off it instead of guessed. */
+   * It was a hairline with a bare "32" beside it, and "32" is not a length: it
+   * is a number next to a line, in a page that also quotes radii, pixel sizes
+   * and footprints. Discovery is 520 and a berth sits a few dozen units off a
+   * jetty, and there was nothing anywhere saying how far that is on screen.
+   *
+   * A ruler now: end ticks, a mid tick, the halved value under the mid, the
+   * whole value under the end, and the word. One graticule square wide, so the
+   * grid IS the ruler repeated and a distance is counted rather than guessed. */
   const rx = 16
-  const ry = size.h - 16
+  const ry = size.h - 24
   const rl = step * fit.s
-  c.strokeStyle = 'rgba(216,227,238,0.32)'
+  c.strokeStyle = CHART_QUIET
   c.lineWidth = 1
   c.beginPath()
-  c.moveTo(rx + 0.5, ry - 5)
+  c.moveTo(rx + 0.5, ry - 6)
   c.lineTo(rx + 0.5, ry + 0.5)
   c.lineTo(rx + rl + 0.5, ry + 0.5)
-  c.lineTo(rx + rl + 0.5, ry - 5)
+  c.lineTo(rx + rl + 0.5, ry - 6)
+  c.moveTo(rx + rl / 2 + 0.5, ry + 0.5)
+  c.lineTo(rx + rl / 2 + 0.5, ry - 4)
   c.stroke()
   c.font = TINY
-  say(String(step), rx + rl + 7, ry + 3, '#6f7885')
+  c.fillStyle = CHART_QUIET
+  c.fillText('0', rx - 1, ry + 12)
+  c.fillText(String(step / 2), rx + rl / 2 - 5, ry + 12)
+  c.fillText(`${step} world units`, rx + rl + 7, ry + 3)
 }
 
 /* What is under the pointer, tested in the order things are drawn on top of
  * each other: the size handle of the selected island, then its marks, then the
  * islands newest first, then the water regions. A region is last because it is
  * the biggest thing on the chart and would otherwise swallow every click. */
-function under(doc: Doc, fit: Fit, sel: Sel, mx: number, my: number): Hit {
+function under(doc: Doc, fit: Fit, sel: Sel, mx: number, my: number, skin: (p: Place) => Skin): Hit {
   const X = (x: number) => fit.ox + x * fit.s
   const Y = (y: number) => fit.oy + y * fit.s
   const near = (x: number, y: number, r: number) => Math.hypot(mx - X(x), my - Y(y)) <= r
 
-  /* THE CORNER, THROUGH THE SAME FLOOR THE DRAWING USES.
-   * This read p.w * fit.s raw while paint floored the rectangle at three
-   * pixels, so zoomed out the handle you could see and the spot that answered
-   * a press were in different places and the grab silently became a pan. */
+  /* THE CORNER, THROUGH THE FUNCTION THAT DRAWS IT.
+   * This built its own corner out of the raw footprint while paint drew the
+   * square on the painted coast, so the amber block you aimed at was 16 px
+   * from the band that answered at 2.6x and 103 px from it at 17x. One
+   * reader, so a press and a picture cannot disagree about where a handle is. */
   const chosen = sel?.kind === 'place' ? doc.places[sel.i] : undefined
-  if (chosen && sel?.kind === 'place') {
-    const hx = X(chosen.x) + Math.max(3, chosen.w * fit.s)
-    const hy = Y(chosen.y) + Math.max(3, chosen.h * fit.s)
-    if (Math.abs(mx - hx) <= GRIP && Math.abs(my - hy) <= GRIP) return { kind: 'size', i: sel.i }
+  // and only while there is a handle drawn. rig() drops it under GRIP_DROP,
+  // where the square would be wider than the island, and a hot spot with no
+  // picture under it is the same lie the handle used to tell from 103 px away.
+  if (chosen && sel?.kind === 'place' && chosen.w * fit.s >= GRIP_DROP) {
+    const { gx, gy } = gripOf(chosen, fit, skin(chosen))
+    if (Math.abs(mx - gx) <= GRIP && Math.abs(my - gy) <= GRIP) return { kind: 'size', i: sel.i }
   }
+  // a free-standing mark is a point and nothing else, so it sits with the other
+  // points rather than with the islands. Ahead of them, because it is drawn
+  // last and a waypoint dropped over an island has to stay reachable.
+  const list = doc.marks || []
+  for (let i = list.length - 1; i >= 0; i--) if (near(list[i].x, list[i].y, 10)) return { kind: 'mark', i }
   for (let i = doc.places.length - 1; i >= 0; i--) {
     const p = doc.places[i]
     if (p.berth && near(p.berth.x, p.berth.y, 9)) return { kind: 'berth', i }
@@ -815,7 +1167,18 @@ export default function World() {
   const [tool, setTool] = useState<Tool>('move')
   const [pick, setPick] = useState<Pick>('')
   const [hover, setHover] = useState<Hit>(null)
+  /* WHAT IS ACTUALLY IN THE HAND, as state and not as the ref the drag lives
+   * in. The ref cannot make the cursor change, because writing a ref does not
+   * render, so the shape was frozen for the whole of a press. */
+  const [hand, setHand] = useState<'' | 'pan' | 'place' | 'berth' | 'approach' | 'size' | 'mark'>('')
   const [band, setBand] = useState<Band>(null)
+  /* WHERE THE ARMED TOOL'S ONE LINE IS DRAWN, which used to be the top centre of
+   * the stage: measured 500 px from the button that armed it and 500 px from
+   * the water the click has to land on, sitting on top of the zoom cluster on
+   * the way. It rides just off the pointer instead. Only written while a tool
+   * is armed, so the ordinary case of moving a pointer across the chart costs
+   * no renders at all. */
+  const [nib, setNib] = useState({ x: 14, y: 12 })
   const [dirty, setDirty] = useState(false)
   const [busy, setBusy] = useState(false)
   const [problems, setProblems] = useState<string[]>([])
@@ -835,7 +1198,16 @@ export default function World() {
   const box = useRef<HTMLDivElement>(null)
   const cv = useRef<HTMLCanvasElement>(null)
   const art = useRef<Art>(new Map())
-  const drag = useRef<{ kind: 'place' | 'berth' | 'approach' | 'size'; i: number; dx: number; dy: number; mx: number; my: number; w: number; h: number } | null>(null)
+  const drag = useRef<{
+    kind: 'place' | 'berth' | 'approach' | 'size' | 'mark'
+    i: number
+    dx: number
+    dy: number
+    mx: number
+    my: number
+    w: number
+    h: number
+  } | null>(null)
   const pan = useRef<{ mx: number; my: number; ox: number; oy: number; far: number } | null>(null)
   const bandFrom = useRef<{ x: number; y: number } | null>(null)
   // the documents to go back to, newest last. Held in a ref because nothing
@@ -844,6 +1216,14 @@ export default function World() {
   const live = useRef<Doc | null>(null)
   live.current = doc
   const nudged = useRef(0)
+  // the row the server last agreed to. Undo compares against this rather than
+  // leaving the dirty flag stuck up, and it is set from what came BACK from a
+  // save so it is the server's copy and not a hopeful one.
+  const saved = useRef('')
+  // the inspector's own scroller, so a fresh selection starts at the name.
+  // Not called `side`, which is the footprint clamp this file already has and
+  // which the resize handle calls four lines into a drag.
+  const panel = useRef<HTMLElement>(null)
 
   /* THE PAGE IS ONE ACCOUNT'S, AND IT SAYS SO RATHER THAN BREAKING.
    *
@@ -867,7 +1247,9 @@ export default function World() {
     fetch('/api/world')
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(`the ocean would not load (${r.status})`))))
       .then((j: Doc & { states?: string[]; seaKinds?: string[] }) => {
-        setDoc({ w: j.w, h: j.h, places: j.places || [], regions: j.regions || [], marks: j.marks, home: j.home || '' })
+        const fresh: Doc = { w: j.w, h: j.h, places: j.places || [], regions: j.regions || [], marks: j.marks, home: j.home || '' }
+        saved.current = stamp(fresh)
+        setDoc(fresh)
         setStates(j.states || [])
         setKinds(j.seaKinds || [])
       })
@@ -889,6 +1271,47 @@ export default function World() {
       .then((j: { maps?: MapRow[] }) => setReg(new Map((j.maps || []).map((m) => [m.slug, m]))))
       .catch(() => setReg(new Map()))
   }, [])
+
+  /* THE FOOTPRINTS ARE PUT RIGHT ONCE, AT THE LOAD, AND IT IS NOT AN EDIT.
+   *
+   * Every place used to be born 64x64 and the hub is 688x640, so the document
+   * on the server holds squares for paintings that are not square and every
+   * anchor on them lands a few percent off. The correction has to happen: a
+   * berth placed against a squashed jetty is placed against nothing.
+   *
+   * WHERE it happened was the bug. The inspector did it on mount, so opening an
+   * island to read its name rewrote its height, lit the save button, and made
+   * the undo button unable to reach a clean document, because stepping back put
+   * the panel straight back on screen to do it again. Measured: a fresh /world
+   * said "saved", one click on the roster said "save".
+   *
+   * So it runs here, over the whole document, on the frame the registry lands,
+   * and the result is folded into the saved stamp. Nothing on screen changed by
+   * the author, so nothing claims it did; the corrected height rides out with
+   * the next real save. It is idempotent, so a load that finds the document
+   * already square with its paintings does nothing at all. */
+  const squared = useRef(false)
+  useEffect(() => {
+    if (squared.current || !doc || !reg.size) return
+    squared.current = true
+    let moved = false
+    const places = doc.places.map((p) => {
+      const m = p.map ? reg.get(p.map) : undefined
+      if (!m || m.w <= 0 || m.h <= 0) return p
+      const want = side((p.w * m.h) / m.w)
+      if (want === p.h) return p
+      moved = true
+      return { ...p, h: want }
+    })
+    if (!moved) return
+    const put = { ...doc, places }
+    // and only folded in while the document still matches what the server sent.
+    // If the registry is slow enough that somebody has already dragged an
+    // island, re-stamping here would swallow their change and the save button
+    // would go quiet with work in it.
+    if (stamp(doc) === saved.current) saved.current = stamp(put)
+    setDoc(put)
+  }, [doc, reg])
 
   /* The paintings, one fetch each, kept by slug AND version so a republish is
    * a different picture rather than a stale one held forever. A load failure is
@@ -1027,9 +1450,36 @@ export default function World() {
       const f = want.current || here.current || base
       const s = clamp(f.s * k, base.s, MAX_S)
       if (Math.abs(s - f.s) < 1e-9) return
+      /* AT THE FLOOR, THE OCEAN GOES BACK IN THE MIDDLE.
+       *
+       * Anchoring the zoom on a point is right everywhere except at the very
+       * bottom, where there is nothing left to zoom and the anchor only slides
+       * the water. Pan a long way out and press minus and the whole 4096 square
+       * ends up off the side of the stage with its bottom cut off, which is a
+       * chart of nothing that still says 1:6. The floor means "the whole ocean",
+       * so it draws the whole ocean. */
+      if (s <= base.s * 1.0001) return glide(base)
       glide({ s, ox: mx - (mx - f.ox) * (s / f.s), oy: my - (my - f.oy) * (s / f.s) })
     },
     [base, glide],
+  )
+
+  /* ONE PRESS IS ONE RUNG, and the rungs are named numbers.
+   *
+   * A fixed factor per press walked the readout 1.6, 2.6, 4.1, 6.6 and never
+   * landed on 2, 4 or 8, so the two most discoverable controls on the chart
+   * could not reach a round zoom at all. The ladder is clamped to what this
+   * ocean on this stage can actually show, and the floor is always its first
+   * rung so pulling all the way back is still one press away. */
+  const rung = useCallback(
+    (dir: 1 | -1, mx: number, my: number) => {
+      const f = want.current || here.current || base
+      const rungs = [base.s, ...STOPS.filter((v) => v > base.s * 1.02 && v <= MAX_S)]
+      const next = dir > 0 ? rungs.find((v) => v > f.s * 1.02) : [...rungs].reverse().find((v) => v < f.s * 0.98)
+      if (next === undefined) return
+      zoomAt(mx, my, next / f.s)
+    },
+    [base, zoomAt],
   )
 
   /* A NATIVE LISTENER, because React binds wheel passively at the root and
@@ -1068,6 +1518,23 @@ export default function World() {
     glide({ s, ox: size.w / 2 - (b.x + b.w / 2) * s, oy: size.h / 2 - (b.y + b.h / 2) * s })
   }, [doc, size, base, glide])
 
+  /* AND THE WHOLE OCEAN, WHICH NOTHING COULD ASK FOR.
+   * `base` was the zoom floor and the fallback for an empty chart and was
+   * reachable no other way, so the only view of the water the header names was
+   * arrived at by pressing minus until it stopped. */
+  const frameSea = useCallback(() => glide(base), [base, glide])
+
+  /* THE PANEL STARTS AT THE TOP OF WHATEVER WAS JUST SELECTED.
+   *
+   * It kept the scroll from the last island, so picking a new one landed you
+   * somewhere down in its berth fields with the name off the top, and the name
+   * is the one field a place born a second ago actually needs. Keyed on which
+   * row is selected rather than on the row's contents, so typing in a field
+   * does not throw the panel back to the top under your hands. */
+  useEffect(() => {
+    if (sel) panel.current?.scrollTo({ top: 0 })
+  }, [sel?.kind, sel?.i])
+
   // once, when the water first arrives with something on it
   const opened = useRef(false)
   useEffect(() => {
@@ -1078,12 +1545,21 @@ export default function World() {
 
   const place = doc && sel?.kind === 'place' ? doc.places[sel.i] : null
   const region = doc && sel?.kind === 'region' ? doc.regions[sel.i] : null
+  const spot = doc && sel?.kind === 'mark' ? (doc.marks || [])[sel.i] : null
   const sheet = place && place.map ? reg.get(place.map) : undefined
 
   // fill the stage with the selected island and everything tied to it, which is
   // the one move that gets you from the whole ocean to a jetty
   const frame = useCallback(() => {
-    if (!place || !size.w) return
+    if (!size.w) return
+    // a mark has no footprint, so what is framed round it is its own reach: the
+    // radius that decides a hull has arrived, with room either side of it
+    if (spot) {
+      const r = Math.max(24, (spot.r || 40) * 3)
+      const s = clamp(Math.min((size.w - PAD * 3) / (r * 2), (size.h - PAD * 3) / (r * 2)), base.s, MAX_S)
+      return glide({ s, ox: size.w / 2 - spot.x * s, oy: size.h / 2 - spot.y * s })
+    }
+    if (!place) return
     let x0 = place.x
     let y0 = place.y
     let x1 = place.x + place.w
@@ -1099,7 +1575,7 @@ export default function World() {
     const mh = Math.max(8, y1 - y0)
     const s = clamp(Math.min((size.w - PAD * 3) / mw, (size.h - PAD * 3) / mh), base.s, MAX_S)
     glide({ s, ox: size.w / 2 - (x0 + mw / 2) * s, oy: size.h / 2 - (y0 + mh / 2) * s })
-  }, [place, size, base.s, glide])
+  }, [place, spot, size, base.s, glide])
 
   /* the screen point the ± buttons pull toward: the selected island if there is
    * one, otherwise the middle of everything placed, and only the bare middle of
@@ -1134,20 +1610,49 @@ export default function World() {
     setDepth(past.current.length)
   }, [])
 
+  /* A STEP BACK KEEPS WHAT YOU WERE WORKING ON.
+   *
+   * This dropped the selection, so undoing one nudge shut the inspector and
+   * threw away the island being nudged, and the next thing an author did was
+   * find it again. Only an index the restored document no longer has is let
+   * go, which is the one case where holding on would point the panel at
+   * nothing.
+   *
+   * And the dirty flag is answered rather than raised: stepping back to the
+   * document the server holds means there is nothing to send. */
   const undo = useCallback(() => {
     const back = past.current.pop()
     setDepth(past.current.length)
     if (!back) return
     setDoc(back)
-    setSel(null)
+    setSel((s) => {
+      if (!s) return s
+      const len = s.kind === 'place' ? back.places.length : s.kind === 'region' ? back.regions.length : (back.marks || []).length
+      return s.i < len ? s : null
+    })
     setSure(false)
-    setDirty(true)
+    setDirty(stamp(back) !== saved.current)
   }, [])
 
   const edit = useCallback((i: number, patch: Partial<Place>) => {
     setDoc((d) => (d ? { ...d, places: d.places.map((p, k) => (k === i ? { ...p, ...patch } : p)) } : d))
     setDirty(true)
   }, [])
+
+  const editMark = useCallback((i: number, patch: Partial<WorldMark>) => {
+    setDoc((d) => (d ? { ...d, marks: (d.marks || []).map((m, k) => (k === i ? { ...m, ...patch } : m)) } : d))
+    setDirty(true)
+  }, [])
+  const dropMark = useCallback(
+    (i: number) => {
+      remember()
+      setDoc((d) => (d ? { ...d, marks: (d.marks || []).filter((_, k) => k !== i) } : d))
+      setSel(null)
+      setSure(false)
+      setDirty(true)
+    },
+    [remember],
+  )
 
   /* AN ISLAND CARRIES ITS BERTH AND ITS APPROACH WITH IT.
    *
@@ -1179,6 +1684,11 @@ export default function World() {
     })
     setDirty(true)
   }, [])
+
+  /* THE SAME READING OF THE PICTURE THE CHART DRAWS WITH, handed to every hit
+   * test. skinOf caches by slug and version, so this is a map lookup and not
+   * an alpha scan per pointer move. */
+  const skin = useCallback((p: Place) => skinAt(p, reg, art.current), [reg])
 
   const at = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const r = e.currentTarget.getBoundingClientRect()
@@ -1225,6 +1735,7 @@ export default function World() {
     // other canvas anybody has used
     if (e.button === 1) {
       pan.current = { mx, my, ox: fit.ox, oy: fit.oy, far: 0 }
+      setHand('pan')
       return
     }
 
@@ -1244,15 +1755,22 @@ export default function World() {
 
     if (tool === 'place') {
       const name = freeName('island', doc.places.map((p) => p.name))
+      // one size, every time, and the painting bends the short side later.
+      // Born 64x64 it depended on nothing and looked like nothing.
+      const born = bornAs()
       const made: Place = {
         name,
         map: '',
         title: '',
-        x: clamp(Math.round(w.x), 0, doc.w),
-        y: clamp(Math.round(w.y), 0, doc.h),
-        // one size, every time, and the painting bends the short side later.
-        // Born 64x64 it depended on nothing and looked like nothing.
-        ...bornAs(),
+        /* THE CLICK IS THE MIDDLE OF THE ISLAND, NOT ITS TOP LEFT CORNER.
+         * x,y is the corner because that is where a raster starts and where
+         * every distance is measured from, but nobody aiming at open water is
+         * thinking about a corner. Anchored there, a click low or right on the
+         * stage put most of the new island off the edge of the view and the
+         * first thing an author did was drag it back. */
+        x: clamp(Math.round(w.x - born.w / 2), 0, doc.w),
+        y: clamp(Math.round(w.y - born.h / 2), 0, doc.h),
+        ...born,
         // a slot with no map behind it is a rumour and nothing else reads
         // honestly, which is what checkWorld warns about
         state: 'rumour',
@@ -1276,17 +1794,56 @@ export default function World() {
       return
     }
 
-    const hit = under(doc, fit, sel, mx, my)
+    /* A WAYPOINT IS A PRESS AND NOTHING ELSE.
+     *
+     * It has no footprint to size and no painting to line up with, so there is
+     * nothing to drag out. The name goes in one namespace with every island and
+     * every stretch of water, because a grape calls sail_to("north_passage")
+     * and never says which list to look in, so the free name is checked against
+     * all three or checkWorld refuses the save with a duplicate. */
+    if (tool === 'mark') {
+      const taken = [...doc.places.map((p) => p.name), ...doc.regions.map((r) => r.name), ...(doc.marks || []).map((k) => k.name)]
+      const made: WorldMark = {
+        name: freeName('waypoint', taken),
+        kind: 'waypoint',
+        x: clamp(Math.round(w.x), 0, doc.w),
+        y: clamp(Math.round(w.y), 0, doc.h),
+        // a label from the start, so a mark never reaches a player as
+        // `waypoint_1`. Ash, 2026-08-29: waypoints get labels too.
+        label: displayName({ name: freeName('waypoint', taken) }).text,
+        // the same order of size a berth sits at off a jetty, so arriving is not
+        // an exact-pixel test on a hull that moves in floats
+        r: 40,
+      }
+      remember()
+      setDoc({ ...doc, marks: [...(doc.marks || []), made] })
+      setSel({ kind: 'mark', i: (doc.marks || []).length })
+      setTool('move')
+      setDirty(true)
+      return
+    }
+
+    const hit = under(doc, fit, sel, mx, my, skin)
     if (!hit) {
       /* EMPTY WATER DRAGS THE CHART, and only DESELECTS if the pointer did not
        * really move. Zoomed in, panning is the thing you do most, and reaching
        * for a scrollbar that is not there was the first thing that made this
        * page feel broken. */
       pan.current = { mx, my, ox: fit.ox, oy: fit.oy, far: 0 }
+      setHand('pan')
       return
     }
     if (hit.kind === 'region') {
       setSel({ kind: 'region', i: hit.i })
+      return
+    }
+    if (hit.kind === 'mark') {
+      setSel({ kind: 'mark', i: hit.i })
+      setSure(false)
+      const k = (doc.marks || [])[hit.i]
+      drag.current = { kind: 'mark', i: hit.i, dx: w.x - k.x, dy: w.y - k.y, mx, my, w: 0, h: 0 }
+      setHand('mark')
+      remember()
       return
     }
     setSel({ kind: 'place', i: hit.i })
@@ -1302,6 +1859,7 @@ export default function World() {
      * than the old width plus it, and the footprint collapsed to its floor the
      * instant a corner was touched. */
     drag.current = { kind: hit.kind, i: hit.i, dx: w.x - (from?.x ?? p.x), dy: w.y - (from?.y ?? p.y), mx, my, w: p.w, h: p.h }
+    setHand(hit.kind)
     remember()
   }
 
@@ -1309,6 +1867,16 @@ export default function World() {
     if (!doc) return
     const { mx, my } = at(e)
     const w = toWorld(mx, my)
+
+    /* the armed tool's line follows the hand. Only while one is armed, so an
+     * ordinary pointer sweep across the chart still costs no state at all.
+     *
+     * Held inside the stage on both axes: down and right of the cursor is where
+     * it belongs, and near the panel edge or the bottom of the water that is
+     * off screen, which is a worse place for it than the one it came from. 230
+     * is the widest line this ever says, measured, plus its padding. */
+    if (pick || tool !== 'move')
+      setNib({ x: Math.round(clamp(mx + 16, 6, Math.max(6, size.w - 236))), y: Math.round(clamp(my + 26, 6, Math.max(6, size.h - 30))) })
 
     const pn = pan.current
     if (pn) {
@@ -1328,7 +1896,7 @@ export default function World() {
     if (!d) {
       // the same hit, held rather than replaced, or every pixel of pointer
       // movement is a new object and a full repaint of the chart
-      const h = under(doc, fit, sel, mx, my)
+      const h = under(doc, fit, sel, mx, my, skin)
       setHover((v) => (v?.kind === h?.kind && v?.i === h?.i ? v : h))
       // and the anchor the cursor would snap a berth to, lit while you decide
       const p = pick && place ? aimed(place, mx, my) : null
@@ -1340,36 +1908,58 @@ export default function World() {
     if (d.kind === 'place') shift(d.i, x, y)
     else if (d.kind === 'berth') edit(d.i, { berth: { ...doc.places[d.i].berth, x, y } as Pt })
     else if (d.kind === 'approach') edit(d.i, { approach: { x, y } })
+    else if (d.kind === 'mark') editMark(d.i, { x, y })
     else {
-      /* THE FOOTPRINT GROWS FROM WHAT IT WAS, GEARED, AND IT COULD DO NEITHER.
+      /* THE GRIP STAYS UNDER THE HAND, and the arithmetic is what puts it there.
        *
-       * The old branch put the corner wherever the pointer was, using the MOVE
-       * drag's offset to get there, so the width became the raw travel since
-       * the grab and an untouched grab set it to 1. That is the collapse. And
-       * even once it was anchored, one to one on the corner means an island
-       * doubles in the width of a thumb.
+       * The old branch geared the travel to half and divided it by the raw
+       * footprint, so a 300 px drag left the drawn corner 242 px from the
+       * cursor and the handle read as something you steered rather than
+       * something you held.
        *
-       * The delta is a fraction of the island ON SCREEN, so the same hand
-       * movement does the same thing at every zoom, and half of it lands on the
-       * size, an eighth with shift held. The floor under d.w * fit.s stops a
-       * footprint that is three pixels wide out at full extent turning every
-       * tremor into a doubling. */
+       * sk.x1 is the fraction of the footprint's screen width the drawn corner
+       * sits at, so one world unit of w carries the corner sk.x1 * fit.s
+       * pixels. Dividing the hand's travel by that is the corner tracking the
+       * cursor exactly. Dividing by the FOOTPRINT instead, which is what this
+       * did, overshoots by however much transparent margin the painting
+       * carries: a third of it on the hub. */
       const p0 = doc.places[d.i]
       const m = p0.map ? reg.get(p0.map) : undefined
+      const sk = skin(p0)
       const gain = e.shiftKey ? RESIZE_FINE : RESIZE_GAIN
-      const gx = ((mx - d.mx) / Math.max(GRIP * 2, d.w * fit.s)) * gain
-      const gy = ((my - d.my) / Math.max(GRIP * 2, d.h * fit.s)) * gain
+      // never zero, or a picture whose paint stops short of its own left edge
+      // would divide a whole drag by nothing and throw the footprint to its fence
+      const kx = Math.max(1e-3, sk.x1 * fit.s)
+      const ky = Math.max(1e-3, sk.y1 * fit.s)
+      const hx = (mx - d.mx) * gain
+      const hy = (my - d.my) * gain
       // the handle honours the same lock the inspector does, so dragging a
-      // footprint cannot quietly squash the painting inside it. Held, both
-      // axes push the one scale, or dragging straight down does nothing at all.
+      // footprint cannot quietly squash the painting inside it
       const held = lock && m && m.w > 0 && m.h > 0
-      const nw = held ? side(d.w * (1 + (gx + gy) / 2)) : side(d.w * (1 + gx))
-      const nh = held && m ? side((nw * m.h) / m.w) : side(d.h * (1 + gy))
+      let nw: number
+      let nh: number
+      if (held && m) {
+        /* HELD, THE CORNER CAN ONLY RUN ALONG ONE DIAGONAL, so the hand's
+         * travel is projected onto it. Averaging the two axes, which is what
+         * this used to do, meant a drag straight down and a drag straight
+         * right each got half of what was asked and the corner sat off the
+         * cursor in both. Projection puts it as close as the shape allows and
+         * exactly under the cursor whenever the drag runs along the diagonal. */
+        const vx = kx * d.w
+        const vy = (ky * d.w * m.h) / m.w
+        const k = (hx * vx + hy * vy) / Math.max(1e-6, vx * vx + vy * vy)
+        nw = side(d.w + d.w * k)
+        nh = side((nw * m.h) / m.w)
+      } else {
+        nw = side(d.w + hx / kx)
+        nh = side(d.h + hy / ky)
+      }
       if (nw !== p0.w || nh !== p0.h) edit(d.i, { w: nw, h: nh })
     }
   }
 
   const up = () => {
+    setHand('')
     const pn = pan.current
     if (pn) {
       // a press that went nowhere is a click on open water, which clears the
@@ -1426,7 +2016,11 @@ export default function World() {
    * that quietly loses an island is worse than a save that refuses. */
   const save = async () => {
     if (!doc || busy) return
+    // marks are in this check now, and by their own rule. isMarkName is the
+    // server's regex restated, and cleanMark drops a row that fails it exactly
+    // the way cleanPlace does, so a bad waypoint would vanish without a word.
     const illegal = [...doc.places, ...doc.regions].filter((p) => !isAnchorName(p.name)).map((p) => p.name || '(no name)')
+    illegal.push(...(doc.marks || []).filter((m) => !isMarkName(m.name)).map((m) => m.name || '(no name)'))
     if (illegal.length) {
       setProblems([`${illegal.join(', ')} cannot be a name · lower case letters, digits and underscores, starting with a letter`])
       return
@@ -1438,14 +2032,20 @@ export default function World() {
       const r = await fetch('/api/world', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ w: doc.w, h: doc.h, places: doc.places, regions: doc.regions, home: doc.home || '', ...(doc.marks === undefined ? {} : { marks: doc.marks }) }),
+        // marks always go, and they used to be sent only if the load had
+        // brought some back. The waypoint tool can now make the first one on an
+        // ocean that had none, and an absent key means "keep what is in the
+        // row", so that first waypoint would have been dropped in silence.
+        body: JSON.stringify({ w: doc.w, h: doc.h, places: doc.places, regions: doc.regions, marks: doc.marks || [], home: doc.home || '' }),
       })
       const j = await r.json().catch(() => ({}))
       if (!r.ok) {
         setProblems(j.problems?.length ? j.problems : [j.error || `the server refused it (${r.status})`])
         return
       }
-      setDoc({ w: j.w, h: j.h, places: j.places || [], regions: j.regions || [], marks: j.marks, home: j.home || '' })
+      const kept: Doc = { w: j.w, h: j.h, places: j.places || [], regions: j.regions || [], marks: j.marks, home: j.home || '' }
+      saved.current = stamp(kept)
+      setDoc(kept)
       setWarnings(j.warnings || [])
       setDirty(false)
     } catch (e) {
@@ -1547,11 +2147,51 @@ export default function World() {
     )
   if (!doc || mine === null) return <div className="world" />
 
-  const scale = fit.s >= 1 ? `${fit.s < 10 ? fit.s.toFixed(1) : Math.round(fit.s)}×` : `1:${Math.round(1 / fit.s)}`
-  // what the pointer is over, said by the cursor rather than by a sentence at
-  // the bottom of the chart. The old grabbing state read a ref during render,
-  // which never re-renders, so it was a cursor that could not appear.
-  const grip = pick || tool !== 'move' ? 'crosshair' : hover?.kind === 'size' ? 'nwse-resize' : hover ? 'move' : 'grab'
+  /* ONE NOTATION, ALL THE WAY DOWN.
+   *
+   * It read "2.6×" zoomed in and "1:6" zoomed out, which is two different
+   * things written in the same 42 px slot: a multiplier and a ratio, swapping
+   * over at a boundary nothing on screen announces. Pressing minus took the
+   * number from 1.5 to 1:1 to 1:2 and it looked like the readout had broken.
+   * A multiplier throughout, with the decimals only where they carry
+   * information, so the sequence is 0.16, 0.25, 0.5, 1, 2, 4, 8. */
+  const scale = `${fit.s >= 10 ? Math.round(fit.s) : fit.s >= 1 ? Number(fit.s.toFixed(1)) : Number(fit.s.toFixed(2))}×`
+  /* HOW MUCH OF THE OCEAN IS ACTUALLY IN FRONT OF YOU.
+   *
+   * The header advertises 4096 × 4096 and the opening view frames the islands,
+   * which on a chart holding one island is about two hundred units across: half
+   * a per cent of the water by area, with nothing saying so. It is the right
+   * view to open on and the wrong thing to leave unlabelled, so the span is
+   * quoted beside the zoom and the button that goes to the whole square is
+   * named "ocean" rather than hidden inside "fit". */
+  const span = size.w && fit.s ? Math.round(size.w / fit.s) : 0
+  /* WHAT A PRESS WOULD DO, SAID BY THE CURSOR, AND IT COULD NOT SAY IT WHILE
+   * YOU WERE PRESSING.
+   *
+   * hover is only written while nothing is held, so the whole of a pan and the
+   * whole of a drag ran under whatever the cursor happened to be a moment
+   * earlier. `hand` is the missing half: it is set at the press, so the shape
+   * changes when the hand closes and changes back when it opens.
+   *
+   * A region says pointer and not move, because a press on one SELECTS it and
+   * nothing here drags a stretch of water. A cursor promising a move that no
+   * press performs is the same lie the handle was telling. */
+  const grip =
+    hand === 'pan'
+      ? 'grabbing'
+      : hand === 'size'
+        ? 'nwse-resize'
+        : hand
+          ? 'move'
+          : pick || tool !== 'move'
+            ? 'crosshair'
+            : hover?.kind === 'size'
+              ? 'nwse-resize'
+              : hover?.kind === 'region'
+                ? 'pointer'
+                : hover
+                  ? 'move'
+                  : 'grab'
 
   return (
     <div className="world">
@@ -1572,6 +2212,13 @@ export default function World() {
           </button>
           <button className={'world-tool' + (tool === 'sea' ? ' on' : '')} onClick={() => setTool('sea')} title="drag out a stretch of water and name it">
             water
+          </button>
+          {/* THE FREE-STANDING POINT, which is the one thing this bar could not
+              make. A berth and an approach both belong to an island, so the
+              corner a crossing turns at had to be faked as a berth on whichever
+              island was nearest, and then it moved when that island moved. */}
+          <button className={'world-tool' + (tool === 'mark' ? ' on' : '')} onClick={() => setTool('mark')} title="drop a named point on open water">
+            waypoint
           </button>
         </div>
         <span className="world-meta">
@@ -1628,8 +2275,16 @@ export default function World() {
               ones where the tool has something to say, so they are the only
               ones that speak, and they get the gold for saying it. */}
           {(pick || tool !== 'move') && (
-            <p className="world-hint" role="status">
-              {pick ? (aim ? `on ${aim.split('/')[1]}` : `click the water · esc`) : tool === 'place' ? 'click open water · esc' : 'drag out the water · esc'}
+            <p className="world-hint" role="status" style={{ '--hx': `${nib.x}px`, '--hy': `${nib.y}px` } as React.CSSProperties}>
+              {pick
+                ? aim
+                  ? `on ${displayName(aim.split('/')[1]).text}`
+                  : `click the water · esc`
+                : tool === 'place'
+                  ? 'click open water · esc'
+                  : tool === 'mark'
+                    ? 'click open water to drop a waypoint · esc'
+                    : 'drag out the water · esc'}
             </p>
           )}
           <div className="world-zoom">
@@ -1640,15 +2295,24 @@ export default function World() {
                 wheel was already cursor-anchored and correct, so the discoverable
                 control was the worse of the two. Both now pull toward whatever is
                 selected, or toward everything that is placed. */}
-            <button className="world-zbtn" onClick={() => zoomAt(...holdPt, 1 / 1.6)} aria-label="zoom out" title="zoom out">
+            <button className="world-zbtn" onClick={() => rung(-1, ...holdPt)} aria-label="zoom out" title="zoom out one step">
               −
             </button>
-            <span className="world-zread">{scale}</span>
-            <button className="world-zbtn" onClick={() => zoomAt(...holdPt, 1.6)} aria-label="zoom in" title="zoom in">
+            <span className="world-zread" title={`${span} world units across the stage`}>
+              {scale}
+            </span>
+            <button className="world-zbtn" onClick={() => rung(1, ...holdPt)} aria-label="zoom in" title="zoom in one step">
               +
             </button>
+            {/* THREE FRAMINGS, EACH SAYING WHAT IT FRAMES. "fit" showed about a
+                two hundred unit window of a 4096 unit ocean the header
+                advertises, which is right for opening a chart and wrong to call
+                fit with nothing else on offer. */}
+            <button className="world-zbtn wide" onClick={frameSea} title={`the whole ${doc.w} × ${doc.h} ocean`}>
+              ocean
+            </button>
             <button className="world-zbtn wide" onClick={frameAll} title="everything on the water · 0">
-              fit
+              placed
             </button>
             <button className="world-zbtn wide" onClick={frame} disabled={!place} title="fill the stage with what is selected · f">
               frame
@@ -1663,7 +2327,7 @@ export default function World() {
           </div>
         </div>
 
-        <aside className="world-side">
+        <aside className="world-side sparse" ref={panel}>
           {problems.length > 0 && (
             <div className="world-refused">
               <span className="world-lab">refused</span>
@@ -1721,37 +2385,347 @@ export default function World() {
               }}
               onDrop={() => dropRegion(sel.i)}
             />
+          ) : spot && sel?.kind === 'mark' ? (
+            <MarkPanel m={spot} sure={sure} onSure={setSure} onEdit={(patch) => editMark(sel.i, patch)} onDrop={() => dropMark(sel.i)} />
           ) : null}
 
+          {/* THE ROSTER READS THE WAY A PERSON WOULD SAY IT.
+              It printed `the_hub`, which is the address python holds and not a
+              name anybody gave a place. Every row here carries a second field
+              for exactly this and the column was ignoring it, so displayName
+              takes the title when there is one and unpacks the identifier when
+              there is not. The identifier is still one hover away, because the
+              author writing a grape needs the string they will type. */}
+          {/* WHAT THIS CHART IS, IN A RAIL THAT WAS OTHERWISE AIR.
+              Measured 290 by 719 holding a heading and one 15 px row, which is
+              97 per cent nothing with a border down the side. The empty state
+              answers a rail with nothing in it; this answers the case /world is
+              actually in, which is one island and a column of air under it.
+              Counts, the water it sits in, the fraction of it on screen, and
+              the things the save is going to complain about. */}
+          {!sel && <Summary doc={doc} span={span} />}
+
           <div className="world-roster">
-            <span className="world-lab">
-              on the water · {doc.places.length}
-              {doc.regions.length ? ` · ${doc.regions.length} sea` : ''}
-            </span>
-            {doc.places.map((p, i) => (
-              <button
-                key={i}
-                className={'world-row' + (sel?.kind === 'place' && sel.i === i ? ' on' : '')}
-                onClick={() => setSel({ kind: 'place', i })}
-              >
-                <i style={{ background: inkFor(STATE_INK, p.state) }} />
-                <span className="world-row-n">{p.name}</span>
-                <span className="world-row-m">{p.map || 'rumour'}</span>
-              </button>
-            ))}
-            {doc.regions.map((r, i) => (
-              <button
-                key={'r' + i}
-                className={'world-row' + (sel?.kind === 'region' && sel.i === i ? ' on' : '')}
-                onClick={() => setSel({ kind: 'region', i })}
-              >
-                <i style={{ background: inkFor(SEA_INK, r.kind) }} />
-                <span className="world-row-n">{r.name}</span>
-                <span className="world-row-m">{r.kind}</span>
-              </button>
-            ))}
+            {/* ONE COLUMN, ONE MEANING. The right hand column printed a map slug
+                on an island row and a KIND on a water row, so the same 42 px of
+                the rail meant two unrelated things one line apart. It is the
+                address everywhere now, which is the one field every row on this
+                ocean has and the one string a grape actually types, and what
+                kind of thing a row is comes from the group it sits in. */}
+            {(
+              [
+                ['islands', doc.places.length],
+                ['water', doc.regions.length],
+                ['waypoints', (doc.marks || []).length],
+              ] as const
+            ).map(([what, n]) => {
+              if (!n) return null
+              return (
+                <div className="world-grp" key={what}>
+                  <div className="world-cols">
+                    <span className="world-lab">
+                      {what} · {n}
+                    </span>
+                    {/* on every group and not just the first, because each group
+                        is read on its own and an unlabelled monospace column is
+                        how this one came to mean two things. */}
+                    <span className="world-lab">code name</span>
+                  </div>
+                  {what === 'islands' &&
+                    doc.places.map((p, i) => {
+                      const said = displayName(p, 'unnamed island')
+                      return (
+                        <button
+                          key={i}
+                          className={'world-row' + (sel?.kind === 'place' && sel.i === i ? ' on' : '')}
+                          onClick={() => setSel({ kind: 'place', i })}
+                          title={`${said.text} · ${p.state}${p.map ? ` · ${p.map}` : ' · no map'}${said.derived ? ' · nobody has titled it, so the words were read off the address' : ''}`}
+                        >
+                          <i style={{ background: inkFor(STATE_INK, p.state) }} />
+                          <span className={'world-row-n' + (said.derived ? ' guessed' : '')}>{said.text}</span>
+                          <span className="world-row-m">{p.name}</span>
+                        </button>
+                      )
+                    })}
+                  {what === 'water' &&
+                    doc.regions.map((r, i) => {
+                      const said = displayName(r, 'unnamed water')
+                      return (
+                        <button
+                          key={'r' + i}
+                          className={'world-row' + (sel?.kind === 'region' && sel.i === i ? ' on' : '')}
+                          onClick={() => setSel({ kind: 'region', i })}
+                          title={`${said.text} · ${r.kind}${said.derived ? ' · no label yet, so the words were read off the address' : ''}`}
+                        >
+                          <i style={{ background: inkFor(SEA_INK, r.kind) }} />
+                          <span className={'world-row-n' + (said.derived ? ' guessed' : '')}>{said.text}</span>
+                          <span className="world-row-m">{r.name}</span>
+                        </button>
+                      )
+                    })}
+                  {what === 'waypoints' &&
+                    (doc.marks || []).map((m, i) => {
+                      const said = displayName(m, 'unnamed mark')
+                      return (
+                        <button
+                          key={'m' + i}
+                          className={'world-row' + (sel?.kind === 'mark' && sel.i === i ? ' on' : '')}
+                          onClick={() => setSel({ kind: 'mark', i })}
+                          title={`${said.text} · ${m.kind}${said.derived ? ' · no label yet, so the words were read off the address' : ''}`}
+                        >
+                          <i style={{ background: 'var(--acc-mark)' }} />
+                          <span className={'world-row-n' + (said.derived ? ' guessed' : '')}>{said.text}</span>
+                          <span className="world-row-m">{m.name}</span>
+                        </button>
+                      )
+                    })}
+                </div>
+              )
+            })}
           </div>
+
+          {/* the shared empty state, for the ocean that genuinely has nothing on
+              it. Anything else is answered by the summary above. */}
+          {!sel && !doc.places.length && !doc.regions.length && !(doc.marks || []).length && (
+            <div className="nothing">
+              <p className="nothing-say">nothing is on this ocean yet</p>
+              <p className="nothing-do">place the first island</p>
+            </div>
+          )}
+          {!sel && (doc.places.length > 0 || doc.regions.length > 0 || (doc.marks || []).length > 0) && (
+            <Key doc={doc} />
+          )}
         </aside>
+      </div>
+    </div>
+  )
+}
+
+/* WHAT THE COLOURED DOTS MEAN, AT THE FOOT OF THE RAIL.
+ *
+ * Two things at once, and the second is why it is here rather than in a help
+ * sheet. A roster row carries a square of state ink and nothing on the page
+ * said what green was, so the one piece of information the chart encodes as
+ * colour was the one piece a reader had to already know. That is a legend, and
+ * a chart with a legend is the normal shape of this.
+ *
+ * The other thing is the rail's floor. Measured with one island on the water:
+ * the column is 719 px tall and the summary and roster fill 183 of them, so
+ * three quarters of it is air with a border down the side. A legend is real
+ * content that belongs at the bottom, so it sits on `margin-top: auto` and the
+ * rail reads as a panel with a floor instead of a panel with a hole.
+ *
+ * ONLY WHAT IS ACTUALLY ON THE WATER. Seven states and five water kinds listed
+ * unconditionally is a wall of swatches for a document using two of them, and
+ * that is a worse rail than the empty one. */
+function Key({ doc }: { doc: Doc }) {
+  const rows: { ink: string; word: string }[] = []
+  for (const s of [...new Set(doc.places.map((p) => p.state))]) rows.push({ ink: inkFor(STATE_INK, s), word: s })
+  for (const k of [...new Set(doc.regions.map((r) => r.kind))]) rows.push({ ink: inkFor(SEA_INK, k), word: k })
+  if ((doc.marks || []).length) rows.push({ ink: CHART_MARK, word: 'waypoint' })
+  if (!rows.length) return null
+  return (
+    <div className="world-key">
+      <span className="world-lab">what the colours are</span>
+      <div className="world-key-rows">
+        {rows.map((r) => (
+          <span className="world-key-r" key={r.word}>
+            <i style={{ background: r.ink }} />
+            {r.word}
+          </span>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/* WHAT IS ON THIS CHART, FOR A RAIL THAT WAS 97 PER CENT AIR.
+ *
+ * The empty state in tokens.css is the right answer for a panel with nothing in
+ * it. It is the wrong answer for /world, which is a chart with one island on it
+ * and seven hundred pixels of nothing under one row: not empty, just thin, and
+ * a thin panel does not get fixed by a sentence saying it is empty.
+ *
+ * So the rail says something true about the chart instead. The counts, the
+ * water they sit in, how much of that water is on screen right now, and the
+ * work the save is going to name: exactly the warnings checkWorld raises, said
+ * before the press rather than after it. On a full ocean the last line goes
+ * away and the block is four rows, which is what a summary should cost. */
+function Summary({ doc, span }: { doc: Doc; span: number }) {
+  const marks = doc.marks || []
+  /* THE SAME QUESTIONS server/store/world.mjs ASKS AT THE SAVE, in the same
+   * order, so nothing here can promise a clean save the server then refuses. */
+  const todo: string[] = []
+  const homeless = !doc.home && doc.places.length
+  const noId = doc.places.filter((p) => p.map && !p.place).length
+  const noBerth = doc.places.filter((p) => p.map && !p.berth).length
+  const noMap = doc.places.filter((p) => !p.map).length
+  if (homeless) todo.push('no island is marked as where a run starts')
+  if (noId) todo.push(`${noId} ${noId === 1 ? 'island has' : 'islands have'} no place id, so the game cannot count a visit`)
+  if (noBerth) todo.push(`${noBerth} ${noBerth === 1 ? 'island has' : 'islands have'} nowhere to tie up`)
+  if (noMap) todo.push(`${noMap} ${noMap === 1 ? 'slot holds' : 'slots hold'} no painting yet`)
+  return (
+    <div className="world-sum">
+      <div className="world-sum-r">
+        <span>on the water</span>
+        <b>
+          {doc.places.length} island{doc.places.length === 1 ? '' : 's'}
+        </b>
+      </div>
+      {/* only the parts that are there. "0 water · 1 waypoint" is a row that
+          spends half its width saying nothing happened. */}
+      {(doc.regions.length > 0 || marks.length > 0) && (
+        <div className="world-sum-r">
+          <span>also marked</span>
+          <b>
+            {[
+              doc.regions.length ? `${doc.regions.length} water` : '',
+              marks.length ? `${marks.length} waypoint${marks.length === 1 ? '' : 's'}` : '',
+            ]
+              .filter(Boolean)
+              .join(' · ')}
+          </b>
+        </div>
+      )}
+      <div className="world-sum-r">
+        <span>the ocean</span>
+        <b>
+          {doc.w} × {doc.h} u
+        </b>
+      </div>
+      {/* the honest half of the fit question. The header advertises 4096 and the
+          opening view frames the islands, so this says how wide the window on it
+          currently is rather than letting the two numbers sit unrelated. */}
+      {/* and it says so in words when the stage has not been measured yet. It
+          printed an em dash, which is a typographic shrug in a readout column
+          where every other row is a number and a unit. */}
+      <div className="world-sum-r">
+        <span>in view</span>
+        <b>{span ? `${span} u across` : 'not drawn yet'}</b>
+      </div>
+      {todo.length > 0 && <p className="world-sum-todo">{todo[0]}</p>}
+    </div>
+  )
+}
+
+/* A POINT ON OPEN WATER THAT BELONGS TO NOTHING.
+ *
+ * Every other panel on this page edits something with a footprint. This one has
+ * a name, a kind, two coordinates, a radius and a heading, and that is the
+ * whole of a waypoint: the corner a sail leg turns at, which is exactly what
+ * the ocean could not author until now. */
+function MarkPanel({
+  m,
+  sure,
+  onSure,
+  onEdit,
+  onDrop,
+}: {
+  m: WorldMark
+  sure: boolean
+  onSure: (v: boolean) => void
+  onEdit: (patch: Partial<WorldMark>) => void
+  onDrop: () => void
+}) {
+  const said = displayName(m, 'unnamed mark')
+  const legal = isMarkName(m.name)
+  return (
+    <div className="world-insp">
+      <div className="world-head">
+        <b className={said.derived ? 'guessed' : ''}>{said.text}</b>
+        <span className="world-code">
+          <i>waypoint</i> {m.name}
+        </span>
+      </div>
+      <div className="world-set">
+        <span className="world-lab">what a person reads</span>
+        <label className="world-f">
+          <span>label</span>
+          <input
+            className="world-in"
+            value={m.label || ''}
+            maxLength={120}
+            placeholder={said.text}
+            title="the words a player is shown. Without one the label is guessed from the address below"
+            onChange={(e) => onEdit({ label: e.target.value })}
+          />
+        </label>
+      </div>
+      <div className="world-set">
+        <span className="world-lab">what code addresses</span>
+        <label className="world-f">
+          <span>code name</span>
+          <input
+            className={'world-in' + (legal ? '' : ' bad')}
+            value={m.name}
+            spellCheck={false}
+            maxLength={48}
+            title="what a grape calls sail_to with · one namespace with every island and every stretch of water"
+            onChange={(e) => onEdit({ name: e.target.value })}
+            onBlur={() => !legal && onEdit({ name: anchorName(m.name) })}
+          />
+        </label>
+        {!legal && <p className="world-bad">lower case, digits, underscores</p>}
+        <label className="world-f">
+          <span>kind</span>
+          <select className="world-in" value={m.kind} onChange={(e) => onEdit({ kind: e.target.value as MarkKind })}>
+            {MARK_KINDS.map((k) => (
+              <option key={k} value={k}>
+                {k}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <div className="world-set">
+        <span className="world-lab">where it is</span>
+        <div className="world-pair">
+          <Num label="x" v={m.x} on={(n) => onEdit({ x: n })} />
+          <Num label="y" v={m.y} on={(n) => onEdit({ y: n })} />
+        </div>
+        {/* how close counts as arrived, because a hull moves in floats and an
+            exact-pixel test on one never fires */}
+        <label className="world-f">
+          <span>arrived within</span>
+          <input
+            className="world-in"
+            type="number"
+            min={0}
+            value={m.r ?? 0}
+            title="how close a hull comes before it counts as having reached this point"
+            onChange={(e) => onEdit({ r: Math.max(0, Math.round(Number(e.target.value) || 0)) })}
+          />
+        </label>
+        <Facing v={m.facing || ''} say="the heading held here" on={(k) => onEdit({ facing: k || undefined })} />
+      </div>
+      <Scrap what={said.text} sure={sure} onSure={onSure} onDrop={onDrop} />
+    </div>
+  )
+}
+
+/* THE COMPASS, WITH THE WORD IT WAS MISSING.
+ *
+ * Nine arrow buttons in a 3x3 block with nothing above them, in a column where
+ * every other control has a caption over it. It was readable only if you
+ * already knew that a berth has a facing, which is the one group on this page
+ * that cannot be worked out from its own shape. Lifted out of the inspector so
+ * a berth and a waypoint ask for a heading the same way. */
+function Facing({ v, say, on }: { v: string; say: string; on: (k: string) => void }) {
+  return (
+    <div className="world-f">
+      <span>{say}</span>
+      <div className="world-face" role="group" aria-label={say}>
+        {FACE_GRID.flat().map((k, n) => (
+          <button
+            key={k || 'none'}
+            className={'world-fbtn' + ((k ? v === k : !v) ? ' on' : '')}
+            title={k || 'no opinion'}
+            aria-pressed={k ? v === k : !v}
+            onClick={() => on(k && v !== k ? k : '')}
+          >
+            {FACE_ARROW[n]}
+          </button>
+        ))}
       </div>
     </div>
   )
@@ -1830,266 +2804,298 @@ function Inspector({
    * fix it by hand. The two states this can be in are held and not held; a
    * third state where it is held but wrong is not one anybody asked for.
    *
-   * It corrects itself instead, once, when the shape is first known. Only ever
-   * the height, so the size an author chose is the one they keep. */
-  const wantH = shape ? side(p.w / shape) : 0
-  useEffect(() => {
-    if (lock && wantH && p.h !== wantH) set({ h: wantH })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lock, wantH, p.h])
+   * IT DOES NOT HAPPEN HERE ANY MORE. It ran on mount, so opening an island to
+   * read it rewrote its height and lit the save button on a page nobody had
+   * edited, and undo could then never reach a clean document because the panel
+   * put the change straight back. Correcting the document is right; charging it
+   * to the author for looking is not. squareUp in World() does it once, for
+   * every place, at the load, before the page decides what "saved" means. */
 
+  const said = displayName(p, 'unnamed island')
   return (
     <div className="world-insp">
-      <span className="world-lab">island</span>
-      <label className="world-f">
-        <span>name</span>
-        <input
-          className={'world-in' + (legal ? '' : ' bad')}
-          value={p.name}
-          spellCheck={false}
-          maxLength={48}
-          title="the address a grape reaches this island by"
-          onChange={(e) => set({ name: e.target.value })}
-          onBlur={() => !legal && set({ name: anchorName(p.name) })}
-        />
-      </label>
-      {!legal && <p className="world-bad">lower case, digits, underscores</p>}
-      {/* THE ID THE GAME LOOKS THIS UP BY, which is a different string from the
-          address above and could never have been typed into it: the roster's
-          ids are kebab-case and a name here is a python identifier. Without one
-          the game has nothing to discover this island under and nothing to count
-          a visit against, so it reads misty for the whole run. */}
-      <label className="world-f">
-        <span>place id</span>
-        <input
-          className="world-in"
-          value={p.place || ''}
-          spellCheck={false}
-          maxLength={48}
-          placeholder="home-island"
-          title="the roster id the game finds this slot by · lower case with hyphens"
-          onChange={(e) => set({ place: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') })}
-        />
-      </label>
-      <label className="world-f">
-        <span>map</span>
-        <select
-          className="world-in"
-          value={p.map}
-          onChange={(e) => {
-            const slug = e.target.value
-            const m = reg.get(slug)
-            onBefore()
-            /* A FOOTPRINT NOBODY HAS SIZED TAKES THE DEFAULT WHOLE, and one
-             * somebody HAS sized keeps its width and only has the shape put
-             * right. Bending the height of a square is correct for an island
-             * already placed and wrong for one born a moment ago, which would
-             * otherwise keep a width chosen before there was a picture. */
-            if (!m || m.w <= 0 || m.h <= 0) return set({ map: slug })
-            const fresh = p.w === ISLAND_DEFAULT && p.h === ISLAND_DEFAULT
-            set(fresh ? { map: slug, ...bornAs(m) } : { map: slug, h: side((p.w * m.h) / m.w) })
-          }}
-        >
-          <option value="">no map</option>
-          {options.map((s) => (
-            <option key={s} value={s}>
-              {s}
-              {slugs.includes(s) ? '' : ' · unpublished'}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="world-f">
-        <span>title</span>
-        <input
-          className="world-in"
-          value={p.title}
-          maxLength={120}
-          title="what the player is told this place is called"
-          onChange={(e) => set({ title: e.target.value })}
-        />
-      </label>
-      {/* typing a coordinate goes through the same move the drag does, so an
-          island carries its berth and its approach either way. Two ways to say
-          the same thing that mean different things is how a mooring gets left
-          behind by whoever typed instead of dragged. */}
-      <div className="world-pair">
-        <Num label="x" v={p.x} on={(n) => onMove(i, n, p.y)} />
-        <Num label="y" v={p.y} on={(n) => onMove(i, p.x, n)} />
-      </div>
-      <div className="world-pair">
-        <Num label="w" v={p.w} min={ISLAND_MIN} on={setW} />
-        <Num label="h" v={p.h} min={ISLAND_MIN} on={setH} />
-      </div>
-      {/* the sentence this was, "hold the painting's shape · 688x640", said the
-          same thing three times. The size it is holding is the title. */}
-      <label className="world-check" title={sheet ? `the painting is ${sheet.w}×${sheet.h}` : 'the painting decides the short side'}>
-        <input type="checkbox" checked={lock} onChange={(e) => onLock(e.target.checked)} />
-        <span>keep the shape</span>
-      </label>
-      <label className="world-f">
-        <span>state</span>
-        <select className="world-in" value={p.state} onChange={(e) => set({ state: e.target.value })}>
-          {states.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
-      </label>
-      {/* TWO RADII, AND THIS PANEL HAD ONE UNDER THE WRONG NAME. What was called
-          release here is what the game calls discover; what the game calls
-          release is how far out the bundle stays decoded, which is the number
-          the memory budget trims against and had no control at all. */}
-      <label className="world-f">
-        <span>discover</span>
-        <input
-          className="world-in"
-          type="number"
-          min={0}
-          value={p.discover}
-          title="how close the hull comes, measured from x,y, before this island is found"
-          onChange={(e) => set({ discover: Math.max(0, Math.round(Number(e.target.value) || 0)) })}
-        />
-      </label>
-      <label className="world-f">
-        <span>hold</span>
-        <input
-          className="world-in"
-          type="number"
-          min={0}
-          value={p.release}
-          title="how far out this map's bundle stays in memory · the first thing dropped when a chromebook runs short"
-          onChange={(e) => set({ release: Math.max(0, Math.round(Number(e.target.value) || 0)) })}
-        />
-      </label>
-      {/* ONE SLOT FOR THE WHOLE OCEAN, so it is a radio wearing a checkbox: a
-          run starts in one place, and two islands both claiming it would make a
-          fresh run begin in whichever the reader happened to find first.
-          Ticking this unticks any other by writing one name on the world. */}
-      <label className="world-check" title="a run with no ship yet begins here, and a graduate is handed back to it">
-        <input type="checkbox" checked={home === p.name} onChange={(e) => onHome(e.target.checked ? p.name : '')} />
-        <span>the run starts here</span>
-      </label>
-
-      <span className="world-lab">mooring</span>
-      {/* the marks the painting carries were spelt out as a sentence naming
-          every one of them. The count is what you need in the panel; the names
-          are on the island itself, which is where you aim at them. */}
-      <div className="world-mark">
-        <span className="world-mark-t" title={marks.length ? marks.map((a) => a.name).join(', ') : 'nothing on this painting to snap to yet'}>
-          berth
-          {p.map ? ` · ${marks.length} mark${marks.length === 1 ? '' : 's'}` : ''}
+      {/* THE PANEL SAYS WHICH ISLAND IT IS ABOUT.
+          The heading was the word "island" on every island, so the only place
+          the thing's name appeared was inside the name field, where it is the
+          ADDRESS and not a name at all. Ash, 2026-08-29: humans see labels, and
+          the snake_case stays where it is the address, marked as the code
+          name. */}
+      <div className="world-head">
+        <b className={said.derived ? 'guessed' : ''}>{said.text}</b>
+        <span className="world-code">
+          <i>island</i> {p.name}
         </span>
+      </div>
+
+      {/* THE ACTS FIRST, AND THIS IS THE WHOLE RESTRUCTURE.
+          Measured: the panel ran 856 px inside a 719 px column, so "set" for a
+          berth, which is the entire reason this page draws the paintings, sat
+          below the fold behind eleven number fields. Nothing here is a field.
+          Everything here is something somebody came to the panel to do. */}
+      <div className="world-acts">
         <button
           className={'world-btn small' + (pick === 'berth' ? ' on' : '')}
-          title="then click the water · a mark on the island snaps"
+          title="where the ship ties up · then click the water, and a mark on the island snaps"
           onClick={() => onPick(pick === 'berth' ? '' : 'berth')}
         >
-          {p.berth ? 'move' : 'set'}
+          {p.berth ? 'move berth' : 'set berth'}
         </button>
-        {p.berth && (
-          <button
-            className="world-btn small"
-            title="take the berth off"
-            onClick={() => {
-              onBefore()
-              set({ berth: undefined })
-            }}
-          >
-            ×
-          </button>
-        )}
-      </div>
-      {p.berth && (
-        <>
-          <div className="world-pair">
-            <Num label="x" v={p.berth.x} on={(n) => set({ berth: { ...p.berth, x: n } as Pt })} />
-            <Num label="y" v={p.berth.y} on={(n) => set({ berth: { ...p.berth, y: n } as Pt })} />
-          </div>
-          {/* the heading held once the hull is tied up, on the compass the
-              editor already uses for a door and a post, so a facing is set the
-              same way everywhere in this tool */}
-          <div className="world-face" role="group" aria-label="berth facing">
-            {FACE_GRID.flat().map((k, n) => (
-              <button
-                key={k || 'none'}
-                className={'world-fbtn' + ((k ? p.berth?.facing === k : !p.berth?.facing) ? ' on' : '')}
-                title={k || 'no opinion'}
-                onClick={() => {
-                  const b = p.berth as Pt
-                  // rebuilt rather than spread, so clearing a facing really
-                  // clears it. The arrival anchor is carried across by hand,
-                  // because it is the one other thing living on this point.
-                  const at = b.at ? { at: b.at } : {}
-                  set({ berth: k && b.facing !== k ? { x: b.x, y: b.y, facing: k, ...at } : { x: b.x, y: b.y, ...at } })
-                }}
-              >
-                {FACE_ARROW[n]}
-              </button>
-            ))}
-          </div>
-          {/* WHERE THE HULL PUTS SOMEBODY DOWN ONCE THEY ARE ASHORE. A berth is
-              a position out on the water and says nothing about the inside of
-              the island, so without this a voyage arrives at that map's default
-              spawn and the dock somebody drew gets walked past. The list is the
-              island's own anchors, which is the same registry aiming a berth
-              already needed. */}
-          <label className="world-f">
-            <span>lands at</span>
-            <select
-              className="world-in"
-              value={p.berth.at || ''}
-              disabled={!p.map}
-              title={p.map ? 'the anchor on that island the player stands on' : 'pick a map first'}
-              onChange={(e) => {
-                const b = p.berth as Pt
-                const at = e.target.value
-                set({ berth: { x: b.x, y: b.y, ...(b.facing ? { facing: b.facing } : {}), ...(at ? { at } : {}) } })
-              }}
-            >
-              <option value="">the map&apos;s own spawn</option>
-              {marks.map((a) => (
-                <option key={a.name} value={a.name}>
-                  {a.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        </>
-      )}
-      <div className="world-mark">
-        <span className="world-mark-t" title="where the hull waits before it comes in">
-          approach
-        </span>
         <button
           className={'world-btn small' + (pick === 'approach' ? ' on' : '')}
-          title="then click the water"
+          title="where the hull waits before it comes in · then click the water"
           onClick={() => onPick(pick === 'approach' ? '' : 'approach')}
         >
-          {p.approach ? 'move' : 'set'}
+          {p.approach ? 'move approach' : 'set approach'}
         </button>
-        {p.approach && (
-          <button
-            className="world-btn small"
-            title="take the approach off"
-            onClick={() => {
+      </div>
+
+      <div className="world-set">
+        <span className="world-lab">what a person reads</span>
+        <label className="world-f">
+          <span>title</span>
+          <input
+            className="world-in"
+            value={p.title}
+            maxLength={120}
+            placeholder={said.text}
+            title="what the player is told this place is called. Without one the words above are guessed from the address"
+            onChange={(e) => set({ title: e.target.value })}
+          />
+        </label>
+        <label className="world-f">
+          <span>state</span>
+          <select className="world-in" value={p.state} onChange={(e) => set({ state: e.target.value })}>
+            {states.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <div className="world-set">
+        <span className="world-lab">what code addresses</span>
+        <label className="world-f">
+          <span>code name</span>
+          <input
+            className={'world-in' + (legal ? '' : ' bad')}
+            value={p.name}
+            spellCheck={false}
+            maxLength={48}
+            title="the address a grape reaches this island by"
+            onChange={(e) => set({ name: e.target.value })}
+            onBlur={() => !legal && set({ name: anchorName(p.name) })}
+          />
+        </label>
+        {!legal && <p className="world-bad">lower case, digits, underscores</p>}
+        {/* THE ID THE GAME LOOKS THIS UP BY, which is a different string from the
+            address above and could never have been typed into it: the roster's
+            ids are kebab-case and a name here is a python identifier. Without one
+            the game has nothing to discover this island under and nothing to count
+            a visit against, so it reads misty for the whole run. */}
+        <label className="world-f">
+          <span>place id</span>
+          <input
+            className="world-in"
+            value={p.place || ''}
+            spellCheck={false}
+            maxLength={48}
+            placeholder="home-island"
+            title="the roster id the game finds this slot by · lower case with hyphens"
+            onChange={(e) => set({ place: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') })}
+          />
+        </label>
+      </div>
+
+      <details className="world-set" open={!p.map}>
+        <summary className="world-lab">the painting and the footprint</summary>
+        <label className="world-f">
+          <span>map</span>
+          <select
+            className="world-in"
+            value={p.map}
+            onChange={(e) => {
+              const slug = e.target.value
+              const m = reg.get(slug)
               onBefore()
-              set({ approach: undefined })
+              /* A FOOTPRINT NOBODY HAS SIZED TAKES THE DEFAULT WHOLE, and one
+               * somebody HAS sized keeps its width and only has the shape put
+               * right. Bending the height of a square is correct for an island
+               * already placed and wrong for one born a moment ago, which would
+               * otherwise keep a width chosen before there was a picture. */
+              if (!m || m.w <= 0 || m.h <= 0) return set({ map: slug })
+              const fresh = p.w === ISLAND_DEFAULT && p.h === ISLAND_DEFAULT
+              set(fresh ? { map: slug, ...bornAs(m) } : { map: slug, h: side((p.w * m.h) / m.w) })
             }}
           >
-            ×
-          </button>
-        )}
-      </div>
-      {p.approach && (
+            <option value="">no map</option>
+            {options.map((s) => (
+              <option key={s} value={s}>
+                {displayName(s).text}
+                {slugs.includes(s) ? '' : ' · unpublished'}
+              </option>
+            ))}
+          </select>
+        </label>
+        {/* typing a coordinate goes through the same move the drag does, so an
+            island carries its berth and its approach either way. Two ways to say
+            the same thing that mean different things is how a mooring gets left
+            behind by whoever typed instead of dragged. */}
         <div className="world-pair">
-          <Num label="x" v={p.approach.x} on={(n) => set({ approach: { ...p.approach, x: n } as Pt })} />
-          <Num label="y" v={p.approach.y} on={(n) => set({ approach: { ...p.approach, y: n } as Pt })} />
+          <Num label="x" v={p.x} on={(n) => onMove(i, n, p.y)} />
+          <Num label="y" v={p.y} on={(n) => onMove(i, p.x, n)} />
         </div>
-      )}
+        <div className="world-pair">
+          <Num label="w" v={p.w} min={ISLAND_MIN} on={setW} />
+          <Num label="h" v={p.h} min={ISLAND_MIN} on={setH} />
+        </div>
+        {/* the sentence this was, "hold the painting's shape · 688x640", said the
+            same thing three times. The size it is holding is the title. */}
+        <label className="world-check" title={sheet ? `the painting is ${sheet.w}×${sheet.h}` : 'the painting decides the short side'}>
+          <input type="checkbox" checked={lock} onChange={(e) => onLock(e.target.checked)} />
+          <span>keep the shape</span>
+        </label>
+      </details>
 
-      <Scrap what={p.name} sure={sure} onSure={onSure} onDrop={onDrop} />
+      <details className="world-set">
+        <summary className="world-lab">how far it reaches</summary>
+        {/* TWO RADII, AND THIS PANEL HAD ONE UNDER THE WRONG NAME. What was called
+            release here is what the game calls discover; what the game calls
+            release is how far out the bundle stays decoded, which is the number
+            the memory budget trims against and had no control at all. */}
+        <label className="world-f">
+          <span>discovered within</span>
+          <input
+            className="world-in"
+            type="number"
+            min={0}
+            value={p.discover}
+            title="how close the hull comes, measured from x,y, before this island is found"
+            onChange={(e) => set({ discover: Math.max(0, Math.round(Number(e.target.value) || 0)) })}
+          />
+        </label>
+        <label className="world-f">
+          <span>held in memory within</span>
+          <input
+            className="world-in"
+            type="number"
+            min={0}
+            value={p.release}
+            title="how far out this map's bundle stays in memory · the first thing dropped when a chromebook runs short"
+            onChange={(e) => set({ release: Math.max(0, Math.round(Number(e.target.value) || 0)) })}
+          />
+        </label>
+        {/* ONE SLOT FOR THE WHOLE OCEAN, so it is a radio wearing a checkbox: a
+            run starts in one place, and two islands both claiming it would make a
+            fresh run begin in whichever the reader happened to find first.
+            Ticking this unticks any other by writing one name on the world. */}
+        <label className="world-check" title="a run with no ship yet begins here, and a graduate is handed back to it">
+          <input type="checkbox" checked={home === p.name} onChange={(e) => onHome(e.target.checked ? p.name : '')} />
+          <span>the run starts here</span>
+        </label>
+      </details>
+
+      <details className="world-set" open={!!p.berth || !!p.approach}>
+        <summary className="world-lab">
+          the mooring{p.map ? ` · ${marks.length} mark${marks.length === 1 ? '' : 's'} to aim at` : ''}
+        </summary>
+        {p.berth ? (
+          <>
+            <div className="world-mark">
+              <span className="world-mark-t">berth</span>
+              <button
+                className="world-btn small danger"
+                title="take the berth off"
+                onClick={() => {
+                  onBefore()
+                  set({ berth: undefined })
+                }}
+              >
+                remove
+              </button>
+            </div>
+            <div className="world-pair">
+              <Num label="x" v={p.berth.x} on={(n) => set({ berth: { ...p.berth, x: n } as Pt })} />
+              <Num label="y" v={p.berth.y} on={(n) => set({ berth: { ...p.berth, y: n } as Pt })} />
+            </div>
+            {/* the heading held once the hull is tied up, on the compass the
+                editor already uses for a door and a post, so a facing is set the
+                same way everywhere in this tool. Through Facing, which is where
+                the caption this block never had now lives. */}
+            <Facing
+              v={p.berth.facing || ''}
+              say="the heading held at the berth"
+              on={(k) => {
+                const b = p.berth as Pt
+                // rebuilt rather than spread, so clearing a facing really
+                // clears it. The arrival anchor is carried across by hand,
+                // because it is the one other thing living on this point.
+                const at = b.at ? { at: b.at } : {}
+                set({ berth: k ? { x: b.x, y: b.y, facing: k, ...at } : { x: b.x, y: b.y, ...at } })
+              }}
+            />
+            {/* WHERE THE HULL PUTS SOMEBODY DOWN ONCE THEY ARE ASHORE. A berth is
+                a position out on the water and says nothing about the inside of
+                the island, so without this a voyage arrives at that map's default
+                spawn and the dock somebody drew gets walked past. The list is the
+                island's own anchors, which is the same registry aiming a berth
+                already needed. */}
+            <label className="world-f">
+              <span>lands at</span>
+              <select
+                className="world-in"
+                value={p.berth.at || ''}
+                disabled={!p.map}
+                title={p.map ? 'the anchor on that island the player stands on' : 'pick a map first'}
+                onChange={(e) => {
+                  const b = p.berth as Pt
+                  const at = e.target.value
+                  set({ berth: { x: b.x, y: b.y, ...(b.facing ? { facing: b.facing } : {}), ...(at ? { at } : {}) } })
+                }}
+              >
+                <option value="">the map&apos;s own spawn</option>
+                {/* the anchor's own words, not its identifier. mask.ts keeps
+                    label separate from name for exactly this reason and every
+                    reader of the list was printing the address. */}
+                {marks.map((a) => (
+                  <option key={a.name} value={a.name}>
+                    {displayName(a).text}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </>
+        ) : (
+          <p className="world-note">no berth yet, so a ship cannot tie up here</p>
+        )}
+        {p.approach ? (
+          <>
+            <div className="world-mark">
+              <span className="world-mark-t">approach</span>
+              <button
+                className="world-btn small danger"
+                title="take the approach off"
+                onClick={() => {
+                  onBefore()
+                  set({ approach: undefined })
+                }}
+              >
+                remove
+              </button>
+            </div>
+            <div className="world-pair">
+              <Num label="x" v={p.approach.x} on={(n) => set({ approach: { ...p.approach, x: n } as Pt })} />
+              <Num label="y" v={p.approach.y} on={(n) => set({ approach: { ...p.approach, y: n } as Pt })} />
+            </div>
+          </>
+        ) : (
+          <p className="world-note">no approach, so the hull comes straight in</p>
+        )}
+      </details>
+
+      {/* the words, not the address. It read "remove the_hub" at a person. */}
+      <Scrap what={said.text} sure={sure} onSure={onSure} onDrop={onDrop} />
     </div>
   )
 }
@@ -2140,45 +3146,69 @@ function SeaPanel({
     rect[n] = v
     onEdit({ rect })
   }
+  const said = displayName(r, 'unnamed water')
+  const legal = isAnchorName(r.name)
   return (
     <div className="world-insp">
-      <span className="world-lab">water</span>
-      <label className="world-f">
-        <span>name</span>
-        <input
-          className={'world-in' + (isAnchorName(r.name) ? '' : ' bad')}
-          value={r.name}
-          spellCheck={false}
-          maxLength={48}
-          onChange={(e) => onEdit({ name: e.target.value })}
-          onBlur={() => !isAnchorName(r.name) && onEdit({ name: anchorName(r.name) })}
-        />
-      </label>
-      <label className="world-f">
-        <span>kind</span>
-        <select className="world-in" value={r.kind} onChange={(e) => onEdit({ kind: e.target.value })}>
-          {kinds.map((k) => (
-            <option key={k} value={k}>
-              {k}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label className="world-f">
-        <span>label</span>
-        <input className="world-in" value={r.label || ''} maxLength={120} onChange={(e) => onEdit({ label: e.target.value })} />
-      </label>
-      {/* two opposite corners, the order the mask's own rect settled on, so one
-          reader shape serves an anchor region and a sea region */}
-      <div className="world-pair">
-        <Num label="x0" v={r.rect[0]} on={(n) => set(0, n)} />
-        <Num label="y0" v={r.rect[1]} on={(n) => set(1, n)} />
+      <div className="world-head">
+        <b className={said.derived ? 'guessed' : ''}>{said.text}</b>
+        <span className="world-code">
+          <i>water</i> {r.name}
+        </span>
       </div>
-      <div className="world-pair">
-        <Num label="x1" v={r.rect[2]} on={(n) => set(2, n)} />
-        <Num label="y1" v={r.rect[3]} on={(n) => set(3, n)} />
+      <div className="world-set">
+        <span className="world-lab">what a person reads</span>
+        <label className="world-f">
+          <span>label</span>
+          <input
+            className="world-in"
+            value={r.label || ''}
+            maxLength={120}
+            placeholder={said.text}
+            title="the words a player is shown. Without one the label is guessed from the address below"
+            onChange={(e) => onEdit({ label: e.target.value })}
+          />
+        </label>
+        <label className="world-f">
+          <span>kind</span>
+          <select className="world-in" value={r.kind} onChange={(e) => onEdit({ kind: e.target.value })}>
+            {kinds.map((k) => (
+              <option key={k} value={k}>
+                {k}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
-      <Scrap what={r.name} sure={sure} onSure={onSure} onDrop={onDrop} />
+      <div className="world-set">
+        <span className="world-lab">what code addresses</span>
+        <label className="world-f">
+          <span>code name</span>
+          <input
+            className={'world-in' + (legal ? '' : ' bad')}
+            value={r.name}
+            spellCheck={false}
+            maxLength={48}
+            onChange={(e) => onEdit({ name: e.target.value })}
+            onBlur={() => !legal && onEdit({ name: anchorName(r.name) })}
+          />
+        </label>
+        {!legal && <p className="world-bad">lower case, digits, underscores</p>}
+      </div>
+      <div className="world-set">
+        <span className="world-lab">where it is</span>
+        {/* two opposite corners, the order the mask's own rect settled on, so one
+            reader shape serves an anchor region and a sea region */}
+        <div className="world-pair">
+          <Num label="x0" v={r.rect[0]} on={(n) => set(0, n)} />
+          <Num label="y0" v={r.rect[1]} on={(n) => set(1, n)} />
+        </div>
+        <div className="world-pair">
+          <Num label="x1" v={r.rect[2]} on={(n) => set(2, n)} />
+          <Num label="y1" v={r.rect[3]} on={(n) => set(3, n)} />
+        </div>
+      </div>
+      <Scrap what={said.text} sure={sure} onSure={onSure} onDrop={onDrop} />
     </div>
   )
 }

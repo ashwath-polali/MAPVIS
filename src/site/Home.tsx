@@ -29,6 +29,11 @@ import { Link, go } from './router'
 import { useSession, signOut } from './session'
 import { Settings } from './Settings'
 import { Icon } from '../ui/icons'
+/* `m.title || m.slug` was written out at both card sizes, so a map nobody had
+   titled put its kebab-case id on the shelf as though that were its name. The
+   slug is still the address on every link here; it is just no longer the
+   words. */
+import { displayName } from '../core/naming'
 
 type MapRow = {
   id: string
@@ -567,7 +572,7 @@ function Lead({ m, onDelete }: { m: MapRow; onDelete: () => void }) {
       <img src={shot(m) as string} alt="" />
       <div className="lead-say">
         <span className="lead-when">last opened {when(m.updated_at)}</span>
-        <h1>{m.title || m.slug}</h1>
+        <h1>{displayName({ name: m.slug, title: m.title }).text}</h1>
         <div className="lead-nums">
           <span>
             {m.w}&times;{m.h}
@@ -666,7 +671,7 @@ function Card({ m, onDelete, org }: { m: MapRow; onDelete: () => void; org?: Org
       </a>
       <div className="card-say">
         <div className="card-top">
-          <h2>{m.title || m.slug}</h2>
+          <h2>{displayName({ name: m.slug, title: m.title }).text}</h2>
           <span className="card-when">{when(m.updated_at)}</span>
         </div>
         <div className="card-nums">

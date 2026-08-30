@@ -248,7 +248,11 @@ export function migratePath(p: MapPath): MapPath | null {
   if (points.length < 2) return null
   const marks = (Array.isArray(p.marks) ? p.marks : [])
     .filter((m) => m && isAnchorName(m.name) && isFinite(Number(m.at)))
-    .map((m) => ({ at: Math.round(Number(m.at)), name: m.name }))
+    .map((m) => ({
+      at: Math.round(Number(m.at)),
+      name: m.name,
+      ...(typeof m.label === 'string' && m.label.trim() ? { label: String(m.label) } : {}),
+    }))
     .filter((m) => m.at >= 0 && m.at < points.length)
   return {
     id: Math.round(Number(p.id)) || 0,
@@ -388,6 +392,14 @@ export interface PathMark {
   /* index into points, so a mark cannot name a waypoint that is not there */
   at: number
   name: string
+  /* WHAT A PERSON READS, the same split an anchor makes between name and label.
+   * Ash, 2026-08-29: waypoints get labels too. Until this existed the only
+   * string a mark carried was the python identifier, so the canvas captioned a
+   * waypoint `at_the_doorway` and the panel listed it the same way, which is
+   * the exact thing the name/label split was paid for to stop. Optional,
+   * because every mark saved before today has none and displayName unpacks the
+   * identifier for those. */
+  label?: string
 }
 
 /* WHAT TRAVELS THE LINE, and the thing that decides whether a route crossing

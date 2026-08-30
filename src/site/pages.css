@@ -79,7 +79,7 @@
   left: clamp(20px, 5vw, 56px);
   z-index: 3;
   color: var(--dim-on-paper);
-  font-size: 13px;
+  font-size: var(--fs-body);
   text-decoration: none;
 }
 .enter-desk {
@@ -103,7 +103,7 @@
 .desk-art {
   aspect-ratio: 4 / 5;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--iron) 22%, transparent);
+  border: var(--hair) solid color-mix(in srgb, var(--iron) 22%, transparent);
   box-shadow: 0 30px 70px -40px rgba(40, 30, 12, 0.7);
   /* a sheet on a desk is never square to the edge */
   rotate: -1.2deg;
@@ -138,11 +138,11 @@
   gap: 6px;
 }
 .wfield input {
-  font: 400 16px var(--font-label);
+  font: 400 var(--fs-read) var(--font-label);
   color: inherit;
   background: transparent;
   border: 0;
-  border-bottom: 1px solid color-mix(in srgb, currentColor 28%, transparent);
+  border-bottom: var(--hair) solid color-mix(in srgb, currentColor 28%, transparent);
   padding: 8px 2px;
   outline: none;
   transition: border-color var(--t) var(--ease-paper);
@@ -154,17 +154,17 @@
   border-color: var(--iron);
 }
 .wfield-hint {
-  font-size: 12px;
+  font-size: var(--fs-small);
   color: var(--dim);
 }
 .wax {
   color: var(--wax);
-  font-size: 13px;
+  font-size: var(--fs-body);
   margin: 0;
 }
 .sheet-foot {
   padding-top: 18px;
-  border-top: 1px solid color-mix(in srgb, var(--iron) 14%, transparent);
+  border-top: var(--hair) solid color-mix(in srgb, var(--iron) 14%, transparent);
 }
 .asbtn {
   background: none;
@@ -172,7 +172,7 @@
   padding: 0;
   font: inherit;
   color: inherit;
-  cursor: pointer;
+  cursor: var(--cur-do);
 }
 .paper .plate {
   --plate-ink: var(--iron);
@@ -243,7 +243,7 @@
 }
 .mplate-slug {
   color: var(--dim);
-  font-size: 10.5px;
+  font-size: var(--fs-fine);
   margin-top: 4px;
 }
 .facts {
@@ -253,11 +253,11 @@
   margin: 16px 0 14px;
 }
 .fact dt {
-  font-size: 9px;
+  font-size: var(--fs-micro);
 }
 .fact dd {
   margin: 3px 0 0;
-  font-size: 14px;
+  font-size: var(--fs-lead);
   color: var(--ink);
 }
 .fact.gold dd {
@@ -270,11 +270,11 @@
   gap: 12px;
   padding-top: 12px;
   border-top: var(--rule);
-  font-size: 12px;
+  font-size: var(--fs-small);
 }
 .dimmed {
   color: var(--dim);
-  font-size: 12px;
+  font-size: var(--fs-small);
 }
 
 /* a status pip: a small filled mark, not a coloured pill */
@@ -283,7 +283,7 @@
   align-items: center;
   gap: 7px;
   font-family: var(--font-label);
-  font-size: 10px;
+  font-size: var(--fs-micro);
   letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--dim);
@@ -346,7 +346,7 @@
 }
 .map-meta {
   color: var(--dim);
-  font-size: 10.5px;
+  font-size: var(--fs-fine);
 }
 .map-acts {
   display: flex;
@@ -381,27 +381,27 @@
   gap: 12px;
   flex-wrap: wrap;
   padding: 10px 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--gold) 10%, transparent);
+  border-bottom: var(--hair) solid color-mix(in srgb, var(--gold) 10%, transparent);
 }
 .anchname {
   color: var(--gold-lit);
-  font-size: 12px;
+  font-size: var(--fs-small);
 }
 .anchname.guessed {
   text-decoration: underline dotted;
   text-underline-offset: 3px;
 }
 .anchkind {
-  font-size: 9px;
+  font-size: var(--fs-micro);
 }
 .anchto {
   color: var(--dim);
-  font-size: 10.5px;
+  font-size: var(--fs-fine);
   margin-left: auto;
 }
 .anchwarn2 {
   color: var(--wax);
-  font-size: 9px;
+  font-size: var(--fs-micro);
 }
 
 .codebox-head {
@@ -412,13 +412,13 @@
   margin-bottom: 16px;
 }
 .codelet.big {
-  font-size: 12px;
+  font-size: var(--fs-small);
   padding: 26px 28px;
   line-height: 1.9;
 }
 .codebox-note {
   margin-top: 16px;
-  font-size: 0.95rem;
+  font-size: var(--fs-lead);
 }
 
 /* the filmstrip */
@@ -442,7 +442,7 @@
   background: none;
   border: 0;
   padding: 0;
-  cursor: pointer;
+  cursor: var(--cur-do);
   scroll-snap-align: start;
   opacity: 0.55;
   transition: opacity var(--t) var(--ease-paper);
@@ -456,21 +456,21 @@
   aspect-ratio: 16 / 11;
   object-fit: cover;
   image-rendering: pixelated;
-  border: 1px solid color-mix(in srgb, var(--gold) 20%, transparent);
+  border: var(--hair) solid color-mix(in srgb, var(--gold) 20%, transparent);
   display: block;
 }
 .strip-cell.on img {
   border-color: var(--gold);
 }
 .strip-cell .mono {
-  font-size: 10px;
+  font-size: var(--fs-micro);
   color: var(--dim);
 }
 .strip-cell .pip {
   position: absolute;
   top: 8px;
   right: 8px;
-  font-size: 8px;
+  font-size: var(--fs-micro);
 }
 
 /* ---- the atlas ------------------------------------------------------------ */
@@ -527,7 +527,7 @@
 }
 .hung-meta {
   color: var(--dim);
-  font-size: 10px;
+  font-size: var(--fs-micro);
   margin-top: 5px;
 }
 
@@ -546,9 +546,9 @@
 }
 .rtable td {
   padding: 13px 14px 13px 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--gold) 10%, transparent);
+  border-bottom: var(--hair) solid color-mix(in srgb, var(--gold) 10%, transparent);
   vertical-align: middle;
-  font-size: 14px;
+  font-size: var(--fs-lead);
 }
 .rtable td:first-child {
   width: 26px;
@@ -557,7 +557,7 @@
   color: var(--dim);
 }
 .rtable .aside {
-  font-size: 0.9rem;
+  font-size: var(--fs-lead);
 }
 .rtable .gold {
   color: var(--gold-lit);
@@ -596,12 +596,12 @@
 .kbtn2 {
   padding: 8px 14px;
   font-family: var(--font-label);
-  font-size: 11px;
+  font-size: var(--fs-fine);
   letter-spacing: 0.1em;
   color: var(--dim);
   background: none;
-  border: 1px solid color-mix(in srgb, var(--ink) 16%, transparent);
-  cursor: pointer;
+  border: var(--hair) solid color-mix(in srgb, var(--ink) 16%, transparent);
+  cursor: var(--cur-do);
   transition: all var(--t-fast) var(--ease-paper);
 }
 .kbtn2:hover:not(:disabled) {
@@ -615,11 +615,11 @@
 }
 .kbtn2:disabled {
   opacity: 0.35;
-  cursor: default;
+  cursor: var(--cur-no);
 }
 .prov-held {
   margin: 0 0 16px;
-  font-size: 0.9rem;
+  font-size: var(--fs-lead);
 }
 .prov .wfield {
   margin-bottom: 14px;
@@ -643,8 +643,8 @@
   gap: 16px;
   flex-wrap: wrap;
   padding: 12px 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--gold) 10%, transparent);
-  font-size: 13px;
+  border-bottom: var(--hair) solid color-mix(in srgb, var(--gold) 10%, transparent);
+  font-size: var(--fs-body);
 }
 .relaylist .dimmed {
   margin-left: auto;
@@ -660,14 +660,14 @@
   margin: 10px 0;
   word-break: break-all;
   color: var(--gold-lit);
-  font-size: 11px;
+  font-size: var(--fs-fine);
 }
 .ledger-total {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
   padding-top: 16px;
-  font-size: 13px;
+  font-size: var(--fs-body);
   color: var(--dim);
 }
 .gold {

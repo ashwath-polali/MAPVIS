@@ -4,6 +4,7 @@
  * Everything that happens per frame or per pixel happens here, outside React,
  * so a brush stroke never runs a render pass.
  */
+import { ANCHOR_INK, inkFor } from './ink'
 import { cleanLife, lifeAt, liveState, separate, type Life, type LifeAt, type LifeBounds } from './life'
 import {
   MaskDoc,
@@ -37,6 +38,10 @@ import {
   type PathKind,
 } from './mask'
 import { Walker, canStand, checkReach, type WalkCfg, type ReachResult } from './walk'
+/* the canvas is a surface a person reads, so it obeys the same law the panels
+ * do: it prints the label and never the identifier. It was captioning
+ * `the_maw_mouth` and `the_dock_walk` straight onto the painting. */
+import { displayName } from './naming'
 import { savedScene, saveDoc, loadDoc, type LibItem } from '../api'
 
 export type Tool =
@@ -375,6 +380,20 @@ const SHOT_SEL = '#a9e6f5'
  * second colour for "the floor is not there". */
 const PATH_BAD = '#ff2828'
 
+/* THE TWO CHROME SURFACES THIS FILE DRAWS, written out because a 2d context
+ * cannot read a custom property, and named for the token they mirror so a token
+ * that moves can be followed here instead of drifting off it.
+ *
+ * PLATE was five different strings, '#16181bd9' in three places and a bare
+ * '#16181bf2' in the toast rule, for one job: the dark card a caption sits on.
+ * BOARD is --board in app.css and is the surface a painting lies on. */
+const PLATE = 'rgba(16,20,26,0.9)' // --panel at nine tenths
+const BOARD = '#0e1319' // --board
+/* AN ANCHOR'S INK IS NOT WRITTEN HERE. It was one pale iris for all six kinds,
+ * and the ocean chart had its own list with a different colour per kind, so a
+ * door was lavender in the tool that made it and orange on the page that places
+ * it. Both read src/core/ink.ts now. */
+
 /* A ROUTE AS THE PAIRS OF POINTS IT IS ACTUALLY WALKED IN, so the checker and
  * the overlay count legs the same way. A closed route has one more leg than an
  * open one, the run back to the first point, and forgetting it is how a patrol
@@ -568,6 +587,10 @@ export class Editor {
   private canvas: HTMLCanvasElement | null = null
   private g: CanvasRenderingContext2D | null = null
   private painting: HTMLImageElement | HTMLCanvasElement | null = null
+  /* WHERE THE PICTURE ACTUALLY IS inside the document, in painting pixels.
+   * Worked out once per painting and kept, because a full alpha scan of 688x640
+   * is not something to do sixty times a second. null means not scanned yet. */
+  private paintBox: { x0: number; y0: number; x1: number; y1: number } | null = null
   private z = 3
   private ox = 0
   private oy = 0
@@ -784,6 +807,7 @@ export class Editor {
     this.natHits = mkCanvas(this.doc.W, this.doc.H)
     this.plates = null
     this.cutApplied = null
+    this.paintBox = null
     this.regionLabels = null
     this.regionCount = 0
     this.hoverRegion = -1
@@ -3912,7 +3936,11 @@ export class Editor {
        * this function has to apply it or a mark survives its own waypoint. */
       const clean = (patch.marks || [])
         .filter((m) => m && isAnchorName(m.name) && isFinite(Number(m.at)))
-        .map((m) => ({ at: Math.round(Number(m.at)), name: m.name }))
+        .map((m) => ({
+          at: Math.round(Number(m.at)),
+          name: m.name,
+          ...(m.label && String(m.label).trim() ? { label: String(m.label) } : {}),
+        }))
         .filter((m) => m.at >= 0 && m.at < p.points.length)
       if (clean.length) p.marks = clean
       else delete p.marks
@@ -3989,11 +4017,18 @@ export class Editor {
     return marks.length - 1
   }
 
-  updatePathMark(id: number, i: number, patch: { at?: number; name?: string }) {
+  updatePathMark(id: number, i: number, patch: { at?: number; name?: string; label?: string }) {
     const p = this.doc.paths.find((q) => q.id === id)
     if (!p || !p.marks || !p.marks[i]) return
     const m = p.marks[i]
     if (patch.at !== undefined) m.at = clamp(Math.round(patch.at), 0, p.points.length - 1)
+    /* an empty label is REMOVED rather than stored as '', so displayName falls
+     * back to unpacking the identifier instead of printing nothing at all when
+     * an author clears the box */
+    if (patch.label !== undefined) {
+      if (patch.label.trim()) m.label = patch.label
+      else delete m.label
+    }
     if (patch.name !== undefined) {
       const clean = anchorName(patch.name)
       const taken = new Set(p.marks.filter((_, j) => j !== i).map((q) => q.name))
@@ -4574,6 +4609,7 @@ export class Editor {
     this.natHits = mkCanvas(W, H)
     this.plates = null
     this.cutApplied = null
+    this.paintBox = null
     this.regionLabels = null
     this.regionCount = 0
     this.hoverRegion = -1
@@ -5084,6 +5120,16 @@ export class Editor {
 
     g.save()
     g.translate(ox, oy)
+    /* the board the painting lies on. Drawn under everything, so the margin a
+     * grow added reads as bare board instead of as the stage showing through a
+     * hole in the map. The shadow is what stops the whole thing floating. */
+    g.save()
+    g.shadowColor = 'rgba(0,0,0,0.55)'
+    g.shadowBlur = 18
+    g.shadowOffsetY = 4
+    g.fillStyle = BOARD
+    g.fillRect(0, 0, w, h)
+    g.restore()
     if (this.showCutPreview) {
       // exactly what the game will get: the painting with the cut applied,
       // over a dark checkerboard where the engine's ocean will show through
@@ -5169,6 +5215,9 @@ export class Editor {
           if (this.walker.y < p.baseline) g.drawImage(p.cv, 0, 0, w, h)
       }
     }
+    // one claim list per frame, emptied here rather than inside any one drawer,
+    // because the whole point of it is that the three drawers share it
+    this.plateRects.length = 0
     if (this.eventsVisible && this.doc.events.length) this.drawEvents(g, z)
     if (this.eventsVisible && this.doc.paths.length) this.drawPaths(g, z)
     if (this.eventsVisible && this.doc.framings.length) this.drawFramings(g, z)
@@ -5192,10 +5241,79 @@ export class Editor {
     }
     g.restore()
 
-    // frame edge, so the painting's bounds are readable against the backdrop
-    g.strokeStyle = 'rgba(255,255,255,0.14)'
+    /* THE BOARD, and the reason it is a board and not a hairline.
+     *
+     * It was one 1px white-at-14 per cent rectangle round the document, floating
+     * in flat black. On the hub that rectangle enclosed about 190px of dead
+     * black above the picture, because growCanvas adds transparent margin and
+     * never adds picture: only rows 194 to 570 of a 688x640 scene hold an opaque
+     * pixel. So the rule said "the map is this tall" while the eye said "the top
+     * third failed to load".
+     *
+     * Two marks now and they answer two different questions. The board is a lit
+     * surface with a shadow under it, and it is the DOCUMENT: it says how much
+     * canvas there is to work on and it makes the empty margin read as spare
+     * board rather than as a hole. The brighter rule is the PICTURE: it says
+     * where the paint actually reaches. When the two agree, which is every map
+     * that was never grown, only one line is drawn.
+     *
+     * The board is filled before the painting, so this pass draws the shadow and
+     * the outline only; the fill happens up at the top of draw(). */
+    const box = this.paintExtent()
+    g.save()
+    g.strokeStyle = 'rgba(230,233,238,0.10)'
     g.lineWidth = 1
     g.strokeRect(ox - 0.5, oy - 0.5, w + 1, h + 1)
+    if (box) {
+      const bx = ox + box.x0 * z
+      const by = oy + box.y0 * z
+      const bw = (box.x1 - box.x0 + 1) * z
+      const bh = (box.y1 - box.y0 + 1) * z
+      // within a pixel of the whole document is the same rectangle, and drawing
+      // it twice at two brightnesses reads as a rendering fault
+      const whole = bw >= w - z && bh >= h - z
+      g.strokeStyle = whole ? 'rgba(230,233,238,0.22)' : 'rgba(230,233,238,0.26)'
+      g.strokeRect(Math.round(bx) - 0.5, Math.round(by) - 0.5, Math.round(bw) + 1, Math.round(bh) + 1)
+    }
+    g.restore()
+  }
+
+  /* The opaque bounds of the painting, scanned once. Null when the painting is
+   * empty or cannot be read back (a cross-origin image would taint the scratch
+   * canvas), and every caller treats null as "no opinion" rather than as zero. */
+  private paintExtent(): { x0: number; y0: number; x1: number; y1: number } | null {
+    if (this.paintBox) return this.paintBox
+    const src = this.painting
+    if (!src) return null
+    const { W, H } = this.doc
+    if (W < 1 || H < 1) return null
+    let d: Uint8ClampedArray
+    try {
+      const c = mkCanvas(W, H)
+      const cg = c.getContext('2d') as CanvasRenderingContext2D
+      cg.drawImage(src, 0, 0)
+      d = cg.getImageData(0, 0, W, H).data
+    } catch {
+      return null
+    }
+    let x0 = W
+    let y0 = H
+    let x1 = -1
+    let y1 = -1
+    for (let y = 0; y < H; y++)
+      for (let x = 0; x < W; x++)
+        // 8 and not 0, because a coastline feathered by the generator leaves a
+        // ring of alpha-2 pixels that no player will ever see and that would
+        // otherwise put the rule back on the document edge
+        if (d[(y * W + x) * 4 + 3] > 8) {
+          if (x < x0) x0 = x
+          if (x > x1) x1 = x
+          if (y < y0) y0 = y
+          if (y > y1) y1 = y
+        }
+    if (x1 < 0) return null
+    this.paintBox = { x0, y0, x1, y1 }
+    return this.paintBox
   }
 
   // The placements, y-sorted among themselves and layered over the painting,
@@ -5607,6 +5725,66 @@ export class Editor {
     g.restore()
   }
 
+  /* EVERY CAPTION ON THE CANVAS IS PLACED HERE, and it exists because of a
+   * measured pile. On the hub's test step the anchor plate for Panther's Maw,
+   * the shot plate for the_maw_mouth and the route plate for the_dock_walk all
+   * landed inside a 140 by 40 box around (840, 435) and drew straight over each
+   * other, so two of the three were unreadable and nothing on screen said which
+   * mark owned which words. Each of the three drawers worked its own y out from
+   * its own mark, and none of them could see the other two.
+   *
+   * THE RULE: a plate claims a rectangle, and a plate that would land on a
+   * claimed one steps away from its mark until it is clear. Once it has stepped
+   * far enough to stop touching its mark, a leader is drawn back down to it,
+   * because a caption floating 40px above a dot is a caption belonging to
+   * nothing. The claim list is emptied once per frame in draw().
+   *
+   * ONE FACE AND ONE SIZE, too. Anchors were 11px monospace and routes and
+   * shots were 10px, which is three decisions for one job. These are labels a
+   * person reads, not identifiers, so they take the label face the panels use. */
+  private plateRects: [number, number, number, number][] = []
+
+  private static readonly PLATE_FONT = '11px "Archivo Narrow", "Segoe UI", system-ui, sans-serif'
+
+  private plate(g: CanvasRenderingContext2D, text: string, mx: number, my: number, ink: string, up: boolean) {
+    g.font = Editor.PLATE_FONT
+    const h = 15
+    const w = g.measureText(text).width + 12
+    // the gap between the mark and the near edge of the plate at rest
+    const clear = 7
+    let top = up ? my - clear - h : my + clear
+    const hit = (t: number) =>
+      this.plateRects.some(([rx, ry, rw, rh]) => mx - w / 2 < rx + rw && mx + w / 2 > rx && t < ry + rh && t + h > ry)
+    // ten steps is 180px, which is more room than any pile this tool has made,
+    // and stopping rather than looping keeps a bad frame cheap
+    for (let i = 0; i < 10 && hit(top); i++) top += up ? -(h + 3) : h + 3
+    const x = mx - w / 2
+    this.plateRects.push([x, top, w, h])
+    // the leader, drawn first so the plate sits on top of its own line
+    const near = up ? top + h : top
+    if (Math.abs(near - my) > clear + 1) {
+      g.strokeStyle = ink
+      g.lineWidth = 1
+      g.globalAlpha = 0.5
+      g.beginPath()
+      g.moveTo(mx, my)
+      g.lineTo(mx, near)
+      g.stroke()
+      g.globalAlpha = 1
+    }
+    g.fillStyle = PLATE
+    g.beginPath()
+    g.roundRect(x, top, w, h, 4)
+    g.fill()
+    g.strokeStyle = ink
+    g.lineWidth = 1
+    g.stroke()
+    g.fillStyle = ink
+    g.textAlign = 'center'
+    g.textBaseline = 'middle'
+    g.fillText(text, mx, top + h / 2 + 0.5)
+  }
+
   // The events, drawn in the tool's own chrome (accent iris over panel dark,
   // never a colour the art uses): the activation ring at its real radius, a
   // dot on the anchor, the name on a small plate above. Test and export show
@@ -5622,7 +5800,15 @@ export class Editor {
       const spot = home ? this.lifeSpot(home) : { x: ev.x, y: ev.y }
       const px = spot.x * z
       const py = spot.y * z
-      g.strokeStyle = '#8f93f5'
+      /* THE INK COMES FROM THE KIND, and it is the ocean chart's table.
+       * Every anchor was drawn in one iris here whatever it was, while /world
+       * drew a door in salmon and a spawn in blue off its own list, so the same
+       * mark changed colour when an author walked from the tool that made it to
+       * the chart that places it. src/core/ink.ts is the one table now. This
+       * also buys the thing the single hue could not: nine marks on the hub and
+       * you can see which of them are doors without reading nine plates. */
+      const ink = inkFor(ANCHOR_INK, ev.kind)
+      g.strokeStyle = ink
       g.lineWidth = 1.5
       /* THE AREA, when one was drawn. A region with a rectangle is that
        * rectangle and not a circle around its middle, on both sides of the
@@ -5640,7 +5826,7 @@ export class Editor {
       g.arc(px, py, ev.r * z, 0, Math.PI * 2)
       g.stroke()
       g.setLineDash([])
-      g.fillStyle = '#8f93f5'
+      g.fillStyle = ink
       g.fillRect(Math.round(px) - 1, Math.round(py) - 1, 3, 3)
       /* WHERE A BODY ENDS UP, joined to the thing it is standing at by a line,
        * because two loose dots near each other say nothing about which one is
@@ -5657,26 +5843,13 @@ export class Editor {
         g.beginPath()
         g.arc(sx, sy, 3.5, 0, Math.PI * 2)
         g.stroke()
-        g.strokeStyle = '#8f93f5'
+        g.strokeStyle = ink
         g.lineWidth = 1.5
       }
-      // the NAME when there is no label, not the word "door". Every kind is
-      // drawn here and most of them are not doors, and a map of six anchors all
-      // captioned "door" says nothing about which one you are looking at.
-      const label = ev.label || ev.name
-      g.font = '11px monospace'
-      const tw = g.measureText(label).width
-      const ty = py - ev.r * z - 6
-      g.beginPath()
-      g.roundRect(px - tw / 2 - 5, ty - 15, tw + 10, 16, 5)
-      g.fillStyle = '#16181bd9'
-      g.fill()
-      g.lineWidth = 1
-      g.stroke()
-      g.fillStyle = '#c9cbf8'
-      g.textAlign = 'center'
-      g.textBaseline = 'middle'
-      g.fillText(label, px, ty - 7)
+      // WHAT A PERSON READS, never the identifier. It was `ev.label || ev.name`,
+      // which prints `panthers_maw` onto the painting the moment nobody has
+      // typed a label yet. displayName unpacks it into words instead.
+      this.plate(g, displayName(ev).text, px, py - ev.r * z, ink, true)
     }
     g.restore()
   }
@@ -5763,28 +5936,12 @@ export class Editor {
         g.beginPath()
         g.arc(q[0], q[1], 5.5, 0, Math.PI * 2)
         g.stroke()
-        g.fillStyle = '#16181bd9'
-        const tw = g.measureText(m.name).width
-        g.beginPath()
-        g.roundRect(q[0] - tw / 2 - 4, q[1] + 8, tw + 8, 13, 4)
-        g.fill()
-        g.strokeStyle = col
-        g.lineWidth = 1
-        g.stroke()
-        g.fillStyle = col
-        g.fillText(m.name, q[0], q[1] + 15)
+        // a mark's caption hangs BELOW its ring, so it does not fight the route
+        // name sitting above the head of the same line
+        this.plate(g, displayName(m).text, q[0], q[1] + 5.5, col, false)
       }
       // the name at the head, where the eye already is after following the line
-      const tw = g.measureText(p.name).width
-      g.fillStyle = '#16181bd9'
-      g.beginPath()
-      g.roundRect(end[0] - tw / 2 - 5, end[1] - 22, tw + 10, 15, 5)
-      g.fill()
-      g.strokeStyle = col
-      g.lineWidth = 1
-      g.stroke()
-      g.fillStyle = col
-      g.fillText(p.name, end[0], end[1] - 14)
+      this.plate(g, displayName(p).text, end[0], end[1] - 6, col, true)
     }
     g.restore()
   }
@@ -5841,16 +5998,7 @@ export class Editor {
         g.arc(px, py, 2.5, 0, Math.PI * 2)
         g.fill()
       }
-      const label = `${f.name} · ${f.zoom}x`
-      const tw = g.measureText(label).width
-      g.fillStyle = '#16181bd9'
-      g.beginPath()
-      g.roundRect(px - tw / 2 - 5, py - 26, tw + 10, 15, 5)
-      g.fill()
-      g.lineWidth = 1
-      g.stroke()
-      g.fillStyle = col
-      g.fillText(label, px, py - 18)
+      this.plate(g, `${displayName(f).text} · ${f.zoom}x`, px, py - 6, col, true)
     }
     g.restore()
   }

@@ -45,24 +45,33 @@
 
   --vellum: #e6d9be; /* aged paper */
   --vellum-2: #d8c8a6; /* paper in shadow */
-  --iron: #1a1611; /* iron gall ink */
-  --iron-soft: #4a4136; /* ink, thinned */
+  --iron: var(--ink-paper); /* iron gall ink */
+  --iron-soft: var(--ink-paper-2); /* ink, thinned */
 
   /* Gold is the accent everywhere, and it is chosen the same way the editor
      chose its iris: it is a hue a MAP never contains. Painted islands are
-     green, sand, stone and water; a gold line always means the tool talking. */
-  --gold: #d4a53c;
-  --gold-lit: #f0c869;
-  --gold-deep: #8a6a1f;
-  --gold-soft: #d4a53c22;
+     green, sand, stone and water; a gold line always means the tool talking.
 
-  --verdigris: #4f9b84; /* aged copper: a thing that is alive or working */
-  --wax: #b04a2f; /* sealing wax: a warning, a refusal */
+     THE HEXES MOVED TO tokens.css and these four are now the site's own words
+     for them. They were the same three golds the editor was writing as
+     #d8a657 and #d9bb55 out of its own head, which is how one accent became
+     three that nearly match. --acc-tool is the token; gold is what the chart
+     calls it. */
+  --gold: var(--acc-tool);
+  --gold-lit: var(--acc-tool-lit);
+  --gold-deep: var(--acc-tool-deep);
+  --gold-soft: color-mix(in srgb, var(--acc-tool) 13%, transparent);
 
-  --ink-on-sea: #d8e3ee;
-  --dim-on-sea: #7d8ea1;
-  --ink-on-paper: var(--iron);
-  --dim-on-paper: #6b5f4e;
+  --verdigris: var(--acc-live); /* aged copper: a thing that is alive or working */
+  --wax: var(--acc-stop); /* sealing wax: a warning, a refusal */
+
+  /* ONE WHITE. This was #d8e3ee here and #e6e9ee in app.css, so walking from
+     /world to /edit changed what "text" meant by a whole step of lightness and
+     neither file knew the other existed. */
+  --ink-on-sea: var(--ink);
+  --dim-on-sea: var(--ink-3);
+  --ink-on-paper: var(--ink-paper);
+  --dim-on-paper: var(--ink-paper-3);
 
   --font-display: 'Fraunces', 'Iowan Old Style', Georgia, serif;
   --font-label: 'Archivo Narrow', 'Segoe UI', system-ui, sans-serif;
@@ -76,8 +85,11 @@
   --t: 340ms;
   --t-slow: 900ms;
 
-  --rule: 1px solid color-mix(in srgb, var(--gold) 22%, transparent);
-  --rule-paper: 1px solid color-mix(in srgb, var(--iron) 18%, transparent);
+  /* the site's engraved border, which is a gold-tinted line rather than the
+     grey --line the tool uses. 22% of gold on the sea measured 1.4:1 and
+     disappeared, so it is mixed against --edge instead of against nothing. */
+  --rule: var(--hair) solid color-mix(in srgb, var(--gold) 30%, var(--edge));
+  --rule-paper: var(--hair) solid color-mix(in srgb, var(--iron) 26%, transparent);
 }
 
 /* ---- the page ------------------------------------------------------------ */
@@ -88,7 +100,7 @@
   min-height: 100%;
   background: var(--void);
   color: var(--ink);
-  font: 400 16px/1.6 var(--font-label);
+  font: 400 var(--fs-read)/1.6 var(--font-label);
   -webkit-font-smoothing: antialiased;
 }
 
@@ -164,7 +176,7 @@ body[data-view='site'] {
    Used for every eyebrow, every section marker, every field name. */
 .label {
   font-family: var(--font-label);
-  font-size: 11px;
+  font-size: var(--fs-fine);
   font-weight: 600;
   letter-spacing: 0.22em;
   text-transform: uppercase;
@@ -172,7 +184,7 @@ body[data-view='site'] {
 }
 .mono {
   font-family: var(--font-mono);
-  font-size: 12px;
+  font-size: var(--fs-small);
   letter-spacing: -0.02em;
 }
 .lede {
@@ -186,7 +198,7 @@ body[data-view='site'] {
 .aside {
   font-family: var(--font-display);
   font-style: italic;
-  font-size: 1.05rem;
+  font-size: var(--fs-read);
   color: var(--dim);
   font-variation-settings: 'SOFT' 40, 'WONK' 1;
 }
@@ -227,14 +239,14 @@ body[data-view='site'] {
   gap: 12px;
   padding: 13px 26px;
   font-family: var(--font-label);
-  font-size: 12px;
+  font-size: var(--fs-small);
   font-weight: 700;
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--plate-ink);
   background: transparent;
-  border: 1px solid color-mix(in srgb, var(--gold) 45%, transparent);
-  cursor: pointer;
+  border: var(--hair) solid color-mix(in srgb, var(--gold) 45%, transparent);
+  cursor: var(--cur-do);
   overflow: hidden;
   transition: color var(--t-fast) var(--ease-paper), border-color var(--t-fast) var(--ease-paper);
   /* the corners are notched, like a brass plate screwed to a case */
@@ -357,14 +369,18 @@ body[data-view='site'] {
 /* ---- the cursor ----------------------------------------------------------
  * A survey reticle rather than an arrow, drawn as an svg data url so it costs
  * no request. It is the first thing anybody notices and the cheapest signal
- * that this was made by somebody rather than assembled.
+ * that this was made by somebody rather than assembled. The svg itself now
+ * lives in tokens.css as --cur-survey, so the two canvases and this page draw
+ * the same reticle.
+ *
+ * IT IS NO LONGER ON BUTTONS AND LINKS. It was on `.site button, .site a`, so
+ * the one signal that says "this is a chart you survey" was also on every
+ * thing you press, which drains it of meaning and makes a button read as
+ * scenery. Controls take `pointer` from the shared convention in tokens.css.
+ * A chart takes it by being a .chart.
  */
-.site,
-.site button,
-.site a {
-  cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28'%3E%3Cg fill='none' stroke='%23d4a53c' stroke-width='1.25'%3E%3Ccircle cx='14' cy='14' r='6.5'/%3E%3Cpath d='M14 1v6M14 21v6M1 14h6M21 14h6'/%3E%3C/g%3E%3Ccircle cx='14' cy='14' r='1.1' fill='%23f0c869'/%3E%3C/svg%3E")
-      14 14,
-    crosshair;
+.site {
+  cursor: var(--cur-survey);
 }
 
 /* ---- shared layout ------------------------------------------------------- */

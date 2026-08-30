@@ -77,21 +77,21 @@
   justify-content: space-between;
 }
 .land-mark {
-  font: 700 12px var(--font-label);
+  font: 700 var(--fs-small) var(--font-label);
   letter-spacing: 0.4em;
-  color: #fff;
+  color: var(--ink);
 }
 .land-in {
-  font: 500 12px var(--font-label);
+  font: 500 var(--fs-small) var(--font-label);
   letter-spacing: 0.06em;
   color: rgba(255, 255, 255, 0.62);
   background: none;
   border: 0;
-  cursor: pointer;
+  cursor: var(--cur-do);
   transition: color 200ms ease;
 }
 .land-in:hover {
-  color: #fff;
+  color: var(--ink);
 }
 
 /* the line sits on whichever side leaves the painting alone */
@@ -123,7 +123,7 @@
   margin: 0;
   font: 500 clamp(1.6rem, 3.6vw, 3.1rem) / 1.12 var(--font-label);
   letter-spacing: -0.02em;
-  color: #fff;
+  color: var(--ink);
   -webkit-text-stroke: 5px #0a0c10;
   paint-order: stroke fill;
   text-shadow:
@@ -158,13 +158,13 @@
 }
 .land-go {
   padding: 14px 40px;
-  font: 700 12px var(--font-label);
+  font: 700 var(--fs-small) var(--font-label);
   letter-spacing: 0.28em;
   text-transform: uppercase;
   color: #0b0d10;
-  background: #fff;
+  background: var(--ink);
   border: 0;
-  cursor: pointer;
+  cursor: var(--cur-do);
   transition:
     transform 220ms cubic-bezier(0.16, 1, 0.3, 1),
     box-shadow 220ms ease;
@@ -186,14 +186,14 @@
   padding: 0;
   border: 0;
   background: rgba(255, 255, 255, 0.28);
-  cursor: pointer;
+  cursor: var(--cur-do);
   transition:
     width 420ms cubic-bezier(0.16, 1, 0.3, 1),
     background 300ms ease;
 }
 .land-dots button.on {
   width: 34px;
-  background: #fff;
+  background: var(--ink);
 }
 
 @media (max-width: 700px) {
@@ -212,7 +212,7 @@
 .home {
   min-height: 100svh;
   background: #0a0c0f;
-  color: #e6e9ee;
+  color: var(--ink);
   font-family: var(--font-label);
 }
 .home-bar {
@@ -227,9 +227,9 @@
   background: linear-gradient(180deg, #0a0c0f 70%, transparent);
 }
 .home-mark {
-  font: 700 11px var(--font-label);
+  font: 700 var(--fs-fine) var(--font-label);
   letter-spacing: 0.4em;
-  color: #6f7885;
+  color: var(--ink-3);
 }
 .home-bar-r {
   display: flex;
@@ -239,15 +239,15 @@
 .home-find {
   width: 150px;
   padding: 7px 10px;
-  font: 400 13px var(--font-label);
-  color: #e6e9ee;
+  font: 400 var(--fs-body) var(--font-label);
+  color: var(--ink);
   background: #12161b;
-  border: 1px solid #1d232b;
+  border: var(--hair) solid #1d232b;
   outline: none;
   transition: border-color 200ms ease;
 }
 .home-find:focus {
-  border-color: #39434f;
+  border-color: var(--edge);
 }
 /* every control in this bar, including the two that are links now rather than
    spelt-out words. text-decoration is here because an <a> brings an underline
@@ -257,15 +257,15 @@
   place-items: center;
   width: 30px;
   height: 30px;
-  color: #6f7885;
+  color: var(--ink-3);
   background: none;
   border: 0;
-  cursor: pointer;
+  cursor: var(--cur-do);
   text-decoration: none;
   transition: color 180ms ease;
 }
 .home-icon:hover {
-  color: #e6e9ee;
+  color: var(--ink);
 }
 
 .home-body {
@@ -285,7 +285,7 @@
   display: flex;
   flex-direction: column;
   background: #10141a;
-  border: 1px solid #1a2027;
+  border: var(--hair) solid #1a2027;
   transition:
     border-color 200ms ease,
     transform 260ms cubic-bezier(0.16, 1, 0.3, 1);
@@ -304,11 +304,11 @@
   width: 26px;
   height: 26px;
   padding: 0;
-  border: 1px solid transparent;
-  border-radius: 3px;
+  border: var(--hair) solid transparent;
+  border-radius: var(--r);
   background: rgba(8, 11, 15, 0.6);
-  color: #5a6470;
-  cursor: pointer;
+  color: var(--ink-3);
+  cursor: var(--cur-do);
   opacity: 0;
   backdrop-filter: blur(4px);
   transition:
@@ -323,12 +323,12 @@
   opacity: 1;
 }
 .card-bin:hover {
-  color: #ff6b5e;
-  border-color: #6d2b26;
+  color: var(--acc-stop-lit);
+  border-color: var(--acc-stop);
   background: rgba(40, 12, 10, 0.85);
 }
 .card-bin:focus-visible {
-  outline: 1px solid #ff6b5e;
+  outline: 1px solid var(--acc-stop-lit);
   outline-offset: 1px;
 }
 .lead-bin {
@@ -338,7 +338,7 @@
   height: 30px;
 }
 .card:hover {
-  border-color: #2c3742;
+  border-color: var(--edge);
   transform: translateY(-3px);
 }
 .card-art {
@@ -366,7 +366,7 @@
   display: grid;
   place-items: center;
   color: #39434f;
-  font: 400 10px var(--font-mono);
+  font: 400 var(--fs-micro) var(--font-mono);
   letter-spacing: 0.1em;
 }
 .card-say {
@@ -382,27 +382,27 @@
 }
 .card-top h2 {
   margin: 0;
-  font: 500 15px var(--font-label);
+  font: 500 var(--fs-lead) var(--font-label);
   letter-spacing: -0.01em;
-  color: #e6e9ee;
+  color: var(--ink);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .card-when {
   flex: none;
-  font: 400 10px var(--font-mono);
-  color: #5b6470;
+  font: 400 var(--fs-micro) var(--font-mono);
+  color: var(--ink-3);
 }
 .card-nums {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
-  font: 400 10px var(--font-mono);
-  color: #5b6470;
+  font: 400 var(--fs-micro) var(--font-mono);
+  color: var(--ink-3);
 }
 .card-nums .lit {
-  color: #7fb3a3;
+  color: var(--acc-live);
 }
 .card-do {
   display: flex;
@@ -410,13 +410,13 @@
   padding-top: 3px;
 }
 .card-do a {
-  font: 500 12px var(--font-label);
-  color: #8d97a4;
+  font: 500 var(--fs-small) var(--font-label);
+  color: var(--ink-2);
   text-decoration: none;
   transition: color 180ms ease;
 }
 .card-do a:hover {
-  color: #fff;
+  color: var(--ink);
 }
 
 /* new map is a card too, so the grid never has a special first row that breaks
@@ -429,26 +429,26 @@
   aspect-ratio: auto;
   background: none;
   border-style: dashed;
-  border-color: #232b34;
-  cursor: pointer;
+  border-color: var(--edge);
+  cursor: var(--cur-do);
   text-align: left;
   min-height: 220px;
 }
 .card.new:hover {
-  border-color: #3a4652;
+  border-color: var(--edge);
 }
 .new-plus {
-  font: 300 30px var(--font-label);
+  font: 300 var(--fs-figure) var(--font-label);
   line-height: 1;
-  color: #4a5563;
+  color: var(--ink-off);
 }
 .new-say {
-  font: 500 15px var(--font-label);
-  color: #e6e9ee;
+  font: 500 var(--fs-lead) var(--font-label);
+  color: var(--ink);
 }
 .new-sub {
-  font: 400 12px var(--font-label);
-  color: #5b6470;
+  font: 400 var(--fs-small) var(--font-label);
+  color: var(--ink-3);
 }
 
 /* ============================= folders =================================
@@ -505,38 +505,38 @@
   padding: 7px 8px 7px 9px;
   background: none;
   border: 0;
-  cursor: pointer;
+  cursor: var(--cur-do);
   text-align: left;
 }
 .rail-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font: 500 12px var(--font-label);
-  color: #8d97a4;
+  font: 500 var(--fs-small) var(--font-label);
+  color: var(--ink-2);
   transition: color 160ms ease;
 }
 .rail-n {
   flex: none;
-  font: 400 10px var(--font-mono);
-  color: #454f5b;
+  font: 400 var(--fs-micro) var(--font-mono);
+  color: var(--ink-off);
 }
 .rail-row:hover .rail-name,
 .rail-hit:hover .rail-name {
-  color: #e6e9ee;
+  color: var(--ink);
 }
 /* the one you are looking at, said with a line and not a fill */
 .rail-row.on,
 button.rail-row.on {
-  border-left-color: #7fb3a3;
+  border-left-color: var(--acc-live);
   background: #10141a;
 }
 .rail-row.on .rail-name {
-  color: #e6e9ee;
+  color: var(--ink);
 }
 /* a card is over this folder and letting go puts it in */
 .rail-row.over {
-  border-left-color: #7fb3a3;
+  border-left-color: var(--acc-live);
   background: #16211e;
 }
 .rail-row.over .rail-name {
@@ -546,12 +546,12 @@ button.rail-row.on {
   flex: none;
   width: 20px;
   padding: 0;
-  font: 400 14px var(--font-label);
+  font: 400 var(--fs-lead) var(--font-label);
   line-height: 1;
   color: #39434f;
   background: none;
   border: 0;
-  cursor: pointer;
+  cursor: var(--cur-do);
   opacity: 0;
   transition:
     opacity 140ms ease,
@@ -562,7 +562,7 @@ button.rail-row.on {
   opacity: 1;
 }
 .rail-x:hover {
-  color: #ff6b5e;
+  color: var(--acc-stop-lit);
 }
 /* removing a folder keeps every map in it, so this asks once, inline, rather
    than opening the two-step dialog that deleting a map opens */
@@ -573,14 +573,14 @@ button.rail-row.on {
 }
 .rail-sure button {
   padding: 0;
-  font: 400 10px var(--font-mono);
+  font: 400 var(--fs-micro) var(--font-mono);
   background: none;
   border: 0;
-  cursor: pointer;
-  color: #5b6470;
+  cursor: var(--cur-do);
+  color: var(--ink-3);
 }
 .rail-sure button:first-child {
-  color: #ff6b5e;
+  color: var(--acc-stop-lit);
 }
 .rail-sure button:hover {
   text-decoration: underline;
@@ -588,35 +588,35 @@ button.rail-row.on {
 .rail-new {
   margin-top: 6px;
   padding: 7px 9px;
-  font: 400 11px var(--font-label);
-  color: #4a5563;
+  font: 400 var(--fs-fine) var(--font-label);
+  color: var(--ink-off);
   background: none;
   border: 1px dashed #1d232b;
-  cursor: pointer;
+  cursor: var(--cur-do);
   text-align: left;
   transition:
     color 160ms ease,
     border-color 160ms ease;
 }
 .rail-new:hover {
-  color: #e6e9ee;
-  border-color: #3a4652;
+  color: var(--ink);
+  border-color: var(--edge);
 }
 .rail-name-in {
   flex: 1;
   min-width: 0;
   padding: 6px 8px;
-  font: 400 12px var(--font-label);
-  color: #e6e9ee;
+  font: 400 var(--fs-small) var(--font-label);
+  color: var(--ink);
   background: #12161b;
-  border: 1px solid #39434f;
+  border: var(--hair) solid var(--edge);
   outline: none;
 }
 
 .fold-empty {
   margin: 22px 2px 0;
-  font: 400 11px var(--font-mono);
-  color: #454f5b;
+  font: 400 var(--fs-fine) var(--font-mono);
+  color: var(--ink-off);
 }
 
 /* ---- a folder as a tile in the grid ---- */
@@ -626,10 +626,10 @@ button.rail-row.on {
    the face: a shape and no painting, and no colour on it until something is
    being dragged onto it. */
 .card.fold {
-  cursor: pointer;
+  cursor: var(--cur-do);
 }
 .card.fold:hover {
-  border-color: #2c3742;
+  border-color: var(--edge);
 }
 /* the face is the click target and the whole art area, so opening a folder is
    the same size of gesture as opening a map */
@@ -643,7 +643,7 @@ button.rail-row.on {
   background: #0b0f14;
   border: 0;
   color: #262f39;
-  cursor: pointer;
+  cursor: var(--cur-do);
   transition:
     color 220ms ease,
     background-color 220ms ease;
@@ -654,24 +654,24 @@ button.rail-row.on {
 /* a map is over this folder and letting go files it here. Same green as the
    rail row, so the two drop targets for one folder say it the same way. */
 .card.fold.over {
-  border-color: #7fb3a3;
+  border-color: var(--acc-live);
   transform: none;
 }
 .card.fold.over .fold-face {
-  color: #7fb3a3;
+  color: var(--acc-live);
   background: #101a18;
 }
 .fold-in {
   padding: 0;
-  font: 500 12px var(--font-label);
-  color: #8d97a4;
+  font: 500 var(--fs-small) var(--font-label);
+  color: var(--ink-2);
   background: none;
   border: 0;
-  cursor: pointer;
+  cursor: var(--cur-do);
   transition: color 180ms ease;
 }
 .fold-in:hover {
-  color: #fff;
+  color: var(--ink);
 }
 /* removing a folder keeps every map in it, so it asks once and it asks here,
    in the corner the bin is in, rather than opening the dialog a map opens */
@@ -684,18 +684,18 @@ button.rail-row.on {
   gap: 8px;
   padding: 6px 8px;
   background: rgba(8, 11, 15, 0.94);
-  border: 1px solid #2c3742;
+  border: var(--hair) solid var(--edge);
 }
 .fold-sure button {
   padding: 0;
-  font: 400 10px var(--font-mono);
-  color: #5b6470;
+  font: 400 var(--fs-micro) var(--font-mono);
+  color: var(--ink-3);
   background: none;
   border: 0;
-  cursor: pointer;
+  cursor: var(--cur-do);
 }
 .fold-sure button:first-child {
-  color: #ff6b5e;
+  color: var(--acc-stop-lit);
 }
 .fold-sure button:hover {
   text-decoration: underline;
@@ -713,25 +713,25 @@ button.rail-row.on {
 }
 .fold-back {
   padding: 0;
-  font: 500 12px var(--font-label);
-  color: #8d97a4;
+  font: 500 var(--fs-small) var(--font-label);
+  color: var(--ink-2);
   background: none;
   border: 0;
-  cursor: pointer;
+  cursor: var(--cur-do);
   transition: color 180ms ease;
 }
 .fold-back:hover {
-  color: #fff;
+  color: var(--ink);
 }
 .fold-head h2 {
   margin: 0;
-  font: 500 17px var(--font-label);
+  font: 500 var(--fs-title) var(--font-label);
   letter-spacing: -0.01em;
-  color: #e6e9ee;
+  color: var(--ink);
 }
 .fold-head span {
-  font: 400 10px var(--font-mono);
-  color: #454f5b;
+  font: 400 var(--fs-micro) var(--font-mono);
+  color: var(--ink-off);
 }
 
 /* ---- making one from the bar ---- */
@@ -741,7 +741,7 @@ button.rail-row.on {
   display: flex;
 }
 .home-icon.on {
-  color: #e6e9ee;
+  color: var(--ink);
 }
 .fold-new {
   position: absolute;
@@ -753,35 +753,35 @@ button.rail-row.on {
   width: 236px;
   padding: 8px;
   background: #0d1116;
-  border: 1px solid #2c3742;
+  border: var(--hair) solid var(--edge);
   box-shadow: 0 18px 40px -18px rgba(0, 0, 0, 0.9);
 }
 .fold-in-name {
   flex: 1;
   min-width: 0;
   padding: 6px 8px;
-  font: 400 12px var(--font-label);
-  color: #e6e9ee;
+  font: 400 var(--fs-small) var(--font-label);
+  color: var(--ink);
   background: #12161b;
-  border: 1px solid #39434f;
+  border: var(--hair) solid var(--edge);
   outline: none;
 }
 .fold-make {
   flex: none;
   padding: 0 10px;
-  font: 500 11px var(--font-label);
+  font: 500 var(--fs-fine) var(--font-label);
   color: #0a0c0f;
-  background: #7fb3a3;
+  background: var(--acc-live);
   border: 0;
-  cursor: pointer;
+  cursor: var(--cur-do);
   transition:
     background-color 160ms ease,
     color 160ms ease;
 }
 .fold-make:disabled {
-  color: #5b6470;
+  color: var(--ink-3);
   background: #1a2027;
-  cursor: default;
+  cursor: var(--cur-no);
 }
 
 /* ---- dragging a card ---- */
@@ -801,7 +801,7 @@ button.rail-row.on {
   top: -2px;
   bottom: -2px;
   width: 2px;
-  background: #7fb3a3;
+  background: var(--acc-live);
 }
 .card.drop-before::before {
   left: -9px;
@@ -822,20 +822,20 @@ button.rail-row.on {
   gap: 4px;
   margin-left: auto;
   padding: 0;
-  color: #5b6470;
+  color: var(--ink-3);
   background: none;
   border: 0;
-  cursor: pointer;
+  cursor: var(--cur-do);
   transition: color 180ms ease;
 }
 .card-fold:hover {
-  color: #fff;
+  color: var(--ink);
 }
 .card-fold.on {
-  color: #7fb3a3;
+  color: var(--acc-live);
 }
 .card-foldn {
-  font: 400 9px var(--font-mono);
+  font: 400 var(--fs-micro) var(--font-mono);
 }
 .pick {
   position: absolute;
@@ -845,7 +845,7 @@ button.rail-row.on {
   width: 168px;
   padding: 6px;
   background: #0d1116;
-  border: 1px solid #2c3742;
+  border: var(--hair) solid var(--edge);
   box-shadow: 0 18px 40px -18px rgba(0, 0, 0, 0.9);
 }
 .pick-list {
@@ -860,12 +860,12 @@ button.rail-row.on {
   align-items: center;
   gap: 7px;
   padding: 5px 6px;
-  cursor: pointer;
-  font: 400 12px var(--font-label);
-  color: #8d97a4;
+  cursor: var(--cur-do);
+  font: 400 var(--fs-small) var(--font-label);
+  color: var(--ink-2);
 }
 .pick-list label:hover {
-  color: #e6e9ee;
+  color: var(--ink);
   background: #141a21;
 }
 .pick-list span {
@@ -877,29 +877,29 @@ button.rail-row.on {
   flex: none;
   width: 12px;
   height: 12px;
-  accent-color: #7fb3a3;
+  accent-color: var(--acc-live);
 }
 .pick-new {
   width: 100%;
   margin-top: 4px;
   padding: 6px;
-  font: 400 11px var(--font-label);
-  color: #5b6470;
+  font: 400 var(--fs-fine) var(--font-label);
+  color: var(--ink-3);
   background: none;
   border: 0;
-  cursor: pointer;
+  cursor: var(--cur-do);
   text-align: left;
 }
 .pick-new:hover {
-  color: #e6e9ee;
+  color: var(--ink);
 }
 .pick-name {
   width: 100%;
   margin-top: 4px;
   padding: 6px;
-  font: 400 12px var(--font-label);
-  color: #e6e9ee;
+  font: 400 var(--fs-small) var(--font-label);
+  color: var(--ink);
   background: #12161b;
-  border: 1px solid #39434f;
+  border: var(--hair) solid var(--edge);
   outline: none;
 }

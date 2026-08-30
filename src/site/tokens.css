@@ -1,0 +1,409 @@
+/* THE ROOT LAYER. One font, one scale, one ramp of ink, one set of edges.
+ *
+ * WHY THIS FILE EXISTS. Six stylesheets grew separately and each one solved the
+ * same problems again with its own numbers. Measured across the running app:
+ * the document body carried no font-family at all and inherited Times New
+ * Roman, nineteen distinct font sizes were in use, two different whites were
+ * both called "the text colour", #5b6470 was doing back arrows and section
+ * headers at 9 to 11px at about 3:1, and 'undo' and 'frame' were drawn at
+ * #333c47, which is 1.76:1 and cannot be read at all. Every one of those is a
+ * decision that should have been made once.
+ *
+ * WHAT GOES HERE: only things that are true on every page. A page keeps its own
+ * composition, its own art and its own words. It does not get to keep its own
+ * idea of what grey means.
+ *
+ * LOAD ORDER: this is first in main.tsx, before site.css and before app.css.
+ * Both of those used to declare --ink, --dim, --edge and the font stacks
+ * themselves, and a later :root wins, so those declarations were removed and
+ * now alias what is below. Adding a competing hex to either file quietly turns
+ * this file off, which is the failure this whole layer is here to stop.
+ */
+
+/* ---- type -----------------------------------------------------------------
+ *
+ * The faces are declared and imported in site.css, which owns the webfont
+ * request. This file owns the SIZES, and the point of naming them is that a
+ * step has a job. Nine unnamed sizes is not a scale, it is a history of what
+ * happened to look right in one panel on one afternoon.
+ *
+ * Five steps for anything a person operates, and two for a page they read.
+ * 9.5, 10.5, 11.5, 12.5 and 13.5 all collapsed into the step above or below.
+ * A half pixel is not a design decision; it is a hinting artefact.
+ */
+:root {
+  /* an id, a coordinate, a version, a unit. Mono, and never a sentence: at this
+     size a word is recognised by shape rather than read. */
+  --fs-micro: 10px;
+  /* the tracked uppercase section marker, and a field's name above its input */
+  --fs-fine: 11px;
+  /* a control's own word: a button, a tab, a segment, a row in a list */
+  --fs-small: 12px;
+  /* THE DEFAULT. Anything that is a sentence inside a panel */
+  --fs-body: 13px;
+  /* the one line at the top of a surface, and a card's title */
+  --fs-lead: 15px;
+  /* running prose on a page somebody reads rather than operates. Site only */
+  --fs-read: 16px;
+  /* a heading inside a sheet or a page, below the display faces */
+  --fs-title: 18px;
+  /* NOT PROSE. One number or one glyph drawn at size: the walkable percentage
+     that is the answer to a whole step, and the + on the new-map card. It was
+     24px in one file and 30px in another for the same job. Anything larger
+     than this is a display face and takes a clamp, not a step. */
+  --fs-figure: 24px;
+
+  /* line heights, because a 10px mono id and a 13px sentence do not want the
+     same leading and both were writing 1.5 */
+  --lh-tight: 1.2;
+  --lh: 1.45;
+  --lh-read: 1.6;
+
+  /* the tracking that makes a small uppercase label legible. It was written as
+     0.18em, 0.2em, 0.22em and 0.32em in four files for the same kind of word. */
+  --track-label: 0.2em;
+  --track-wide: 0.32em;
+}
+
+/* ---- ink, and the ratio each step is allowed to be used at -----------------
+ *
+ * Every number below is the measured WCAG contrast against --void (#070b11),
+ * which is the site's darkest surface; the editor's --bg (#0a0c0f) and --panel
+ * (#10141a) are within 1 point of it, so one ramp serves all three.
+ *
+ * THE RULE THAT WAS BEING BROKEN: 4.5:1 is the floor for text, and "large text"
+ * (18px, or 14px bold) is the only thing allowed down at 3:1. This app has
+ * almost no large text. Its section headers, its id columns and its readouts
+ * are 9 to 11px, so they are small text, so they do not get the 3:1 exemption
+ * that everything in here was quietly claiming.
+ *
+ * --ink-edge is therefore NOT A TEXT COLOUR and is named so it cannot be
+ * mistaken for one.
+ */
+:root {
+  --ink: #e6e9ee; /* 16.2:1  primary. Anything a person reads to do the job */
+  --ink-2: #9fadbe; /*  8.6:1  secondary. A value, a row, running panel text */
+  --ink-3: #7d8ea1; /*  5.9:1  tertiary. Section headers, ids, units, readouts.
+                              THE FLOOR FOR TEXT. Nothing dimmer holds words. */
+  --ink-off: #66707d; /*  3.9:1  a control that is off. Visibly still a control,
+                              and visibly not available. It replaces #333c47,
+                              which at 1.76:1 was not disabled, it was gone. */
+  --ink-edge: #5b6470; /*  3.3:1  NOT TEXT. An icon stroke, a chart tick, a
+                              glyph that carries meaning without being read. */
+
+  /* the old names, kept because six files and both canvases call them. They
+     point at the ramp now instead of at their own hex. */
+  --dim: var(--ink-3);
+
+  /* paper. The same five jobs against --vellum (#e6d9be), which is the auth
+     screen and the code view. */
+  --ink-paper: #1a1611; /* 12.9:1 */
+  --ink-paper-2: #4a4136; /*  7.2:1 */
+  --ink-paper-3: #635747; /*  5.0:1  the floor */
+  --ink-paper-off: #79705e; /*  3.6:1  off, on paper */
+}
+
+/* ---- the accents, by what they MEAN ----------------------------------------
+ *
+ * Five hues were in play with nothing written down: amber on /world, green step
+ * badges in the editor, orange on doors, salmon on anchor labels and magenta on
+ * the walkable overlay. Colour that means five things means nothing.
+ *
+ * The governing idea was already in app.css and worth keeping: an accent hue is
+ * chosen because THE MAP NEVER CONTAINS IT, so a coloured stroke always reads
+ * as the tool talking and never as painted art.
+ *
+ * GOLD AND GREEN ARE BOTH KEPT, and the line between them is the one thing to
+ * read here. Gold is what the tool SAYS: it is on the thing you have armed, the
+ * thing you have selected and the one line of instruction, and it is on one of
+ * those at a time. Green is what the tool REPORTS: working, finished,
+ * published, focused, fine. Saying and reporting are different acts, so a
+ * screen with a gold selection and a green "published" badge is not two
+ * accents fighting; it is a sentence and a status.
+ */
+:root {
+  --acc-tool: #d4a53c; /* 8.7:1  THE TOOL SPEAKING. An armed tool, the one hint
+                             on the chart, the thing currently selected. Gold is
+                             on one thing at a time or it stops meaning it. */
+  --acc-tool-lit: #f0c869; /* 12.4:1  the same, under a pointer */
+  --acc-tool-deep: #8a6a1f; /* gold sunk into a surface, for a fill */
+  --acc-tool-ink: #2b2005; /* what is legible ON a gold fill, 8.9:1 against it */
+  /* a warning is the tool speaking, not the tool refusing, so it is gold. It
+     was `var(--warn, #d8a657)` in six places with --warn declared nowhere, so
+     the fallback WAS the colour and a fourth gold got into the app that way. */
+  --warn: var(--acc-tool);
+
+  --acc-live: #6fbf9d; /* 9.0:1  THE TOOL REPORTING. A running job, a step that
+                             completed, a published map, a focus ring, an ok. */
+  --acc-stop: #b04a2f; /* 3.6:1  A REFUSAL OR A DESTRUCTION. Boundary and fill
+                             only: it is under the text floor. */
+  --acc-stop-edge: #d4593a; /* 5.0:1  the boundary of a destructive control once
+                             it is armed, so arming is visible without a second
+                             hue. The editor was reaching for #e84660, a crimson
+                             from no family, wherever it wanted this. */
+  --acc-stop-lit: #ff8d80; /* 8.3:1  the words of a refusal */
+  --acc-door: #d08a4a; /* 7.0:1  A WAY THROUGH to another map. Doors and the
+                             prompts on them, and nothing else. */
+  --acc-mark: #d0785f; /* 6.1:1  AN ANCHOR'S OWN LABEL: the name an author gave
+                             a point, drawn beside it on the chart. */
+
+  /* FUNCTIONAL, and it stays exactly this hue. The cut layer is drawn as a 1px
+     checker at rgb(255,64,208) by src/core/editor.ts, picked because no
+     painting contains it, so a cut pixel can never be mistaken for art. Named
+     here so the panel that talks about the cut can match the canvas. */
+  --mask-cut: #ff40d0;
+  --mask-occ: #be78ff; /* occluders, lilac, same argument */
+}
+
+/* ---- edges: a rule you can actually see at 1x ------------------------------
+ *
+ * A 1px border gets snapped to a device pixel, and at some window scales
+ * Chromium computes it as 0.666667px. Measured on /world: 23 borders on the
+ * page, every one of them 0.666667px, including the header's own bottom rule.
+ * A two-thirds-alpha line drawn in #141c26 on #070b11 is 1.15:1, which is not a
+ * faint line, it is a dither.
+ *
+ * The fix is not a thicker border. It is a border COLOUR chosen for the job the
+ * line is doing, so that even two thirds of it lands.
+ */
+:root {
+  --line: #2b3a4b; /* 1.7:1  a divider between two blocks. It separates; it does
+                        not identify anything, so it is allowed to be quiet. */
+  --edge: #2e3d4d; /* 1.8:1  a resting surface's own outline: a card, a panel */
+  --edge-ctl: #4f6076; /* 3.1:1  THE BOUNDARY OF SOMETHING YOU CAN OPERATE. An
+                        input, a button, a chip. 3:1 is the floor for a control
+                        boundary and this is the token that meets it. */
+  --edge-lit: #6b7f97; /* 4.8:1  the same boundary hovered, focused or armed */
+
+  /* one width, so nothing invents 2px for emphasis when it wanted a colour */
+  --hair: 1px;
+}
+
+/* ---- radius ---------------------------------------------------------------
+ *
+ * It was 3px on everything, which is the shape a framework picks when nobody
+ * picked. Four steps, and the step says how far off the surface the thing is.
+ */
+:root {
+  --r-tight: 2px; /* pressed into the surface: a chip, a swatch, a segment */
+  --r: 4px; /* sitting on it: an input, a button, a row */
+  --r-soft: 8px; /* lifted off it: a card, a panel, a sheet, a menu */
+  --r-round: 999px; /* a dot or a pill */
+}
+
+/* ---- cursors --------------------------------------------------------------
+ *
+ * THE CONVENTION, and the two canvases and every button now agree on it.
+ *
+ *   a control            pointer. A button that shows a crosshair reads as
+ *                        scenery, and the site was putting the survey reticle
+ *                        on every button and link it had.
+ *   a control that is off not-allowed. It was `default`, which says nothing
+ *                        happened rather than nothing can.
+ *   a chart              the reticle. It is the one signal that a surface is
+ *                        something you survey rather than something you read,
+ *                        so it is spent on the map canvas and on the site's
+ *                        chart pages, and nowhere else.
+ *   dragging a chart     grab at rest, grabbing while held
+ *   drawing on a chart   crosshair
+ */
+:root {
+  --cur-do: pointer;
+  --cur-no: not-allowed;
+  --cur-text: text;
+  --cur-grab: grab;
+  --cur-held: grabbing;
+  --cur-draw: crosshair;
+  /* the survey reticle, an inline svg so it costs no request. The stroke is
+     --acc-tool written out, because a data url cannot read a custom property. */
+  --cur-survey: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28'%3E%3Cg fill='none' stroke='%23d4a53c' stroke-width='1.25'%3E%3Ccircle cx='14' cy='14' r='6.5'/%3E%3Cpath d='M14 1v6M14 21v6M1 14h6M21 14h6'/%3E%3C/g%3E%3Ccircle cx='14' cy='14' r='1.1' fill='%23f0c869'/%3E%3C/svg%3E")
+    14 14, crosshair;
+}
+
+/* ---- the document ---------------------------------------------------------
+ *
+ * The one line this whole file was written for. There was no font-family on
+ * html or body, so every component declared its own and anything that forgot
+ * got Times New Roman. Declared once, here, and inherited.
+ */
+html,
+body {
+  font-family: var(--font-label);
+}
+body {
+  font-size: var(--fs-body);
+  line-height: var(--lh);
+}
+
+/* THE SCROLLBAR IS PART OF THE APP AND NOT PART OF THE OPERATING SYSTEM.
+ *
+ * Four places had written this rule and /surfaces had not, so that page ran a
+ * bright OS bar down its edge while the editor two clicks away ran a thin dark
+ * one. It is a whole-document decision, so it is made once. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--edge-ctl) transparent;
+}
+*::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--edge-ctl);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  border-radius: var(--r-round);
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--edge-lit);
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* every control agrees, on both surfaces, without each sheet saying it again */
+button,
+[role='button'],
+summary,
+label,
+select {
+  cursor: var(--cur-do);
+}
+button:disabled,
+[aria-disabled='true'],
+input:disabled,
+select:disabled,
+textarea:disabled {
+  cursor: var(--cur-no);
+}
+input:not([type='checkbox']):not([type='radio']):not([type='range']):not([type='color']),
+textarea {
+  cursor: var(--cur-text);
+}
+
+/* A CHART. Any surface you survey rather than read: the editor's stage, the
+   ocean on /world, the living map on the landing page. One class, so the two
+   canvases cannot drift apart again. data-hand is written by the page while a
+   drag or a draw is live. */
+.chart {
+  cursor: var(--cur-survey);
+  touch-action: none;
+}
+.chart[data-hand='grab'] {
+  cursor: var(--cur-grab);
+}
+.chart[data-hand='held'] {
+  cursor: var(--cur-held);
+}
+.chart[data-hand='draw'] {
+  cursor: var(--cur-draw);
+}
+.chart[data-hand='off'] {
+  cursor: var(--cur-no);
+}
+
+/* ---- the empty state ------------------------------------------------------
+ *
+ * Measured: /world's right rail is 290 by 720 and holds one 15px row, so 97 per
+ * cent of it is air with a border down the side. The editor has the same
+ * disease from the other end, where a panel with nothing in it collapses to a
+ * heading and a gap and reads as broken rather than as empty.
+ *
+ * An empty panel is not a layout failure to be hidden. It is a place that has
+ * a job and nothing in it yet, and it should say the job. Three parts and no
+ * more: a mark, the one line naming what is not here, and the act that would
+ * put something here. The mark is a drawn rule rather than an icon, because
+ * every icon this app could use is already spent on a real control.
+ *
+ * `nothing` and not `empty-state`, because the sheets around it are written in
+ * plain words and a class name is read by a person too.
+ */
+.nothing {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 10px;
+  /* enough height to read as a considered space rather than a gap, and it
+     centres inside whatever it is given if that is taller */
+  min-height: 140px;
+  padding: 24px 18px;
+  text-align: center;
+}
+/* a survey tick, drawn small. It is the same mark the site pins a section to */
+.nothing::before {
+  content: '';
+  width: 26px;
+  height: var(--hair);
+  background: var(--edge-ctl);
+}
+.nothing-say {
+  margin: 0;
+  max-width: 30ch;
+  font-size: var(--fs-small);
+  line-height: var(--lh);
+  color: var(--ink-2);
+}
+/* what would fill it, in the author's own words: "draw the first island", not
+   "no items". A panel that names the next act is a panel that teaches. */
+/* --ink-3 and not --ink-off, and the difference matters. This is a real
+   sentence somebody is meant to read and act on, so it takes the text floor.
+   --ink-off is for a control that cannot be pressed, and nothing here is one. */
+.nothing-do {
+  margin: 0;
+  font-size: var(--fs-fine);
+  letter-spacing: var(--track-label);
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.nothing button,
+.nothing .nothing-act {
+  font-size: var(--fs-small);
+  color: var(--acc-tool);
+  background: none;
+  border: var(--hair) solid var(--edge-ctl);
+  border-radius: var(--r);
+  padding: 5px 14px;
+  transition: color 180ms var(--ease-out), border-color 180ms var(--ease-out);
+}
+.nothing button:hover,
+.nothing .nothing-act:hover {
+  color: var(--acc-tool-lit);
+  border-color: var(--edge-lit);
+}
+
+/* A RAIL THAT IS NEARLY EMPTY, which is the /world case and is different from
+   an empty one. It holds a heading and one row, and 700px of nothing under it
+   reads as a page that failed to load. The rail's content sits at the top and
+   the leftover air is given a floor: the same tick, and the line saying what
+   else could go here. Pages opt in by putting .sparse on the scrolling column.
+
+   FLEX AND NOT GRID, and that is the whole mechanism. `align-content: start`
+   on a grid stacks every child at the top and leaves the air below, which is
+   the state being fixed. A flex column lets one child claim the leftover with
+   `margin-top: auto`, so the rail reads as content at the top and a floor at
+   the bottom rather than content at the top and a hole. */
+.sparse {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.sparse > .nothing {
+  /* inside a rail the empty state is a footer under real content, not a
+     centred hero, so it does not fight the rows above it */
+  margin-top: auto;
+  min-height: 0;
+  padding-top: 34px;
+}
+
+/* A NAME NOBODY TYPED. displayName in src/core/naming.ts unpacked it from the
+   identifier, so the words are a guess and the underline says so. Dotted and
+   not red, because it is not broken: it just has not been confirmed. This was
+   already the idiom in two places and is shared here so the third surface does
+   not invent a third way of saying it. */
+.guessed {
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--ink-off);
+}

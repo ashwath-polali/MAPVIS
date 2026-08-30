@@ -38,7 +38,7 @@
 }
 .wordmark {
   font-family: var(--font-display);
-  font-size: 19px;
+  font-size: var(--fs-title);
   letter-spacing: 0.16em;
   font-variation-settings: 'wght' 500;
 }
@@ -46,7 +46,7 @@
   display: flex;
   align-items: center;
   gap: clamp(14px, 2.4vw, 30px);
-  font-size: 13px;
+  font-size: var(--fs-body);
 }
 .ways a,
 .ways .asbtn {
@@ -56,11 +56,11 @@
   border: 0;
   padding: 0;
   font: inherit;
-  cursor: pointer;
+  cursor: var(--cur-do);
 }
 .plate.small {
   padding: 9px 16px;
-  font-size: 10.5px;
+  font-size: var(--fs-fine);
 }
 @media (max-width: 700px) {
   .ways .ul:not(:last-child) {
@@ -123,7 +123,7 @@
   transform-origin: 60% 40%;
   rotate: -3.4deg;
   background: linear-gradient(160deg, #1a2a3d, #0e1926);
-  border: 1px solid color-mix(in srgb, var(--gold) 16%, transparent);
+  border: var(--hair) solid color-mix(in srgb, var(--gold) 16%, transparent);
   box-shadow:
     0 40px 120px -30px #000,
     inset 0 0 120px -40px var(--gold-deep);
@@ -138,7 +138,7 @@
 .hero-chart-edge {
   position: absolute;
   inset: 10px;
-  border: 1px solid color-mix(in srgb, var(--gold) 12%, transparent);
+  border: var(--hair) solid color-mix(in srgb, var(--gold) 12%, transparent);
   pointer-events: none;
 }
 
@@ -212,7 +212,7 @@
 }
 .hero-alt {
   color: var(--dim);
-  font-size: 14px;
+  font-size: var(--fs-lead);
 }
 
 .hero-foot {
@@ -223,7 +223,7 @@
   justify-content: space-between;
   padding-inline: clamp(20px, 5vw, 56px);
   color: var(--dim);
-  font-size: 10px;
+  font-size: var(--fs-micro);
   letter-spacing: 0.1em;
 }
 .hero-scroll {
@@ -260,7 +260,7 @@
 }
 
 .leg-n {
-  font-size: 10px;
+  font-size: var(--fs-micro);
   letter-spacing: 0.4em;
   color: var(--gold-deep);
   margin-bottom: 18px;
@@ -281,7 +281,7 @@
   position: relative;
   aspect-ratio: 5 / 4;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--gold) 26%, transparent);
+  border: var(--hair) solid color-mix(in srgb, var(--gold) 26%, transparent);
   clip-path: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px);
   background: var(--depth);
   box-shadow: 0 30px 90px -40px #000;
@@ -289,7 +289,7 @@
 .realm-sky {
   position: absolute;
   inset: -8%;
-  background: radial-gradient(70% 60% at 50% 20%, color-mix(in srgb, var(--tone) 90%, #fff 10%), var(--depth) 70%);
+  background: radial-gradient(70% 60% at 50% 20%, color-mix(in srgb, var(--tone) 90%, var(--ink) 10%), var(--depth) 70%);
 }
 .realm-land {
   position: absolute;
@@ -318,7 +318,7 @@
 }
 .realm-await {
   color: color-mix(in srgb, var(--gold) 55%, transparent);
-  font-size: 10px;
+  font-size: var(--fs-micro);
   letter-spacing: 0.1em;
   border: 1px dashed color-mix(in srgb, var(--gold) 30%, transparent);
   padding: 8px 14px;
@@ -332,7 +332,7 @@
   flex-wrap: wrap;
 }
 .realm figcaption .aside {
-  font-size: 0.95rem;
+  font-size: var(--fs-lead);
 }
 
 /* ---- the code sample on leg III ------------------------------------------- */
@@ -340,7 +340,7 @@
 .codelet {
   margin: 0;
   padding: 20px 22px;
-  font-size: 11.5px;
+  font-size: var(--fs-small);
   line-height: 1.85;
   color: var(--ink-on-sea);
   background: color-mix(in srgb, var(--void) 70%, #000);
@@ -357,7 +357,7 @@
   color: var(--verdigris);
 }
 .c-fn {
-  color: #cfe0f0;
+  color: var(--ink);
 }
 
 /* ---- the close ------------------------------------------------------------ */
@@ -378,7 +378,7 @@
 .close-note {
   margin: 22px 0 0;
   max-width: 40ch;
-  font-size: 0.95rem;
+  font-size: var(--fs-lead);
 }
 
 /* ---- the foot -------------------------------------------------------------- */
@@ -404,7 +404,7 @@
 }
 .foot-cols a {
   color: var(--dim);
-  font-size: 13px;
+  font-size: var(--fs-body);
   text-decoration: none;
 }
 .foot-cols a:hover {
@@ -417,7 +417,7 @@
   display: flex;
   justify-content: space-between;
   color: var(--dim);
-  font-size: 9.5px;
+  font-size: var(--fs-micro);
   letter-spacing: 0.24em;
   text-transform: uppercase;
   border-top: var(--rule);

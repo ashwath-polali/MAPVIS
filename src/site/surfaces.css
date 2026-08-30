@@ -8,11 +8,17 @@
  */
 
 .surf {
+  /* THE SAME WELL THE OCEAN SINKS ITS FIELDS INTO, mixed the same way. It is
+     declared here rather than borrowed because world.css is only loaded by
+     World.tsx, so `var(--sunk)` on this page would have resolved to nothing and
+     the form would have come out transparent. Same recipe, so the two pages
+     cannot drift into two dark greys. */
+  --sunk: color-mix(in srgb, var(--void) 82%, var(--line));
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   height: 100svh;
-  background: #070b11;
-  color: #d8e3ee;
+  background: var(--void);
+  color: var(--ink);
   font-family: var(--font-label);
 }
 
@@ -21,32 +27,32 @@
   align-items: center;
   gap: 18px;
   padding: 12px clamp(14px, 2vw, 26px);
-  border-bottom: 1px solid #141c26;
+  border-bottom: var(--hair) solid var(--edge);
 }
 .surf-back {
-  font: 500 12px var(--font-label);
-  color: #6f7885;
+  font: 500 var(--fs-small) var(--font-label);
+  color: var(--ink-3);
   background: none;
   border: 0;
   padding: 0;
-  cursor: pointer;
-  transition: color 180ms ease;
+  cursor: var(--cur-do);
+  transition: color 180ms var(--ease-out);
 }
 .surf-back:hover {
-  color: #d8e3ee;
+  color: var(--ink);
 }
 .surf-mark {
-  font: 700 11px var(--font-label);
-  letter-spacing: 0.4em;
+  font: 700 var(--fs-fine) var(--font-label);
+  letter-spacing: var(--track-wide);
   text-transform: uppercase;
-  color: #d8e3ee;
+  color: var(--ink);
 }
 .surf-meta {
   display: flex;
   align-items: center;
   gap: 12px;
-  font: 400 10px var(--font-mono);
-  color: #5b6470;
+  font: 400 var(--fs-micro) var(--font-mono);
+  color: var(--ink-3);
 }
 .surf-zoom {
   display: flex;
@@ -57,46 +63,48 @@
 .surf-zn {
   min-width: 26px;
   text-align: center;
-  font: 400 10px var(--font-mono);
-  color: #6f7885;
+  font: 400 var(--fs-micro) var(--font-mono);
+  color: var(--ink-3);
 }
 .surf-tool {
   width: 26px;
   height: 26px;
-  font: 500 13px var(--font-label);
-  color: #6f7885;
+  border-radius: var(--r);
+  font: 500 var(--fs-body) var(--font-label);
+  color: var(--ink-3);
   background: none;
-  border: 1px solid #1d232b;
-  cursor: pointer;
-  transition: all 160ms ease;
+  border: var(--hair) solid var(--edge-ctl);
+  cursor: var(--cur-do);
+  transition: all 160ms var(--ease-out);
 }
 .surf-tool:hover:not(:disabled) {
-  color: #d8e3ee;
-  border-color: #39434f;
+  color: var(--ink);
+  border-color: var(--edge);
 }
 .surf-tool:disabled {
-  color: #39434f;
-  cursor: default;
+  color: var(--ink-off);
+  cursor: var(--cur-no);
 }
 .surf-save {
   padding: 6px 16px;
-  font: 600 11px var(--font-label);
-  letter-spacing: 0.16em;
+  border-radius: var(--r);
+  font: 600 var(--fs-fine) var(--font-label);
+  letter-spacing: var(--track-label);
   text-transform: uppercase;
   color: var(--gold-lit);
   background: none;
-  border: 1px solid color-mix(in srgb, var(--gold) 45%, transparent);
-  cursor: pointer;
-  transition: all 180ms ease;
+  border: var(--hair) solid color-mix(in srgb, var(--gold) 45%, transparent);
+  cursor: var(--cur-do);
+  transition: all 180ms var(--ease-out);
 }
 .surf-save:hover:not(:disabled) {
-  color: #070b11;
+  color: var(--void);
   background: var(--gold);
 }
 .surf-save:disabled {
-  color: #4a5563;
-  border-color: #1d232b;
-  cursor: default;
+  color: var(--ink-off);
+  border-color: var(--edge-ctl);
+  cursor: var(--cur-no);
 }
 
 .surf-body {
@@ -114,28 +122,32 @@
 /* the rail: every panel this account has asked for, and the way to ask for
    another. The dot is the status, so a panel still being drawn says so from
    across the room. */
+/* the layout is .sparse from tokens.css, a flex column, so an empty rail can
+   put its floor at the bottom instead of ending in a column of nothing */
+.surf-rail > * {
+  flex-shrink: 0;
+}
 .surf-rail {
   overflow-y: auto;
-  padding: 12px 10px 30px;
-  border-right: 1px solid #141c26;
-  display: grid;
-  align-content: start;
+  padding: 12px 10px 24px;
+  border-right: var(--hair) solid var(--edge);
   gap: 1px;
 }
 .surf-new {
   margin-bottom: 8px;
+  border-radius: var(--r);
   padding: 7px 9px;
-  font: 500 11.5px var(--font-label);
-  color: #8d97a4;
+  font: 500 var(--fs-small) var(--font-label);
+  color: var(--ink-2);
   background: none;
-  border: 1px dashed #232b35;
-  cursor: pointer;
+  border: var(--hair) dashed var(--edge-ctl);
+  cursor: var(--cur-do);
   text-align: left;
-  transition: all 160ms ease;
+  transition: all 160ms var(--ease-out);
 }
 .surf-new:hover {
-  color: #d8e3ee;
-  border-color: #39434f;
+  color: var(--ink);
+  border-color: var(--edge);
 }
 .surf-new.on {
   color: var(--gold-lit);
@@ -145,24 +157,29 @@
 
 .surf-row {
   display: flex;
+  border-radius: 0 var(--r) var(--r) 0;
   align-items: center;
   gap: 8px;
   padding: 6px 7px;
   background: none;
   border: 0;
   border-left: 2px solid transparent;
-  cursor: pointer;
+  cursor: var(--cur-do);
   text-align: left;
-  transition: background-color 140ms ease;
+  transition: background-color 140ms var(--ease-out);
 }
 .surf-row:hover {
-  background: #10141a;
+  background: var(--panel);
 }
 .surf-row.on {
   border-left-color: var(--gold);
-  background: #10141a;
+  background: var(--panel);
 }
-.surf-row i {
+/* THE STATUS DOT, and the child combinator is load-bearing. As a descendant
+   selector this also matched the <i> carrying the identifier on the roster's
+   second line and crushed it to a 7px square, so the address rendered as one
+   clipped letter. */
+.surf-row > i {
   flex: none;
   width: 7px;
   height: 7px;
@@ -172,13 +189,48 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font: 500 12px var(--font-label);
-  color: #d8e3ee;
+  font: 500 var(--fs-small) var(--font-label);
+  color: var(--ink);
+}
+/* A ROSTER ROW WITH BOTH STRINGS ON IT, the same two-line grammar the editor's
+   anchor, route and shot lists use: the words a person reads on top, the
+   identifier a grape asks for underneath, each ellipsised on its own line. It
+   was the identifier alone, set as the row's heading. */
+.surf-row-t {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  line-height: var(--lh-tight);
+}
+.surf-row-t b {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 500 var(--fs-small) var(--font-label);
+  color: var(--ink);
+}
+.surf-row-t i {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 400 var(--fs-micro) var(--font-mono);
+  font-style: normal;
+  color: var(--ink-3);
 }
 .surf-row-m {
   flex: none;
-  font: 400 9.5px var(--font-mono);
-  color: #5b6470;
+  align-self: center;
+  font: 400 var(--fs-micro) var(--font-mono);
+  color: var(--ink-3);
+}
+/* the surface's own identifier, under the words. Same job as the editor's
+   second line, so it is set in the same face at the same size. */
+.surf-addr {
+  margin: -6px 0 0;
+  font: 400 var(--fs-micro) var(--font-mono);
+  color: var(--ink-3);
 }
 
 /* the panel itself, centred in whatever room is left and scrolled when there is
@@ -200,47 +252,47 @@
 }
 .surf-hold {
   line-height: 0;
-  box-shadow: 0 0 0 1px #141c26;
+  box-shadow: 0 0 0 1px var(--edge);
 }
 .surf-cv {
   display: block;
   touch-action: none;
   image-rendering: pixelated;
-  cursor: crosshair;
+  cursor: var(--cur-draw);
 }
 .surf-hint {
   position: absolute;
   left: 14px;
   bottom: 12px;
   margin: 0;
-  font: 400 11px var(--font-label);
-  color: #5b6470;
+  font: 400 var(--fs-fine) var(--font-label);
+  color: var(--ink-3);
   pointer-events: none;
 }
 
 .surf-side {
   overflow-y: auto;
   padding: 14px 16px 40px;
-  border-left: 1px solid #141c26;
+  border-left: var(--hair) solid var(--edge);
   display: grid;
   align-content: start;
   gap: 12px;
 }
 .surf-lab {
-  font: 600 9px var(--font-label);
-  letter-spacing: 0.22em;
+  font: 600 var(--fs-micro) var(--font-label);
+  letter-spacing: var(--track-label);
   text-transform: uppercase;
-  color: #5b6470;
+  color: var(--ink-3);
 }
 .surf-note,
 .surf-say {
   margin: 0;
-  font: 400 11.5px var(--font-label);
-  line-height: 1.5;
-  color: #6f7885;
+  font: 400 var(--fs-small) var(--font-label);
+  line-height: var(--lh);
+  color: var(--ink-3);
 }
 .surf-say b {
-  color: #d8e3ee;
+  color: var(--ink);
   font-weight: 600;
 }
 
@@ -252,18 +304,18 @@
   gap: 5px;
   padding: 10px 12px;
   border-left: 2px solid var(--wax);
-  background: rgba(176, 74, 47, 0.08);
+  background: color-mix(in srgb, var(--acc-stop) 10%, transparent);
 }
 .surf-warns {
   border-left-color: var(--gold);
-  background: rgba(212, 165, 60, 0.07);
+  background: color-mix(in srgb, var(--acc-tool) 9%, transparent);
 }
 .surf-refused p,
 .surf-warns p {
   margin: 0;
-  font: 400 11.5px var(--font-label);
-  line-height: 1.45;
-  color: #d8e3ee;
+  font: 400 var(--fs-small) var(--font-label);
+  line-height: var(--lh);
+  color: var(--ink);
 }
 
 .surf-insp,
@@ -274,49 +326,51 @@
 }
 .surf-insp {
   padding-bottom: 6px;
-  border-bottom: 1px solid #141c26;
+  border-bottom: var(--hair) solid var(--edge);
 }
 /* the form is the only thing on this page wide enough to read as a document,
    because it is the one place you are writing rather than pointing */
 .surf-make {
   width: 440px;
+  border-radius: var(--r-soft);
   max-width: 100%;
   padding: 18px 20px 22px;
-  border: 1px solid #141c26;
-  background: #090d14;
+  border: var(--hair) solid var(--edge);
+  background: var(--sunk);
 }
 .surf-f {
   display: grid;
   gap: 3px;
 }
 .surf-f > span {
-  font: 400 10px var(--font-mono);
-  color: #5b6470;
+  font: 400 var(--fs-micro) var(--font-mono);
+  color: var(--ink-3);
 }
 .surf-in {
   width: 100%;
+  border-radius: var(--r);
   padding: 6px 8px;
-  font: 400 12px var(--font-label);
-  color: #d8e3ee;
-  background: #10141a;
-  border: 1px solid #1d232b;
+  font: 400 var(--fs-small) var(--font-label);
+  color: var(--ink);
+  background: var(--panel);
+  border: var(--hair) solid var(--edge-ctl);
   outline: none;
-  transition: border-color 180ms ease;
+  transition: border-color 180ms var(--ease-out);
 }
 .surf-in:focus {
-  border-color: #39434f;
+  border-color: var(--edge);
 }
 .surf-in.bad {
   border-color: var(--wax);
 }
 .surf-area {
   resize: vertical;
-  line-height: 1.45;
+  line-height: var(--lh);
 }
 .surf-bad {
   margin: 0;
-  font: 400 11px var(--font-label);
-  line-height: 1.45;
+  font: 400 var(--fs-fine) var(--font-label);
+  line-height: var(--lh);
   color: var(--wax);
 }
 .surf-pair {
@@ -332,41 +386,43 @@
 }
 .surf-chip {
   padding: 4px 9px;
-  font: 400 10.5px var(--font-label);
-  color: #6f7885;
-  background: #10141a;
-  border: 1px solid #1d232b;
-  cursor: pointer;
-  transition: all 140ms ease;
+  border-radius: var(--r-tight);
+  font: 400 var(--fs-fine) var(--font-label);
+  color: var(--ink-3);
+  background: var(--panel);
+  border: var(--hair) solid var(--edge-ctl);
+  cursor: var(--cur-do);
+  transition: all 140ms var(--ease-out);
 }
 .surf-chip:hover {
-  color: #d8e3ee;
-  border-color: #39434f;
+  color: var(--ink);
+  border-color: var(--edge);
 }
 .surf-chip.on {
-  color: #070b11;
+  color: var(--void);
   background: var(--gold);
   border-color: var(--gold);
 }
 
 .surf-btn {
   padding: 6px 12px;
-  font: 500 11px var(--font-label);
-  color: #8d97a4;
+  border-radius: var(--r);
+  font: 500 var(--fs-fine) var(--font-label);
+  color: var(--ink-2);
   background: none;
-  border: 1px solid #1d232b;
-  cursor: pointer;
+  border: var(--hair) solid var(--edge-ctl);
+  cursor: var(--cur-do);
   text-decoration: none;
-  transition: all 160ms ease;
+  transition: all 160ms var(--ease-out);
 }
 .surf-btn:hover {
-  color: #d8e3ee;
-  border-color: #39434f;
+  color: var(--ink);
+  border-color: var(--edge);
 }
 .surf-btn.danger:hover {
-  color: #ff6b5e;
-  border-color: #6d2b26;
-  background: rgba(40, 12, 10, 0.7);
+  color: var(--acc-stop-lit);
+  border-color: var(--acc-stop);
+  background: color-mix(in srgb, var(--acc-stop) 18%, transparent);
 }
 .surf-sure {
   display: flex;
@@ -383,29 +439,30 @@
 }
 .surf-go {
   padding: 9px 18px;
-  font: 600 11px var(--font-label);
-  letter-spacing: 0.16em;
+  border-radius: var(--r);
+  font: 600 var(--fs-fine) var(--font-label);
+  letter-spacing: var(--track-label);
   text-transform: uppercase;
-  color: #070b11;
+  color: var(--void);
   background: var(--gold);
-  border: 1px solid var(--gold);
-  cursor: pointer;
-  transition: all 180ms ease;
+  border: var(--hair) solid var(--gold);
+  cursor: var(--cur-do);
+  transition: all 180ms var(--ease-out);
 }
 .surf-go:hover:not(:disabled) {
   background: var(--gold-lit);
   border-color: var(--gold-lit);
 }
 .surf-go:disabled {
-  color: #4a5563;
+  color: var(--ink-off);
   background: none;
-  border-color: #1d232b;
-  cursor: default;
+  border-color: var(--edge-ctl);
+  cursor: var(--cur-no);
 }
 .surf-cost {
   margin: 0;
-  font: 400 11px var(--font-mono);
-  line-height: 1.5;
+  font: 400 var(--fs-fine) var(--font-mono);
+  line-height: var(--lh);
   color: var(--gold-deep);
 }
 
@@ -429,5 +486,5 @@
 }
 .surf-gone p {
   margin: 0;
-  color: #6f7885;
+  color: var(--ink-3);
 }

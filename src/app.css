@@ -17,20 +17,48 @@
    * verdigris for the reason the iris was picked in the first place: it is a
    * hue the MAP never contains. Levels are red through pink, the cut is
    * magenta, occluders are lilac. Nothing painted is this green, so an accent
-   * stroke always means the tool talking and never map data. */
+   * stroke always means the tool talking and never map data.
+   *
+   * SIX OF THESE ARE GONE and this file no longer decides them. --ink, --dim,
+   * --edge, --acc and both font stacks were declared here AND in site.css with
+   * different values, and this sheet loads last, so the editor silently won
+   * every disagreement. They are tokens now; what is left below is the tool's
+   * own surfaces, which the site genuinely does not share. */
   --bg: #0a0c0f;
   --panel: #10141a;
   --raised: #161c24;
-  --edge: #1f2731;
-  --ink: #e6e9ee;
-  --dim: #7d8794;
-  --acc: #6fbf9d;
-  --acc-soft: #6fbf9d24;
-  --acc-ink: #06120d;
-  --ok: #6fbf9d;
+  /* THE EDITOR'S CHROME SPEAKS THE SAME TWO COLOURS THE OCEAN DOES.
+   *
+   * This was green for everything, and the ocean was gold for everything, so
+   * two screens one click apart disagreed about what an armed control looks
+   * like. tokens.css already settled the line and neither surface was reading
+   * it: gold is the tool SAYING something (the tool you have armed, the row you
+   * have selected, the step you are on, the one line of instruction), green is
+   * the tool REPORTING something (running, finished, published, walkable, ok).
+   *
+   * THE CANVAS KEEPS GREEN AND THAT IS NOT A SECOND ACCENT. The hue on the
+   * painting is picked against the painting: levels are red through pink, the
+   * cut is magenta, occluders are lilac, and this island's own sand is gold, so
+   * a gold spawn box on the hub's beach would be invisible. tokens.css carves
+   * that out by name. Chrome and canvas are answering different questions. */
+  --acc: var(--acc-tool);
+  --acc-soft: color-mix(in srgb, var(--acc-tool) 14%, transparent);
+  --acc-ink: var(--acc-tool-ink);
+  /* what the tool reports, and the hue the canvas marks its own work in */
+  --ok: var(--acc-live);
   --stage: #06080b;
-  --font-ui: 'Archivo Narrow', 'Segoe UI Variable Text', 'Segoe UI', system-ui, sans-serif;
-  --font-mono: 'Martian Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  /* the board a painting lies on. The canvas fills the document rectangle with
+     the same value in core/editor.ts, so the margin a grow added reads as spare
+     board rather than as a hole in the map. */
+  --board: #0e1319;
+  /* a shadow, and the six places that each wrote #00000088 for it */
+  --drop: rgba(0, 0, 0, 0.53);
+  --drop-deep: rgba(0, 0, 0, 0.4);
+  /* the scrim under a floating thing: a tooltip, a toast, a modal backdrop */
+  --scrim: color-mix(in srgb, var(--stage) 94%, transparent);
+  /* the seam pressed into a swatch, so the colour has an edge of its own */
+  --seam: rgba(0, 0, 0, 0.4);
+  --font-ui: var(--font-label);
 
   /* One left line for the whole side panel, declared here and read by every
      rule that touches it. The panel keeps its own gutter and every block
@@ -68,7 +96,7 @@ body[data-view='editor'] {
   height: 100%;
   background: var(--bg);
   color: var(--ink);
-  font: 13px/1.5 var(--font-ui);
+  font: var(--fs-body)/1.5 var(--font-ui);
   overflow: hidden;
 }
 body[data-view='editor'] > #root {
@@ -82,11 +110,11 @@ button {
   color: var(--ink);
   background: transparent;
   border: none;
-  cursor: pointer;
+  cursor: var(--cur-do);
 }
 button:disabled {
   opacity: 0.4;
-  cursor: default;
+  cursor: var(--cur-no);
 }
 /* Chromium gives every button 1px 6px of its own padding, and the small square
    icon buttons never declare any, so a 20px box was really 6px of room holding
@@ -104,14 +132,14 @@ button:disabled {
 :focus-visible {
   outline: 2px solid var(--acc);
   outline-offset: 1px;
-  border-radius: 4px;
+  border-radius: var(--r);
 }
 input {
   font: inherit;
   color: var(--ink);
   background: var(--bg);
-  border: 1px solid var(--edge);
-  border-radius: 8px;
+  border: var(--hair) solid var(--edge);
+  border-radius: var(--r);
   padding: 8px 10px;
   transition: border-color 160ms ease;
 }
@@ -128,12 +156,12 @@ input:focus-visible {
   outline-offset: 2px;
 }
 kbd {
-  font: 10px/1 var(--font-mono);
+  font: var(--fs-micro)/1 var(--font-mono);
   color: var(--dim);
   background: var(--bg);
-  border: 1px solid var(--edge);
+  border: var(--hair) solid var(--edge);
   border-bottom-width: 2px;
-  border-radius: 4px;
+  border-radius: var(--r);
   padding: 2px 5px;
   opacity: 0;
   transition: opacity 160ms ease;
@@ -158,11 +186,11 @@ header {
   gap: 16px;
   padding: 0 16px;
   background: var(--panel);
-  border-bottom: 1px solid var(--edge);
+  border-bottom: var(--hair) solid var(--edge);
 }
 .brand {
-  font: 600 12px/1 var(--font-mono);
-  letter-spacing: 0.14em;
+  font: 600 var(--fs-small)/1 var(--font-mono);
+  letter-spacing: var(--track-label);
   color: var(--dim);
 }
 .stepper {
@@ -176,7 +204,7 @@ header {
   align-items: center;
   gap: 7px;
   padding: 8px 14px;
-  border-radius: 8px;
+  border-radius: var(--r-tight);
   color: var(--dim);
   transition: color 160ms ease, background 160ms ease;
 }
@@ -189,9 +217,9 @@ header {
   place-items: center;
   width: 17px;
   height: 17px;
-  border: 1px solid var(--edge);
-  border-radius: 50%;
-  font: 600 10px/1 var(--font-mono);
+  border: var(--hair) solid var(--edge);
+  border-radius: var(--r-round);
+  font: 600 var(--fs-micro)/1 var(--font-mono);
   transition: all 160ms ease;
 }
 .step.on {
@@ -209,7 +237,7 @@ header {
   right: 14px;
   bottom: 2px;
   height: 2px;
-  border-radius: 2px;
+  border-radius: var(--r-tight);
   background: var(--acc);
   transform: scaleX(0);
   transition: transform 180ms ease;
@@ -221,14 +249,14 @@ header .meta {
   min-width: 120px;
   text-align: right;
   color: var(--dim);
-  font: 11px/1.3 var(--font-mono);
+  font: var(--fs-fine)/1.3 var(--font-mono);
   white-space: nowrap;
 }
 .busy {
   display: inline-block;
   margin-right: 10px;
   padding: 3px 9px;
-  border-radius: 20px;
+  border-radius: var(--r-round);
   background: var(--acc-soft);
   color: var(--acc);
   animation: pulse 1.2s ease-in-out infinite;
@@ -253,17 +281,48 @@ body[data-view='editor'] main {
 
 /* the gutter half of the left line. The other half is --pan-in, carried by
    every block in here. Both are at the top of this file. */
+/* A PANEL THAT CARRIES ON PAST THE WINDOW HAS TO SAY SO.
+ *
+ * Measured on step 4: 1073px of content inside 690px, and the last block in the
+ * column, the keys fold, sat below the fold with nothing on screen admitting
+ * there was one. A row half cut by the bottom edge reads as a clipped layout
+ * rather than as a list that continues, and the panel's own scrollbar is 8px of
+ * --edge against --panel, which is 1.2:1 and is not a signal.
+ *
+ * The fade is painted by the panel itself rather than by an overlay, so it
+ * cannot land on top of a control and eat its clicks, and it turns itself off
+ * at the end of the scroll because a permanent gradient over the last row says
+ * there is more when there is not. `mask` and not a gradient background,
+ * because the rows underneath are opaque and would paint straight over it. */
 .panel {
   width: 272px;
   flex: 0 0 272px;
   padding: 14px var(--pan-gut) 18px;
   background: var(--panel);
-  border-right: 1px solid var(--edge);
+  border-right: var(--hair) solid var(--edge);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  /* NO GAP, and it is worth 110px on the tallest step. Every child was pushed
+     6px off the one above, which turned a list of rows that already carry a
+     hairline under each of them into a column of floating slabs, and charged
+     the panel 6px twenty times over for the privilege. A row's own padding is
+     what separates it from the next row; a block that needs air asks for it. */
+  gap: 0;
   overflow-y: auto;
   animation: panel-in 180ms ease;
+}
+/* the blocks that are not rows still want to breathe, so they say so here
+   rather than every child paying for it */
+.panel > .chips,
+.panel > .walkcfg,
+.panel > .doorform,
+.panel > .manifest,
+.panel > .lifebox,
+.panel > .occrows,
+.panel > .metarows,
+.panel > .doorhint,
+.panel > .lawhint {
+  margin-top: 4px;
 }
 @keyframes panel-in {
   from {
@@ -284,28 +343,43 @@ body[data-view='editor'] main {
 }
 .panel::-webkit-scrollbar-thumb {
   background: var(--edge);
-  border-radius: 4px;
+  border-radius: var(--r);
 }
 
 .panel-cap {
   padding: 0 var(--pan-in) 8px;
   color: var(--dim);
-  font-size: 12px;
+  font-size: var(--fs-small);
 }
 .panel-foot {
   padding: 8px var(--pan-in) 0;
   color: var(--dim);
-  font: 11px/1.4 var(--font-mono);
+  font: var(--fs-fine)/1.4 var(--font-mono);
 }
+/* THE SAME EMPTY STATE THE REST OF THE APP DRAWS. It was a bare centred stack
+   with 42px of padding: no mark, no line saying what would fill it, and its
+   words at the bottom of the ramp. `.nothing` in tokens.css is the shared
+   shape and this is the editor saying it, so a panel with nothing in it reads
+   the same here as it does out on the ocean. */
 .panel-empty {
   display: grid;
   gap: 10px;
   justify-items: center;
-  padding: 42px 0;
-  color: var(--dim);
+  padding: 34px 0;
+  text-align: center;
+  color: var(--ink-3);
+}
+.panel-empty::before {
+  content: '';
+  width: 26px;
+  height: var(--hair);
+  background: var(--edge-ctl);
 }
 .panel-empty p {
   margin: 0;
+  max-width: 30ch;
+  font-size: var(--fs-small);
+  line-height: var(--lh);
 }
 
 /* a row: one action or one tool, a big target with a plain sentence under.
@@ -319,9 +393,9 @@ body[data-view='editor'] main {
   width: calc(100% - var(--pan-in) * 2);
   margin: 0 var(--pan-in);
   padding: 10px 10px;
-  border-radius: 9px;
+  border-radius: var(--r);
   text-align: left;
-  border: 1px solid transparent;
+  border: var(--hair) solid transparent;
   transition: background 160ms ease, border-color 160ms ease;
 }
 .row:hover:not(:disabled) {
@@ -337,7 +411,7 @@ body[data-view='editor'] main {
   width: 26px;
   height: 26px;
   flex: 0 0 26px;
-  border-radius: 7px;
+  border-radius: var(--r);
   background: var(--raised);
   color: var(--dim);
   transition: color 160ms ease;
@@ -360,7 +434,7 @@ body[data-view='editor'] main {
 }
 .row-desc {
   color: var(--dim);
-  font-size: 11.5px;
+  font-size: var(--fs-small);
   line-height: 1.4;
 }
 
@@ -390,22 +464,22 @@ input[type='range'] {
   border: none;
   border-radius: 0;
   background: transparent;
-  cursor: pointer;
+  cursor: var(--cur-do);
   transition: none;
 }
 input[type='range']::-webkit-slider-runnable-track {
   height: var(--rail);
-  border-radius: 999px;
+  border-radius: var(--r-round);
   background: linear-gradient(to right, var(--acc) 0 var(--pct, 0%), var(--edge) var(--pct, 0%) 100%);
 }
 input[type='range']::-moz-range-track {
   height: var(--rail);
-  border-radius: 999px;
+  border-radius: var(--r-round);
   background: var(--edge);
 }
 input[type='range']::-moz-range-progress {
   height: var(--rail);
-  border-radius: 999px;
+  border-radius: var(--r-round);
   background: var(--acc);
 }
 /* webkit centres nothing for you once the thumb is unstyled: the negative
@@ -416,36 +490,36 @@ input[type='range']::-webkit-slider-thumb {
   height: var(--knob);
   margin-top: calc((var(--rail) - var(--knob)) / 2);
   border: 2px solid var(--panel);
-  border-radius: 50%;
+  border-radius: var(--r-round);
   background: var(--ink);
-  box-shadow: 0 1px 2px #00000088;
+  box-shadow: 0 1px 2px var(--drop);
   transition: box-shadow 140ms ease, background 140ms ease;
 }
 input[type='range']::-moz-range-thumb {
   width: var(--knob);
   height: var(--knob);
   border: 2px solid var(--panel);
-  border-radius: 50%;
+  border-radius: var(--r-round);
   background: var(--ink);
-  box-shadow: 0 1px 2px #00000088;
+  box-shadow: 0 1px 2px var(--drop);
   transition: box-shadow 140ms ease, background 140ms ease;
 }
 input[type='range']:hover::-webkit-slider-thumb {
-  box-shadow: 0 1px 2px #00000088, 0 0 0 4px var(--acc-soft);
+  box-shadow: 0 1px 2px var(--drop), 0 0 0 4px var(--acc-soft);
 }
 input[type='range']:hover::-moz-range-thumb {
-  box-shadow: 0 1px 2px #00000088, 0 0 0 4px var(--acc-soft);
+  box-shadow: 0 1px 2px var(--drop), 0 0 0 4px var(--acc-soft);
 }
 input[type='range']:active::-webkit-slider-thumb {
   background: var(--acc);
-  box-shadow: 0 1px 2px #00000088, 0 0 0 6px var(--acc-soft);
+  box-shadow: 0 1px 2px var(--drop), 0 0 0 6px var(--acc-soft);
 }
 input[type='range']:active::-moz-range-thumb {
   background: var(--acc);
-  box-shadow: 0 1px 2px #00000088, 0 0 0 6px var(--acc-soft);
+  box-shadow: 0 1px 2px var(--drop), 0 0 0 6px var(--acc-soft);
 }
 input[type='range']:disabled {
-  cursor: default;
+  cursor: var(--cur-no);
   opacity: 0.45;
 }
 
@@ -457,7 +531,7 @@ input[type='range']:disabled {
   gap: 3px;
   padding: 2px 12px 8px calc(var(--pan-in) + 46px);
   color: var(--dim);
-  font-size: 11.5px;
+  font-size: var(--fs-small);
 }
 .slider em {
   font-style: normal;
@@ -474,7 +548,7 @@ input[type='range']:disabled {
 }
 .field-desc {
   color: var(--dim);
-  font-size: 11.5px;
+  font-size: var(--fs-small);
 }
 .field.inline {
   grid-template-columns: 1fr 78px;
@@ -504,8 +578,8 @@ input[type='range']:disabled {
   width: 100%;
   min-width: 0;
   height: 34px;
-  border-radius: 8px;
-  border: 1px solid transparent;
+  border-radius: var(--r);
+  border: var(--hair) solid transparent;
   color: var(--dim);
   transition: all 160ms ease;
 }
@@ -518,19 +592,51 @@ input[type='range']:disabled {
   border-color: var(--acc);
   color: var(--acc);
 }
+/* THE TIP IS WHERE THE STANDING PROSE WENT, so it has to be able to hold a
+   sentence. It was `white-space: nowrap`, which was right while every tip was
+   two words on a 22px button and wrong the moment a row's description moved in
+   here: a ninety character sentence drawn on one line is 480px wide in a 272px
+   column and half of it leaves the window. It wraps now, at a width that puts
+   the longest description in the tool on three lines.
+
+   It is also the only tooltip in the tool. The three lists were carrying a
+   native `title` as well, holding a verbatim copy of their own visible text, so
+   the browser drew a second box under this one repeating what was on screen. */
+[data-tip] {
+  position: relative;
+}
+/* A TIP WIDER THAN THE THING IT HANGS OFF ANCHORS TO THE BLOCK, NOT THE BOX.
+   The panel scrolls, so its overflow-x computes to auto and it clips: a 200px
+   sentence centred on a 70px number field at 16px from the panel edge lost its
+   first two words off the left. These two controls are the only ones in the
+   tool narrower than their own tip, so they hand the anchoring up to the row
+   they sit in, which is the full width of the panel and always has room. */
+.walkcfg,
+.anchkinds {
+  position: relative;
+}
+.walkcfg > .numf[data-tip],
+.anchkinds > .kbtn[data-tip] {
+  position: static;
+}
 [data-tip]:hover::after {
   content: attr(data-tip);
   position: absolute;
   top: calc(100% + 5px);
   left: 50%;
   transform: translateX(-50%);
-  padding: 4px 8px;
-  border-radius: 6px;
-  background: #050608f0;
-  border: 1px solid var(--edge);
+  width: max-content;
+  max-width: 224px;
+  padding: 5px 9px;
+  border-radius: var(--r-soft);
+  background: var(--scrim);
+  border: var(--hair) solid var(--edge-ctl);
+  box-shadow: 0 6px 24px var(--drop-deep);
   color: var(--ink);
-  font-size: 11px;
-  white-space: nowrap;
+  font: var(--fs-fine)/var(--lh) var(--font-ui);
+  text-align: left;
+  text-transform: none;
+  letter-spacing: 0;
   z-index: 6;
   pointer-events: none;
 }
@@ -550,9 +656,9 @@ input[type='range']:disabled {
   gap: 7px;
   min-width: 0;
   padding: 8px 8px;
-  border-radius: 8px;
-  border: 1px solid transparent;
-  font-size: 12px;
+  border-radius: var(--r-tight);
+  border: var(--hair) solid transparent;
+  font-size: var(--fs-small);
   transition: background 160ms ease, border-color 160ms ease;
 }
 .chip:hover {
@@ -566,8 +672,8 @@ input[type='range']:disabled {
   width: 15px;
   height: 15px;
   flex: 0 0 15px;
-  border-radius: 4px;
-  box-shadow: inset 0 0 0 1px #0006;
+  border-radius: var(--r);
+  box-shadow: inset 0 0 0 1px var(--seam);
 }
 .chip-name {
   flex: 1;
@@ -581,10 +687,10 @@ input[type='range']:disabled {
   margin: 4px var(--pan-in) 0;
   padding: 8px 10px;
   border-left: 2px solid var(--acc);
-  border-radius: 0 8px 8px 0;
+  border-radius: 0 var(--r-soft) var(--r-soft) 0;
   background: var(--raised);
   color: var(--dim);
-  font-size: 11.5px;
+  font-size: var(--fs-small);
 }
 .walkstat {
   display: flex;
@@ -592,14 +698,19 @@ input[type='range']:disabled {
   gap: 8px;
   padding: 12px var(--pan-in) 4px;
 }
+/* --ok and not --acc, because this is the tool REPORTING a measurement it took
+   off the map, not the tool saying which thing you have armed. The footer
+   already draws the same number in the same green a step below, and the two
+   disagreeing about the colour of one figure was the whole reason the accent
+   law got written down. */
 .walkpct {
-  font: 600 24px/1 var(--font-mono);
-  color: var(--acc);
+  font: 600 var(--fs-figure)/1 var(--font-mono);
+  color: var(--ok);
   font-variant-numeric: tabular-nums;
 }
 .walklabel {
   color: var(--dim);
-  font-size: 11.5px;
+  font-size: var(--fs-small);
 }
 
 /* the fold for rare things */
@@ -613,10 +724,10 @@ input[type='range']:disabled {
   gap: 7px;
   margin: 0 calc(var(--pan-in) - var(--pan-pill));
   padding: 7px var(--pan-pill);
-  border-radius: 8px;
+  border-radius: var(--r);
   color: var(--dim);
-  font-size: 12px;
-  cursor: pointer;
+  font-size: var(--fs-small);
+  cursor: var(--cur-do);
   list-style: none;
   transition: background 160ms ease;
 }
@@ -638,7 +749,7 @@ input[type='range']:disabled {
   justify-content: center;
   gap: 8px;
   padding: 9px 16px;
-  border-radius: 9px;
+  border-radius: var(--r);
   background: var(--acc);
   color: var(--acc-ink);
   font-weight: 600;
@@ -654,7 +765,7 @@ input[type='range']:disabled {
   width: calc(100% - var(--pan-in) * 2);
   margin: 10px var(--pan-in) 2px;
   padding: 12px;
-  font-size: 14px;
+  font-size: var(--fs-lead);
 }
 
 /* load step */
@@ -665,8 +776,8 @@ input[type='range']:disabled {
 }
 .cand {
   padding: 0;
-  border-radius: 8px;
-  border: 1px solid var(--edge);
+  border-radius: var(--r-soft);
+  border: var(--hair) solid var(--edge);
   background: var(--stage);
   overflow: hidden;
   min-height: 64px;
@@ -683,7 +794,7 @@ input[type='range']:disabled {
   image-rendering: pixelated;
 }
 .cand.wait {
-  background: repeating-linear-gradient(45deg, #14171b, #14171b 8px, #191d23 8px, #191d23 16px);
+  background: repeating-linear-gradient(45deg, var(--bg), var(--bg) 8px, var(--panel) 8px, var(--panel) 16px);
   background-size: 200% 100%;
   animation: shimmer 1.4s linear infinite;
 }
@@ -694,16 +805,16 @@ input[type='range']:disabled {
 }
 .cand span {
   color: var(--dim);
-  font-size: 11px;
+  font-size: var(--fs-fine);
 }
 .drophint {
   margin: 0 var(--pan-in);
   padding: 16px 12px;
   border: 1px dashed var(--edge);
-  border-radius: 9px;
+  border-radius: var(--r);
   color: var(--dim);
   text-align: center;
-  font-size: 12px;
+  font-size: var(--fs-small);
 }
 .loaded {
   display: flex;
@@ -711,25 +822,25 @@ input[type='range']:disabled {
   gap: 8px;
   margin: 12px var(--pan-in) 0;
   padding: 9px 12px;
-  border-radius: 8px;
+  border-radius: var(--r-soft);
   background: var(--raised);
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: var(--fs-small);
 }
 .dotok {
   width: 7px;
   height: 7px;
-  border-radius: 50%;
+  border-radius: var(--r-round);
   background: var(--ok);
 }
 
 /* a section header. Every panel groups its rows under one of these, so the
    eye learns one shape instead of six. */
 .asec {
-  padding: 12px var(--pan-in) 4px;
+  padding: 10px var(--pan-in) 3px;
   color: var(--dim);
-  font: 600 10px/1 var(--font-mono);
-  letter-spacing: 0.12em;
+  font: 600 var(--fs-micro)/1 var(--font-mono);
+  letter-spacing: var(--track-label);
   text-transform: uppercase;
 }
 .panel > .asec:first-of-type {
@@ -746,23 +857,41 @@ input[type='range']:disabled {
   margin-top: 0;
 }
 .keys summary {
+  display: flex;
+  align-items: center;
   margin: 0 calc(var(--pan-in) - var(--pan-pill));
   padding: 5px var(--pan-pill);
-  border-radius: 7px;
+  border-radius: var(--r);
   color: var(--dim);
-  font: 10px/1 var(--font-mono);
-  letter-spacing: 0.12em;
+  font: var(--fs-micro)/1 var(--font-mono);
+  letter-spacing: var(--track-label);
   text-transform: uppercase;
-  cursor: pointer;
+  cursor: var(--cur-do);
   list-style: none;
   transition: background 160ms ease, color 160ms ease;
 }
 .keys summary::-webkit-details-marker {
   display: none;
 }
-.keys summary::before {
-  content: '⌘ ';
-  opacity: 0.6;
+/* THE MARKER IS THE SAME CARET EVERY OTHER FOLD IN THIS APP USES.
+   It was a bare ⌘ typed into the content, which is the Mac command key, on a
+   tool that ships to Windows machines in the ATC room and to school
+   Chromebooks. Nobody who uses this has that key. It was also the last glyph
+   standing in for a picture after the icon set went in: a font's idea of a
+   symbol, at whatever weight the font felt like, next to twenty drawn marks. */
+.keys summary::after {
+  content: '';
+  flex: none;
+  width: 5px;
+  height: 5px;
+  margin-left: auto;
+  border-right: var(--hair) solid var(--edge-ctl);
+  border-bottom: var(--hair) solid var(--edge-ctl);
+  transform: rotate(45deg) translate(-2px, -2px);
+  transition: transform 160ms ease;
+}
+.keys[open] summary::after {
+  transform: rotate(-135deg) translate(-1px, -1px);
 }
 .keys summary:hover {
   background: var(--raised);
@@ -771,7 +900,7 @@ input[type='range']:disabled {
 .keys-body {
   padding: 4px var(--pan-in) 2px;
   color: var(--dim);
-  font: 11px/1.6 var(--font-mono);
+  font: var(--fs-fine)/1.6 var(--font-mono);
   animation: panel-in 160ms ease;
 }
 
@@ -803,8 +932,8 @@ input[type='range']:disabled {
   min-width: 0;
   margin: 2px var(--pan-in) 4px;
   padding: 8px 8px 9px;
-  border: 1px solid var(--edge);
-  border-radius: 10px;
+  border: var(--hair) solid var(--edge);
+  border-radius: var(--r-soft);
   background: var(--raised);
   animation: panel-in 160ms ease;
 }
@@ -834,7 +963,7 @@ input[type='range']:disabled {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
+  font-size: var(--fs-small);
   font-weight: 500;
 }
 .insp-row {
@@ -844,7 +973,7 @@ input[type='range']:disabled {
   gap: 8px;
   min-width: 0;
   color: var(--dim);
-  font-size: 11.5px;
+  font-size: var(--fs-small);
 }
 .insp-row > span {
   overflow: hidden;
@@ -855,11 +984,11 @@ input[type='range']:disabled {
   width: 100%;
   min-width: 0;
   padding: 5px 8px;
-  border: 1px solid var(--edge);
-  border-radius: 7px;
+  border: var(--hair) solid var(--edge);
+  border-radius: var(--r);
   background: var(--bg);
   color: var(--ink);
-  font: 12px var(--font-ui);
+  font: var(--fs-small) var(--font-ui);
   transition: border-color 160ms ease;
 }
 .insp-row select:focus {
@@ -877,26 +1006,30 @@ input[type='range']:disabled {
 /* grid children default to min-width auto, so an input refuses to shrink under
    its own content and the number gets clipped: every level of this needs the
    min-width 0 escape or the digits run under the next column */
+/* A FIELD'S NAME SITS ABOVE ITS INPUT. One decision, and it is the ocean's,
+   because two tools in one product cannot disagree about where a caption goes.
+   Measured before this: /world and /surfaces put the caption above the box in
+   mono micro, and the editor put it to the left of the box in the label face,
+   in a 38px column that clipped "hip out" to "hip o…" at every window width.
+   Above also gives the number the whole cell to be right-aligned in. */
 .numf {
   display: grid;
-  grid-template-columns: minmax(0, 38px) minmax(0, 1fr);
-  align-items: center;
-  gap: 5px;
+  gap: 3px;
   min-width: 0;
-  color: var(--dim);
-  font-size: 11px;
 }
 .numf > span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font: var(--fs-micro) var(--font-mono);
+  color: var(--ink-3);
 }
 .numf input {
   width: 100%;
   min-width: 0;
   padding: 4px 5px;
-  border-radius: 6px;
-  font: 11.5px var(--font-mono);
+  border-radius: var(--r);
+  font: var(--fs-small) var(--font-mono);
   text-align: right;
 }
 /* the browser's own up/down arrows, which nobody here designed and which cost
@@ -917,13 +1050,13 @@ input[type='range']:disabled {
   min-width: 0;
   padding: 2px 2px 0;
   color: var(--dim);
-  font-size: 11.5px;
+  font-size: var(--fs-small);
 }
 .flips label {
   display: flex;
   align-items: center;
   gap: 6px;
-  cursor: pointer;
+  cursor: var(--cur-do);
 }
 .flips input {
   width: 13px;
@@ -943,9 +1076,9 @@ input[type='range']:disabled {
   margin: 2px var(--pan-in);
   padding: 4px 4px 4px 10px;
   border: 1px dashed var(--edge);
-  border-radius: 8px;
+  border-radius: var(--r);
   color: var(--dim);
-  font-size: 11.5px;
+  font-size: var(--fs-small);
 }
 .clipline span {
   flex: 1;
@@ -972,7 +1105,7 @@ input[type='range']:disabled {
   gap: 6px;
   min-width: 0;
   padding: 0 0 8px;
-  border-bottom: 1px solid var(--edge);
+  border-bottom: var(--hair) solid var(--edge);
 }
 /* Four options on one line wanted 268px in a column that is 239px, and neither
    share-out works: an equal quarter is 41px of text room against a 46px label,
@@ -998,11 +1131,11 @@ input[type='range']:disabled {
   width: 22px;
   height: 22px;
   flex: 0 0 22px;
-  border: 1px solid var(--edge);
-  border-radius: 50%;
+  border: var(--hair) solid var(--edge);
+  border-radius: var(--r-round);
   background: transparent;
   color: var(--dim);
-  cursor: pointer;
+  cursor: var(--cur-do);
   transition: all 150ms ease;
 }
 .lifedot svg {
@@ -1028,8 +1161,8 @@ input[type='range']:disabled {
   min-width: 0;
   margin: 2px 0 4px;
   padding: 8px;
-  border: 1px solid var(--acc);
-  border-radius: 8px;
+  border: var(--hair) solid var(--acc);
+  border-radius: var(--r-soft);
   background: var(--raised);
   animation: panel-in 140ms ease;
 }
@@ -1037,7 +1170,7 @@ input[type='range']:disabled {
   width: 100%;
   min-width: 0;
   padding: 6px 8px;
-  font-size: 11.5px;
+  font-size: var(--fs-small);
 }
 .liferow {
   display: flex;
@@ -1050,7 +1183,7 @@ input[type='range']:disabled {
 }
 .lifehint {
   color: var(--dim);
-  font-size: 10px;
+  font-size: var(--fs-micro);
   line-height: 1.45;
 }
 .lifeline {
@@ -1061,9 +1194,9 @@ input[type='range']:disabled {
   margin: 0 0 2px;
   padding: 4px 8px;
   border: 1px dashed var(--edge);
-  border-radius: 7px;
+  border-radius: var(--r);
   color: var(--dim);
-  font-size: 10.5px;
+  font-size: var(--fs-fine);
 }
 .lifeline > span {
   flex: 1;
@@ -1091,8 +1224,8 @@ input[type='range']:disabled {
   min-width: 0;
   margin: 2px 0 0;
   padding: 8px;
-  border: 1px solid var(--acc);
-  border-radius: 8px;
+  border: var(--hair) solid var(--acc);
+  border-radius: var(--r-soft);
   background: var(--raised);
   animation: panel-in 140ms ease;
 }
@@ -1103,10 +1236,10 @@ input[type='range']:disabled {
   width: 100%;
   min-width: 0;
   padding: 6px 8px;
-  font-size: 11.5px;
+  font-size: var(--fs-small);
 }
 .animbox .field-desc {
-  font-size: 10px;
+  font-size: var(--fs-micro);
   line-height: 1.45;
 }
 /* the button keeps the one height it has everywhere else, so a price, a clock
@@ -1130,12 +1263,12 @@ input[type='range']:disabled {
   display: grid;
   gap: 2px;
   padding: 5px;
-  border: 1px solid var(--edge);
-  border-radius: 8px;
+  border: var(--hair) solid var(--edge);
+  border-radius: var(--r-tight);
   background: transparent;
   color: var(--ink);
   font: inherit;
-  cursor: pointer;
+  cursor: var(--cur-do);
   transition: all 150ms ease;
 }
 .acc:hover:not(:disabled) {
@@ -1150,7 +1283,7 @@ input[type='range']:disabled {
   place-items: center;
   height: 54px;
   background: var(--bg);
-  border-radius: 5px;
+  border-radius: var(--r);
   overflow: hidden;
 }
 .acc-th img {
@@ -1162,11 +1295,11 @@ input[type='range']:disabled {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 10.5px;
+  font-size: var(--fs-fine);
 }
 .acc-sub {
   color: var(--dim);
-  font-size: 9.5px;
+  font-size: var(--fs-micro);
 }
 .zone {
   display: grid;
@@ -1187,19 +1320,19 @@ input[type='range']:disabled {
   min-width: 0;
   margin: 0 var(--pan-in);
   padding: 5px 10px;
-  border: 1px solid var(--edge);
-  border-radius: 8px;
+  border: var(--hair) solid var(--edge);
+  border-radius: var(--r);
 }
 .fillnum > span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--dim);
-  font-size: 10.5px;
+  font-size: var(--fs-fine);
 }
 .fillnum > b {
   color: var(--ink);
-  font-size: 11.5px;
+  font-size: var(--fs-small);
   font-weight: 500;
   font-variant-numeric: tabular-nums;
   text-align: right;
@@ -1219,13 +1352,13 @@ input[type='range']:disabled {
   gap: 8px;
   padding: 4px 6px;
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--r);
   background: transparent;
   color: var(--ink);
   font: inherit;
-  font-size: 11.5px;
+  font-size: var(--fs-small);
   text-align: left;
-  cursor: pointer;
+  cursor: var(--cur-do);
 }
 .scenerow:hover {
   background: var(--raised);
@@ -1243,7 +1376,7 @@ input[type='range']:disabled {
 }
 .scenemeta {
   color: var(--dim);
-  font-size: 10px;
+  font-size: var(--fs-micro);
   font-variant-numeric: tabular-nums;
 }
 /* groups as one wrapping line of chips, not a stacked list with nested rows.
@@ -1256,20 +1389,20 @@ input[type='range']:disabled {
   gap: 3px;
   min-width: 0;
   padding: 6px var(--pan-in) 0;
-  border-top: 1px solid var(--edge);
+  border-top: var(--hair) solid var(--edge);
 }
 .grpchip {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   padding: 3px 7px;
-  border: 1px solid var(--edge);
-  border-radius: 999px;
+  border: var(--hair) solid var(--edge);
+  border-radius: var(--r-round);
   background: transparent;
   color: var(--ink);
   font: inherit;
-  font-size: 10.5px;
-  cursor: pointer;
+  font-size: var(--fs-fine);
+  cursor: var(--cur-do);
 }
 .grpchip svg {
   width: 12px;
@@ -1285,7 +1418,7 @@ input[type='range']:disabled {
 }
 .grpnone {
   color: var(--dim);
-  font-size: 10.5px;
+  font-size: var(--fs-fine);
 }
 
 /* many at once: the arranging verbs, on the set. Rows wrap rather than squeeze,
@@ -1319,15 +1452,20 @@ input[type='range']:disabled {
 }
 .abtn.tiny {
   padding: 5px 8px;
-  font-size: 10.5px;
+  font-size: var(--fs-fine);
 }
-.abtn.danger:hover:not(:disabled) {
-  border-color: #d0596b;
-  color: #ff9aa8;
+/* A CONTROL THAT DESTROYS SOMETHING LOOKS LIKE IT AT REST.
+   This was neutral until a pointer was already on it, which is the same defect
+   /world's "remove the_hub" had and the same fix world.css:552 carries: the wax
+   at rest, the lit edge once reached for. A control that reveals what it is
+   after the hand has arrived has told you too late. */
+.abtn.danger {
+  color: var(--acc-stop-lit);
+  border-color: color-mix(in srgb, var(--acc-stop) 55%, transparent);
 }
 .manyfoot {
   color: var(--dim);
-  font-size: 10px;
+  font-size: var(--fs-micro);
   line-height: 1.5;
 }
 .grainrow {
@@ -1339,14 +1477,14 @@ input[type='range']:disabled {
 }
 .grainlab {
   color: var(--dim);
-  font-size: 10.5px;
+  font-size: var(--fs-fine);
 }
 .grainrow .seg {
   min-width: 0;
 }
 .grainrow .seg-opt {
   padding: 4px 6px;
-  font-size: 10.5px;
+  font-size: var(--fs-fine);
   white-space: nowrap;
 }
 
@@ -1361,8 +1499,8 @@ input[type='range']:disabled {
   justify-content: center;
 }
 .areabtn.on {
-  border-color: #8f93f5;
-  color: #b9bcff;
+  border-color: var(--acc-tool);
+  color: var(--acc-tool-lit);
 }
 /* flex, not a two-column grid: with no stop button the second track was still
    there as an empty column plus its gap, so the generate button sat 14px short
@@ -1398,22 +1536,24 @@ input[type='range']:disabled {
   margin: 0 var(--pan-in);
   padding: 2px 0;
 }
+/* a job that is running is the tool REPORTING, so it is green. Gold is the
+   thing you armed, and nobody armed the router thinking. */
 .saidlook {
-  color: var(--acc);
-  font: 10.5px/1.4 var(--font-mono);
+  color: var(--ok);
+  font: var(--fs-fine)/1.4 var(--font-mono);
 }
 .saidline .saidwhy {
   flex: 1 1 auto;
   min-width: 0;
   color: var(--dim);
-  font: 10.5px/1.4 var(--font-mono);
+  font: var(--fs-fine)/1.4 var(--font-mono);
   overflow-wrap: anywhere;
 }
 /* a miss reads warm, not red. Red is the colour this panel uses for delete and
    for an armed confirm, and nothing here is either: every candidate is still
    keepable and the next press is still free. */
 .saidline .saidwhy.miss {
-  color: #d9bb55;
+  color: var(--acc-tool-lit);
 }
 /* named through the line, not on its own, because .abtn further down the file
    hands every button flex: 1 1 76px and a bare class here loses to it. The
@@ -1421,7 +1561,7 @@ input[type='range']:disabled {
 .saidline .saidgo {
   flex: 0 0 auto;
   padding: 2px 8px;
-  font-size: 10.5px;
+  font-size: var(--fs-fine);
   white-space: nowrap;
 }
 .planbox {
@@ -1432,14 +1572,14 @@ input[type='range']:disabled {
      zone card, and the plan was the only one whose edge sat at the panel */
   margin: 2px var(--pan-in) 6px;
   padding: 8px 10px;
-  border: 1px solid var(--edge);
-  border-radius: 8px;
+  border: var(--hair) solid var(--edge);
+  border-radius: var(--r-soft);
   background: var(--raised);
 }
 .plannote {
   min-width: 0;
   color: var(--ink);
-  font-size: 11.5px;
+  font-size: var(--fs-small);
   line-height: 1.45;
 }
 .planmeta {
@@ -1448,7 +1588,7 @@ input[type='range']:disabled {
   gap: 8px;
   min-width: 0;
   color: var(--dim);
-  font-size: 10.5px;
+  font-size: var(--fs-fine);
 }
 .planshow {
   margin-left: auto;
@@ -1457,9 +1597,9 @@ input[type='range']:disabled {
   background: transparent;
   color: var(--dim);
   font: inherit;
-  font-size: 10.5px;
+  font-size: var(--fs-fine);
   text-decoration: underline;
-  cursor: pointer;
+  cursor: var(--cur-do);
 }
 .planshow:hover {
   color: var(--ink);
@@ -1469,7 +1609,7 @@ input[type='range']:disabled {
   max-height: 120px;
   overflow-y: auto;
   color: var(--dim);
-  font-size: 10.5px;
+  font-size: var(--fs-fine);
   line-height: 1.5;
 }
 /* the gate between variant one and the rest. Same box as the plan card, in the
@@ -1486,7 +1626,7 @@ input[type='range']:disabled {
   min-width: 0;
   height: 104px;
   margin: 2px 0;
-  border-radius: 7px;
+  border-radius: var(--r-soft);
   background: var(--stage);
   overflow: hidden;
 }
@@ -1518,12 +1658,12 @@ input[type='range']:disabled {
   margin-left: calc(0px - var(--pan-pill));
   padding: 3px var(--pan-pill);
   border: 0;
-  border-radius: 6px;
+  border-radius: var(--r);
   background: transparent;
   color: var(--dim);
   font: inherit;
-  font-size: 11px;
-  cursor: pointer;
+  font-size: var(--fs-fine);
+  cursor: var(--cur-do);
 }
 .asktoggle:hover {
   color: var(--ink);
@@ -1543,13 +1683,13 @@ input[type='range']:disabled {
   gap: 8px;
   padding: 5px 8px;
   border: 0;
-  border-radius: 7px;
+  border-radius: var(--r);
   background: transparent;
   color: var(--ink);
   font: inherit;
-  font-size: 11.5px;
+  font-size: var(--fs-small);
   text-align: left;
-  cursor: pointer;
+  cursor: var(--cur-do);
   transition: background 140ms ease;
 }
 .askrow:hover {
@@ -1567,7 +1707,7 @@ input[type='range']:disabled {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--dim);
-  font-size: 10.5px;
+  font-size: var(--fs-fine);
 }
 .grps {
   display: grid;
@@ -1577,7 +1717,7 @@ input[type='range']:disabled {
   display: flex;
   align-items: center;
   gap: 2px;
-  border-radius: 8px;
+  border-radius: var(--r-soft);
   transition: background 160ms ease;
 }
 .grp:hover {
@@ -1594,7 +1734,7 @@ input[type='range']:disabled {
   width: 28px;
   height: 30px;
   flex: 0 0 28px;
-  border-radius: 7px;
+  border-radius: var(--r);
   color: var(--dim);
   transition: color 160ms ease, background 160ms ease;
 }
@@ -1612,13 +1752,13 @@ input[type='range']:disabled {
   align-items: center;
   gap: 8px;
   padding: 7px 6px;
-  border-radius: 7px;
+  border-radius: var(--r);
   text-align: left;
   font-weight: 500;
 }
 .grp-n {
   color: var(--dim);
-  font: 11px var(--font-mono);
+  font: var(--fs-fine) var(--font-mono);
 }
 .grp.open .grp-name {
   color: var(--acc);
@@ -1639,9 +1779,9 @@ input[type='range']:disabled {
   gap: 8px;
   min-width: 0;
   padding: 4px 6px;
-  border-radius: 7px;
-  border: 1px solid transparent;
-  cursor: pointer;
+  border-radius: var(--r);
+  border: var(--hair) solid transparent;
+  cursor: var(--cur-do);
   transition: background 160ms ease, border-color 160ms ease;
 }
 .arow:hover {
@@ -1657,7 +1797,7 @@ input[type='range']:disabled {
   width: 26px;
   height: 26px;
   flex: 0 0 26px;
-  border-radius: 5px;
+  border-radius: var(--r);
   background: var(--stage);
   overflow: hidden;
 }
@@ -1672,19 +1812,20 @@ input[type='range']:disabled {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
+  font-size: var(--fs-small);
 }
 .badge {
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: var(--r);
   background: var(--raised);
   color: var(--dim);
-  font: 9.5px/1.2 var(--font-mono);
+  font: var(--fs-micro)/1.2 var(--font-mono);
   letter-spacing: 0.06em;
 }
+/* a fact the tool read off the item, not a thing anybody selected */
 .badge.anim {
-  background: var(--acc-soft);
-  color: var(--acc);
+  background: color-mix(in srgb, var(--ok) 14%, transparent);
+  color: var(--ok);
 }
 .arow-x {
   position: relative;
@@ -1692,12 +1833,12 @@ input[type='range']:disabled {
   place-items: center;
   width: 22px;
   height: 22px;
-  border-radius: 5px;
+  border-radius: var(--r);
   color: var(--dim);
   transition: color 160ms ease, background 160ms ease;
 }
 .arow-x:hover {
-  color: #ff8f9e;
+  color: var(--acc-stop-lit);
   background: var(--raised);
 }
 .libgrid {
@@ -1713,8 +1854,8 @@ input[type='range']:disabled {
   justify-items: center;
   min-width: 0;
   padding: 7px 3px 6px;
-  border-radius: 8px;
-  border: 1px solid transparent;
+  border-radius: var(--r-soft);
+  border: var(--hair) solid transparent;
   transition: background 160ms ease, border-color 160ms ease;
 }
 .lib:hover {
@@ -1742,7 +1883,7 @@ input[type='range']:disabled {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--dim);
-  font-size: 10.5px;
+  font-size: var(--fs-fine);
 }
 .lib.on .lib-name {
   color: var(--acc);
@@ -1773,7 +1914,7 @@ input[type='range']:disabled {
   display: block;
 }
 .facearrow {
-  font-size: 12px;
+  font-size: var(--fs-small);
   line-height: 1;
 }
 /* one dot on a row whose art moves. A walk cycle and a still are both kind
@@ -1786,19 +1927,19 @@ input[type='range']:disabled {
   left: 6px;
   width: 5px;
   height: 5px;
-  border-radius: 50%;
+  border-radius: var(--r-round);
   background: var(--acc);
   opacity: 0.75;
 }
 .lib-empty {
   padding: 10px var(--pan-in);
   color: var(--dim);
-  font-size: 11.5px;
+  font-size: var(--fs-small);
 }
 .lib-cap {
   padding: 0 var(--pan-in) 4px;
   color: var(--dim);
-  font-size: 11px;
+  font-size: var(--fs-fine);
 }
 
 /* a section header with one quiet action on its right. The action is the way
@@ -1824,11 +1965,11 @@ input[type='range']:disabled {
   position: relative;
   flex: 0 0 auto;
   padding: 4px 8px;
-  border-radius: 7px;
-  border: 1px solid var(--edge);
+  border-radius: var(--r);
+  border: var(--hair) solid var(--edge);
   background: transparent;
   color: var(--dim);
-  font-size: 11px;
+  font-size: var(--fs-fine);
   transition: color 160ms ease, border-color 160ms ease, background 160ms ease;
 }
 .seclink:hover:not(:disabled) {
@@ -1853,8 +1994,8 @@ input[type='range']:disabled {
   min-width: 0;
   margin: 2px var(--pan-in) 4px;
   padding: 8px 8px 6px;
-  border: 1px solid var(--edge);
-  border-radius: 10px;
+  border: var(--hair) solid var(--edge);
+  border-radius: var(--r-soft);
   background: var(--raised);
   animation: panel-in 160ms ease;
 }
@@ -1862,11 +2003,11 @@ input[type='range']:disabled {
   width: 100%;
   min-width: 0;
   padding: 6px 8px;
-  border: 1px solid var(--edge);
-  border-radius: 7px;
+  border: var(--hair) solid var(--edge);
+  border-radius: var(--r);
   background: var(--bg);
   color: var(--ink);
-  font: 12px var(--font-ui);
+  font: var(--fs-small) var(--font-ui);
   transition: border-color 160ms ease;
 }
 .accfind:focus {
@@ -1887,7 +2028,7 @@ input[type='range']:disabled {
 }
 .accgrid::-webkit-scrollbar-thumb {
   background: var(--edge);
-  border-radius: 3px;
+  border-radius: var(--r);
 }
 .accgrid .lib:disabled {
   opacity: 0.5;
@@ -1899,7 +2040,7 @@ input[type='range']:disabled {
   gap: 6px;
   min-width: 0;
   color: var(--dim);
-  font: 11px var(--font-mono);
+  font: var(--fs-fine) var(--font-mono);
 }
 .accfoot span {
   flex: 1 1 auto;
@@ -1923,7 +2064,7 @@ input[type='range']:disabled {
 }
 .libpanel::-webkit-scrollbar-thumb {
   background: var(--edge);
-  border-radius: 3px;
+  border-radius: var(--r);
 }
 .libpanel::-webkit-scrollbar-track {
   background: transparent;
@@ -1944,9 +2085,9 @@ input[type='range']:disabled {
   place-items: center;
   width: 20px;
   height: 20px;
-  border-radius: 5px;
+  border-radius: var(--r);
   background: var(--panel);
-  border: 1px solid var(--edge);
+  border: var(--hair) solid var(--edge);
   color: var(--dim);
   opacity: 0;
   transition: opacity 160ms ease, color 160ms ease, border-color 160ms ease;
@@ -1964,8 +2105,8 @@ input[type='range']:disabled {
   opacity: 1;
 }
 .lib-x:hover {
-  color: #ff8f9e;
-  border-color: #e84660;
+  color: var(--acc-stop-lit);
+  border-color: var(--acc-stop-edge);
 }
 .lib-edit:hover {
   color: var(--acc);
@@ -1979,12 +2120,12 @@ input[type='range']:disabled {
   flex: 0 0 auto;
   padding: 0 7px;
   opacity: 1;
-  color: #ff8f9e;
-  border-color: #e84660;
-  font: 10px/1 var(--font-mono);
+  color: var(--acc-stop-lit);
+  border-color: var(--acc-stop-edge);
+  font: var(--fs-micro)/1 var(--font-mono);
 }
 .arow-x.armed {
-  border: 1px solid #e84660;
+  border: var(--hair) solid var(--acc-stop-edge);
   height: 20px;
 }
 /* the generate section's segmented selectors: type, then how many. The on
@@ -1994,8 +2135,8 @@ input[type='range']:disabled {
   gap: 2px;
   margin: 2px var(--pan-in) 4px;
   padding: 2px;
-  border: 1px solid var(--edge);
-  border-radius: 9px;
+  border: var(--hair) solid var(--edge);
+  border-radius: var(--r-tight);
   background: var(--bg);
 }
 /* two selectors that belong to one decision sit on one line */
@@ -2033,10 +2174,10 @@ input[type='range']:disabled {
   text-overflow: ellipsis;
   white-space: nowrap;
   padding: 5px 8px;
-  border-radius: 7px;
-  border: 1px solid transparent;
+  border-radius: var(--r);
+  border: var(--hair) solid transparent;
   color: var(--dim);
-  font-size: 12px;
+  font-size: var(--fs-small);
   transition: background 160ms ease, border-color 160ms ease, color 160ms ease;
 }
 .seg-opt:hover:not(:disabled) {
@@ -2066,19 +2207,19 @@ input[type='range']:disabled {
   margin: 6px var(--pan-in) 0;
   padding: 4px 12px;
   overflow: hidden;
-  font-size: 12px;
+  font-size: var(--fs-small);
   line-height: 1.2;
 }
 .genbtn.armed {
-  background: #ffd166;
-  color: #2b2005;
+  background: var(--acc-tool-lit);
+  color: var(--acc-tool-ink);
   animation: pulse 1.2s ease-in-out infinite;
 }
 
 .placebadge {
   border-color: var(--acc);
   color: var(--acc);
-  background: #14142ad9;
+  background: color-mix(in srgb, var(--panel) 85%, transparent);
 }
 
 /* ---- the effect engine: the live preview and its knobs ------------------
@@ -2105,8 +2246,8 @@ input[type='range']:disabled {
      with nothing to scroll because the box itself was the wrong height. The
      sideways fix is the minmax track and the min-width:0 below; clipping was
      never doing that work. */
-  border: 1px solid var(--edge);
-  border-radius: 10px;
+  border: var(--hair) solid var(--edge);
+  border-radius: var(--r-soft);
   background: var(--raised);
   animation: panel-in 160ms ease;
 }
@@ -2128,14 +2269,14 @@ input[type='range']:disabled {
   padding: 0 4px 2px;
 }
 .fxrule {
-  font: 600 11px/1 var(--font-mono);
-  letter-spacing: 0.08em;
+  font: 600 var(--fs-fine)/1 var(--font-mono);
+  letter-spacing: var(--track-label);
   text-transform: uppercase;
   color: var(--acc);
 }
 .fxdesc {
   color: var(--dim);
-  font-size: 11px;
+  font-size: var(--fs-fine);
   line-height: 1.3;
 }
 .fxstage {
@@ -2144,7 +2285,7 @@ input[type='range']:disabled {
   justify-content: center;
   gap: 12px;
   padding: 8px 4px 6px;
-  border-radius: 8px;
+  border-radius: var(--r-soft);
   background: var(--stage);
 }
 .fxcell {
@@ -2153,7 +2294,7 @@ input[type='range']:disabled {
   gap: 4px;
 }
 .fxcell em {
-  font: 10px/1 var(--font-mono);
+  font: var(--fs-micro)/1 var(--font-mono);
   font-style: normal;
   color: var(--dim);
 }
@@ -2170,8 +2311,8 @@ input[type='range']:disabled {
 .fxpal span {
   flex: 1;
   height: 8px;
-  border-radius: 2px;
-  border: 1px solid #0006;
+  border-radius: var(--r-tight);
+  border: var(--hair) solid var(--seam);
 }
 /* whose colours the effect is made of. A thing made OF the place takes the
    painting's; a thing with its own identity brings its own, and then the ramp
@@ -2184,10 +2325,10 @@ input[type='range']:disabled {
   height: 14px;
   min-width: 0;
   padding: 0;
-  border: 1px solid #0006;
-  border-radius: 2px;
+  border: var(--hair) solid var(--seam);
+  border-radius: var(--r-tight);
   background: none;
-  cursor: pointer;
+  cursor: var(--cur-do);
   -webkit-appearance: none;
   appearance: none;
 }
@@ -2196,7 +2337,7 @@ input[type='range']:disabled {
 }
 .fxpal.edit input::-webkit-color-swatch {
   border: none;
-  border-radius: 1px;
+  border-radius: var(--r-tight);
 }
 .fxpal.edit input:hover {
   border-color: var(--acc);
@@ -2210,10 +2351,10 @@ input[type='range']:disabled {
   margin: 0 4px 2px;
   padding: 4px 8px;
   border-left: 2px solid var(--acc);
-  border-radius: 0 6px 6px 0;
+  border-radius: 0 var(--r-soft) var(--r-soft) 0;
   background: var(--acc-soft);
   color: var(--acc);
-  font: 10.5px/1.4 var(--font-mono);
+  font: var(--fs-fine)/1.4 var(--font-mono);
 }
 /* What the confirmed translation will actually draw. It is the WHOLE prompt,
    which now runs to sixty or eighty words, so it gets its own capped frame and
@@ -2234,18 +2375,18 @@ input[type='range']:disabled {
 }
 .gen-will::-webkit-scrollbar-thumb {
   background: var(--edge);
-  border-radius: 3px;
+  border-radius: var(--r);
 }
 /* a written effect that renders but does not wrap. Quiet on purpose: it is a
    fact about the loop, not a refusal, and he may not care on a slow drift. */
 .fxwarn {
   margin: 4px 4px 0;
   padding: 4px 8px;
-  border-left: 2px solid #c9a227;
-  border-radius: 0 6px 6px 0;
-  background: #c9a2271f;
-  color: #d9bb55;
-  font: 10.5px/1.4 var(--font-mono);
+  border-left: 2px solid var(--acc-tool);
+  border-radius: 0 var(--r-soft) var(--r-soft) 0;
+  background: color-mix(in srgb, var(--acc-tool) 12%, transparent);
+  color: var(--acc-tool-lit);
+  font: var(--fs-fine)/1.4 var(--font-mono);
 }
 /* the recipe fold: what was written for this ask, read-only, so the panel is
    not a black box. There is no editor here on purpose. */
@@ -2258,7 +2399,7 @@ input[type='range']:disabled {
   justify-self: start;
   padding: 2px 0;
   color: var(--dim);
-  font: 10.5px/1.4 var(--font-mono);
+  font: var(--fs-fine)/1.4 var(--font-mono);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
@@ -2270,18 +2411,18 @@ input[type='range']:disabled {
   margin: 0;
   padding: 7px 8px;
   overflow: auto;
-  border: 1px solid var(--edge);
-  border-radius: 6px;
+  border: var(--hair) solid var(--edge);
+  border-radius: var(--r-soft);
   background: var(--stage);
   color: var(--dim);
-  font: 10.5px/1.5 var(--font-mono);
+  font: var(--fs-fine)/1.5 var(--font-mono);
   white-space: pre-wrap;
   word-break: break-word;
 }
 .fxfoot {
   padding: 4px 4px 0;
   color: var(--dim);
-  font: 10.5px/1.4 var(--font-mono);
+  font: var(--fs-fine)/1.4 var(--font-mono);
 }
 
 /* ---- the doors (test step): the inline form and the event rows --------- */
@@ -2300,8 +2441,8 @@ input[type='range']:disabled {
   gap: 6px;
   margin: 2px var(--pan-in);
   padding: 10px;
-  border: 1px solid var(--edge);
-  border-radius: 10px;
+  border: var(--hair) solid var(--edge);
+  border-radius: var(--r-soft);
   background: var(--raised);
   animation: panel-in 160ms ease;
 }
@@ -2310,14 +2451,45 @@ input[type='range']:disabled {
 }
 .doorform input {
   padding: 6px 9px;
-  font-size: 12px;
+  font-size: var(--fs-small);
 }
 .doorrad {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
-  color: var(--dim);
-  font-size: 11.5px;
+  gap: 3px 6px;
+  color: var(--ink-3);
+  font-size: var(--fs-small);
+}
+/* the stepper's caption, above its buttons like every other caption */
+.doorrad > span {
+  flex: 1 0 100%;
+  font: var(--fs-micro) var(--font-mono);
+}
+/* one mark: the two strings that name it, which waypoint it sits on, and a
+   remove. TWO LINES, because four controls across a 228px form gave the
+   identifier 63px and `mark_1` came out as "mark". The identifier leads on its
+   own line for the reason it leads in the anchor form above: it is the string a
+   member types in python, and the label under it is only what a player reads.
+   What each field is for lives on the field, on hover. */
+.markrow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 3px 4px;
+  min-width: 0;
+}
+.markrow input:first-of-type {
+  grid-column: 1 / -1;
+}
+.markrow input {
+  min-width: 0;
+  padding: 4px 6px;
+  font: var(--fs-fine) var(--font-mono);
+}
+/* the label is words a person reads, so it is not set in the identifier face */
+.markrow input:nth-of-type(2) {
+  font-family: var(--font-ui);
 }
 .doorrad em {
   font-style: normal;
@@ -2330,11 +2502,11 @@ input[type='range']:disabled {
   position: relative;
   width: 22px;
   height: 20px;
-  border-radius: 5px;
-  border: 1px solid var(--edge);
+  border-radius: var(--r);
+  border: var(--hair) solid var(--edge);
   background: var(--panel);
   color: var(--ink);
-  font-size: 12px;
+  font-size: var(--fs-small);
   line-height: 1;
   transition: all 160ms ease;
 }
@@ -2346,14 +2518,19 @@ input[type='range']:disabled {
    what is set or what to do next, and an x to put it back. Same row shape as
    the radius above so the form reads as one column of properties. */
 .anchspot {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 6px;
-  color: var(--dim);
-  font-size: 11.5px;
+  gap: 3px 6px;
+  min-width: 0;
 }
+/* the caption spans the whole width above the control, which is where every
+   other caption in the product sits. A 52px column beside it was the third
+   label position in one form. */
 .anchspot > span {
-  min-width: 52px;
+  grid-column: 1 / -1;
+  font: var(--fs-micro) var(--font-mono);
+  color: var(--ink-3);
 }
 .anchspot .mbtn.wide {
   position: relative;
@@ -2361,11 +2538,11 @@ input[type='range']:disabled {
   min-width: 0;
   height: 24px;
   padding: 0 8px;
-  border-radius: 6px;
-  border: 1px solid var(--edge);
+  border-radius: var(--r);
+  border: var(--hair) solid var(--edge);
   background: var(--panel);
   color: var(--ink);
-  font: 11px var(--font-mono);
+  font: var(--fs-fine) var(--font-mono);
   text-align: left;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2390,22 +2567,25 @@ input[type='range']:disabled {
   font-family: var(--font-mono);
 }
 .anchface {
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
-  color: var(--dim);
-  font-size: 11.5px;
+  display: grid;
+  gap: 3px;
+  min-width: 0;
 }
 .anchface > span {
-  min-width: 52px;
-  padding-top: 4px;
+  font: var(--fs-micro) var(--font-mono);
+  color: var(--ink-3);
 }
 /* the six numbers describing the body, in the same auto-fit grid the placement
    inspector uses for its transform, so the two number blocks in this tool read
-   as the same kind of thing */
+   as the same kind of thing.
+
+   THREE ACROSS IN THE PANEL AND TWO IN THE NARROWER SHOT FORM, which is what
+   auto-fit is for. The floor was 92px, so the panel took two columns and the
+   six body numbers ate three rows of a rail that was already 383px over its
+   height. 70px is the width of the widest caption, "offset x", at 10px mono. */
 .walkcfg {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(70px, 1fr));
   gap: 4px 6px;
   min-width: 0;
   margin: 2px var(--pan-in) 4px;
@@ -2430,11 +2610,11 @@ input[type='range']:disabled {
   gap: 8px;
   min-width: 0;
   padding: 4px 6px;
-  border: 1px solid transparent;
-  border-radius: 7px;
+  border: var(--hair) solid transparent;
+  border-radius: var(--r);
   color: var(--dim);
-  font-size: 11.5px;
-  cursor: pointer;
+  font-size: var(--fs-small);
+  cursor: var(--cur-do);
   transition: all 160ms ease;
 }
 .occrow:hover {
@@ -2467,8 +2647,8 @@ input[type='range']:disabled {
   width: 58px;
   min-width: 0;
   padding: 3px 6px;
-  border-radius: 6px;
-  font: 11px var(--font-mono);
+  border-radius: var(--r);
+  font: var(--fs-fine) var(--font-mono);
 }
 /* the map's own key/values. Two columns, the key in the machine face because
    a grape reads it by that exact string. */
@@ -2486,14 +2666,14 @@ input[type='range']:disabled {
 .metarow input {
   min-width: 0;
   padding: 5px 8px;
-  font-size: 11.5px;
+  font-size: var(--fs-small);
 }
 .metarow input:disabled {
   opacity: 0.4;
 }
 .doorhint {
   color: var(--dim);
-  font-size: 11px;
+  font-size: var(--fs-fine);
 }
 .dooracts {
   display: flex;
@@ -2508,35 +2688,64 @@ input[type='range']:disabled {
   gap: 2px;
   padding: 2px 0;
 }
+/* TWO ROW GRAMMARS IN THIS TOOL AND NOT THREE. An ACTION row (.row) is a thing
+   you press. A DATA row (.evrow) is a thing you have made, and pressing it
+   opens it. They are different, so they are allowed to look different.
+
+   What they are not allowed to do is start their words in two different places.
+   Measured on step 4 before this: an action row put its label at x=59 behind a
+   26px bordered tile, and a data row put its label at x=43 behind a bare
+   Unicode glyph with no tile at all, in a different face, down the same 272px
+   column. Two lists, one gutter. A data row wears the same tile, drawn quieter
+   because it is describing rather than offering, and the text lands on the same
+   line. */
 .evrow {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
   min-width: 0;
+  width: calc(100% - var(--pan-in) * 2);
   margin: 0 var(--pan-in);
-  padding: 5px 8px;
-  border-radius: 7px;
-  border: 1px solid transparent;
-  cursor: pointer;
-  transition: background 160ms ease, border-color 160ms ease;
+  padding: 5px 10px;
+  border-radius: 0;
+  border: 0;
+  border-bottom: var(--hair) solid color-mix(in srgb, var(--edge) 55%, transparent);
+  cursor: var(--cur-do);
+  transition: background 160ms ease, box-shadow 160ms ease;
 }
 .evrow:hover {
-  background: var(--raised);
+  background: color-mix(in srgb, var(--acc) 6%, transparent);
 }
 .evrow.sel {
   background: var(--acc-soft);
-  border-color: var(--acc);
+  box-shadow: inset 2px 0 0 var(--acc);
 }
-.ev-glyph {
-  flex: 0 0 auto;
+/* the tile on a data row is quieter than the tile on an action row: an action
+   row is offering to do something, this one is only saying what kind of thing
+   the row is. It keeps the size, because the size is what puts both lists'
+   words on the same line. */
+.evrow .row-ic {
+  border-radius: var(--r);
+  background: transparent;
+  border: var(--hair) solid var(--edge);
+  color: var(--ink-3);
+}
+.evrow:hover .row-ic,
+.evrow.sel .row-ic {
+  border-color: var(--acc);
   color: var(--acc);
-  font-size: 12px;
 }
 /* the row is two lines because one line could not hold both. At 162px the
    metadata was eaten on the right and nothing gave it back: "the_maw_mouth ·
    pa…" does not say which anchor the shot hangs on, and the only way to find
    out was to click every row. The name owns the top line, the detail sits
-   under it smaller, and each line ellipsises on its own. */
+   under it smaller, and each line ellipsises on its own.
+
+   TWO FACES NOW, because the two lines say different kinds of thing. The top
+   line is what the door is CALLED and it is set in the label face; the line
+   under it is the python identifier and where the door goes, and those are
+   addresses, so they stay mono. The whole row used to be mono, which is what
+   made `the_maw_mouth` look like the door's name rather than its address. */
 .ev-name {
   flex: 1;
   min-width: 0;
@@ -2544,23 +2753,27 @@ input[type='range']:disabled {
   flex-direction: column;
   gap: 1px;
   line-height: 1.35;
-  font-size: 12px;
+  font-size: var(--fs-small);
+  font-family: var(--font-label);
+}
+.ev-name i {
   font-family: var(--font-mono);
+  font-size: var(--fs-micro);
 }
 
 /* export step */
 .manifest {
   margin: 2px var(--pan-in);
   padding: 12px 14px;
-  border: 1px solid var(--edge);
-  border-radius: 10px;
+  border: var(--hair) solid var(--edge);
+  border-radius: var(--r-soft);
   background: var(--raised);
-  font-size: 12px;
+  font-size: var(--fs-small);
 }
 .manifest-to {
   color: var(--dim);
   font-family: var(--font-mono);
-  font-size: 11.5px;
+  font-size: var(--fs-small);
   padding-bottom: 8px;
 }
 .manifest-to b {
@@ -2579,7 +2792,7 @@ input[type='range']:disabled {
 }
 .manifest li b {
   color: var(--ink);
-  font: 500 11.5px var(--font-mono);
+  font: 500 var(--fs-small) var(--font-mono);
   margin-right: 6px;
 }
 
@@ -2597,7 +2810,14 @@ input[type='range']:disabled {
   height: 100%;
   image-rendering: pixelated;
   touch-action: none;
-  cursor: crosshair;
+  cursor: var(--cur-draw);
+}
+/* EXCEPT WHERE NOTHING IS DRAWN. The export step is a picture of the bundle
+   about to be written and no press on it does anything, and it wore the same
+   crosshair as the cut brush. The reticle is the token for a surface you survey
+   rather than one you draw on, which is what this canvas is here. */
+.stage[data-step='export'] canvas {
+  cursor: var(--cur-survey);
 }
 .empty {
   position: absolute;
@@ -2613,11 +2833,11 @@ input[type='range']:disabled {
   left: 14px;
   top: 14px;
   padding: 5px 12px;
-  border: 1px solid var(--ok);
-  border-radius: 20px;
+  border: var(--hair) solid var(--ok);
+  border-radius: var(--r-round);
   color: var(--ok);
-  background: #0b1a12d9;
-  font-size: 12px;
+  background: color-mix(in srgb, var(--acc-live) 12%, var(--scrim));
+  font-size: var(--fs-small);
   pointer-events: none;
   animation: panel-in 180ms ease;
 }
@@ -2638,12 +2858,12 @@ input[type='range']:disabled {
 .toast {
   max-width: 520px;
   padding: 8px 16px;
-  border-radius: 20px;
-  background: #16181bf2;
-  border: 1px solid var(--edge);
-  box-shadow: 0 6px 24px #00000066;
+  border-radius: var(--r-round);
+  background: color-mix(in srgb, var(--raised) 95%, transparent);
+  border: var(--hair) solid var(--edge);
+  box-shadow: 0 6px 24px var(--drop-deep);
   color: var(--ink);
-  font-size: 12.5px;
+  font-size: var(--fs-small);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2664,8 +2884,8 @@ footer {
   gap: 14px;
   padding: 0 14px;
   background: var(--panel);
-  border-top: 1px solid var(--edge);
-  font-size: 11px;
+  border-top: var(--hair) solid var(--edge);
+  font-size: var(--fs-fine);
   color: var(--ink);
 }
 footer .grow {
@@ -2708,11 +2928,11 @@ footer .hint {
   min-width: 0;
   max-width: 100%;
   padding: 6px 4px;
-  border-radius: 7px;
-  border: 1px solid var(--edge);
+  border-radius: var(--r);
+  border: var(--hair) solid var(--edge);
   background: var(--raised);
   color: var(--ink);
-  font-size: 11.5px;
+  font-size: var(--fs-small);
   line-height: 1.3;
   overflow-wrap: anywhere;
   transition: all 160ms ease;
@@ -2723,9 +2943,12 @@ footer .hint {
   border-color: var(--acc);
   color: var(--acc);
 }
+/* the reach half of the pair whose rest half is up at .abtn.danger. Both are
+   needed: at rest it says what it is, reached for it says it is armed. */
 .abtn.danger:hover:not(:disabled) {
-  border-color: #e84660;
-  color: #ff8fa0;
+  border-color: var(--acc-stop-edge);
+  color: var(--acc-stop-lit);
+  background: color-mix(in srgb, var(--acc-stop) 22%, transparent);
 }
 .abtn.on {
   border-color: var(--acc);
@@ -2733,8 +2956,8 @@ footer .hint {
   color: var(--acc);
 }
 .abtn.armed {
-  border-color: #e84660;
-  color: #ff8fa0;
+  border-color: var(--acc-stop-edge);
+  color: var(--acc-stop-lit);
 }
 
 /* ---- the map size control (footer): transparent margin growth ---------- */
@@ -2747,11 +2970,11 @@ footer .hint {
   position: relative;
   width: 22px;
   height: 20px;
-  border-radius: 5px;
-  border: 1px solid var(--edge);
+  border-radius: var(--r);
+  border: var(--hair) solid var(--edge);
   background: var(--raised);
   color: var(--ink);
-  font-size: 11px;
+  font-size: var(--fs-fine);
   line-height: 1;
   transition: all 160ms ease;
 }
@@ -2762,12 +2985,12 @@ footer .hint {
 .mapsize .mpx {
   width: 46px;
   padding: 2px 4px;
-  border-radius: 5px;
-  border: 1px solid var(--edge);
+  border-radius: var(--r);
+  border: var(--hair) solid var(--edge);
   background: var(--panel);
   color: var(--ink);
   font-family: var(--font-mono);
-  font-size: 11px;
+  font-size: var(--fs-fine);
 }
 /* footer tooltips open upward, or they would fall off the screen */
 footer [data-tip]:hover::after {
@@ -2787,22 +3010,22 @@ footer [data-tip]:hover::after {
   margin: 0 4px 2px;
   padding: 5px 8px;
   border-left: 2px solid var(--edge);
-  border-radius: 0 6px 6px 0;
+  border-radius: 0 var(--r-soft) var(--r-soft) 0;
   background: var(--raised);
 }
 .style-tx {
   flex: 1;
   min-width: 0;
   color: var(--dim);
-  font: 10.5px/1.4 var(--font-mono);
+  font: var(--fs-fine)/1.4 var(--font-mono);
 }
 .style-re {
   flex: 0 0 auto;
   padding: 2px 6px;
-  border-radius: 5px;
-  border: 1px solid var(--edge);
+  border-radius: var(--r);
+  border: var(--hair) solid var(--edge);
   color: var(--dim);
-  font-size: 10.5px;
+  font-size: var(--fs-fine);
   transition: all 160ms ease;
 }
 .style-re:hover:not(:disabled) {
@@ -2813,7 +3036,7 @@ footer [data-tip]:hover::after {
   display: grid;
   gap: 8px;
   padding: 8px 4px 6px;
-  border-radius: 8px;
+  border-radius: var(--r-soft);
   background: var(--stage);
 }
 .plrow {
@@ -2826,9 +3049,9 @@ footer [data-tip]:hover::after {
    every other row is one click away, and nothing is decided until a button */
 .plrow.pickable {
   padding: 4px;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  cursor: pointer;
+  border: var(--hair) solid transparent;
+  border-radius: var(--r);
+  cursor: var(--cur-do);
 }
 .plrow.pickable:hover {
   border-color: var(--edge);
@@ -2839,7 +3062,7 @@ footer [data-tip]:hover::after {
 }
 .plnum {
   align-self: flex-start;
-  font: 10px/1 var(--font-mono);
+  font: var(--fs-micro)/1 var(--font-mono);
   color: var(--dim);
 }
 .plrow.chosen .plnum {
@@ -2848,7 +3071,7 @@ footer [data-tip]:hover::after {
 .plwhy {
   padding: 3px 8px 0;
   color: var(--acc);
-  font: 10.5px/1.4 var(--font-mono);
+  font: var(--fs-fine)/1.4 var(--font-mono);
 }
 .plfix {
   margin: 4px 4px 0;
@@ -2860,8 +3083,8 @@ footer [data-tip]:hover::after {
    nothing is chosen in that case, in the same warm colour the line under the
    button uses, and every row below it is still keepable. */
 .plmiss {
-  color: #d9bb55;
-  font: 10.5px/1.4 var(--font-mono);
+  color: var(--acc-tool-lit);
+  font: var(--fs-fine)/1.4 var(--font-mono);
   overflow-wrap: anywhere;
 }
 
@@ -2876,24 +3099,25 @@ footer [data-tip]:hover::after {
   min-height: 16px;
   padding: 2px 4px;
 }
+/* same reason as .saidlook: this is the tool working, not the tool asking */
 .fxlooking {
-  color: var(--acc);
-  font: 10.5px/1.4 var(--font-mono);
+  color: var(--ok);
+  font: var(--fs-fine)/1.4 var(--font-mono);
 }
 .fxsaid {
   flex: 1;
   min-width: 0;
   color: var(--dim);
-  font: 10.5px/1.4 var(--font-mono);
+  font: var(--fs-fine)/1.4 var(--font-mono);
   overflow-wrap: anywhere;
 }
 .fxuse {
   flex: 0 0 auto;
   padding: 2px 7px;
-  border: 1px solid var(--edge);
-  border-radius: 5px;
+  border: var(--hair) solid var(--edge);
+  border-radius: var(--r);
   color: var(--dim);
-  font-size: 10.5px;
+  font-size: var(--fs-fine);
   transition: all 160ms ease;
 }
 .fxuse:hover {
@@ -2927,19 +3151,19 @@ footer [data-tip]:hover::after {
 .helpbtn {
   width: 26px;
   height: 26px;
-  border-radius: 50%;
-  border: 1px solid var(--line, #3a3a42);
+  border-radius: var(--r-round);
+  border: var(--hair) solid var(--line);
   background: transparent;
-  color: var(--dim, #9a9aa6);
+  color: var(--dim);
   font: inherit;
-  font-size: 14px;
-  cursor: pointer;
+  font-size: var(--fs-lead);
+  cursor: var(--cur-do);
   margin-left: 10px;
   flex: 0 0 auto;
 }
 .helpbtn:hover {
-  color: var(--fg, #e8e8ee);
-  border-color: var(--dim, #9a9aa6);
+  color: var(--ink);
+  border-color: var(--dim);
 }
 
 .helpwrap {
@@ -2954,9 +3178,9 @@ footer [data-tip]:hover::after {
 .helppanel {
   width: min(940px, 92vw);
   height: min(78vh, 760px);
-  background: var(--panel, #1b1b21);
-  border: 1px solid var(--line, #3a3a42);
-  border-radius: 10px;
+  background: var(--panel);
+  border: var(--hair) solid var(--line);
+  border-radius: var(--r-soft);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -2967,7 +3191,7 @@ footer [data-tip]:hover::after {
   justify-content: space-between;
   gap: 12px;
   padding: 12px 14px;
-  border-bottom: 1px solid var(--line, #3a3a42);
+  border-bottom: var(--hair) solid var(--line);
 }
 /* .abtn stretches to its container by default, which is right everywhere else
  * it is used and wrong on a header where it sits next to a title */
@@ -2976,9 +3200,9 @@ footer [data-tip]:hover::after {
   width: auto;
 }
 .help-title {
-  font-size: 13px;
+  font-size: var(--fs-body);
   letter-spacing: 0.04em;
-  color: var(--fg, #e8e8ee);
+  color: var(--ink);
 }
 .help-body {
   display: flex;
@@ -2988,7 +3212,7 @@ footer [data-tip]:hover::after {
 .help-nav {
   width: 148px;
   flex: 0 0 auto;
-  border-right: 1px solid var(--line, #3a3a42);
+  border-right: var(--hair) solid var(--line);
   padding: 8px 0;
   overflow-y: auto;
 }
@@ -3000,19 +3224,19 @@ footer [data-tip]:hover::after {
   padding: 8px 14px;
   background: none;
   border: 0;
-  color: var(--dim, #9a9aa6);
+  color: var(--dim);
   font: inherit;
-  font-size: 12px;
+  font-size: var(--fs-small);
   text-align: left;
-  cursor: pointer;
+  cursor: var(--cur-do);
 }
 .help-sec:hover {
-  color: var(--fg, #e8e8ee);
+  color: var(--ink);
 }
 .help-sec.on {
-  color: var(--fg, #e8e8ee);
+  color: var(--ink);
   background: rgba(255, 255, 255, 0.05);
-  box-shadow: inset 2px 0 0 var(--acc, #d8a657);
+  box-shadow: inset 2px 0 0 var(--acc);
 }
 .help-list {
   flex: 1;
@@ -3022,16 +3246,16 @@ footer [data-tip]:hover::after {
 }
 .help-gist {
   margin: 0 0 14px;
-  font-size: 12.5px;
+  font-size: var(--fs-small);
   line-height: 1.6;
-  color: var(--dim, #9a9aa6);
+  color: var(--dim);
   max-width: 62ch;
 }
 .help-item {
-  border-top: 1px solid var(--line, #2e2e36);
+  border-top: var(--hair) solid var(--line);
 }
 .help-item:last-child {
-  border-bottom: 1px solid var(--line, #2e2e36);
+  border-bottom: var(--hair) solid var(--line);
 }
 .help-row {
   display: grid;
@@ -3042,27 +3266,27 @@ footer [data-tip]:hover::after {
   padding: 9px 2px;
   background: none;
   border: 0;
-  color: var(--fg, #e8e8ee);
+  color: var(--ink);
   font: inherit;
-  font-size: 12.5px;
+  font-size: var(--fs-small);
   text-align: left;
-  cursor: pointer;
+  cursor: var(--cur-do);
 }
 .help-row:hover {
   background: rgba(255, 255, 255, 0.03);
 }
 .help-what {
-  color: var(--fg, #e8e8ee);
+  color: var(--ink);
 }
 .help-line {
-  color: var(--dim, #9a9aa6);
+  color: var(--dim);
 }
 .help-caret {
-  color: var(--dim, #9a9aa6);
+  color: var(--dim);
   text-align: right;
 }
 .help-item.on .help-what {
-  color: var(--acc, #d8a657);
+  color: var(--acc);
 }
 .help-more {
   padding: 2px 2px 14px 202px;
@@ -3073,17 +3297,17 @@ footer [data-tip]:hover::after {
   padding-left: 18px;
 }
 .help-more li {
-  font-size: 12.5px;
+  font-size: var(--fs-small);
   line-height: 1.7;
-  color: var(--fg, #e8e8ee);
+  color: var(--ink);
   margin-bottom: 3px;
 }
 .help-note {
   margin: 10px 0 0;
-  font-size: 12px;
+  font-size: var(--fs-small);
   line-height: 1.65;
-  color: var(--dim, #9a9aa6);
-  border-left: 2px solid var(--line, #3a3a42);
+  color: var(--dim);
+  border-left: 2px solid var(--line);
   padding-left: 10px;
 }
 
@@ -3115,13 +3339,13 @@ footer [data-tip]:hover::after {
   height: 22px;
   padding: 0 8px;
   flex: 0 0 auto;
-  border: 1px solid var(--edge);
-  border-radius: 11px;
+  border: var(--hair) solid var(--edge);
+  border-radius: var(--r-tight);
   background: transparent;
   color: var(--dim);
   font: inherit;
-  font-size: 11px;
-  cursor: pointer;
+  font-size: var(--fs-fine);
+  cursor: var(--cur-do);
   transition: all 150ms ease;
 }
 .actpill svg {
@@ -3143,7 +3367,7 @@ footer [data-tip]:hover::after {
 }
 .actpill:disabled {
   opacity: 0.4;
-  cursor: default;
+  cursor: var(--cur-no);
 }
 /* the price, so a button that spends never looks like one that does not */
 .pill-cost {
@@ -3152,22 +3376,22 @@ footer [data-tip]:hover::after {
   min-width: 14px;
   height: 14px;
   padding: 0 3px;
-  border-radius: 7px;
-  background: var(--warn-soft, rgba(216, 166, 87, 0.18));
-  color: var(--warn, #d8a657);
-  font-size: 10px;
+  border-radius: var(--r);
+  background: color-mix(in srgb, var(--warn) 18%, transparent);
+  color: var(--warn);
+  font-size: var(--fs-micro);
   line-height: 1;
 }
 .actpill.spends:hover:not(:disabled) {
-  color: var(--warn, #d8a657);
-  border-color: var(--warn, #d8a657);
+  color: var(--warn);
+  border-color: var(--warn);
 }
 
 /* what an open box is for. A bare input carrying a greyed example looks like a
  * field on a form, and two of them stacked look like a form with two required
  * fields, which is exactly how the pair was read the first time it was used. */
 .boxwhat {
-  font-size: 10.5px;
+  font-size: var(--fs-fine);
   line-height: 1.4;
   color: var(--dim);
   margin-bottom: 1px;
@@ -3178,16 +3402,16 @@ footer [data-tip]:hover::after {
 .toast-act {
   margin-left: 10px;
   padding: 2px 8px;
-  border: 1px solid var(--acc, #d8a657);
-  border-radius: 10px;
+  border: var(--hair) solid var(--acc);
+  border-radius: var(--r);
   background: transparent;
-  color: var(--acc, #d8a657);
+  color: var(--acc);
   font: inherit;
-  font-size: 11px;
-  cursor: pointer;
+  font-size: var(--fs-fine);
+  cursor: var(--cur-do);
 }
 .toast-act:hover {
-  background: var(--acc-soft, rgba(216, 166, 87, 0.16));
+  background: var(--acc-soft);
 }
 
 /* who a pixel edit lands on. Sits under the edit buttons rather than beside one
@@ -3197,20 +3421,20 @@ footer [data-tip]:hover::after {
   align-items: center;
   gap: 7px;
   padding: 6px 2px 2px;
-  font-size: 11px;
+  font-size: var(--fs-fine);
   color: var(--dim);
-  cursor: pointer;
+  cursor: var(--cur-do);
 }
 .editall input {
   width: 13px;
   height: 13px;
   margin: 0;
   padding: 0;
-  accent-color: var(--acc, #d8a657);
-  cursor: pointer;
+  accent-color: var(--acc);
+  cursor: var(--cur-do);
 }
 .editall:hover {
-  color: var(--ink, #e8e8ee);
+  color: var(--ink);
 }
 
 /* ---- anchors: named places, the seam with the game and with python -------
@@ -3221,14 +3445,16 @@ footer [data-tip]:hover::after {
   display: grid;
   gap: 3px;
 }
+/* the same caption the ocean writes, in the same face at the same size, so a
+   form on either screen is recognisably the same form */
 .anchfield > span {
-  color: var(--dim);
-  font-size: 10.5px;
-  letter-spacing: 0.02em;
+  font: var(--fs-micro) var(--font-mono);
+  color: var(--ink-3);
+  letter-spacing: 0;
 }
 .anchfield input {
   padding: 6px 9px;
-  font-size: 12px;
+  font-size: var(--fs-small);
 }
 /* the binding picker, matched to the input above it rather than to the group
    select in the inspector, because it lives in this form and has to line up
@@ -3237,11 +3463,11 @@ footer [data-tip]:hover::after {
   width: 100%;
   min-width: 0;
   padding: 6px 9px;
-  border: 1px solid var(--edge);
-  border-radius: 8px;
+  border: var(--hair) solid var(--edge);
+  border-radius: var(--r);
   background: var(--bg);
   color: var(--ink);
-  font: 12px var(--font-ui);
+  font: var(--fs-small) var(--font-ui);
   transition: border-color 160ms ease;
 }
 .anchfield select:focus {
@@ -3276,11 +3502,11 @@ footer [data-tip]:hover::after {
   color: var(--dim);
 }
 .anchname.bad {
-  border-color: var(--warn, #d08a4a);
+  border-color: var(--warn);
 }
 .anchwarn {
-  color: var(--warn, #d08a4a);
-  font-size: 10.5px;
+  color: var(--warn);
+  font-size: var(--fs-fine);
   line-height: 1.35;
 }
 .anchkinds {
@@ -3288,14 +3514,16 @@ footer [data-tip]:hover::after {
   flex-wrap: wrap;
   gap: 3px;
 }
+/* static, so the tip anchors to the row rather than to a 40px chip. The rule
+   near the top of this file says why. */
 .anchkinds .kbtn {
-  position: relative;
+  position: static;
   padding: 4px 8px;
-  border-radius: 6px;
-  border: 1px solid var(--edge);
+  border-radius: var(--r-tight);
+  border: var(--hair) solid var(--edge);
   background: var(--panel);
   color: var(--dim);
-  font-size: 10.5px;
+  font-size: var(--fs-fine);
   transition: all 160ms ease;
 }
 .anchkinds .kbtn:hover {
@@ -3307,29 +3535,45 @@ footer [data-tip]:hover::after {
   background: color-mix(in srgb, var(--acc) 16%, var(--panel));
   color: var(--ink);
 }
+/* the top line stopped being an identifier when displayName took over, so it
+   stopped being set in the identifier face. Mono is the technical voice in
+   this app and it belongs to the address on the line below. */
 .evrow .ev-name b {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: var(--font-mono);
-  font-weight: 500;
+  font-family: var(--font-label);
+  font-weight: 600;
   color: var(--ink);
 }
-/* a name nobody chose, derived from an old door's label. Underlined rather
-   than coloured red: it is not broken, it just has not been confirmed. */
+/* ONE INK RULE FOR EVERY NAME IN EVERY LIST, and this rule is what broke it.
+   A door whose label nobody had typed came out gold and underlined while the
+   route and the shot two blocks down came out white, so three lists in one
+   column said three different things with colour, and the gold underline was
+   the only underline in the tool and read as a link to somewhere broken.
+   Nothing here is broken: the name simply has not been confirmed.
+
+   The mark stays, because a person has to be able to tell a name an author
+   typed from one this tool unpacked out of an identifier, and Ash asked for
+   that split to be honoured on every surface. It is the shared `.guessed` in
+   tokens.css now, which the ocean already draws: the words keep the list's own
+   ink and only the dotted rule under them is quiet. Not a colour, not a link,
+   and the same one mark on both screens. */
 .evrow .ev-name b.guessed {
-  text-decoration: underline dotted;
-  text-underline-offset: 2px;
-  color: var(--warn, #d08a4a);
+  color: var(--ink);
 }
+/* --fs-micro and not --fs-fine, which is the size tokens.css names for exactly
+   this: "an id, a coordinate, a version, a unit. Mono, and never a sentence."
+   Martian Mono is a wide face, so the extra pixel was costing about four
+   characters and cutting "→ panther-maw" to "→ pa…" on a 272px panel. */
 .evrow .ev-name i {
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   font-style: normal;
-  font-size: 10.5px;
+  font-size: var(--fs-micro);
   color: var(--dim);
 }
 
@@ -3360,7 +3604,7 @@ body[data-view='editor'] {
 }
 .step .num {
   font-family: var(--font-mono);
-  font-size: 9px;
+  font-size: var(--fs-micro);
   opacity: 0.55;
 }
 .step.on::after {
@@ -3385,8 +3629,8 @@ body[data-view='editor'] {
 .logo {
   font-family: var(--font-ui);
   font-weight: 700;
-  letter-spacing: 0.34em;
-  font-size: 12px;
+  letter-spacing: var(--track-wide);
+  font-size: var(--fs-small);
 }
 
 /* SIDE PANEL. The left rule this file is careful about stays exactly where it
@@ -3394,7 +3638,31 @@ body[data-view='editor'] {
 .panel,
 aside {
   background: var(--panel);
-  border-right: 1px solid var(--edge);
+  border-right: var(--hair) solid var(--edge);
+}
+
+/* A PANEL THAT CARRIES ON PAST THE WINDOW HAS TO SAY SO.
+ *
+ * Measured on step 4: 1073px of content in 690px, and the last block in the
+ * column, the keys fold, sat below the fold with nothing on screen admitting
+ * there was one. A row cut in half by the bottom edge reads as a clipped layout
+ * rather than as a list that continues, and the panel's own scrollbar is 8px of
+ * --edge on --panel, which is 1.2:1 and is not a signal to anybody.
+ *
+ * Two backgrounds and no javascript. The first is a cover in the panel's own
+ * colour pinned to the bottom of the CONTENT (`local`), the second is the
+ * shadow pinned to the bottom of the BOX (`scroll`). Scrolled to the end the
+ * cover sits over the shadow and there is no fade; anywhere else the cover has
+ * gone off the bottom and the shadow shows. So the mark is present exactly when
+ * there is more to read, which is the whole of what it has to say.
+ *
+ * It cannot swallow a click the way an absolutely positioned overlay would, and
+ * that matters here: the thing under it is usually a button. */
+.panel {
+  background:
+    linear-gradient(var(--panel), var(--panel)) bottom / 100% 22px local no-repeat,
+    linear-gradient(to top, var(--stage), transparent) bottom / 100% 26px scroll no-repeat,
+    var(--panel);
 }
 
 /* A ROW is the tool's main unit and was a rounded card. Cards stack into a
@@ -3403,7 +3671,7 @@ aside {
 .row {
   border-radius: 0;
   border: 0;
-  border-bottom: 1px solid color-mix(in srgb, var(--edge) 55%, transparent);
+  border-bottom: var(--hair) solid color-mix(in srgb, var(--edge) 55%, transparent);
   transition:
     background 160ms ease,
     color 160ms ease;
@@ -3422,7 +3690,7 @@ aside {
 .count,
 .px {
   font-family: var(--font-mono);
-  font-size: 10.5px;
+  font-size: var(--fs-fine);
   letter-spacing: -0.02em;
   color: var(--dim);
 }
@@ -3439,10 +3707,10 @@ aside {
 .foot,
 .statusbar {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--fs-micro);
   letter-spacing: 0.02em;
   color: var(--dim);
-  border-top: 1px solid var(--edge);
+  border-top: var(--hair) solid var(--edge);
 }
 
 /* Buttons lose their pill. A tool this dense reads better with square edges:
@@ -3453,7 +3721,7 @@ aside {
 .tbtn,
 .pill,
 .actpill {
-  border-radius: 2px;
+  border-radius: var(--r-tight);
 }
 .abtn,
 .actpill {
@@ -3486,7 +3754,7 @@ body[data-view='editor'] *::-webkit-scrollbar-thumb {
   border: 2px solid var(--panel);
 }
 body[data-view='editor'] *::-webkit-scrollbar-thumb:hover {
-  background: #2b3542;
+  background: var(--edge-lit);
 }
 body[data-view='editor'] *::-webkit-scrollbar-track {
   background: transparent;
@@ -3505,7 +3773,7 @@ body[data-view='editor'] *::-webkit-scrollbar-track {
 .field:has(.field-desc) .field-desc {
   order: -1;
   grid-column: 1;
-  font-size: 10.5px;
+  font-size: var(--fs-fine);
   line-height: 1.45;
 }
 .field:has(.field-desc) > input,
@@ -3521,7 +3789,7 @@ body[data-view='editor'] *::-webkit-scrollbar-track {
   display: inline-grid;
   place-items: center;
   text-decoration: none;
-  font-size: 15px;
+  font-size: var(--fs-lead);
   line-height: 1;
 }
 
@@ -3529,8 +3797,8 @@ body[data-view='editor'] *::-webkit-scrollbar-track {
 .brand {
   font-family: var(--font-ui);
   font-weight: 700;
-  font-size: 12px;
-  letter-spacing: 0.34em;
+  font-size: var(--fs-small);
+  letter-spacing: var(--track-wide);
   color: var(--dim);
   text-decoration: none;
   transition: color 160ms ease;
@@ -3543,7 +3811,7 @@ body[data-view='editor'] *::-webkit-scrollbar-track {
    the button, so the whole row is one target and nothing looks like a browser
    default in the middle of a tool. */
 .openfile {
-  cursor: pointer;
+  cursor: var(--cur-do);
 }
 .openfile input[type='file'] {
   position: absolute;
@@ -3559,8 +3827,8 @@ body[data-view='editor'] *::-webkit-scrollbar-track {
   font-weight: 500;
   color: var(--ink);
   background: var(--raised);
-  border: 1px solid var(--edge);
-  border-radius: 2px;
+  border: var(--hair) solid var(--edge);
+  border-radius: var(--r-tight);
   transition:
     border-color 160ms ease,
     color 160ms ease;
