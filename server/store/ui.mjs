@@ -517,6 +517,174 @@ export function legalCanvas(w, h) {
   }
 }
 
+/* ---- WHAT THE ROUTER IS TOLD, and why any of it is written down here ------
+ *
+ * The generate route used to post the author's own sentence straight to
+ * pixellab. Everything below this comment already existed on the type and none
+ * of it left the process: an author typed "a wooden dialogue box", and the
+ * tier, the stretch axis, the legal canvas, the region vocabulary and the
+ * caution the record spent a sweep writing all sat here unread while a
+ * four-word sentence went out to be paid for.
+ *
+ * 240 generations went on two pieces on 2026-08-30 because the prompts were
+ * hand-written in a chat window with none of this in front of whoever wrote
+ * them. The asset stage settled the fix two months earlier and it is the same
+ * fix: the description goes to CLAUDE with the context, claude writes the
+ * pixellab prompt, pixellab draws it. This file's job in that chain is to hand
+ * over what it knows about the type, in words a model can act on.
+ *
+ * It lives in the store rather than in the route because the store is what owns
+ * the twenty-one types. A second copy of the tier rules in api.mjs is two lists
+ * that disagree the first time one is edited. */
+
+/* THE HARD CONSTRAINT ON EVERY GROUND, AND THE ONE THAT HAS ACTUALLY FAILED.
+ *
+ * A ground is nine-sliced: four corners held at fixed size, four edges repeated
+ * along their axis, one middle stretched under the text. That is not a
+ * preference about how it looks, it is what the consumer does with the bytes,
+ * so a painting that cannot survive it is a painting the game cannot use.
+ *
+ * Two rolls died on exactly this and both died the same way: an anchor motif
+ * landed at TOP CENTRE and BOTTOM CENTRE. Centre-of-an-edge is the one place
+ * ornament must never go, because that is the pixel band the widening box
+ * repeats, so the anchor smeared into a rhythm of half anchors the moment the
+ * box was wider than the canvas it was drawn on. The corners are the only place
+ * a motif is safe, because the corners are the only part that is never
+ * repeated and never stretched.
+ *
+ * The middle is the second half and it fails quieter: a grain, a crest or a
+ * knot painted in the centre is what the text prints on top of, and the text is
+ * the thing the player is there to read. */
+export const NINE_SLICE_LAW = [
+  'THIS PIECE IS NINE-SLICED, so the picture has to survive being cut into nine and stretched.',
+  '- ORNAMENT GOES IN THE CORNERS. The four corners are the only part that is never repeated and never stretched, so they are the only place a motif, a rivet, a carving or an emblem can live.',
+  '- THE EDGES REPEAT, so each edge has to be a plain even run of one material along its whole length. Nothing centred on an edge and nothing that reads as a middle. Two pieces already failed here: an anchor drawn at top centre and bottom centre smeared into a row of half anchors as soon as the box was widened.',
+  '- THE MIDDLE HOLDS TEXT, so it is plain: one flat or softly grained surface with no crest, no knot, no seam and no illustration in it. Whatever is painted there is what a sentence prints on top of.',
+].join('\n')
+
+/* WHAT EACH TIER OWES, in the words the router needs rather than the words the
+ * publish gate needs. The publish gate's version is checkUi and checkSlices;
+ * this one is the same three rules said forward, before the picture exists. */
+const TIER_LAW = {
+  ground: NINE_SLICE_LAW,
+  sheet:
+    'THIS PIECE IS A SHEET: one canvas holding a grid of separate faces, cut apart afterwards by marked rectangles. ' +
+    'Draw the faces evenly spaced on transparent, all at one weight and one scale, with clear empty space between them so a rectangle can be drawn round each without touching its neighbour. ' +
+    'It is a sheet because BOTH SIDES OF A GENERATION START AT 192 pixels and these marks are far smaller than that, so they cannot be asked for at their own size. ' +
+    'Drawing the family in one job is also the only way the faces come back matching: a second job returns a different weight and a different palette.',
+  painted:
+    'THIS PIECE IS A PAINTED WHOLE: one full-bleed illustration, not a frame and not a nine-slice. ' +
+    'It never stretches and it takes no edge numbers, so the composition is fixed. ' +
+    'Leave the areas the regions name legible enough to print words over, and keep the busy part of the picture away from them.',
+}
+
+/* WHICH DRAWN THING A NEW PIECE HAS TO MATCH.
+ *
+ * The game already ships chrome Ash accepted, in AdventureGame/public/art/ui,
+ * and those files are the look. Copied into public/chrome here rather than
+ * reached across two repos, because the host has no AdventureGame checkout on
+ * it and a path into a sibling working copy is a thing that works on exactly
+ * one laptop.
+ *
+ * Chosen BY TYPE and sent by the server. An author pasting a reference is the
+ * same defect as an author pasting a prompt: it works when the person doing it
+ * already knows the answer, which is the one case that never needed the tool.
+ *
+ * The mapping is by what the piece IS, not by what it is called. Anything with
+ * a drawn frame round it takes a drawn frame; the small marks take the crest,
+ * which is the only self-contained emblem in the set at that scale; the painted
+ * whole takes the one painted whole that exists. */
+const CHROME_REFS = {
+  dialogue_box: 'dialogue-box.png',
+  panel: 'panel-paper-wood.png',
+  cover_plate: 'chart-cover.png',
+  plank: 'button-wood.png',
+  tab: 'button-wood.png',
+  chip: 'button-wood.png',
+  pip: 'crest-panther.png',
+  icon_set: 'crest-panther.png',
+  cue: 'crest-panther.png',
+  stamp: 'crest-panther.png',
+  pointer: 'crest-panther.png',
+}
+// everything else is a wooden ground with no paper in it
+const CHROME_FALLBACK = 'panel-square.png'
+
+export const chromeRef = (type) => CHROME_REFS[String(type || '')] || CHROME_FALLBACK
+
+/* THE TYPE, WRITTEN OUT FOR A READER THAT IS NOT THE PAGE.
+ *
+ * `what` and `why` are already the record's own sentences about the piece and
+ * `caution` is the trap somebody already fell into, so none of it is invented
+ * here. The router gets them verbatim: a paraphrase of a caution is a caution
+ * with the specific thing filed off it, and the specific thing is the whole
+ * value ("a panel with a painted heading in it is a panel that can hold exactly
+ * one thing").
+ *
+ * `shelf` is what this account has already drawn. It is here because the second
+ * piece has to match the first, and the only way a router can match something
+ * is to be told it exists. */
+export function typeBrief(t, { width, height, shelf = [] } = {}) {
+  if (!t) return []
+  const w = num(width, t.w) || t.w
+  const h = num(height, t.h) || t.h
+  const lines = [
+    `THE PIECE TYPE IS "${t.name}" (${t.label}).`,
+    `What it is for: ${t.what}`,
+    `Where it is used, which is what its shape has to survive: ${t.why}`,
+    `The trap on this type, in the record's own words: ${t.caution}`,
+    ``,
+    TIER_LAW[t.tier] || '',
+    ``,
+    `THE CANVAS IS ${w} BY ${h} AND IT IS NOT NEGOTIABLE. It is aspect-gated by the generator and both sides start at 192, so it is decided before you are asked and nothing you write can change it. Compose for that shape.`,
+  ]
+  const STRETCH = {
+    both: 'It stretches on BOTH axes: it is drawn once and appears at several widths AND several heights.',
+    x: 'It stretches HORIZONTALLY only: its height is what it is drawn at, and its width changes with what it is holding.',
+    y: 'It stretches VERTICALLY only: its width is what it is drawn at, and its height changes with how many entries it holds.',
+    none: 'It does NOT stretch. It draws at one size, so nothing in it has to survive being pulled.',
+  }
+  lines.push(STRETCH[t.stretch] || STRETCH.none)
+  if (t.fill === false)
+    lines.push(
+      `ITS MIDDLE IS EMPTY. This one is a ring drawn round a hole: the map shows through the centre, so anything painted in the middle is paint over the game.`,
+    )
+  if (Array.isArray(t.faces) && t.faces.length)
+    lines.push(
+      ``,
+      `IT NEEDS THESE FACES, ALL IN THIS ONE DRAWING: ${t.faces.join(', ')}. They are the same object wearing different states, so they must be identical in size, weight and palette and differ only in the thing that changed.${
+        t.facesFree ? ' More faces of the same family are welcome beside those, at the same weight.' : ''
+      }`,
+    )
+  /* THE REGIONS ARE THE SECOND HALF OF THE PIECE AND THE GENERATOR NEVER SEES
+   * THEM, which is exactly why the router has to. A rectangle is dragged onto
+   * this picture afterwards and a sentence prints inside it; if the painting put
+   * a carved crest where `body` goes, the mark is drawn over art and the author
+   * finds out with a paragraph on top of a knot of wood. */
+  const marks = Array.isArray(t.regions) ? t.regions : []
+  if (marks.length)
+    lines.push(
+      ``,
+      `RECTANGLES GET MARKED ON THIS PICTURE AFTERWARDS AND THE GAME DRAWS INTO THEM. Leave room for them and leave those areas plain:`,
+      ...marks.map((r) => `- ${r.name} (${r.kind}${r.required ? ', required' : ''})`),
+      `Nothing in your description draws the contents of those: no lettering, no numbers, no portrait, no icons. The picture is the empty furniture and the game fills it.`,
+    )
+  else lines.push(``, `No rectangles are marked on this one, so it is the whole picture and nothing is drawn into it.`)
+  if (Array.isArray(t.elements) && t.elements.length)
+    lines.push(
+      ``,
+      `The generator is being told to scaffold this from its own "${t.elements.join('", "')}" element, which forces ONE complete centred piece instead of a sheet of loose parts. Write for that.`,
+    )
+  const drawn = shelf.filter((u) => u && u.status === 'ready' && u.description)
+  if (drawn.length)
+    lines.push(
+      ``,
+      `ALREADY ON THIS SHELF, and the new piece has to look like it came out of the same workshop:`,
+      ...drawn.slice(0, 12).map((u) => `- ${u.name}${u.type ? ` (${u.type})` : ''}: ${String(u.description).slice(0, 160)}`),
+    )
+  return lines.filter((s) => s !== null && s !== undefined)
+}
+
 // ---- regions ---------------------------------------------------------------
 
 /* ONE NAMED PLACE INSIDE A PIECE.

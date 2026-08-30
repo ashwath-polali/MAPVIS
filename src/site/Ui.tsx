@@ -204,6 +204,15 @@ export default function Ui() {
    * the one on the saved record and is the one worth reporting while somebody is
    * dragging rectangles. The footer lives up here, so the count has to. */
   const [marks, setMarks] = useState(0)
+  /* WHO WROTE THE PROMPT THAT WAS PAID FOR, carried up here because the answer
+   * arrives on the draw screen and the person reads it on the marking screen.
+   *
+   * Normally claude writes it, with the type's rules and the shipped chrome in
+   * front of it. With no claude the author's own sentence goes to the generator
+   * bare, and that has to be said: an author whose piece came back looking like
+   * nothing else on the shelf otherwise cannot tell a bad written prompt from
+   * no prompt at all, and those want opposite next moves. */
+  const [bare, setBare] = useState('')
 
   const load = useCallback(async () => {
     const r = await fetch('/api/ui')
@@ -332,6 +341,7 @@ export default function Ui() {
             type={piece.type ? byType.get(piece.type) : undefined}
             v={v}
             stamp={stamp}
+            bare={bare}
             onSaved={() => void load()}
             onGone={() => {
               setOpen('')
@@ -352,7 +362,8 @@ export default function Ui() {
             mine={mine}
             stamp={stamp}
             onArm={armType}
-            onDrawn={(name) => {
+            onDrawn={(name, why) => {
+              setBare(why)
               void load()
               openPiece(name)
             }}
@@ -948,7 +959,7 @@ function Drawing({
   mine: boolean
   stamp: number
   onArm: (name: string) => void
-  onDrawn: (name: string) => void
+  onDrawn: (name: string, why: string) => void
 }) {
   const taken = useMemo(() => new Set(v.ui.map((p) => p.name)), [v.ui])
   const had = t ? v.ui.find((p) => p.type === t.name) : undefined
@@ -978,7 +989,12 @@ function Drawing({
     setBusy(true)
     setErr('')
     try {
-      await post('/api/ui/generate', {
+      /* THE ANSWER IS KEPT NOW, AND IT WAS THROWN AWAY. The server writes the
+       * prompt through claude with the type's rules and the shipped chrome in
+       * front of it, and says on every answer whether that happened. A press
+       * that discards the answer turns the one honest degrade in the route back
+       * into a silent one. */
+      const said = (await post('/api/ui/generate', {
         name,
         type: t.name,
         title,
@@ -987,8 +1003,8 @@ function Drawing({
         height: t.h,
         style: style || undefined,
         core,
-      })
-      onDrawn(name)
+      })) as { routed?: boolean; why?: string }
+      onDrawn(name, said?.routed === false ? String(said.why || '') : '')
     } catch (e) {
       setErr(String((e as Error).message || e))
     } finally {
@@ -1202,6 +1218,7 @@ function Marking({
   type,
   v,
   stamp,
+  bare,
   onSaved,
   onGone,
   onRedraw,
@@ -1212,6 +1229,8 @@ function Marking({
   type?: PType
   v: Vocab
   stamp: number
+  // the reason nobody wrote the prompt for this piece, empty when the router ran
+  bare: string
   onSaved: () => void
   onGone: () => void
   onRedraw: () => void
@@ -1710,6 +1729,13 @@ function Marking({
         ) : null}
 
         {err ? <p className="ui-err">{err}</p> : null}
+        {/* said where the piece is looked at, because that is where somebody
+            decides whether the picture is any good */}
+        {bare ? (
+          <div className="anchwarn" style={{ padding: '4px var(--pan-in) 0' }}>
+            {bare}
+          </div>
+        ) : null}
         {warn.map((w) => (
           <div className="anchwarn" key={w} style={{ padding: '4px var(--pan-in) 0' }}>
             {w}

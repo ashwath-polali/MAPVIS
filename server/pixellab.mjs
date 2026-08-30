@@ -19,10 +19,15 @@
  *                                         mode template off a named walk, or mode v3 off written motion words
  *   GET  /v2/characters                -> { characters, total }, every character on the account
  *   GET  /v2/characters/{id}           -> status, rotation_urls, and animations carrying frame urls
- *   POST /v2/create-ui-asset           -> { ui_asset_id, background_job_id }, one panel of chrome
- *   GET  /v2/ui-assets/{id}            -> { status, image_url, size, progress_percent }, 200 all the way through
+ *   POST /v2/create-ui-asset           -> { ui_asset_id, background_job_id, status, usage }, one panel of chrome
+ *   GET  /v2/ui-assets/{id}            -> { status, image_url, size, progress_percent, eta_seconds }, 200 throughout
  *   GET  /v2/ui-assets                 -> the list. GET ONLY: a POST here is 405, which is what was being sent
+ *   DELETE /v2/ui-assets/{id}          -> { success }, the only other verb that path takes
  *   GET  /v1/balance                   -> { usd }
+ *
+ * GET /v2/openapi.json IS FREE AND NAMES EVERY ROUTE AND EVERY FIELD. Read it
+ * rather than guessing at a shape, and rather than probing: it is the whole
+ * schema, it costs nothing, and it is what settled every ui fact below.
  */
 import fs from 'node:fs'
 import os from 'node:os'
@@ -216,8 +221,30 @@ export async function mapObject({ description, w, h, view = 'low top-down', seed
  * author could ever draw a piece, and the row failed with a Method Not Allowed
  * in it.
  *
- * HOW IT WAS FOUND, AND THE PROOF IS THE 422. GET /v2/openapi.json is free and
- * names four ui paths: /generate-ui-v2, /create-ui-asset, /ui-assets and
+ * THE WHOLE REQUEST MODEL, off the published schema and not off a guess.
+ * CreateUIAssetRequest takes exactly these and additionalProperties is FALSE,
+ * so one stray field is a 422 for the whole call:
+ *
+ *   description    required, 1 to 2000 characters
+ *   image_size     { width, height }, each 192 to 688, and ITS OWN
+ *                  additionalProperties is false as well
+ *   elements       list of the twelve names below, auto-positioned
+ *   pieces         shape template, rounded_rect | circle | polygon
+ *   style_image    a Base64Image object, { type, base64, format }
+ *   color_palette  a phrase, up to 200 characters
+ *   no_background  defaults true
+ *   seed           integer
+ *   name           a friendly name kept on the saved asset
+ *   project_id     assigns the finished asset to a pixellab project. Not sent:
+ *                  MAPVIS does not keep projects, and a parameter nothing can
+ *                  fill is the half-plumbed shape docs/AUTHORING.md names.
+ *
+ * The answer is { ui_asset_id, background_job_id, status, usage }. THERE IS NO
+ * download_url on this route: the finished picture is `image_url` on the poll,
+ * and download_url was carried over from /v2/map-objects.
+ *
+ * HOW THE ROUTE WAS FOUND, AND THE PROOF IS THE 422. The schema names four ui
+ * paths: /generate-ui-v2, /create-ui-asset, /ui-assets and
  * /ui-assets/{ui_asset_id}. Then each candidate was posted an INVALID body, `{}`,
  * which fastapi refuses at validation before any work happens and therefore
  * costs nothing, and the status separates the three cases cleanly:
@@ -293,6 +320,14 @@ export function fitUi(w, h) {
 /* THE TWELVE NAMES THE ENDPOINT SCAFFOLDS FROM, off the schema's own field
  * description, and they are fenced here because NOTHING VALIDATES THEM.
  *
+ * SENDING ONE AT ALL IS THE DIFFERENCE BETWEEN A PANEL AND A KIT, measured over
+ * four rolls. With `elements` omitted the endpoint decides for itself and
+ * returns a SHEET of loose interface parts, with the piece somebody actually
+ * asked for sitting at the top and cropped off the edge of the canvas. With
+ * `elements: ['window']` it returns one complete centred panel, every time.
+ * That is why several piece types in server/store/ui.mjs carry a one-name list
+ * and why the few that carry none say out loud that they mean it.
+ *
  * `elements` types as a plain list of strings, so a name outside this list is
  * accepted at the door, reaches the handler, and spends. That is the one place
  * on this route where a typo costs money instead of a 422, and the generate
@@ -321,6 +356,15 @@ export async function uiAsset({ description, width = 256, height = 256, palette,
    * route was right. The schema caps this at 2000 rather than 1000. */
   const req = {
     description: say.slice(0, 2000),
+    /* ONLY EVER PROBE THIS API BY OMITTING A REQUIRED FIELD. 40 generations
+     * were spent finding this route's shape by posting `image_size: {}`, which
+     * looks like an obviously invalid body and is not: both width and height
+     * DEFAULT to 256, so an empty object validates, reaches the handler, draws
+     * a 256x256 picture and is charged for. An empty `{}` at the top level is
+     * safe because `description` is required with no default, so fastapi
+     * refuses it before any work happens. That is the difference, and it is the
+     * only free probe: a missing required field is refused, a missing OPTIONAL
+     * field is filled in and paid for. */
     image_size: { width: size.width, height: size.height },
     // chrome sits on top of a map, so it is cut out for the same reason every
     // map object is: anything opaque behind it is a rectangle of somebody
@@ -358,11 +402,22 @@ export async function uiAsset({ description, width = 256, height = 256, palette,
       throw new Error(`a ${one.kind} needs an id and ${need.join(', ')}, on a canvas whose longer side runs 0 to 512`)
     req.pieces = pieces
   }
-  /* THE STRONGEST LEVER THIS ENDPOINT HAS, and the one measured true elsewhere.
-   * A style image transfers palette, outline, detail and shading, which is
-   * exactly what makes a panel look like it belongs to the island under it. It
-   * cannot transfer layout or content, so it does not carry the same risk the
-   * map did on /v2/map-objects: there is no subject for it to continue.
+  /* THE STRONGEST LEVER THIS ENDPOINT HAS, AND HALF OF WHAT A PIECE NEEDS.
+   *
+   * A style image transfers MATERIAL: the palette, the outline weight, the
+   * wear, the motifs. It transfers NO LAYOUT at all. So it is the only thing
+   * that can make a new piece the same wood as the chrome the game already
+   * ships, and it can do nothing whatever about ornament landing in the middle
+   * of an edge, which is what both failed rolls died of. The words are the
+   * other half and neither lever substitutes for the other.
+   *
+   * The route sends this from public/chrome, chosen by piece type, rather than
+   * taking a reference somebody pasted. See the comment at /api/ui/generate.
+   *
+   * It does not carry the risk the map did on /v2/map-objects, where
+   * background_image made the endpoint CONTINUE a picture it was given and a
+   * bookshelf came back as roof tiles. There is no subject in a style image and
+   * nothing for it to continue.
    *
    * IT IS A Base64Image AND IT WAS A BARE STRING under `style_image_base64`,
    * which the probe answered extra_forbidden. Same wrapper `submit` already

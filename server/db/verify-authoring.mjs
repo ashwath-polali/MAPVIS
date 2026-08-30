@@ -20,7 +20,8 @@ import { putLibraryFrames, copyLibraryItem } from '../store/platform.mjs'
 import { createUi, setUiRegions, setUiImage, getUiByName, removeUi, publishUi, readyUi, pieceType, PIECE_TYPES } from '../store/ui.mjs'
 import { uiAsset } from '../pixellab.mjs'
 import { encodePNG } from '../sheet.mjs'
-import { api } from '../api.mjs'
+import { api, chromePrompt, chromePlan, chromeStyle } from '../api.mjs'
+import { NoPlanner } from '../store/planner.mjs'
 import { q, one, closeDb } from './pool.mjs'
 import http from 'node:http'
 
@@ -1376,6 +1377,170 @@ try {
     badPiece.includes('what kind it is')
       ? ok('a name where a shape belongs is refused, naming the three shapes there are')
       : no(`a bare string went out as a shape template: ${badPiece || 'no error'}`)
+  }
+
+  /* ---- 5.7 WHO WRITES THE PROMPT THAT GETS PAID FOR ----------------------
+   *
+   * /api/ui/generate posted the author's own sentence to pixellab unchanged.
+   * Everything the process knew about the piece sat in ui.mjs unread: the tier,
+   * the stretch axis, the legal canvas, the region vocabulary, the caution, and
+   * the nine-slice law that two failed rolls died on. 240 generations went on
+   * two pieces on 2026-08-30 with none of it in front of whoever wrote the
+   * words.
+   *
+   * This is the fence saying the router runs and that the constraints reach the
+   * prompt. NOTHING HERE CALLS PIXELLAB AND NOTHING HERE CALLS CLAUDE: the
+   * planner is a function passed in, and the one pixellab call is made against
+   * a replaced fetch so the request body can be read without a spend. */
+  {
+    const gt = pieceType('dialogue_box')
+    const st = pieceType('pip')
+    const style = chromeStyle('dialogue_box')
+    style && style.base64
+      ? ok(`the style reference is picked by type and read off disk: ${style.file}, ${style.w}x${style.h}`)
+      : no('no reference art for dialogue_box, so the one lever that matches the palette is missing')
+    // a small mark is not a panel and must not be handed a panel to match
+    chromeStyle('pip')?.file !== style?.file
+      ? ok('a sheet of small marks takes a different reference from a drawn frame')
+      : no('every type was handed the same reference picture')
+
+    // the shelf goes over, because the second piece has to match the first
+    const shelf = [{ name: 'binder', type: 'panel', status: 'ready', description: 'a worn oak binder with brass corners' }]
+    const asked = chromePrompt({ ask: 'a wooden dialogue box', t: gt, width: 688, height: 384, shelf, style })
+    const carries = (what, needle) =>
+      asked.includes(needle) ? ok(`the router is told ${what}`) : no(`the router was NOT told ${what}: "${needle}" is missing`)
+    carries('which type this is', 'THE PIECE TYPE IS "dialogue_box"')
+    carries("the type's own caution, verbatim", gt.caution)
+    carries('that ornament belongs in the corners', 'ORNAMENT GOES IN THE CORNERS')
+    carries('that an edge repeats and cannot hold a motif', 'THE EDGES REPEAT')
+    carries('that the middle has to stay plain enough for text', 'THE MIDDLE HOLDS TEXT')
+    carries('the anchor that smeared, so it is a measured failure and not a rule', 'anchor drawn at top centre')
+    carries('the canvas it cannot argue with', 'THE CANVAS IS 688 BY 384')
+    carries('which way this one stretches', 'stretches on BOTH axes')
+    carries('the rectangles the game draws into', '- body (text, required)')
+    carries('that the element list forces one centred panel', '"window" element')
+    carries('what is already on this shelf', 'binder (panel): a worn oak binder')
+    carries('that painted words cannot be read or translated', 'NO LETTERING ANYWHERE')
+    carries('to say muted rather than saturated', 'MUTED saturation')
+    // and the two fields, because a model that writes the joined sentence can
+    // drop the law out of it
+    carries('to answer two fields and never the joined sentence', 'never write the joined sentence yourself')
+
+    // a sheet is a different piece and gets a different law, not the ground one
+    const sheetAsk = chromePrompt({ ask: 'season tokens', t: st, width: 384, height: 384, shelf: [], style: chromeStyle('pip') })
+    !sheetAsk.includes('ORNAMENT GOES IN THE CORNERS') && sheetAsk.includes('THIS PIECE IS A SHEET')
+      ? ok('a sheet is told it is a grid of faces cut apart, not told a nine-slice law it cannot obey')
+      : no('the wrong tier law went to a sheet')
+    sheetAsk.includes('fall, winter, spring, spent, ghost')
+      ? ok('a sheet is told every face it owes, so they come back at one weight')
+      : no('a sheet was asked for without naming its faces')
+
+    /* THE ROUTER RUNS, with the planner replaced. What is asserted is that the
+     * answer's two fields come back joined by CODE with the law attached, and
+     * the model here deliberately answers a lazy style field with no rule in it,
+     * which is exactly what both failed rolls did. */
+    let sawPrompt = ''
+    const fakeThink = async (prompt) => {
+      sawPrompt = prompt
+      return JSON.stringify({
+        result: JSON.stringify({
+          subject: 'A carved oak dialogue box with brass corner plates and a worn paper face',
+          style: 'chunky pixels, muted oak and brass palette, dark brown outline, lit from the upper left, shaded right',
+          palette: 'muted oak brown and tarnished brass',
+          note: 'matched the shipped dialogue box',
+        }),
+      })
+    }
+    const plan = await chromePlan({ ask: 'a wooden dialogue box', t: gt, width: 688, height: 384, shelf, style, think: fakeThink })
+    plan.routed ? ok('the router wrote the prompt') : no(`the router did not run: ${plan.why || 'no reason given'}`)
+    sawPrompt.includes('ORNAMENT GOES IN THE CORNERS')
+      ? ok('and it was handed the constraints on its way in')
+      : no('the router ran on a prompt with no constraints in it')
+    plan.description.includes('Ornament only in the four corners')
+      ? ok('the nine-slice law is attached by code, so a lazy answer cannot drop it')
+      : no(`the law fell out of the joined prompt: ${plan.description}`)
+    plan.description.includes('fully transparent background') && plan.description.includes('no lettering')
+      ? ok('and so do the cut-out and the no-lettering clauses')
+      : no(`the code-owned clauses are missing: ${plan.description}`)
+    eq('the palette leaves as its own field, the way the endpoint takes it', plan.palette, 'muted oak brown and tarnished brass')
+
+    // a sheet takes no nine-slice law, because there is nothing to nine-slice
+    const sheetPlan = await chromePlan({ ask: 'season tokens', t: st, width: 384, height: 384, shelf: [], style, think: fakeThink })
+    sheetPlan.description.includes('Ornament only in the four corners')
+      ? no('a sheet of loose marks was told to keep its ornament in the corners')
+      : ok('a sheet gets no nine-slice clause, because it is never cut into nine')
+
+    /* AND THE PROMPT THE ROUTER WROTE IS THE ONE THAT GETS PAID FOR. Asserted
+     * against the request body rather than against the return value, because
+     * the return value is not what pixellab is handed. */
+    const real = globalThis.fetch
+    let body = null
+    globalThis.fetch = async (url, init) => {
+      body = JSON.parse(init.body)
+      return { ok: true, status: 200, text: async () => '{}' }
+    }
+    try {
+      await uiAsset({
+        description: plan.description,
+        width: 688,
+        height: 384,
+        palette: plan.palette,
+        elements: gt.elements,
+        styleImageBase64: style?.base64,
+        name: 'zz_probe',
+      })
+    } catch {
+      /* no id in the fake answer, so it gives up before its poll. Expected. */
+    } finally {
+      globalThis.fetch = real
+    }
+    if (!body) console.log('  skip  no pixellab key on this machine, so the routed request was not built')
+    else {
+      body.description === plan.description
+        ? ok('the routed prompt is the string that reaches the generator')
+        : no('something rewrote the prompt between the router and the wire')
+      eq('the palette rides as its own field', body.color_palette, 'muted oak brown and tarnished brass')
+      eq('the element list forces one centred panel rather than a kit', body.elements, ['window'])
+      body.style_image?.base64 === style?.base64 && body.style_image?.type === 'base64'
+        ? ok('the reference goes as a Base64Image, so material transfers alongside the words')
+        : no('the style reference never left, so nothing carries the palette of the shipped chrome')
+    }
+
+    /* DEGRADED HONESTLY. With no claude there is nobody to write the prompt, so
+     * the author's own words go out unchanged, which is what this route did for
+     * every piece it ever drew. The difference is that it says so: an author
+     * whose piece came back wrong needs to know whether a written prompt was
+     * bad or whether there was no prompt. */
+    const down = await chromePlan({
+      ask: '  a wooden   dialogue box  ',
+      t: gt,
+      width: 688,
+      height: 384,
+      shelf,
+      style,
+      think: async () => {
+        throw new NoPlanner('none')
+      },
+    })
+    eq('with no claude the author own sentence goes out unchanged', [down.routed, down.description], [false, 'a wooden dialogue box'])
+    down.why?.includes('no claude key') && down.why?.includes('none of the type rules in it')
+      ? ok('and the answer says plainly that nobody wrote this prompt, so a worse result has a reason')
+      : no(`the degrade was silent: ${down.why || 'nothing said'}`)
+    eq('and it names which provider was missing, the way every other degrade does', down.degraded, 'none')
+    const relayDown = await chromePlan({
+      ask: 'a wooden dialogue box',
+      t: gt,
+      width: 688,
+      height: 384,
+      shelf,
+      style,
+      think: async () => {
+        throw new NoPlanner('relay')
+      },
+    })
+    relayDown.why?.includes('no linked machine')
+      ? ok('a laptop being closed reads as a closed laptop rather than as a missing key')
+      : no(`a relay degrade said the wrong thing: ${relayDown.why}`)
   }
 
   // ---- 6. the ui library, and one kit shared across maps -------------------
