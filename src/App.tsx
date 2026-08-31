@@ -20,6 +20,8 @@ import {
   isLookName,
   lookOf,
   ANCHOR_KINDS,
+  ANCHOR_R_MIN,
+  ANCHOR_R_MAX,
   MAP_CLASSES,
   PATH_KINDS,
   type AnchorKind,
@@ -913,6 +915,11 @@ export default function App() {
    * holds the first corner while it waits for the second. */
   const [standPick, setStandPick] = useState(0)
   const [rectPick, setRectPick] = useState<{ id: number; from: [number, number] | null } | null>(null)
+  /* the radius while it is being typed. Held rather than applied per keystroke
+   * for the reason a name is: clearing the box to type 300 goes through the
+   * empty string, and an empty string committed straight through would clamp the
+   * anchor to the minimum and take the digits away as they were typed. */
+  const [radDraft, setRadDraft] = useState<string | null>(null)
   /* which route's form and which shot's form are open, and a held name draft
    * for each. Three separate draft pairs rather than one, for the reason the
    * placement pair is separate from the anchor pair: all four forms can be open
@@ -1220,10 +1227,13 @@ export default function App() {
     }
   }, [step, doorPick])
 
-  // and a half-laid route the same way, or its clicks would land as waypoints
-  // on a step where the line is not even drawn
+  // and a half-laid route or a half-drawn area the same way, or their clicks
+  // would land as corners on a step where neither shape is even drawn
   useEffect(() => {
-    if (step !== 'test') edRef.current?.cancelPath()
+    if (step !== 'test') {
+      edRef.current?.cancelPath()
+      edRef.current?.cancelRegionDraw()
+    }
   }, [step])
 
   /* A KEPT ROUTE OPENS ITS OWN FORM, the way a dropped door does. It has to be
@@ -1232,6 +1242,9 @@ export default function App() {
    * outside React. The line closing is the signal, and the editor has already
    * selected whichever route it just made. */
   const layingPath = (st?.pathDraw ?? -1) >= 0
+  // the same read for an area being walked round. The gesture lives in the
+  // editor, so this is how the form knows the shape is still open.
+  const drawingRegion = (st?.polyDraw ?? -1) >= 0
   const wasLaying = useRef(false)
   useEffect(() => {
     if (wasLaying.current && !layingPath && st?.pathSel) {
@@ -2978,6 +2991,26 @@ export default function App() {
     [rectPick],
   )
 
+  /* THE AREA AN AUTHOR WALKS ROUND, which a circle and a box could not describe.
+   *
+   * This one does NOT borrow pickPoint: a corner per click with the shape drawn
+   * growing under the cursor is a held gesture and not a one-shot pick, so it
+   * lives in the editor beside the route and the cut outline. The rectangle pick
+   * is cancelled first, because arming both would put one click into two
+   * different shapes at once. */
+  const armPoly = useCallback(
+    (id: number) => {
+      const e = edRef.current
+      if (!e) return
+      if (rectPick) {
+        setRectPick(null)
+        e.pickPoint(null)
+      }
+      e.drawRegion(id)
+    },
+    [rectPick],
+  )
+
   // The spend itself, after every confirm has happened. spot is the static
   // path's context: the clicked painting pixel and a crop of the cut painting
   // around it, which the server hands to pixellab as the background, so the
@@ -4658,46 +4691,87 @@ export default function App() {
             </div>
           </div>
 
-          {/* THE AREA, for a region that is a shape rather than a circle.
+          {/* THE SHAPE A NAMED PLACE IS, and there are three of them now.
               *
-              * r is clamped 4 to 64 on maps 688 px wide, so the largest named
-              * area the tool could make covered under two percent of the hub and
-              * could not hold a pier, a shop floor, a plaza or a bay. The four
-              * numbers are two opposite corners, matching the game's own box
-              * test, which is the disagreement this settles. */}
+              * A region could be a circle or a box and nothing else, and the
+              * things a region is actually for are neither: a pier bends, a
+              * plaza turns a corner, a waterfront follows a coast. Marking the
+              * hub's dock as a box takes in half the water. So the third option
+              * is the edge itself, walked round with the cut outline's gesture,
+              * which an author has already used to cut the island out.
+              *
+              * The three are exclusive and each one clears the others, because a
+              * box beside a drawn shape is two areas both claiming to be this
+              * place and both exporters would have to guess. */}
           {editingDoor.kind === 'region' && (
-            <div className="anchspot">
+            <div className="anchface">
               <span>area</span>
-              <button
-                className={'mbtn wide' + (rectPick ? ' on' : '')}
-                onClick={() => armRect(editingDoor.id)}
-              >
-                {rectPick
-                  ? rectPick.from
-                    ? 'now the opposite corner'
-                    : 'click one corner · esc cancels'
-                  : editingDoor.rect
-                    ? `${Math.abs(editingDoor.rect[2] - editingDoor.rect[0])} × ${Math.abs(editingDoor.rect[3] - editingDoor.rect[1])}`
-                    : 'a circle of r'}
-              </button>
-              {editingDoor.rect && !rectPick && (
+              <div className="anchkinds">
                 <button
-                  className="arow-x"
-                  data-tip="back to the circle"
-                  onClick={() => ed?.updateEvent(editingDoor.id, { rect: null })}
+                  className={'kbtn' + (!editingDoor.rect && !editingDoor.poly ? ' on' : '')}
+                  data-tip="a circle of the radius below"
+                  onClick={() => ed?.updateEvent(editingDoor.id, { rect: null, poly: null })}
                 >
-                  <Icon name="x" />
+                  circle
                 </button>
-              )}
+                <button
+                  className={'kbtn' + (editingDoor.rect || rectPick ? ' on' : '')}
+                  data-tip="two opposite corners"
+                  onClick={() => armRect(editingDoor.id)}
+                >
+                  rect
+                </button>
+                <button
+                  className={'kbtn' + (editingDoor.poly || drawingRegion ? ' on' : '')}
+                  data-tip="walk the edge of the place · click corners · enter closes"
+                  onClick={() => armPoly(editingDoor.id)}
+                >
+                  draw
+                </button>
+              </div>
+            </div>
+          )}
+          {editingDoor.kind === 'region' && (
+            <div className="doorhint">
+              {rectPick
+                ? rectPick.from
+                  ? 'now the opposite corner'
+                  : 'click one corner · esc cancels'
+                : drawingRegion
+                  ? `${st?.polyDraw} corners · enter closes · backspace takes one back · esc drops it`
+                  : editingDoor.poly
+                    ? `${editingDoor.poly.length} corners · drag one to correct it · the game gets the box round it too`
+                    : editingDoor.rect
+                      ? `${Math.abs(editingDoor.rect[2] - editingDoor.rect[0])} × ${Math.abs(editingDoor.rect[3] - editingDoor.rect[1])}`
+                      : `a circle of ${editingDoor.r}px`}
             </div>
           )}
 
+          {/* THE RADIUS, TYPEABLE, because the ceiling is 512 and stepping there
+              two pixels at a time is 250 presses. The buttons stay for the small
+              corrections they were always for. */}
           <div className="doorrad">
             <span>radius</span>
             <button className="mbtn" onClick={() => ed?.updateEvent(editingDoor.id, { r: editingDoor.r - 2 })}>
               −
             </button>
-            <em>{editingDoor.r}px</em>
+            <input
+              className="radnum"
+              type="number"
+              min={ANCHOR_R_MIN}
+              max={ANCHOR_R_MAX}
+              value={radDraft ?? String(editingDoor.r)}
+              onChange={(e) => setRadDraft(e.target.value)}
+              onBlur={() => {
+                if (radDraft === null) return
+                const n = Number(radDraft)
+                if (isFinite(n)) ed?.updateEvent(editingDoor.id, { r: n })
+                setRadDraft(null)
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === 'Escape') e.currentTarget.blur()
+              }}
+            />
             <button className="mbtn" onClick={() => ed?.updateEvent(editingDoor.id, { r: editingDoor.r + 2 })}>
               +
             </button>

@@ -2596,6 +2596,32 @@ input[type='range']:disabled {
   min-width: 36px;
   text-align: center;
 }
+/* THE RADIUS, TYPED. It replaced a read-only number the moment the ceiling went
+   from 64 to 512: stepping to 300 two pixels at a time is 150 presses. Wide
+   enough for three digits, which is the largest value that fits. The spinners
+   go, because at 20px high nobody can hit them and the two buttons either side
+   already do that job. */
+.doorrad .radnum {
+  width: 52px;
+  padding: 3px 4px;
+  border-radius: var(--r);
+  border: var(--hair) solid var(--edge);
+  background: var(--bg);
+  color: var(--ink);
+  font: var(--fs-small) / 1.1 var(--font-mono);
+  text-align: center;
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+.doorrad .radnum:focus {
+  border-color: var(--acc);
+  outline: none;
+}
+.doorrad .radnum::-webkit-outer-spin-button,
+.doorrad .radnum::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
+}
 .doorrad .mbtn {
   position: relative;
   width: 22px;

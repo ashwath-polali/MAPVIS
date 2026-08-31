@@ -473,19 +473,28 @@ export async function syncEventsToAnchors(mapId, anchors) {
       if (when) meta.when = when
       else delete meta.when
 
+      /* THE DRAWN AREA, checked here as well as in the browser, for the reason
+       * every other shape guard in this file is repeated: putDoc is reachable
+       * by a hand-written POST and mask.ts is not in front of it. Two points
+       * are a line and a line has no inside, so anything under three is stored
+       * as no shape at all rather than as an area nobody can ever be in. */
+      const poly = (Array.isArray(a.poly) ? a.poly : []).filter(
+        (q) => Array.isArray(q) && q.length === 2 && Number.isFinite(Number(q[0])) && Number.isFinite(Number(q[1])),
+      )
+      const polyJson = poly.length >= 3 ? JSON.stringify(poly.map((q) => [Math.round(Number(q[0])), Math.round(Number(q[1]))])) : null
       const r = await c.query(
-        `insert into anchors (map_id, name, kind, x, y, r, rect, stand, to_slug, to_anchor, placement_id, facing, label, meta)
-         values ($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9,$10,$11,$12,$13,$14::jsonb)
+        `insert into anchors (map_id, name, kind, x, y, r, rect, poly, stand, to_slug, to_anchor, placement_id, facing, label, meta)
+         values ($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11,$12,$13,$14,$15::jsonb)
          on conflict (map_id, name) do update set
            kind=excluded.kind, x=excluded.x, y=excluded.y, r=excluded.r, rect=excluded.rect,
-           stand=excluded.stand,
+           poly=excluded.poly, stand=excluded.stand,
            to_slug=excluded.to_slug, to_anchor=excluded.to_anchor, placement_id=excluded.placement_id,
            facing=excluded.facing, label=excluded.label, meta=excluded.meta
-         where (anchors.kind, anchors.x, anchors.y, anchors.r, anchors.rect, anchors.stand,
+         where (anchors.kind, anchors.x, anchors.y, anchors.r, anchors.rect, anchors.poly, anchors.stand,
                 anchors.to_slug, anchors.to_anchor, anchors.placement_id,
                 anchors.facing, anchors.label, anchors.meta)
            is distinct from
-               (excluded.kind, excluded.x, excluded.y, excluded.r, excluded.rect, excluded.stand,
+               (excluded.kind, excluded.x, excluded.y, excluded.r, excluded.rect, excluded.poly, excluded.stand,
                 excluded.to_slug, excluded.to_anchor, excluded.placement_id,
                 excluded.facing, excluded.label, excluded.meta)
          returning id`,
@@ -496,7 +505,10 @@ export async function syncEventsToAnchors(mapId, anchors) {
           Math.round(a.x),
           Math.round(a.y),
           Math.round(a.r) || 14,
-          a.rect ? JSON.stringify(a.rect) : null,
+          // one shape per region, the drawn one winning, exactly as migrateEvent
+          // decides it in the browser. Both would leave the exporters guessing.
+          a.rect && !polyJson ? JSON.stringify(a.rect) : null,
+          polyJson,
           a.stand ? JSON.stringify(a.stand) : null,
           a.to || null,
           a.toAnchor || null,
@@ -523,7 +535,7 @@ export async function syncEventsToAnchors(mapId, anchors) {
  * because the editor holds the whole list. */
 export async function eventsFromAnchors(mapId) {
   const rows = await many(
-    `select name, kind, x, y, r, rect, stand, to_slug, to_anchor, placement_id, facing, label, meta
+    `select name, kind, x, y, r, rect, poly, stand, to_slug, to_anchor, placement_id, facing, label, meta
      from anchors where map_id = $1 order by created_at`,
     [mapId],
   )
@@ -539,6 +551,9 @@ export async function eventsFromAnchors(mapId) {
     y: a.y,
     r: a.r,
     ...(a.rect ? { rect: a.rect } : {}),
+    // the shape the author walked round, back in the document's own shape so
+    // reopening a map shows the area they drew instead of the box it sits in
+    ...(a.poly ? { poly: a.poly } : {}),
     ...(a.stand ? { stand: a.stand } : {}),
     to: a.to_slug || '',
     ...(a.to_anchor ? { toAnchor: a.to_anchor } : {}),

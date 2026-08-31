@@ -310,6 +310,19 @@ export interface MapAnchor {
    * the game wins and everything else was moved to it. Order does not matter:
    * both readers take the min and the max. */
   rect?: [number, number, number, number]
+  /* region only. THE SHAPE THE PLACE ACTUALLY IS, in painting pixels, closed
+   * by the reader rather than by a repeated last point.
+   *
+   * A circle and a box are the only two shapes this tool could describe, and
+   * neither is a pier that bends or an L-shaped plaza: an author marking the
+   * hub's waterfront either took in half the water or left out half the pier.
+   * Exclusive with `rect`, enforced in migrateEvent below, because a region
+   * carrying two different shapes gives the exporter a choice nobody authored.
+   *
+   * WHAT SHIPS IS BOTH THIS AND ITS BOUNDING BOX. The running game tests a
+   * region with a box and has no polygon test at all, so a bundle carrying only
+   * the points would be an area nothing can ever be inside. See polyBounds. */
+  poly?: [number, number][]
   /* door only: the map this leads to */
   to: string
   /* door only: WHICH anchor in that map you arrive at. Without it every door
@@ -364,6 +377,48 @@ export function anchorName(s: string): string {
 }
 
 export const isAnchorName = (s: string) => /^[a-z][a-z0-9_]{0,47}$/.test(String(s))
+
+/* HOW BIG A NAMED PLACE IS ALLOWED TO BE, and the old ceiling was 64.
+ *
+ * A region is what a plaza, a pier, a shop floor or a bay gets authored as, and
+ * a 64px circle on a 688px map covers under two percent of it. None of those
+ * things fit, so the one shape an author could reach for could not describe the
+ * thing they were marking.
+ *
+ * THE CONSUMER NEVER ENFORCED 64 AND STILL DOES NOT. AdventureGame's
+ * src/game/pmap/anchors.ts reads `r: Math.max(1, Math.round(num(e.r, 14)))`
+ * with no upper bound; the anchors.r column is a plain integer with no check
+ * constraint; neither exporter clamps. The cap lived in one line of this tool
+ * and nowhere else, so raising it cannot outrun anything downstream.
+ *
+ * 512 rather than unbounded: PixelLab's measured area budget is about 265,000
+ * output pixels, so 688x377 is the widest painting that exists and a corner of
+ * it is 392 pixels from the middle. 512 covers any map this project can make
+ * and still refuses a number that could only be a typo. */
+export const ANCHOR_R_MIN = 4
+export const ANCHOR_R_MAX = 512
+
+/* THE BOX A DRAWN AREA SITS IN, two opposite corners, in the order `rect` uses.
+ *
+ * This is what makes a poly safe to ship. The game tests a region by its rect
+ * and has no polygon test at all (src/game/pmap/anchors.ts:224), so a bundle
+ * carrying only the points would be an area no player is ever inside and every
+ * grape hung on it would go quiet. Both exporters write the box beside the
+ * points: the box is what runs today, the points are what a reader that learns
+ * them will use, and until then an L-shaped plaza tests as its bounding box. */
+export function polyBounds(poly: [number, number][]): [number, number, number, number] {
+  let x0 = poly[0][0]
+  let y0 = poly[0][1]
+  let x1 = x0
+  let y1 = y0
+  for (const [x, y] of poly) {
+    if (x < x0) x0 = x
+    if (y < y0) y0 = y
+    if (x > x1) x1 = x
+    if (y > y1) y1 = y
+  }
+  return [x0, y0, x1, y1]
+}
 
 /* A saved route, made safe. Two points is the minimum that means anything, and
  * a mark pointing past the end of the line is dropped rather than carried,
@@ -455,6 +510,22 @@ export function migrateEvent(e: MapAnchor & { type?: string }): MapAnchor {
   if (Array.isArray(e.rect) && e.rect.length === 4 && e.rect.every((n) => isFinite(Number(n))))
     e.rect = e.rect.map((n) => Math.round(Number(n))) as [number, number, number, number]
   else delete e.rect
+  /* THE DRAWN AREA, and three points is the floor rather than a nicety: two
+   * points are a line, a line has no inside, and a region built from one would
+   * test as empty for every player forever with nothing saying why. Refused
+   * here rather than repaired, the way an illegal name is refused, because a
+   * shape somebody half-drew is not a shape they meant. */
+  const poly = (Array.isArray(e.poly) ? e.poly : [])
+    .filter((q) => Array.isArray(q) && q.length === 2 && isFinite(Number(q[0])) && isFinite(Number(q[1])))
+    .map((q) => [Math.round(Number(q[0])), Math.round(Number(q[1]))] as [number, number])
+  if (poly.length >= 3) {
+    e.poly = poly
+    /* ONE SHAPE PER REGION. A rect beside a poly is two different areas both
+     * claiming to be this place, and both exporters would have to guess which
+     * the author meant. The drawn one wins because it is the more specific of
+     * the two, and the box that ships is derived from it at export. */
+    delete e.rect
+  } else delete e.poly
   if (!isAnchorName(e.name)) {
     e.name = anchorName(e.label || `${e.kind}_${e.id}`)
     e.meta = { ...(e.meta || {}), derived: true }

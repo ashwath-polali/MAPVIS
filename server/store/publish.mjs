@@ -142,6 +142,32 @@ const without = (meta, ...keys) => {
   return Object.keys(out).length ? out : undefined
 }
 
+/* THE BOX A DRAWN AREA SITS IN, two opposite corners, in the order `rect` uses.
+ *
+ * This is what makes a poly safe to ship. AdventureGame's
+ * src/game/pmap/anchors.ts:224 tests a region by its rect and has no polygon
+ * test at all, so a bundle carrying only the points would be a place no player
+ * is ever inside and every grape hung on it would go quiet. The points ship for
+ * the reader that learns them; until then an L-shaped plaza tests as its box.
+ *
+ * A DELIBERATE SECOND COPY of polyBounds in src/core/mask.ts, the way `without`
+ * above is a second copy. A .mjs on the server cannot import the .ts, and the
+ * two exporters writing different geometry is exactly the divergence that lost
+ * `placement` for a whole release. If either half changes, change both. */
+const polyBox = (poly) => {
+  let x0 = Number(poly[0][0])
+  let y0 = Number(poly[0][1])
+  let x1 = x0
+  let y1 = y0
+  for (const [x, y] of poly) {
+    if (x < x0) x0 = x
+    if (y < y0) y0 = y
+    if (x > x1) x1 = x
+    if (y > y1) y1 = y
+  }
+  return [x0, y0, x1, y1]
+}
+
 const shotsOntoMeta = (framings, anchor, meta) => {
   const all = Array.isArray(framings) ? framings : []
   const mine = all.filter((f) => f && f.anchor === anchor)
@@ -478,7 +504,7 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
   // will read, events[] is what the game reads today, and writing both means no
   // bundle that works now stops working.
   const anchors = await many(
-    `select name, kind, x, y, r, rect, stand, to_slug, to_anchor, placement_id, facing, label, meta
+    `select name, kind, x, y, r, rect, poly, stand, to_slug, to_anchor, placement_id, facing, label, meta
      from anchors where map_id = $1 order by kind, name`,
     [m.id],
   )
@@ -688,7 +714,11 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
       x: a.x,
       y: a.y,
       ...(a.r ? { r: a.r } : {}),
-      ...(a.rect ? { rect: a.rect } : {}),
+      /* THE AREA, AS BOTH SHAPES WHEN IT WAS DRAWN, and the same rule the
+       * browser exporter applies: the two have diverged before and a field
+       * written by one of them and not the other is a field with no reader.
+       * See polyBox below for why the box has to go beside the points. */
+      ...(a.poly && a.poly.length > 2 ? { poly: a.poly, rect: polyBox(a.poly) } : a.rect ? { rect: a.rect } : {}),
       ...(a.stand ? { stand: a.stand } : {}),
       ...(a.to_slug ? { to: a.to_slug } : {}),
       ...(a.to_anchor ? { toAnchor: a.to_anchor } : {}),

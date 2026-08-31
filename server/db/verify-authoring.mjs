@@ -163,8 +163,54 @@ const doc = {
     // the anchor a variant set is addressed through, which is the only address
     // python has for one: every world-touching intent takes an anchor name
     { id: 5, name: 'the_berth', kind: 'point', x: 24, y: 22, r: 10, to: '', label: 'the berth' },
+    /* AN AREA AN AUTHOR WALKED ROUND, which no circle and no box can describe.
+     * L-shaped on purpose: a pier that bends and a plaza that turns a corner are
+     * what a region is actually for, and either of the two shapes this tool used
+     * to have takes in half the water to hold one.
+     *
+     * The radius beside it is 220, which the old 4-to-64 clamp could not hold.
+     * Nothing downstream ever enforced 64: the column has no check, neither
+     * exporter clamps, and the game reads Math.max(1, Math.round(r)) with no
+     * ceiling, so the cap lived in one line of the editor. This is the fence
+     * that says raising it reaches the other end. */
+    {
+      id: 6,
+      name: 'the_pier',
+      kind: 'region',
+      x: 20,
+      y: 30,
+      r: 220,
+      to: '',
+      label: 'the pier',
+      poly: [
+        [6, 26],
+        [20, 26],
+        [20, 34],
+        [34, 34],
+        [34, 40],
+        [6, 40],
+      ],
+    },
+    /* AND HALF A SHAPE IS NOT A SHAPE. Two points are a line, a line has no
+     * inside, and a region built from one is a place no player is ever inside
+     * with nothing anywhere saying why. Refused where it is written rather than
+     * stored and left to fire for nobody. */
+    {
+      id: 7,
+      name: 'the_half_shape',
+      kind: 'region',
+      x: 30,
+      y: 12,
+      r: 8,
+      to: '',
+      label: '',
+      poly: [
+        [2, 2],
+        [9, 9],
+      ],
+    },
   ],
-  eventNext: 6,
+  eventNext: 8,
   occs: [{ id: 1, baseline: 41 }],
   occNext: 2,
   // the six numbers describing the body, none of them the defaults
@@ -272,6 +318,16 @@ try {
   eq('the stand-at point survives the save', post?.stand, [20, 26])
   eq('the facing survives the save', post?.facing, 'north')
   eq('the area survives the save', back.events.find((e) => e.name === 'the_yard')?.rect, [4, 4, 36, 30])
+  const pier = back.events.find((e) => e.name === 'the_pier')
+  eq('a drawn area survives the save with every corner it was given', pier?.poly, doc.events[5].poly)
+  /* THE CEILING WAS ONE LINE IN THE EDITOR AND NOWHERE ELSE, so this is what
+   * says a radius past the old 64 is not quietly clipped on the way through. */
+  eq('a radius past the old 64 cap survives the save', pier?.r, 220)
+  /* AND TWO POINTS ARE STORED AS NO SHAPE AT ALL rather than as an area nobody
+   * can ever be inside. Checked in the browser and again in syncEventsToAnchors,
+   * because putDoc is reachable by a hand-written POST and mask.ts is not in
+   * front of it: this call went straight to the store. */
+  eq('a two-point area is refused rather than stored', back.events.find((e) => e.name === 'the_half_shape')?.poly, undefined)
   const bp = back.paths?.find((p) => p.name === 'the_approach')
   eq('the route survives the save', bp?.points, doc.paths[0].points)
   eq('the route keeps its direction', [bp?.closed, bp?.twoWay, bp?.facing], [false, false, 'east'])
@@ -396,6 +452,32 @@ try {
   eq('published stand-at', pa?.stand, [20, 26])
   eq('published facing', pa?.facing, 'north')
   eq('published rect', (shipped.anchors || []).find((a) => a.name === 'the_yard')?.rect, [4, 4, 36, 30])
+
+  /* THE DRAWN AREA, ALL THE WAY INTO THE BUNDLE, AND IN BOTH SHAPES.
+   *
+   * Two exporters write anchors, bundle() in the browser and publishBundle here,
+   * and they have diverged before: `placement` lived in the type, the form, the
+   * document and the table and was dropped by both, so one of the fifteen
+   * intents could not fire on any bundle this tool could produce. This is the
+   * fence for the poly.
+   *
+   * THE BOX IS NOT OPTIONAL. AdventureGame's src/game/pmap/anchors.ts:224 tests
+   * a region by its rect and has no polygon test at all, so a bundle carrying
+   * only the corners is a place no player is ever inside and every grape hung on
+   * it goes quiet. The corners ship for the reader that learns them; until then
+   * this L tests as the box round it. */
+  const shippedPier = (shipped.anchors || []).find((a) => a.name === 'the_pier')
+  eq('published drawn area, corner for corner', shippedPier?.poly, doc.events[5].poly)
+  eq('and the box round it, which is what the running game can actually test', shippedPier?.rect, [6, 26, 34, 40])
+  eq('published radius past the old 64 cap', shippedPier?.r, 220)
+  /* AND THE HALF SHAPE REACHES THE BUNDLE AS A PLAIN CIRCLE. It is still a
+   * region and still has a radius; what it does not have is a shape it never
+   * had, silently invented somewhere between the form and the game. */
+  eq(
+    'a two-point area never becomes a shape downstream either',
+    (shipped.anchors || []).find((a) => a.name === 'the_half_shape')?.poly,
+    undefined,
+  )
 
   const sp = (shipped.paths || []).find((p) => p.name === 'the_approach')
   eq('published route', sp?.points, doc.paths[0].points)
