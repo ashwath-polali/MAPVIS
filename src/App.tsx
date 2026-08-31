@@ -4341,10 +4341,19 @@ export default function App() {
         on={st?.walking}
         onClick={() => ed?.toggleWalk()}
       />
+      {/* THE START POINT LOOKS LIKE IT COMPETES WITH A SPAWN ANCHOR AND IT DOES
+          NOT. The game resolves arrival in three steps: the anchor a door named
+          in its `arrive at`, then any spawn anchor on this map, then this. So
+          this is where somebody lands who opened the map cold with no door
+          involved, and a spawn anchor is a named address a door can aim at.
+          Both are real and neither is redundant. The desc says the order now,
+          because two controls that both look like "the spawn" and never say
+          which one wins is a question an author should not have to read the
+          engine to answer. */}
       <Row
         icon="pin"
         label="set start point"
-        desc="under the cursor, or the walker mid-test"
+        desc="under the cursor, or the walker mid-test · last resort: a door's arrive at wins, then a spawn anchor, then this"
         onClick={() => ed?.setSpawnHere()}
       />
       {/* THE BODY THIS MAP IS DRAWN FOR, and it sits under the walk test
@@ -4418,11 +4427,16 @@ export default function App() {
         desc="stranded ground turns red"
         onClick={() => ed?.check()}
       />
-      <Sec>doors</Sec>
+      {/* THIS PANEL HAS NEVER ONLY MADE DOORS. Six kinds sit in the form below
+          and a door is one of them, but the button and the header both still
+          said door, from back when it was the only kind there was. An author
+          reading the sidebar had no way to find out that a post, a region or a
+          spawn is made here, so the words now say what the thing does. */}
+      <Sec>anchors</Sec>
       <Row
         icon="door"
-        label={doorPick ? 'click the map for the door' : 'add door'}
-        desc={doorPick ? 'right-click or esc cancels' : 'a spot that leads to another map'}
+        label={doorPick ? 'click the map for the anchor' : 'add anchor'}
+        desc={doorPick ? 'right-click or esc cancels' : 'a named spot code can address'}
         on={doorPick}
         onClick={armDoor}
       />
