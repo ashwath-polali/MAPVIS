@@ -32,6 +32,8 @@ import {
   removeUi,
   publishUi,
   readyUi,
+  listUi,
+  checkSlices,
   sliceCss,
   pieceType,
   chromeRef,
@@ -2995,6 +2997,62 @@ try {
   } finally {
     if (dlgSnap) await putUiBack(dlgSnap)
     else await removeUi(owner.id, 'dialogue_box', { core: true })
+  }
+
+  /* ---- 6f. the shelf itself is finished, not just able to be ---------------
+   *
+   * Everything above proves the machinery works on a piece this file made. This
+   * asks the opposite question of the real shelf: is the art on it actually
+   * carrying its half yet. A png with no edge numbers is a wallpaper, and the
+   * consumer falls back to `center / 100% 100% no-repeat`, which is the squash
+   * the whole library exists to end. A png with no named rectangles is a picture
+   * a grape cannot put a single word into.
+   *
+   * It reads the account's own shelf rather than a fixture, so it is a fence
+   * around the work rather than a test of the store: a piece redrawn tomorrow
+   * and left unmeasured fails here. An empty shelf says so and passes, because
+   * a machine with no art on it has nothing to be wrong about.
+   */
+  {
+    const shelf = (await listUi(owner.id)).filter((p) => p.status === 'ready' && !p.name.startsWith('zz_'))
+    if (!shelf.length) ok('there is no drawn kit on this account, so its completeness is skipped rather than faked')
+    else {
+      const grounds = shelf.filter((p) => pieceType(p.type)?.tier === 'ground')
+      const missing = grounds.filter((p) => !p.slice)
+      missing.length
+        ? no(`${missing.length} ground piece(s) carry no edge numbers, so the game would squash them: ${missing.map((p) => p.name).join(', ')}`)
+        : ok(`all ${grounds.length} ground pieces on the shelf carry their four edge numbers`)
+
+      /* THE PAIR THAT BREAKS SILENTLY. top + bottom under h and left + right
+       * under w, or CSS drops the border image with no error anywhere and the
+       * author spends an hour in the wrong stylesheet. Asked of what is STORED
+       * rather than of what saveUi was handed, because a row written by a script
+       * or by an older validator never went past that refusal. */
+      const crossed = []
+      for (const p of grounds) {
+        if (!p.slice) continue
+        const { problems } = checkSlices({ slice: p.slice, scale: p.scale, fill: p.fill, repeat: p.repeat }, p.w, p.h, pieceType(p.type))
+        if (problems.length) crossed.push(`${p.name}: ${problems[0]}`)
+      }
+      crossed.length
+        ? no(`edge numbers that cannot be drawn are stored: ${crossed.join(' · ')}`)
+        : ok('and every pair of them leaves a middle, so no piece silently loses its border image')
+
+      /* AND EVERY NAMED PLACE THE TYPE PROMISES IS ON THE PICTURE. The type's
+       * own list is the vocabulary a grape holds: a dialogue box that has no
+       * `body` is a surface with nowhere for a line to go, and the name is the
+       * only address there is. */
+      const owed = []
+      for (const p of shelf) {
+        const t = pieceType(p.type)
+        if (!t) continue
+        const have = new Set((p.regions || []).map((s) => s.name))
+        for (const want of t.regions) if (want.required && !have.has(want.name)) owed.push(`${p.name}.${want.name}`)
+      }
+      owed.length
+        ? no(`${owed.length} named place(s) the type promises are not on the picture: ${owed.join(', ')}`)
+        : ok('and every region a type calls required is marked on every piece of that type')
+    }
   }
 
   /* ONE DOCK KIT, TWENTY MAPS. The bytes are duplicated on purpose: that costs

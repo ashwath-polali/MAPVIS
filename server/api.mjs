@@ -3870,8 +3870,14 @@ async function readApi(req, res, p, url) {
      * inside one advisory block, on a 4 GB Chromebook, paying it. Opt-in, so
      * the cheap listing stays cheap for the dashboard that only wants names. */
     if (url.searchParams.get('with') === 'anchors' && maps.length) {
+      /* THE AREA COMES WITH IT, AND IT DID NOT, so every region on the ocean
+       * chart was drawn as a circle of its radius: an author who walked the
+       * edge of a pier saw a ring over the water beside it. The three fields
+       * below are what anchorShape needs to answer which of the three an author
+       * meant, and the mode rides in the meta bag, so it is lifted onto the
+       * field here exactly as readEvents lifts it for the editor. */
       const all = await many(
-        `select m.slug, a.name, a.kind, a.x, a.y, a.r, a.to_slug, a.to_anchor, a.label
+        `select m.slug, a.name, a.kind, a.x, a.y, a.r, a.to_slug, a.to_anchor, a.label, a.rect, a.poly, a.meta
          from anchors a join maps m on m.id = a.map_id
          where m.slug = any($1) order by m.slug, a.kind, a.name`,
         [maps.map((m) => m.slug)],
@@ -3888,6 +3894,9 @@ async function readApi(req, res, p, url) {
           ...(a.to_slug ? { to: a.to_slug } : {}),
           ...(a.to_anchor ? { toAnchor: a.to_anchor } : {}),
           ...(a.label ? { label: a.label } : {}),
+          ...(['circle', 'rect', 'poly'].includes(a.meta?.shape) ? { shape: a.meta.shape } : {}),
+          ...(Array.isArray(a.rect) && a.rect.length === 4 ? { rect: a.rect } : {}),
+          ...(Array.isArray(a.poly) && a.poly.length > 2 ? { poly: a.poly } : {}),
         })
       }
       return send(res, 200, { maps: maps.map((m) => ({ ...m, anchors: by.get(m.slug) || [] })) })

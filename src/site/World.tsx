@@ -30,7 +30,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link, go } from './router'
 import { useSession } from './session'
-import { anchorName, isAnchorName } from '../core/mask'
+import { anchorName, anchorShape, isAnchorName } from '../core/mask'
 import { ANCHOR_INK, inkFor } from '../core/ink'
 import { displayName } from '../core/naming'
 import { MARK_KINDS, isMarkName, type MarkKind, type WorldMark } from '../core/world'
@@ -89,7 +89,21 @@ type Doc = { w: number; h: number; places: Place[]; regions: Region[]; marks?: W
 /* What the registry hands back for one map. The x,y on an anchor is in that
  * map's OWN pixel raster, the same raster scene.png is published at, which is
  * what makes it drawable on this chart at all. */
-type Anchor = { name: string; kind: string; x: number; y: number; r?: number; to?: string; label?: string }
+/* THE AREA FIELDS ARE PART OF IT, because a region is not a circle. `shape` is
+ * the mode the author chose, lifted off the anchor's meta bag by the registry,
+ * and `rect` is two opposite corners the way the game reads them. */
+type Anchor = {
+  name: string
+  kind: string
+  x: number
+  y: number
+  r?: number
+  to?: string
+  label?: string
+  shape?: string
+  rect?: [number, number, number, number]
+  poly?: [number, number][]
+}
 type MapRow = { slug: string; w: number; h: number; version: number | null; anchors?: Anchor[] }
 
 type Sel = { kind: 'place' | 'region' | 'mark'; i: number } | null
@@ -930,16 +944,43 @@ function paint(c: CanvasRenderingContext2D, size: { w: number; h: number }, sc: 
         const key = `${p.name}/${a.name}`
         const hot = aim === key
         const ink = inkFor(ANCHOR_INK, a.kind)
-        // its reach, when it has one, in the map's own pixels scaled onto the
-        // ocean, so a door with r 14 reads as the area it really covers
-        if (a.r) {
+        /* ITS REACH, IN THE SHAPE IT WAS ACTUALLY AUTHORED IN.
+         *
+         * A ring was drawn for anything carrying an `r`, and a region carries
+         * one whatever shape it is, so an author who walked the edge of a bent
+         * pier saw a circle out over the water beside it: the chart drew a
+         * shape the map does not have and hid the one it does. anchorShape is
+         * the single answer to which of the three is live, shared with the
+         * form, the overlay and both exporters, so this cannot drift from what
+         * gets published. Everything is in the map's own pixels scaled onto the
+         * ocean, the same way the mark itself is placed. */
+        const spot = (mx: number, my: number) => ({
+          x: X(p.x + (mx / Math.max(1, m.w)) * p.w),
+          y: Y(p.y + (my / Math.max(1, m.h)) * p.h),
+        })
+        const shape = anchorShape(a)
+        c.strokeStyle = ink
+        c.globalAlpha = 0.3
+        if (shape === 'poly' && a.poly) {
+          c.beginPath()
+          a.poly.forEach(([mx, my], n) => {
+            const q = spot(mx, my)
+            if (n) c.lineTo(q.x, q.y)
+            else c.moveTo(q.x, q.y)
+          })
+          c.closePath()
+          c.stroke()
+        } else if (shape === 'rect' && a.rect) {
+          const [x0, y0, x1, y1] = a.rect
+          const nw = spot(Math.min(x0, x1), Math.min(y0, y1))
+          const se = spot(Math.max(x0, x1), Math.max(y0, y1))
+          c.strokeRect(nw.x, nw.y, se.x - nw.x, se.y - nw.y)
+        } else if (a.r) {
           c.beginPath()
           c.arc(ax, ay, (a.r / Math.max(1, m.w)) * p.w * fit.s, 0, Math.PI * 2)
-          c.strokeStyle = ink
-          c.globalAlpha = 0.3
           c.stroke()
-          c.globalAlpha = 1
         }
+        c.globalAlpha = 1
         c.beginPath()
         c.arc(ax, ay, hot ? 6 : 3.6, 0, Math.PI * 2)
         c.lineWidth = 3
