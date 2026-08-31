@@ -36,9 +36,13 @@ import {
   pieceType,
   chromeRef,
   legalCanvas,
+  sheetCanvas,
+  canvasFor,
+  usesImageEndpoint,
+  cutFaces,
   PIECE_TYPES,
 } from '../store/ui.mjs'
-import { uiAsset, uiAssetBody, UI_ELEMENTS } from '../pixellab.mjs'
+import { uiAsset, uiAssetBody, sheetBody, fitSheet, SHEET_ONE_IMAGE, UI_ELEMENTS } from '../pixellab.mjs'
 import { encodePNG, decodePNG } from '../sheet.mjs'
 import { api, chromePrompt, chromePlan, chromeStyle, chromeFinal } from '../api.mjs'
 import { NoPlanner } from '../store/planner.mjs'
@@ -1452,13 +1456,35 @@ try {
     carries('to answer two fields and never the joined sentence', 'never write the joined sentence yourself')
 
     // a sheet is a different piece and gets a different law, not the ground one
-    const sheetAsk = chromePrompt({ ask: 'season tokens', t: st, width: 384, height: 384, shelf: [], style: chromeStyle('pip') })
+    const sheetAsk = chromePrompt({ ask: 'season tokens', t: st, width: st.w, height: st.h, shelf: [], style: chromeStyle('pip') })
     !sheetAsk.includes('ORNAMENT GOES IN THE CORNERS') && sheetAsk.includes('THIS PIECE IS A SHEET')
       ? ok('a sheet is told it is a grid of faces cut apart, not told a nine-slice law it cannot obey')
       : no('the wrong tier law went to a sheet')
     sheetAsk.includes('fall, winter, spring, spent, ghost')
       ? ok('a sheet is told every face it owes, so they come back at one weight')
       : no('a sheet was asked for without naming its faces')
+    /* AND IT IS TOLD THE COUNT, because the cut afterwards is arithmetic against
+     * that number. Measured on the first roll 2026-08-31: eight marks asked for
+     * on a canvas with an empty bottom third came back as TWELVE, the last four a
+     * repeat of the row above, and the cut refused to hand out names it could not
+     * prove. */
+    sheetAsk.includes('EXACTLY 5, no more and no fewer')
+      ? ok('a sheet is told how many marks, which is the number the cut checks against')
+      : no('a sheet was asked for with no count in it, so nothing downstream can check what came back')
+    /* AND IT IS TOLD NOT TO WRITE THE NAMES DOWN. Measured on the chip roll: the
+     * router wrote "Middle, plate_lit:" into the subject, which reads as a
+     * caption, and the picture came back with plate_lit painted under the token.
+     * The NO LETTERING clause was in the same prompt and lost, so the fix is to
+     * keep the strings out of the prompt rather than to refuse them again. */
+    sheetAsk.includes('DO NOT WRITE THESE NAMES INTO YOUR ANSWER')
+      ? ok('and told the names are addresses rather than captions, which is what came back painted once')
+      : no('nothing stops the router writing the face names into the subject, which drew them as labels')
+    /* THE FLOOR IN THE SHEET BRIEF IS NOT 192. That number is
+     * /v2/create-ui-asset's, and saying it to a piece going somewhere else is a
+     * lie about the endpoint that will draw it. */
+    sheetAsk.includes('both sides start at 192')
+      ? no('a sheet was told the panel route floor, which is not the route it goes to')
+      : ok('a sheet is not told a floor belonging to the endpoint it does not use')
 
     /* THE ROUTER RUNS, with the planner replaced. What is asserted is that the
      * answer's two fields come back joined by CODE with the law attached, and
@@ -1644,9 +1670,15 @@ try {
     strayEl.length
       ? no(`an element name the generator does not have would reach the handler and be paid for: ${strayEl.join(', ')}`)
       : ok('every element name on the table is one the endpoint actually scaffolds from')
-    PIECE_TYPES.filter((t) => t.tier === 'sheet').every((t) => !t.elements && t.elementsWhy)
-      ? ok('a sheet sends no list and says why, because a grid of loose parts is what a sheet IS')
-      : no('a sheet either carries an element list or does not say why it has none')
+    /* A SHEET CARRIES NO LIST AND THE REASON FOR THAT CHANGED. It used to be
+     * that the endpoint's own no-elements behaviour returned the grid a sheet
+     * wants. It does not: what it returns is a grid of PANELS, measured on an
+     * icon set and a chip set that both came back as framed bars. A sheet
+     * carries no list because the route it goes to has no such field, and the
+     * sentence on the type has to say that rather than the old reading. */
+    PIECE_TYPES.filter((t) => t.tier === 'sheet').every((t) => !t.elements && t.elementsWhy.includes('generate-image-v2'))
+      ? ok('a sheet sends no list and names the route with no such field, rather than claiming the panel route would behave')
+      : no('a sheet either carries an element list or still says the panel route returns a grid of loose marks')
 
     /* FOUR TYPES THROUGH THE WHOLE PATH, one per tier plus the two the recipe
      * was learned on. What is asserted is the request body, because the body is
@@ -1722,6 +1754,184 @@ try {
         ? ok('a subject long enough to fill the budget loses its own words and never the code-owned tail')
         : no(`the tail was truncated off a long subject: ...${long.slice(-160)}`)
     }
+  }
+
+  /* ---- 5.9 THE SECOND PATH, WHICH SIX OF THE TWENTY-ONE TYPES TAKE --------
+   *
+   * /v2/create-ui-asset IS A PANEL KIT GENERATOR AND NOTHING ELSE. Measured
+   * 2026-08-31: asked for an icon set of a compass, a key, a star, a lock and a
+   * tick it returned panels, and asked for round blank chip tokens it returned
+   * panels. work/.kit/icon_set-as-panels.png and work/.kit/chip-as-panels.png
+   * are the two paid pictures. `elements` decides shape on that route and its
+   * twelve names are all furniture, so no wording reaches past it, and chip,
+   * pip, icon_set, cue, stamp and pointer could not be made there at all.
+   *
+   * They go to /v2/generate-image-v2 instead, which paints an arbitrary subject
+   * with transparency and has no element list, no shape template and no camera.
+   * This is the fence saying the routing holds, that the body is the shape THAT
+   * route's schema actually takes, and that the canvases clear its floor rather
+   * than the other one's.
+   *
+   * NOTHING HERE SPENDS. sheetBody builds the request without posting it and
+   * needs no token, the same way uiAssetBody does above. */
+  {
+    const sheets = PIECE_TYPES.filter((t) => t.tier === 'sheet')
+    eq('six of the twenty-one types are sheets', sheets.length, 6)
+    sheets.every((t) => usesImageEndpoint(t))
+      ? ok('every sheet routes to the image endpoint, which is the only one that draws a mark')
+      : no(`a sheet still goes to the panel route: ${sheets.filter((t) => !usesImageEndpoint(t)).map((t) => t.name).join(', ')}`)
+    PIECE_TYPES.filter((t) => t.tier !== 'sheet').some((t) => usesImageEndpoint(t))
+      ? no('a piece of furniture was sent to the image route, which has no element list to force one clean piece out of it')
+      : ok('and nothing else does, because the two levers on the panel route are what drew the twelve already on the shelf')
+
+    /* THE FLOOR IS THE OTHER ROUTE'S AND IT WOULD REFUSE A REAL SHEET. A chip
+     * strip is 384x160 and legalCanvas starts at 192 on both sides, so running a
+     * sheet through the panel gate pushes it onto a canvas taller than its
+     * family needs. That is not cosmetic: an icon sheet on a canvas with an empty
+     * bottom third came back with a repeated row in it. */
+    const wrongGate = sheets.filter((t) => !legalCanvas(t.w, t.h).ok)
+    wrongGate.length
+      ? ok(`the panel route's floor would refuse ${wrongGate.length} real sheet canvas(es), which is why the gate is chosen by tier`)
+      : ok('every sheet canvas happens to clear both gates')
+    const badCanvas = sheets.filter((t) => !canvasFor(t, t.w, t.h).ok)
+    badCanvas.length
+      ? no(`${badCanvas.length} sheet canvas(es) would be refused after the money is committed: ${badCanvas.map((t) => t.name).join(', ')}`)
+      : ok('every sheet canvas passes its own route gate before anything is spent')
+    /* AND CLEARS 171 ON THE LONG SIDE. Under that the endpoint answers with a
+     * GRID OF VARIANTS of one mark, 4 or 16 or 64 of them, rather than one
+     * picture, so a sheet asked for small comes back as sixty-four compasses. */
+    sheets.every((t) => Math.max(t.w, t.h) >= SHEET_ONE_IMAGE)
+      ? ok('and clears the one-image line, so the answer is one canvas rather than a grid of variants')
+      : no(`a sheet is small enough to come back as a grid of variants: ${sheets.filter((t) => Math.max(t.w, t.h) < SHEET_ONE_IMAGE).map((t) => t.name).join(', ')}`)
+    eq('and a canvas asked for under that line is lifted over it rather than drawn as 64 copies', Math.max(...Object.values(fitSheet(24, 24))), SHEET_ONE_IMAGE)
+
+    const think = async () =>
+      JSON.stringify({
+        result: JSON.stringify({
+          subject: 'Small walnut and brass marks in a row, each a plain silhouette on empty space',
+          style: 'chunky pixels, muted walnut and brass palette, dark brown outline, lit upper left, shaded right',
+          palette: 'muted walnut brown and tarnished brass',
+          note: 'matched the shipped chrome',
+        }),
+      })
+    for (const t of sheets) {
+      const style = chromeStyle(t.name)
+      const plan = await chromePlan({ ask: 'the marks', t, width: t.w, height: t.h, shelf: [], style, think })
+      const req = sheetBody({ description: plan.description, width: t.w, height: t.h, styleImage: style ? { base64: style.base64, w: style.w, h: style.h } : null })
+      const has = (what, cond) => (cond ? ok(`${t.name}: ${what}`) : no(`${t.name}: ${what} · NOT true of the body that would be sent`))
+      /* THE TWO ROUTES WRAP THE REFERENCE DIFFERENTLY AND additionalProperties IS
+       * FALSE ON BOTH. The panel route takes a bare Base64Image; this one takes a
+       * ReferenceImage carrying the picture's own size, so the panel route's
+       * shape posted here is extra_forbidden and the call never draws. */
+      has(
+        "the reference rides as a ReferenceImage with its own size, which is this route's shape",
+        req.style_image?.image?.type === 'base64' &&
+          req.style_image.image.base64 === style.base64 &&
+          req.style_image.size?.width === style.w &&
+          req.style_image.size?.height === style.h,
+      )
+      has('it is cut out, because a mark is laid straight over a painted map', req.no_background === true)
+      has('the canvas is the one the type asks for', req.image_size.width === t.w && req.image_size.height === t.h)
+      /* AND NO FIELD FROM THE OTHER ROUTE. GenerateImageV2Request sets
+       * additionalProperties false, so one `elements` carried across from the
+       * panel body is a 422 for the whole call. */
+      has('nothing from the panel route rides along, which would be a 422 for the whole call', !('elements' in req) && !('pieces' in req) && !('name' in req) && !('color_palette' in req))
+      has('and the description fits the schema ceiling of 2000', req.description.length <= 2000 && req.description.length >= 1)
+      // the clauses code owns on this tier, which is what the first two rolls
+      // proved a model will not carry on its own
+      has('the count rides, which is the number the cut checks against', req.description.includes(`Exactly ${t.faces.length} marks on the canvas`))
+      has('no frame around the group, which is what the panel route always drew', req.description.includes('No frame, border, card or panel around the group'))
+      has('it is a grid of separate small marks', req.description.includes('A grid of separate small marks'))
+      has('no nine-slice law on something that is never cut into nine', !req.description.includes('Ornament only in the four corners'))
+    }
+
+    /* A CHIP'S MARKS ARE PLATES, so the flat "nothing sits on a plate" clause and
+     * the family it was asked for cannot both be obeyed, and two instructions
+     * that contradict is how a generator picks. Same shape as the ring clause. */
+    const chipTail = chromeFinal({ subject: 'three round tokens', style: 'chunky pixels', t: pieceType('chip') })
+    chipTail.includes('unless the mark itself is a plate')
+      ? ok('the sheet whose marks ARE plates is not told to draw nothing on a plate')
+      : no('a chip sheet carries two instructions it cannot both obey')
+
+    /* ---- and the cut that comes after the picture ------------------------
+     *
+     * A sheet arrives as one canvas of separate marks and there is no hero in it,
+     * so cropHero would throw the other seven away. The cut reads EVERY shape
+     * over a minimum, in reading order, and refuses rather than inventing: a
+     * grape holds the name `lock` and asks the kit for that rectangle, so a name
+     * handed to the wrong shape is wrong in the game with nothing saying so.
+     *
+     * The pictures below are drawn by this file. Nothing here generates. */
+    const sheetPNG = (w, h, blobs) => {
+      const px = new Uint8ClampedArray(w * h * 4)
+      for (const [x0, y0, bw, bh] of blobs)
+        for (let y = y0; y < y0 + bh; y++)
+          for (let x = x0; x < x0 + bw; x++) {
+            const i = (y * w + x) * 4
+            px[i] = 200
+            px[i + 1] = 170
+            px[i + 2] = 120
+            px[i + 3] = 255
+          }
+      return encodePNG(w, h, px)
+    }
+    // evenly spaced across the canvas with a margin at both ends, so nothing in
+    // these fixtures runs off the right edge and wraps onto the next row
+    const row = (n, y, size, w) => Array.from({ length: n }, (_, i) => [Math.round((w - n * size) / (n + 1)) * (i + 1) + i * size, y, size, size])
+    const pipT = pieceType('pip')
+
+    const clean = cutFaces(sheetPNG(512, 160, row(5, 50, 60, 512)), pipT)
+    clean.why || clean.note
+      ? no(`a clean sheet of five was not cut: ${clean.why || clean.note}`)
+      : eq('five marks are cut and named in reading order', clean.faces.map((f) => f.name), pipT.faces)
+    clean.faces.every((f) => f.kind === 'face')
+      ? ok('and each one is a face, which is the kind a consumer cuts OUT rather than draws into')
+      : no('a cut came back as some other kind of region')
+
+    /* READING ORDER IS BANDED AND NOT A SORT ON Y. Marks in one row do not share
+     * a y: a tick sits lower than a compass of the same height, and a plain sort
+     * by y interleaves two rows into nonsense. */
+    const jittered = cutFaces(sheetPNG(384, 256, [[30, 20, 60, 60], [150, 32, 60, 60], [270, 18, 60, 60], [30, 150, 60, 60], [150, 162, 60, 60], [270, 148, 60, 60]]), pieceType('pointer'))
+    eq('a row whose marks do not share a y still reads left to right', jittered.faces.map((f) => f.name), pieceType('pointer').faces)
+
+    /* A MARK DRAWN IN SEPARATE PIECES IS ONE MARK, and this is measured art
+     * rather than a hypothetical: a paw print is a heel pad and four toe pads,
+     * five shapes sharing no pixel at all. The merge is forced rather than
+     * chosen, because when two boxes overlap no pair of rectangles can separate
+     * the shapes and the union is the only rectangle holding each of them whole. */
+    // a ring with a needle floating inside it, which shares no pixel with the
+    // ring and whose box sits entirely within the ring's
+    const ringed = (x) => [
+      [x, 30, 60, 8],
+      [x, 82, 60, 8],
+      [x, 30, 8, 60],
+      [x + 52, 30, 8, 60],
+      [x + 26, 56, 10, 10],
+    ]
+    const paw = cutFaces(sheetPNG(384, 160, [...ringed(20), ...ringed(110), ...ringed(200), ...ringed(290)]), pieceType('cue'))
+    paw.found === 4 && !paw.why && !paw.note
+      ? ok('a mark drawn in separate pieces is cut as one face, because no rectangle could separate them anyway')
+      : no(`a mark in pieces was not merged: found ${paw.found}, ${paw.why || paw.note || 'no reason'}`)
+
+    /* AND THE TWO REFUSALS. One big object is the failure the whole second path
+     * exists to get past, and it is what the panel route returned every time. */
+    const lump = cutFaces(sheetPNG(512, 160, [[40, 20, 430, 120]]), pipT)
+    lump.why.includes('one big object')
+      ? ok('a sheet that came back as one big object is refused, naming what it looks like')
+      : no(`one big object was cut into faces anyway: ${lump.why || 'no reason'}`)
+    const crumbs = cutFaces(sheetPNG(512, 160, Array.from({ length: 24 }, (_, i) => [10 + (i % 12) * 42, 20 + Math.floor(i / 12) * 70, 20, 20])), pipT)
+    crumbs.why.includes('not a grid of 5 things')
+      ? ok('and so is a picture with far too many shapes on it')
+      : no(`a shattered sheet was cut anyway: ${crumbs.why || 'no reason'}`)
+
+    /* THE ONE FAILURE THAT WOULD BE SILENT. A count inside the band but not
+     * exact means the fourth shape is not `spent`, and calling it that would be
+     * wrong in the game with nothing anywhere saying a word. Measured on the
+     * first roll: eight asked for, twelve came back. */
+    const seven = cutFaces(sheetPNG(512, 160, row(7, 50, 50, 512)), pipT)
+    seven.faces.length === 7 && seven.faces.every((f) => /^face_\d+$/.test(f.name)) && seven.note.includes('numbered rather than named')
+      ? ok('a count that is close but not exact is numbered rather than named, because a wrong name is a silent wrong answer')
+      : no(`an inexact count was handed the type's names: ${seven.faces.map((f) => f.name).join(', ')}`)
   }
 
   // ---- 6. the ui library, and one kit shared across maps -------------------
@@ -1963,10 +2173,49 @@ try {
     )
     ring.includes('ring around a hole') ? ok('a panel that would draw as a ring around a hole is refused') : no(`fill:false saved on a panel: ${ring || 'no error'}`)
 
-    /* A SHEET CARRIES NAMED FACES CUT FROM ONE CANVAS. Both sides of a
-     * generation start at 192 and a season token is about 24 across, so a
-     * family of small marks is one job cut by marked rectangles, which is also
-     * the only way the five faces come back the same weight. */
+    /* A SHEET CARRIES NAMED FACES CUT FROM ONE CANVAS. The reason it is one job
+     * rather than five is NOT the 192 pixel floor: that belongs to
+     * /v2/create-ui-asset and a sheet does not go there. It is the asset stage's
+     * own settled law, that a family split across jobs comes back at different
+     * weights and a drifted palette, which this repo measured on character
+     * headings long before there was a ui kit.
+     *
+     * THE CUT HAPPENS AT IMPORT, the way the hero crop does, because a sheet
+     * that spends any time in the library uncut is a sheet somebody can measure
+     * rectangles against by hand and then have replaced under them by a redraw.
+     * So the faces below are not authored: the picture is written by this file
+     * and the rectangles come off the alpha channel. */
+    {
+      const CUT = 'zz_verify_cut'
+      await removeUi(owner.id, CUT, { core: true })
+      const marks = new Uint8ClampedArray(512 * 160 * 4)
+      pieceType('pip').faces.forEach((_, i) => {
+        for (let y = 40; y < 110; y++)
+          for (let x = 26 + i * 96; x < 86 + i * 96; x++) {
+            const at = (y * 512 + x) * 4
+            marks[at] = 190
+            marks[at + 1] = 170
+            marks[at + 2] = 130
+            marks[at + 3] = 255
+          }
+      })
+      await createUi({ ownerId: owner.id, name: CUT, type: 'pip', description: 'five season tokens', w: 512, h: 160 })
+      const cut = await setUiImage(owner.id, CUT, encodePNG(512, 160, marks), 512, 160)
+      eq('a sheet is not cropped to one hero, because it has no hero to crop to', cut.full_key, '')
+      eq('and the cut ran without a complaint', cut.crop_note, '')
+      const readBack = await getUiByName(owner.id, CUT)
+      eq('a sheet round-trips carrying its faces, named in reading order', readBack.faces.map((f) => f.name), pieceType('pip').faces)
+      eq('and each face keeps the rectangle the scan measured', readBack.faces[2], { name: 'spring', x: 218, y: 40, w: 60, h: 70 })
+      /* AND EVERY FACE THE TYPE OWES IS CUT, which is the warning checkUi
+       * carries. A sheet arriving with the picture and no rectangles is the
+       * wallpaper case one layer along: a consumer holding the name `spent` has
+       * nothing to ask for. */
+      readBack.faces.length === pieceType('pip').faces.length
+        ? ok('so nothing is owed a hand cut on a sheet that came back the way it was asked for')
+        : no(`${pieceType('pip').faces.length - readBack.faces.length} face(s) of the type were never cut`)
+      await removeUi(owner.id, CUT, { core: true })
+    }
+
     await createUi({ ownerId: owner.id, name: SHEET, type: 'pip', description: 'five season tokens', w: 100, h: 100 })
     await setUiImage(owner.id, SHEET, solidPNG(100, 100, 120, 150, 190), 100, 100)
     const s = await setUiRegions(owner.id, SHEET, [

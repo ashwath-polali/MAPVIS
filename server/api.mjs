@@ -87,6 +87,8 @@ import {
   TEXT_OVERFLOWS,
   typeBrief,
   chromeRef,
+  usesImageEndpoint,
+  canvasFor,
 } from './store/ui.mjs'
 import { publishBundle, publishedMap, publishHistory, hotGet, hotPut, orderedHeadings } from './store/publish.mjs'
 import { store } from './store/blobs.mjs'
@@ -2587,9 +2589,15 @@ async function route(req, res, p, url) {
 
     /* THE GATE IS CHECKED BEFORE THE PRESS AND NOT AFTER IT. The maxima do not
      * combine, so 688x512 reads as 4:3 and comes back refused with the money
-     * already committed. Both sides also start at 192, which is why anything
-     * smaller is a sheet of faces rather than its own generation. */
-    const gate = legalCanvas(width, height)
+     * already committed.
+     *
+     * WHICH GATE depends on which generator, because the two have different
+     * limits and the difference is not cosmetic. The panel route starts at 192
+     * on both sides. The image route starts at 16, and running a sheet through
+     * the panel route's floor would refuse a 384x160 chip strip and push it onto
+     * a canvas taller than its family needs, which is measured to make the
+     * generator repeat a row to fill the space. */
+    const gate = canvasFor(t, width, height)
     if (!gate.ok)
       return send(res, 400, {
         error: `${width}x${height} is not a size this can be drawn at · the nearest legal canvas is ${gate.width}x${gate.height}`,
@@ -2646,7 +2654,18 @@ async function route(req, res, p, url) {
      * reference: said out loud, because "no reference" is why the colours
      * drifted and an author who is not told reads it as a bad prompt. */
     const elements = t?.elements || null
+    /* AND WHICH GENERATOR IS ABOUT TO BE PAID, because it is no longer one.
+     *
+     * /v2/create-ui-asset is a panel kit generator and nothing else: measured
+     * 2026-08-31, an icon set came back as panels and round chip tokens came
+     * back as panels, and the six sheet types could not be made on it at all.
+     * They go to /v2/generate-image-v2, which paints an arbitrary subject with
+     * transparency and has no element list, no shape template and no camera.
+     * `elements` on a sheet is therefore not a dropped lever, it is a field that
+     * route does not have, and the answer says which of the two it is. */
+    const viaImage = usesImageEndpoint(t)
     const levers = {
+      route: viaImage ? '/v2/generate-image-v2' : '/v2/create-ui-asset',
       elements,
       elementsWhy: t?.elementsWhy || '',
       styleRef: style ? style.file : '',
@@ -2696,17 +2715,41 @@ async function route(req, res, p, url) {
       name: pieceName,
     })
 
+    /* THE SHEET'S OWN ASK, and it is a different set of fields rather than the
+     * same one with two dropped. The image route takes no element list, no
+     * shape template and no name, and its style reference is a ReferenceImage
+     * carrying the picture's size rather than the bare Base64Image the panel
+     * route takes, so sending one route's body to the other is a 422 either
+     * way. Both are assembled here, once, for the reason askFor is: a dry run
+     * built from a second copy of the fields proves nothing about the copy that
+     * spends. */
+    const sheetAsk = (plan) => ({
+      description: plan.description,
+      width,
+      height,
+      styleImage: style ? { base64: style.base64, w: style.w, h: style.h } : null,
+    })
+
     if (dry) {
       const plan = await chromePlan({ ask: description, t, width, height, shelf, style, job: `ui:dry:${name || t?.name || 'piece'}` })
-      const wire = pixellab.uiAssetBody(askFor(plan, name || t?.name || 'piece'))
+      const wire = viaImage ? pixellab.sheetBody(sheetAsk(plan)) : pixellab.uiAssetBody(askFor(plan, name || t?.name || 'piece'))
       /* THE PICTURE IS REPLACED BY ITS LENGTH. A base64 png is 60 to 200 KB of
        * one unreadable line, and printing it buries the six fields somebody is
        * dry-running to check. What matters about style_image is that it is
-       * there, that it is a Base64Image and which file it came off, and all
-       * three survive this. */
-      const body = wire.style_image
-        ? { ...wire, style_image: { ...wire.style_image, base64: `<${wire.style_image.base64.length} chars of ${style.file}>` } }
-        : wire
+       * there, that it is the shape ITS OWN route takes, and which file it came
+       * off, and all three survive this.
+       *
+       * The two routes wrap it differently and that is the point of showing it:
+       * the panel route takes a bare Base64Image and the image route takes a
+       * ReferenceImage with the picture's own size beside it, so a body built
+       * for one and posted to the other is a 422 with the money uncommitted but
+       * the author none the wiser. */
+      const shown = (b64) => `<${b64.length} chars of ${style.file}>`
+      const body = !wire.style_image
+        ? wire
+        : wire.style_image.image
+          ? { ...wire, style_image: { ...wire.style_image, image: { ...wire.style_image.image, base64: shown(wire.style_image.image.base64) } } }
+          : { ...wire, style_image: { ...wire.style_image, base64: shown(wire.style_image.base64) } }
       return send(res, 200, {
         dry: true,
         piece: { name: name || '', type: t ? t.name : '', tier: t ? t.tier : '', w: width, h: height },
@@ -2743,7 +2786,7 @@ async function route(req, res, p, url) {
 
     const plan = await chromePlan({ ask: description, t, width, height, shelf, style, job: `ui:${row.name}` })
     try {
-      const out = await pixellab.uiAsset(askFor(plan, row.name))
+      const out = viaImage ? await pixellab.sheetImage(sheetAsk(plan)) : await pixellab.uiAsset(askFor(plan, row.name))
       const buf = Buffer.from(out.b64, 'base64')
       const size = pngSizeBuf(buf.subarray(0, 24))
       /* THE PIXELLAB ID IS KEPT, and it never was. The column exists, createUi
@@ -2753,14 +2796,27 @@ async function route(req, res, p, url) {
        * `pixellabId` never appeared on the wire. Every other generated thing in
        * this repo can be traced back to the spend it was paid for; chrome
        * silently could not. */
-      const saved = await setUiImage(me.id, row.name, buf, size.w || out.width, size.h || out.height, out.uiAssetId)
+      /* THE ID IS WHICHEVER ONE THE ROUTE THAT DREW IT HANDS BACK. The panel
+       * route answers a ui_asset_id and the image route answers a background job
+       * id, and a row that cannot be traced to the spend it was paid for is the
+       * defect this line already exists to fix. */
+      const saved = await setUiImage(me.id, row.name, buf, size.w || out.width, size.h || out.height, out.uiAssetId || out.jobId || '')
       /* WHAT COMES BACK, AND NOT WHAT IT COST. The old page put the price under
        * the button as the last thing an author read, which is why it read as a
        * bill. What belongs there is this many faces, at this size, ready to be
        * cut. */
+      const cutFaces = (saved.regions || []).filter((r) => r && r.kind === 'face')
       return send(res, 200, {
         ui: { name: saved.name, type: saved.type, w: saved.w, h: saved.h, status: saved.status },
         cut: t ? { tier: t.tier, faces: t.faces, regions: t.regions } : null,
+        /* AND WHAT THE SCAN ACTUALLY FOUND ON A SHEET, which is the half an
+         * author cannot see in the picture. The rectangles are already stored,
+         * so this is a report and not an offer: either the marks were counted
+         * and named, or the cut refused and `cutNote` says which check failed
+         * and the piece is owed a hand cut. */
+        ...(viaImage
+          ? { faces: cutFaces.map((r) => ({ name: r.name, x: r.x, y: r.y, w: r.w, h: r.h })), cutNote: saved.crop_note || '' }
+          : {}),
         /* WHO WROTE THE PROMPT, said out loud on every answer.
          *
          * An author whose piece came back wrong needs to know which of the two
@@ -6824,10 +6880,21 @@ export function chromeStyle(type) {
  * anything. Every fact in it already existed in this process and none of it was
  * reaching the generator. */
 export function chromePrompt({ ask, t, width, height, shelf, style }) {
+  /* WHICH GENERATOR IS BEING WRITTEN FOR, said first, because the two behave
+   * differently enough that a prompt good for one is wasted on the other. The
+   * panel route scaffolds from a fixed list of interface element names and hands
+   * back furniture whatever the words say. The image route draws the words and
+   * nothing else, so on a sheet the composition is genuinely the model's to
+   * decide and there is no scaffold underneath to catch a vague answer. */
   const lines = [
-    `You are writing ONE prompt for a pixel-art UI generator (PixelLab). It draws game interface ` +
-      `furniture: a dialogue box, a panel, a button, a gauge. It is not drawing a scene and there ` +
-      `is no world in front of it.`,
+    t && t.tier === 'sheet'
+      ? `You are writing ONE prompt for a pixel-art image generator (PixelLab). It paints whatever it is ` +
+        `described, cut out on a transparent canvas. What it is drawing here is a SET OF SMALL MARKS on ` +
+        `one canvas, the kind a game draws over a map: little icons and tokens, not a panel, not a ` +
+        `window, not a scene, and there is no world in front of it.`
+      : `You are writing ONE prompt for a pixel-art UI generator (PixelLab). It draws game interface ` +
+        `furniture: a dialogue box, a panel, a button, a gauge. It is not drawing a scene and there ` +
+        `is no world in front of it.`,
   ]
   if (style) {
     /* THE PATH LINE IS ONLY THERE WHEN THERE IS A FILE. The reference is
@@ -6868,11 +6935,18 @@ export function chromePrompt({ ask, t, width, height, shelf, style }) {
     /* The same shape the object router answers in, for the same reason. See the
      * section comment above: the model never writes the joined sentence, so the
      * nine-slice law cannot be dropped out of it. */
-    `SHAPE. Answer as TWO FIELDS rather than as one finished sentence. subject: the piece and its ` +
-      `own materials in physical detail, what it is made of, how it is worn, what the frame is, ` +
-      `where the ornament sits, what the middle surface is. style: how it is drawn. Never blend ` +
-      `the two and never write the joined sentence yourself. Code joins them and code adds the ` +
-      `constraint the piece cannot be drawn without.`,
+    t && t.tier === 'sheet'
+      ? `SHAPE. Answer as TWO FIELDS rather than as one finished sentence. subject: the grid and every ` +
+        `mark on it, said one by one and named, how they are laid out in rows, what each one is made ` +
+        `of and how it is worn. Describe each mark by its SILHOUETTE, the outline shape a person reads ` +
+        `it by, because that is the only thing that tells one from another at this size. style: how ` +
+        `they are drawn. Never blend the two and never write the joined sentence yourself. Code joins ` +
+        `them and code adds the constraint the picture cannot be drawn without.`
+      : `SHAPE. Answer as TWO FIELDS rather than as one finished sentence. subject: the piece and its ` +
+        `own materials in physical detail, what it is made of, how it is worn, what the frame is, ` +
+        `where the ornament sits, what the middle surface is. style: how it is drawn. Never blend ` +
+        `the two and never write the joined sentence yourself. Code joins them and code adds the ` +
+        `constraint the piece cannot be drawn without.`,
     ``,
     `THE STYLE FIELD. Begin it at "chunky pixels", then a limited palette named by its real ` +
       `colours, a dark outline named by its colour, the light direction and the shaded side as ` +
@@ -6898,13 +6972,24 @@ export function chromePrompt({ ask, t, width, height, shelf, style }) {
       `generator takes it as a separate field.`,
     ``,
     `Answer with ONLY this JSON, no prose:`,
-    CHROME_ANSWER,
+    t && t.tier === 'sheet' ? SHEET_ANSWER : CHROME_ANSWER,
   )
   return lines.join('\n')
 }
 
 const CHROME_ANSWER =
   `{"subject":"the piece and its materials, 30 to 70 words, no lettering and no ground",` +
+  `"style":"chunky pixels, ... , muted saturation",` +
+  `"palette":"muted ... ","note":"one short lower-case line: what you matched it against"}`
+
+/* A SHEET NEEDS MORE WORDS THAN A PANEL AND FOR ONE REASON: a panel is one thing
+ * and a sheet is eight, and every one of the eight has to be named or the
+ * generator picks. Thirty to seventy words spread over eight marks is four words
+ * each, which is how a compass and a coin come back as the same disc. The
+ * ceiling is the same 2000 characters and the subject is the part that gets cut
+ * if it overruns, so asking for length here costs nothing that matters. */
+const SHEET_ANSWER =
+  `{"subject":"the layout in rows, then every mark named one by one with its silhouette, 80 to 160 words, no lettering and no ground",` +
   `"style":"chunky pixels, ... , muted saturation",` +
   `"palette":"muted ... ","note":"one short lower-case line: what you matched it against"}`
 
@@ -6940,10 +7025,23 @@ export function chromeFinal({ subject, style, t }) {
    * Split in two, because a sheet is not one piece and telling it to be one
    * would refuse the grid that IS the deliverable. The half both tiers share is
    * the crop, which is the half v3 actually died of. */
+  /* THE COUNT IS A CODE-OWNED CLAUSE ON A SHEET, and it is here for the reason
+   * the nine-slice law is on a ground: it is the rule the picture is unusable
+   * without, and the first roll proved a model will not carry it. Eight marks
+   * were asked for in a routed prompt that said "two rows of four" and twelve
+   * came back. The cut counts shapes and matches them against this same number,
+   * so a picture that ignores it cannot be named and is owed a hand cut. */
   const whole =
     t && t.tier === 'sheet'
-      ? ' Every face is drawn complete and entirely inside the image, evenly spaced with clear margin on every side, ' +
-        'nothing touching the edge of the image and nothing cut off by it.'
+      ? ` Exactly ${t.faces.length} marks on the canvas, no more and no fewer, and no mark drawn twice.` +
+        ' A grid of separate small marks with empty space between them, every mark drawn complete and entirely inside ' +
+        'the image, evenly spaced with clear margin on every side, nothing touching the edge of the image and nothing ' +
+        /* THE "unless" IS NOT SOFTENING. A chip sheet's marks ARE plates, so the
+         * flat version of this clause and the family it was asked for cannot
+         * both be obeyed, and two instructions that contradict is how a
+         * generator picks. Same shape as the ring clause on highlight_edge. */
+        'cut off by it. No frame, border, card or panel around the group, and nothing sits on a plate or inside a box ' +
+        'unless the mark itself is a plate.'
       : ' One single complete piece, centred, with margin on every side, nothing touching the edge of the image and ' +
         'nothing cut off by it.'
   /* AND THE INTERIOR NAMED BY CODE. work/.kit/panel.png is the reason: its

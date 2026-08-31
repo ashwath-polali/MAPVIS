@@ -28,7 +28,7 @@ import crypto from 'node:crypto'
 import { q, one, many } from '../db/pool.mjs'
 import { store } from './blobs.mjs'
 import { decodePNG, encodePNG } from '../sheet.mjs'
-import { UI_GATES, fitUi } from '../pixellab.mjs'
+import { UI_GATES, fitUi, fitSheet, SHEET_ONE_IMAGE } from '../pixellab.mjs'
 
 // ---- the vocabulary --------------------------------------------------------
 
@@ -95,12 +95,16 @@ const int = (v, d) => (isFinite(Number(v)) ? Math.max(1, Math.round(Number(v))) 
  *
  *   ground   nine-sliced and stretchable. Owes four edge numbers, because those
  *            four numbers are the entire thing the game can consume today.
- *   sheet    one legal canvas holding a grid of faces, cut by marked
- *            rectangles. Every piece under 192 pixels is one of these, because
- *            BOTH SIDES OF A GENERATION START AT 192 and a season token is
- *            about 24 across. Drawing a family in one job is also the only way
- *            the faces come back the same weight, which is the law the asset
- *            stage already settled for character headings.
+ *   sheet    one canvas holding a grid of separate small marks, cut apart
+ *            afterwards by marked rectangles. IT GOES TO A DIFFERENT GENERATOR:
+ *            /v2/create-ui-asset draws panels and only panels, measured
+ *            2026-08-31 on an icon set and a chip set that both came back as
+ *            framed bars, so these six go to /v2/generate-image-v2, which paints
+ *            an arbitrary subject and has no element list to force furniture.
+ *            The reason a sheet is one job and not six is NOT the old 192 pixel
+ *            floor, which is create-ui-asset's and does not exist on the image
+ *            route. It is the asset stage's own settled law: the faces of one
+ *            family drawn in separate jobs come back at different weights.
  *   painted  a full-bleed illustration keyed to a destination. Not a
  *            nine-slice, so four numbers on one would be a fact nothing reads.
  *   none     named here so that nobody generates them. Both cost a spend and
@@ -530,38 +534,63 @@ export const PIECE_TYPES = [
     regions: [],
   }),
 
-  /* ---- the six sheets, WHERE THE FAILURE MODE IS THE DELIVERABLE ----------
+  /* ---- the six sheets, WHICH ARE THE ONES THAT GO SOMEWHERE ELSE ----------
    *
-   * Every sheet below sends NO elements, and that is the one place in this file
-   * where dropping the lever is right rather than the bug it is everywhere else.
+   * NONE OF THESE SIX CAN BE DRAWN ON /v2/create-ui-asset, and the plan that
+   * they could rested on one bad reading of one picture.
    *
-   * dialogue_box_v3 asked with no list and came back a KIT: a grid of loose
-   * parts, evenly spaced, all at one weight, on transparent. That is a defect
-   * when one complete panel was wanted and it is the exact definition of a
-   * sheet. So the endpoint's own no-elements behaviour is what these six are
-   * for, and asking for `icon_button` on a chip would force ONE complete icon
-   * button out of a type whose whole job is a plate family drawn in one job.
+   * dialogue_box_v3 asked that route with no element list and came back a KIT: a
+   * grid of loose parts, evenly spaced, all at one weight, on transparent. It
+   * looked like the sheet these six want, so the plan was to use that behaviour
+   * on purpose. It is not: the loose parts in that kit are PANELS. Measured
+   * 2026-08-31, an icon set of a compass, a key, a star, a lock and a tick came
+   * back as a framed bar over a tray of smaller framed bars, and round blank chip
+   * tokens came back as the same thing in another wood. work/.kit/icon_set-as-panels.png
+   * and work/.kit/chip-as-panels.png are the two paid pictures. `elements` is the lever
+   * that decides shape there and its twelve names are all furniture, so no
+   * wording reaches past it.
    *
-   * The half of v3 that stays a danger is the CROP: its hero panel ran off the
-   * top of the canvas. A sheet has no hero, so nothing here is oversized on its
-   * own, and the tail clause code appends refuses the edge in words as well. */
+   * So they go to /v2/generate-image-v2, which paints an arbitrary subject with
+   * transparency and has no element list, no piece template and no camera. That
+   * is why `elements` is null on all six: not because dropping the lever is
+   * right here, but because the route these send to does not have one.
+   *
+   * `faces` on a sheet is doing THREE jobs at once and that is deliberate. It is
+   * what the brief asks the generator to draw, it is how many marks the cut
+   * expects to find, and it is what each cut is named. One number and one list,
+   * so the ask and the check cannot disagree about what was ordered.
+   *
+   * AND THE CANVAS ON EACH OF THE SIX IS CUT TO ITS FAMILY, which is not a
+   * tidiness choice. Measured on the first roll 2026-08-31: icon_set asked for
+   * eight marks on a 512x512 canvas and TWELVE came back, the bottom four a
+   * repeat of the row above them, because two rows of marks left the bottom
+   * third of the picture empty and the generator filled the space it was given.
+   * So each canvas below is sized for the rows its family actually needs, at
+   * roughly three quarters of the width, and the 192 pixel floor that would have
+   * stopped some of these being that short is create-ui-asset's and does not
+   * exist on the route these go to. */
   T({
     name: 'chip',
     label: 'Chip sheet',
     tier: 'sheet',
     order: 6,
     stretch: 'none',
+    // one row of three tokens
     w: 384,
-    h: 384,
+    h: 160,
     // it WAS ['icon_button'], which forces one complete control out of a type
     // that exists to draw a family of them at one weight
     elements: null,
-    elementsWhy: 'a sheet wants the endpoint\'s own no-elements behaviour, which is a grid of matched loose parts',
+    elementsWhy: 'a sheet is painted on /v2/generate-image-v2, which has no element list at all, because the ui route draws panels even when it is asked for marks',
     // control scale, and the plate this sheet is drawing a family of
     styleRef: 'button-wood.png',
     material: null,
-    faces: ['plate'],
-    facesFree: true,
+    /* THREE STATES OF ONE BLANK PLATE, and it was a single face called `plate`
+     * with the family left open. A chip marks a state or a count, and the three
+     * states a token can be in are the same three pip already carries under its
+     * own names: live, called out, and used up. Naming them here is what lets
+     * the cut check a number instead of accepting whatever came back. */
+    faces: ['plate', 'plate_lit', 'plate_spent'],
     what: 'The small fixed control, plate and icon drawn separately.',
     why:
       'The 46px compass and Handbook spine are the first two pieces of UI a student sees after the intro and they are emoji today. The POWER sort is five rows by five buckets, which is twenty-five touch targets off one plate.',
@@ -573,10 +602,11 @@ export const PIECE_TYPES = [
     tier: 'sheet',
     order: 16,
     stretch: 'none',
-    w: 384,
-    h: 384,
+    // one row of five tokens
+    w: 512,
+    h: 160,
     elements: null,
-    elementsWhy: 'a sheet wants the endpoint\'s own no-elements behaviour, which is a grid of matched loose parts',
+    elementsWhy: 'a sheet is painted on /v2/generate-image-v2, which has no element list at all, because the ui route draws panels even when it is asked for marks',
     /* THE ONLY SELF-CONTAINED MARK ON THE SHELF. crest-panther.png is 128x128
      * with no frame, no wood and no paper on it, so it is the one reference that
      * carries a mark's material without handing a small token a panel's frame to
@@ -595,13 +625,21 @@ export const PIECE_TYPES = [
     tier: 'sheet',
     order: 7,
     stretch: 'none',
+    // two rows of four marks
     w: 512,
-    h: 512,
+    h: 256,
     elements: null,
-    elementsWhy: 'a sheet wants the endpoint\'s own no-elements behaviour, which is a grid of matched loose parts',
+    elementsWhy: 'a sheet is painted on /v2/generate-image-v2, which has no element list at all, because the ui route draws panels even when it is asked for marks',
     styleRef: 'crest-panther.png',
     material: null,
-    facesFree: true,
+    /* THE EIGHT HUD MARKS, NAMED, and the list was empty with the family left
+     * open. An open family cannot be cut: the scan finds however many shapes are
+     * on the canvas and has nothing to check that count against, so a sheet that
+     * came back as one big object and a sheet that came back correct look the
+     * same to the arithmetic. Each one is a thing told apart by SILHOUETTE,
+     * which is the type's own caution and the reason a student with a colour
+     * vision deficiency can read this world. */
+    faces: ['compass', 'key', 'star', 'lock', 'tick', 'cross', 'arrow', 'coin'],
     what: 'A family of marks told apart by silhouette rather than by hue.',
     why:
       'The seven dock and chart state marks, the six badge chips, the stickers, the ten letter marks, the reveal marks and the emote set are one family under one law, because a student with a colour vision deficiency has to read this world.',
@@ -613,13 +651,18 @@ export const PIECE_TYPES = [
     tier: 'sheet',
     order: 17,
     stretch: 'none',
+    // one row of four frames
     w: 384,
-    h: 192,
+    h: 160,
     elements: null,
-    elementsWhy: 'a sheet wants the endpoint\'s own no-elements behaviour, which is a grid of matched loose parts',
+    elementsWhy: 'a sheet is painted on /v2/generate-image-v2, which has no element list at all, because the ui route draws panels even when it is asked for marks',
     styleRef: 'crest-panther.png',
     material: null,
-    facesFree: true,
+    /* FRAMES AND NOT STATES, so they are numbered and not described. A cue is
+     * one mark animating in place, and naming its four frames rest, rise, peak
+     * and fall would be four claims about a loop nobody has drawn yet. The order
+     * is the reading order off the strip, which is what the cut hands back. */
+    faces: ['frame_1', 'frame_2', 'frame_3', 'frame_4'],
     what: 'The small animated mark that says the surface wants a press, as a strip of frames.',
     why:
       'Three ship today and all three are the paw emoji. The most visible instance is on the last screen of the run, on the surface a teacher reads over a shoulder.',
@@ -631,14 +674,17 @@ export const PIECE_TYPES = [
     tier: 'sheet',
     order: 18,
     stretch: 'none',
-    w: 384,
-    h: 384,
+    // one row of three marks, which are chunkier than an icon
+    w: 512,
+    h: 192,
     elements: null,
-    elementsWhy: 'a sheet wants the endpoint\'s own no-elements behaviour, which is a grid of matched loose parts',
+    elementsWhy: 'a sheet is painted on /v2/generate-image-v2, which has no element list at all, because the ui route draws panels even when it is asked for marks',
     styleRef: 'crest-panther.png',
     material: null,
-    faces: ['mark'],
-    facesFree: true,
+    // the three the record actually asks for, and it was one face called `mark`
+    // with the family left open. A stamp says a specific word without lettering:
+    // approved on a form, sealed on a year sheet, awarded on a cord row.
+    faces: ['approved', 'sealed', 'awarded'],
     what: 'An applied mark that lands on top of something.',
     why:
       'The wax stamp on the year sheet should be the loudest thing that has happened so far and today it is a CSS gradient with an emoji in it. The EARNED mark on a cord row wants a wax or foil mark rather than a coloured word.',
@@ -650,14 +696,17 @@ export const PIECE_TYPES = [
     tier: 'sheet',
     order: 19,
     stretch: 'none',
+    // two rows of three markers
     w: 384,
-    h: 192,
+    h: 256,
     elements: null,
-    elementsWhy: 'a sheet wants the endpoint\'s own no-elements behaviour, which is a grid of matched loose parts',
+    elementsWhy: 'a sheet is painted on /v2/generate-image-v2, which has no element list at all, because the ui route draws panels even when it is asked for marks',
     styleRef: 'crest-panther.png',
     material: null,
-    faces: ['chevron', 'trail_dot', 'bearing', 'pin_tail', 'pin_plate'],
-    facesFree: true,
+    // the record's five plus the hand, which is the one the record left out: a
+    // pointer set is an arrow and a hand cursor, and the five below are all
+    // arrows of one kind or another
+    faces: ['chevron', 'hand', 'trail_dot', 'bearing', 'pin_tail', 'pin_plate'],
     what: 'The world-space marker family.',
     why:
       'One objective chevron live at a time, because a home base with six glowing stations is a menu. The trail dot repeats along a computed path and is consumed from the near end as the player walks it.',
@@ -752,6 +801,24 @@ const CORE = new Set(CORE_NAMES)
  * one ratio gets that ratio's ceiling, so 688x512 comes back refused after the
  * money is already committed. Both sides also start at 192, and that floor is
  * why six of the twenty-one types are sheets. */
+/* WHICH GENERATOR A TYPE GOES TO, and it is the tier that decides.
+ *
+ * `ground` and `painted` are furniture, and /v2/create-ui-asset draws furniture
+ * well: the two levers on it, `elements` and `style_image`, are the whole recipe
+ * that produced the twelve pieces already on the shelf.
+ *
+ * `sheet` is not furniture and that route cannot draw it. Measured 2026-08-31,
+ * asked for an icon set of a compass, a key, a star, a lock and a tick it
+ * returned panels, and asked for round blank chip tokens it returned panels.
+ * `elements` decides shape there and its twelve names are all furniture, so no
+ * wording reaches past it. The six sheets go to /v2/generate-image-v2, which
+ * paints an arbitrary subject with transparency and has no element list.
+ *
+ * It lives here rather than in the route because the store owns the twenty-one
+ * types, and a second table in api.mjs saying which route a type takes is two
+ * lists that disagree the first time one is edited. */
+export const usesImageEndpoint = (t) => !!t && t.tier === 'sheet'
+
 export function legalCanvas(w, h) {
   const want = { w: Math.max(1, num(w, 0)), h: Math.max(1, num(h, 0)) }
   const got = fitUi(want.w, want.h)
@@ -762,6 +829,37 @@ export function legalCanvas(w, h) {
     floor: 192,
   }
 }
+
+/* THE SAME CHECK FOR THE OTHER ROUTE, AND ITS FLOOR IS A DIFFERENT NUMBER.
+ *
+ * legalCanvas above refuses anything under 192 on either side, which is
+ * /v2/create-ui-asset's own limit and is real there. Running a sheet through it
+ * would refuse a 384x160 chip strip that the image route draws happily, and the
+ * piece would be pushed to a canvas taller than its family needs. That matters
+ * for a reason measured on the first roll: an icon sheet asked for eight marks
+ * on a 512x512 canvas came back with TWELVE, the last four a repeat of the row
+ * above, because two rows of marks left the bottom third of the picture empty
+ * and the generator filled it. A canvas cut to the family is the fix, and the
+ * 192 floor is what would stop it being cut.
+ *
+ * The floor here is 171 and it is not about pixels being too small to draw. Under
+ * that on the long side the endpoint answers with a GRID OF VARIANTS of one mark,
+ * 4 or 16 or 64 of them, rather than one picture. */
+export function sheetCanvas(w, h) {
+  const want = { w: Math.max(1, num(w, 0)), h: Math.max(1, num(h, 0)) }
+  const got = fitSheet(want.w, want.h)
+  return {
+    ...got,
+    ok: got.width === want.w && got.height === want.h,
+    gates: UI_GATES.map(([, gw, gh]) => ({ w: gw, h: gh })),
+    floor: SHEET_ONE_IMAGE,
+  }
+}
+
+// one call site in the route, so it cannot check a sheet against the panel
+// route's limits, which is what a second `if` on the tier over there would
+// eventually do
+export const canvasFor = (t, w, h) => (usesImageEndpoint(t) ? sheetCanvas(w, h) : legalCanvas(w, h))
 
 /* ---- WHAT THE ROUTER IS TOLD, and why any of it is written down here ------
  *
@@ -813,11 +911,25 @@ export const NINE_SLICE_LAW = [
  * this one is the same three rules said forward, before the picture exists. */
 const TIER_LAW = {
   ground: NINE_SLICE_LAW,
+  /* THE SHEET BRIEF IS NOT THE PANEL BRIEF WITH A WORD CHANGED. It goes to a
+   * different endpoint, /v2/generate-image-v2, which paints whatever the words
+   * say and has no element list to force furniture out of it, so every sentence
+   * here is load-bearing in a way it was not on the ui route.
+   *
+   * The three things that go wrong are named as refusals rather than as a
+   * description of a grid, because both failures already on the shelf are the
+   * model reaching for the nearest familiar thing: a FRAME around the whole
+   * group, a PANEL under each mark, and one big object instead of many small
+   * ones. work/.kit/icon_set-as-panels.png is all three at once. */
   sheet:
-    'THIS PIECE IS A SHEET: one canvas holding a grid of separate faces, cut apart afterwards by marked rectangles. ' +
-    'Draw the faces evenly spaced on transparent, all at one weight and one scale, with clear empty space between them so a rectangle can be drawn round each without touching its neighbour. ' +
-    'It is a sheet because BOTH SIDES OF A GENERATION START AT 192 pixels and these marks are far smaller than that, so they cannot be asked for at their own size. ' +
-    'Drawing the family in one job is also the only way the faces come back matching: a second job returns a different weight and a different palette.',
+    'THIS PIECE IS A SHEET: one canvas holding a GRID OF SEPARATE SMALL MARKS, cut apart afterwards by rectangles measured off the picture. ' +
+    'Draw the marks evenly spaced in rows on a fully transparent canvas, all at one weight and one scale, each one whole and complete, with clear empty space between them so a rectangle can be drawn round each without touching its neighbour. ' +
+    'THERE IS NO FRAME AROUND THE WHOLE THING. No border, no card, no sheet of paper, no wooden surround and no background behind the group: the transparent canvas is the only thing holding them together. ' +
+    'THERE IS NO PANEL UNDER ANY MARK. Each one is the bare silhouette of the thing itself, not a thing sitting on a plate, in a button or inside a box, unless the mark IS a plate. ' +
+    'THEY ARE SMALL AND THERE ARE MANY. This is not one large object filling the canvas; it is a set of small ones with air around each. ' +
+    'THE CANVAS IS ALREADY CUT TO FIT THIS FAMILY, so there is no leftover space to fill and no mark is ever drawn twice. Measured on the first roll: eight marks asked for on a canvas with an empty bottom third came back as twelve, the last four a repeat of the row above them. ' +
+    'No lettering anywhere on it. ' +
+    'THE WHOLE FAMILY IS DRAWN IN THIS ONE JOB, and that is the reason it is a sheet at all rather than one generation per mark: this repo measured it on character headings and on states, and a family split across jobs comes back at different weights, different sizes and a drifted palette. Everything on this canvas has to look like it was cut from the same die.',
   painted:
     'THIS PIECE IS A PAINTED WHOLE: one full-bleed illustration, not a frame and not a nine-slice. ' +
     'It never stretches and it takes no edge numbers, so the composition is fixed. ' +
@@ -904,7 +1016,16 @@ export function typeBrief(t, { width, height, shelf = [] } = {}) {
     ``,
     TIER_LAW[t.tier] || '',
     ``,
-    `THE CANVAS IS ${w} BY ${h} AND IT IS NOT NEGOTIABLE. It is aspect-gated by the generator and both sides start at 192, so it is decided before you are asked and nothing you write can change it. Compose for that shape.`,
+    /* THE FLOOR IS NOT THE SAME NUMBER ON BOTH ROUTES and saying 192 to a sheet
+     * would be a lie about the endpoint it goes to. The panel route starts at
+     * 192 on both sides. The image route starts at 16, and its real floor is
+     * that under 171 on the long side it answers with a GRID OF VARIANTS of one
+     * mark rather than one picture, which is a different thing from a sheet of
+     * different marks. Either way the number is decided before the model is
+     * asked, and the only thing it can do with it is compose for that shape. */
+    t.tier === 'sheet'
+      ? `THE CANVAS IS ${w} BY ${h} AND IT IS NOT NEGOTIABLE. It is big enough to hold the whole family with air around every mark, and it is decided before you are asked. Compose for that shape: think about how many rows and how many per row, not about how big to make the canvas.`
+      : `THE CANVAS IS ${w} BY ${h} AND IT IS NOT NEGOTIABLE. It is aspect-gated by the generator and both sides start at 192, so it is decided before you are asked and nothing you write can change it. Compose for that shape.`,
   ]
   const STRETCH = {
     both: 'It stretches on BOTH axes: it is drawn once and appears at several widths AND several heights.',
@@ -917,12 +1038,27 @@ export function typeBrief(t, { width, height, shelf = [] } = {}) {
     lines.push(
       `ITS MIDDLE IS EMPTY. This one is a ring drawn round a hole: the map shows through the centre, so anything painted in the middle is paint over the game.`,
     )
+  /* THE COUNT IS THE HALF THAT WAS MISSING, and it is not a style note. The cut
+   * that comes after the picture counts the separate shapes on the canvas and
+   * matches them against this list, so a helpful extra flourish and a dropped
+   * mark both land as a refused cut and a piece that has to be measured by hand.
+   * The old wording invited exactly that: it said more faces of the same family
+   * were welcome. */
   if (Array.isArray(t.faces) && t.faces.length)
     lines.push(
       ``,
-      `IT NEEDS THESE FACES, ALL IN THIS ONE DRAWING: ${t.faces.join(', ')}. They are the same object wearing different states, so they must be identical in size, weight and palette and differ only in the thing that changed.${
-        t.facesFree ? ' More faces of the same family are welcome beside those, at the same weight.' : ''
-      }`,
+      `IT NEEDS EXACTLY THESE ${t.faces.length}, ALL IN THIS ONE DRAWING: ${t.faces.join(', ')}.`,
+      `EXACTLY ${t.faces.length}, no more and no fewer, and nothing else on the canvas. The picture is cut apart afterwards by counting the separate shapes on it and handing them these names in reading order, so one extra flourish and one missing mark are the same failure.`,
+      /* THE NAMES ARE ADDRESSES AND THE GENERATOR CANNOT TELL. Measured on the
+       * chip roll 2026-08-31: the router wrote "Left, plate: ... Middle,
+       * plate_lit: ..." into the subject, which reads as a caption, and the
+       * picture came back with the words plate_lit and plate_spent painted under
+       * two of the three tokens. The NO LETTERING clause was in the same prompt
+       * and lost, because on a noun pixellab holds a prior for, words lose, and a
+       * word sitting next to a thing is a label. So the fix is not another
+       * refusal, it is to keep the strings out of the prompt entirely. */
+      `DO NOT WRITE THESE NAMES INTO YOUR ANSWER. They are addresses for the cut that happens afterwards, not part of the picture. Say WHERE each mark goes instead, by its place in the grid, in the same reading order as the list above: left to right along the top row, then the next row. A name written beside a mark reads as a caption and comes back painted under it, which has already happened once.`,
+      `Any of them that are the same object in a different state must be identical in size, weight and palette and differ only in the thing that changed. The ones that are different objects still share one weight, one scale and one palette, because they were drawn together.`,
     )
   /* THE REGIONS ARE THE SECOND HALF OF THE PIECE AND THE GENERATOR NEVER SEES
    * THEM, which is exactly why the router has to. A rectangle is dragged onto
@@ -952,7 +1088,7 @@ export function typeBrief(t, { width, height, shelf = [] } = {}) {
   else if (t.tier === 'sheet')
     lines.push(
       ``,
-      `NO ELEMENT LIST GOES OUT WITH THIS ONE, and that is deliberate. Left to itself the generator returns a grid of evenly spaced loose parts at one weight on transparent, which is a defect on a panel and is exactly what a sheet is. Write for that grid.`,
+      `THIS ONE GOES TO A DIFFERENT GENERATOR AND THAT CHANGES WHAT YOUR WORDS DO. The panel endpoint scaffolds from a list of twelve interface element names and draws a panel whatever it is asked for: measured, an icon set came back as panels and round chip tokens came back as panels. So a sheet is painted on the plain image endpoint instead, which has no element list, no shape template and no camera. Nothing forces the composition except what you write, so the arrangement is entirely yours and the failure is entirely yours too.`,
     )
   if (t.material)
     lines.push(
@@ -1427,6 +1563,168 @@ export function cropHero(png, type) {
   return out
 }
 
+// ---- cutting the faces out of a sheet --------------------------------------
+
+/* THE SAME SCAN, WITH THE OPPOSITE QUESTION ASKED OF IT.
+ *
+ * A ground arrives as one hero in a tray of offcuts and the answer is the
+ * largest shape. A sheet arrives as a canvas of separate marks and there is no
+ * hero at all: taking the biggest one would throw the other seven away. So the
+ * answer here is EVERY shape over a small minimum, in reading order, each one a
+ * named rectangle the consumer cuts out.
+ *
+ * IT IS THE SAME ARITHMETIC AND IT IS STILL NOT A JUDGEMENT. Nothing below looks
+ * at what any mark is OF, asks a model anything or scores a candidate. It reads
+ * the alpha channel, groups touching opaque pixels, sorts the groups by where
+ * they sit, and then puts the set through three checks that can each fail. When
+ * one fails NOTHING IS STORED, the row records which check failed in the
+ * sentence the author reads, and the piece is owed a hand cut. A silently wrong
+ * cut is the outcome that must not happen: a grape asking for the `lock` face
+ * would get whatever shape happened to be fourth.
+ */
+
+/* A SPECK IS NOT A FACE, AND THE THRESHOLD IS RELATIVE TO THE MARKS THEMSELVES.
+ *
+ * An absolute pixel count would be a number picked out of the air that is wrong
+ * on the next canvas size. The marks on one sheet are drawn at one weight by
+ * construction, so the biggest one is the scale, and anything under a hundredth
+ * of its box area is a stray pixel or an outline crumb rather than a mark. A
+ * hundredth of the area is a tenth of the size in each direction: a dot beside a
+ * compass is about a quarter, so this clears the real spread with room. */
+const FACE_SPECK = 0.01
+
+/* AND A TWO PIXEL SHAPE IS NEVER A MARK whatever the biggest one is, because on
+ * a sheet that came back as one big object the biggest is the whole canvas and
+ * the relative floor would let every crumb through. */
+const FACE_MIN_SIDE = 4
+
+/* HOW FAR OFF THE COUNT IS ALLOWED TO BE BEFORE THE CUT REFUSES.
+ *
+ * The names are only handed out when the count is EXACT, so this band is not
+ * about naming. It is about telling a usable sheet apart from a picture of
+ * something else, and the two failures it has to catch sit far outside it: a
+ * sheet that came back as one big object gives 1 against a want of 8, and a
+ * sheet that shattered into outline crumbs gives dozens. Half to triple is
+ * loose on purpose. Tight is what the exact-count naming rule is for. */
+const FACE_BAND = [0.5, 3]
+
+/* Reading order, which is top to bottom and then left to right, and it is a band
+ * sort rather than a sort on y.
+ *
+ * Marks in one row do not share a y: a tick sits lower than a compass of the
+ * same height and a plain sort by y interleaves the two rows. So shapes are
+ * banded by whether they overlap vertically at all, and each band is then sorted
+ * by x, which is what a person reading the picture does. */
+function readingOrder(boxes) {
+  const left = [...boxes].sort((a, b) => a.y - b.y || a.x - b.x)
+  const rows = []
+  for (const b of left) {
+    const row = rows.find((r) => b.y < r.bottom && r.top < b.y + b.h)
+    if (row) {
+      row.items.push(b)
+      row.top = Math.min(row.top, b.y)
+      row.bottom = Math.max(row.bottom, b.y + b.h)
+    } else rows.push({ top: b.y, bottom: b.y + b.h, items: [b] })
+  }
+  return rows.flatMap((r) => r.items.sort((a, b) => a.x - b.x))
+}
+
+/* EVERY MARK ON A SHEET, NAMED, OR THE REASON THERE IS NOT ONE.
+ *
+ * `why` non-empty means the cut refused and nothing should be stored. `note`
+ * non-empty means it went through with POSITIONAL names, which happens when the
+ * count is inside the band but not exact: handing `lock` to the fourth of nine
+ * shapes when eight were asked for would be an address the author never made, so
+ * the rectangles are kept as face_1, face_2 and so on and the row says why.
+ */
+export function cutFaces(png, type) {
+  const { w, h, data } = decodePNG(png)
+  const want = Array.isArray(type?.faces) ? type.faces : []
+  const out = { canvas: { w, h }, faces: [], found: 0, want: want.length, why: '', note: '' }
+  const no = (why) => ({ ...out, why })
+  if (!want.length) return no('this type names no faces, so there is no list to cut against')
+
+  const all = opaqueRegions(w, h, data)
+  if (!all.length) return no('every pixel in it is transparent, so there are no marks on it to cut')
+  const biggest = all[0].w * all[0].h
+  const marks = all.filter((r) => r.w >= FACE_MIN_SIDE && r.h >= FACE_MIN_SIDE && (r.w * r.h) / biggest >= FACE_SPECK)
+  out.found = marks.length
+
+  /* ONE · SHAPES WHOSE BOXES OVERLAP ARE ONE MARK, AND THAT IS FORCED RATHER
+   * THAN CHOSEN.
+   *
+   * Marks are routinely drawn in separate pieces. Measured on the cue roll
+   * 2026-08-31: a paw print is a heel pad and four toe pads, five shapes sharing
+   * no pixel at all, so the flood fill correctly reports five where a person
+   * sees one. That sheet was right and this check refused it.
+   *
+   * The merge is not a judgement about which crumbs belong together. If two
+   * boxes overlap then NO pair of rectangles can separate those two shapes,
+   * because any rectangle holding one whole contains part of the other. The
+   * union is the only rectangle that holds each of them whole. It is the single
+   * available answer rather than the likeliest one, which is the same standard
+   * the hero crop is held to.
+   *
+   * The case this used to catch is still caught, one layer down: two DIFFERENT
+   * marks drawn touching merge into one, the count comes out low, and the count
+   * check below refuses the sheet. Nothing is lost by settling it here.
+   *
+   * Repeated until nothing moves, because a merged box reaches further than
+   * either of the two boxes that made it. */
+  for (let again = true; again; ) {
+    again = false
+    outer: for (let i = 0; i < marks.length; i++)
+      for (let j = i + 1; j < marks.length; j++) {
+        const a = marks[i]
+        const b = marks[j]
+        if (!(a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h)) continue
+        const x = Math.min(a.x, b.x)
+        const y = Math.min(a.y, b.y)
+        marks[i] = { x, y, w: Math.max(a.x + a.w, b.x + b.w) - x, h: Math.max(a.y + a.h, b.y + b.h) - y, pixels: a.pixels + b.pixels }
+        marks.splice(j, 1)
+        again = true
+        break outer
+      }
+  }
+  // the count the checks below work on is the count AFTER merging, because a
+  // paw reported as five pads is not five marks
+  out.found = marks.length
+
+  /* TWO · THE COUNT IS IN THE RIGHT COUNTRY. One shape against a want of eight
+   * is the sheet coming back as one big object, which is the failure this whole
+   * second path exists to get past. */
+  const low = Math.max(1, Math.floor(want.length * FACE_BAND[0]))
+  const high = Math.ceil(want.length * FACE_BAND[1])
+  if (marks.length < low)
+    return no(
+      `${want.length} marks were asked for and only ${marks.length} separate shape${marks.length === 1 ? '' : 's'} came back, which is what a sheet drawn as one big object looks like`,
+    )
+  if (marks.length > high)
+    return no(`${want.length} marks were asked for and ${marks.length} separate shapes came back, so this is not a grid of ${want.length} things`)
+
+  /* THREE · THE NAMES ARE ONLY HANDED OUT ON AN EXACT COUNT, and this is the
+   * check that matters most, because it is the only one whose failure would be
+   * SILENT. A grape holds the name `lock` and asks the kit for that rectangle.
+   * If nine shapes came back where eight were asked for, the fourth shape is not
+   * `lock`, and calling it that would be wrong in the game with nothing anywhere
+   * saying so. */
+  const order = readingOrder(marks)
+  const exact = marks.length === want.length
+  if (!exact)
+    out.note =
+      `${marks.length} marks came back where ${want.length} were asked for, so the cuts are numbered rather than named: ` +
+      `handing out ${want.join(', ')} in this order would give at least one of them the wrong shape`
+  out.faces = order.map((r, i) => ({
+    name: exact ? want[i] : `face_${i + 1}`,
+    kind: 'face',
+    x: r.x,
+    y: r.y,
+    w: r.w,
+    h: r.h,
+  }))
+  return out
+}
+
 // ---- reading ---------------------------------------------------------------
 
 /* WHAT THE GAME AND A MEMBER'S PYTHON GET, and the whole of it.
@@ -1769,7 +2067,7 @@ export async function setUiImage(ownerId, name, buf, w, h, pixellabId = '', { cr
    * delivery of a new family. Cropping a restore would shrink the piece a
    * little more on every verify run.
    */
-  const row = await one('select type from ui_assets where owner_id = $1 and name = $2', [ownerId, name])
+  const row = await one('select type, regions from ui_assets where owner_id = $1 and name = $2', [ownerId, name])
   const t = row?.type ? pieceType(row.type) : null
   let img = buf
   let box = null
@@ -1786,6 +2084,37 @@ export async function setUiImage(ownerId, name, buf, w, h, pixellabId = '', { cr
       }
     } catch (e) {
       note = `the picture could not be read to find the piece in it (${String(e.message || e)}), so the whole image is kept`
+    }
+  }
+
+  /* AND A SHEET IS CUT INTO ITS FACES AT THIS SAME MOMENT, for the reason the
+   * hero is: a sheet that spends any time in the library uncut is a sheet
+   * somebody can measure rectangles against by hand, and a redraw would replace
+   * the picture underneath them without moving them.
+   *
+   * The faces REPLACE any face rects already on the row rather than being kept
+   * the way createUi keeps regions through a redraw. A face is a cut of one
+   * specific picture, so a new picture means new cuts, and a rect measured off
+   * the drawing that was thrown away is a rect pointing at nothing. Regions of
+   * any other kind are left alone: none of the six sheet types declares one, and
+   * throwing away an author's mark because it sat on a sheet would be a loss the
+   * type list happens to make invisible.
+   *
+   * `crop: false` skips it for the same reason it skips the crop: a restore is
+   * putting bytes back exactly as they were, not taking delivery of a new
+   * picture, and re-cutting on every verify run would rewrite the author's own
+   * rectangles with the scan's. */
+  let faces = null
+  if (crop && usesImageEndpoint(t)) {
+    try {
+      const cut = cutFaces(buf, t)
+      // one column, because there is one scan asked two questions and a second
+      // column saying the same thing about the other half is a column nobody
+      // reads. 024 widens what the comment on it claims.
+      note = cut.why || cut.note
+      if (!cut.why) faces = cut.faces
+    } catch (e) {
+      note = `the sheet could not be read to find the marks on it (${String(e.message || e)}), so nothing was cut`
     }
   }
 
@@ -1833,10 +2162,16 @@ export async function setUiImage(ownerId, name, buf, w, h, pixellabId = '', { cr
    * The pixellab id lands here too. It has never been non-empty on any row,
    * because the generate route never passed it, so a spend on chrome could not
    * be traced back to what it bought. */
+  /* THE CUTS GO IN WITH THE PICTURE THEY WERE MEASURED ON, in one statement, so
+   * the row is never once in a state where the rectangles and the bytes are from
+   * two different drawings. Any mark that is not a face survives, because the
+   * scan only has an answer about the faces. */
+  const kept = faces ? (Array.isArray(row?.regions) ? row.regions : []).filter((r) => r && r.kind !== 'face') : []
   return one(
     `update ui_assets set blob_key = $3, w = $4, h = $5, status = 'ready',
        pixellab_id = case when $6 <> '' then $6 else ui_assets.pixellab_id end,
        full_key = $7, crop = $8::jsonb, crop_note = $9, img_sha = $10,
+       regions = case when $11::boolean then $12::jsonb else ui_assets.regions end,
        slices = case when ui_assets.w = $4 and ui_assets.h = $5 then ui_assets.slices else '{}'::jsonb end
      where owner_id = $1 and name = $2 returning *`,
     [
@@ -1850,6 +2185,8 @@ export async function setUiImage(ownerId, name, buf, w, h, pixellabId = '', { cr
       JSON.stringify(box || {}),
       note,
       shaOf(img),
+      !!faces,
+      JSON.stringify(faces ? kept.concat(faces) : []),
     ],
   )
 }

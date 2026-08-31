@@ -3,7 +3,9 @@
  * It is read from PIXELLAB_TOKEN, or from a token file if one is configured.
  *
  * Endpoints in use:
- *   POST /v2/generate-image-v2         -> { background_job_id }
+ *   POST /v2/generate-image-v2         -> { background_job_id }, a map painting,
+ *                                         and the sheets of small marks the ui
+ *                                         route cannot draw on create-ui-asset
  *   GET  /v2/background-jobs/{id}      -> { status, ...images somewhere inside }
  *   POST /v1/generate-image-pixflux    -> the image inline, for small assets
  *   POST /v2/animate-with-text-v3      -> { background_job_id }, frames of one sprite
@@ -19,7 +21,9 @@
  *                                         mode template off a named walk, or mode v3 off written motion words
  *   GET  /v2/characters                -> { characters, total }, every character on the account
  *   GET  /v2/characters/{id}           -> status, rotation_urls, and animations carrying frame urls
- *   POST /v2/create-ui-asset           -> { ui_asset_id, background_job_id, status, usage }, one panel of chrome
+ *   POST /v2/create-ui-asset           -> { ui_asset_id, background_job_id, status, usage }, one panel of
+ *                                         chrome, and ONLY a panel: asked for an
+ *                                         icon set it returns panels
  *   GET  /v2/ui-assets/{id}            -> { status, image_url, size, progress_percent, eta_seconds }, 200 throughout
  *   GET  /v2/ui-assets                 -> the list. GET ONLY: a POST here is 405, which is what was being sent
  *   DELETE /v2/ui-assets/{id}          -> { success }, the only other verb that path takes
@@ -94,27 +98,69 @@ async function call(method, route, body) {
 
 export const balance = () => call('GET', '/v1/balance')
 
-/* The style reference's four aspects are INDEPENDENT, and that is the whole
- * point of exposing them. A new map usually wants the craft of a map that
- * already works, the crisp outline and the shading structure, while keeping its
- * own colours: the Maw is black and grey stone and must not inherit the hub's
- * tropical palette. Sending all four was fine while every map was the same
- * island; it is wrong the moment two maps are meant to look different. */
-export async function submit({ prompt, w, h, seed, styleImage, styleOptions }) {
+/* THE BODY, BUILT WITHOUT SENDING IT, for the reason uiAssetBody was split the
+ * same way: a request that can only be read by paying for it is a request
+ * nobody ever checks.
+ *
+ * OFF THE PUBLISHED SCHEMA, GenerateImageV2Request, and not off a guess:
+ *
+ *   description    REQUIRED, 1 to 2000 characters, no default
+ *   image_size     REQUIRED, no default, and ITS OWN additionalProperties is
+ *                  false as well. width 16 to 792, height 16 to 688, BOTH
+ *                  required with no default
+ *   no_background  defaults TRUE here, which is the opposite of what a map
+ *                  wants and exactly what a cut-out wants
+ *   seed           integer
+ *   reference_images  up to 4, for SUBJECT guidance. Not sent by anything. This
+ *                  is the field shaped like the /v2/map-objects trap, where a
+ *                  picture handed over gets continued instead of drawn into
+ *   style_image    a ReferenceImage, `{ image: Base64Image, size: {w,h} }`, and
+ *                  NOT the bare Base64Image /v2/create-ui-asset takes. Sending
+ *                  that route's shape here is extra_forbidden
+ *   style_options  the four booleans, all defaulting true
+ *
+ * additionalProperties is false on the request too, so one stray field is a 422
+ * for the whole call.
+ *
+ * THERE IS NO VIEW, CAMERA, ELEMENT OR PIECE PARAMETER ON THIS ROUTE AT ALL.
+ * That is why the sheets come here. /v2/create-ui-asset scaffolds from its
+ * twelve element names and returns a panel kit whatever the words ask for:
+ * measured 2026-08-31, an icon set came back panels and round chip tokens came
+ * back panels, so six of the twenty-one types could not be made on it.
+ *
+ * PROBING THIS ROUTE IS FREE IN A WAY THE UI ROUTE IS NOT. Both `description`
+ * and `image_size` are required with no default, and image_size's own width and
+ * height are required with no default too, so `{}` and `{"image_size":{}}` are
+ * both refused at validation before any work happens. On /v2/create-ui-asset an
+ * empty image_size VALIDATES, defaults to 256x256, draws and is charged for,
+ * which is what 40 generations were spent learning.
+ */
+export function imageBody({ prompt, w, h, seed, styleImage, styleOptions, noBackground = false }) {
   const body = {
     description: prompt,
     image_size: { width: w, height: h },
-    no_background: false,
+    no_background: noBackground,
   }
   if (seed != null) body.seed = seed
   if (styleImage) {
     body.style_image = { image: { type: 'base64', base64: styleImage.base64 }, size: { width: styleImage.w, height: styleImage.h } }
+    /* THE STYLE REFERENCE'S FOUR ASPECTS ARE INDEPENDENT, and that is the whole
+     * point of exposing them. A new map usually wants the craft of a map that
+     * already works, the crisp outline and the shading structure, while keeping
+     * its own colours: the Maw is black and grey stone and must not inherit the
+     * hub's tropical palette. Sending all four was fine while every map was the
+     * same island; it is wrong the moment two maps are meant to look
+     * different. */
     body.style_options = {
       color_palette: true, outline: true, detail: true, shading: true,
       ...(styleOptions || {}),
     }
   }
-  const out = await call('POST', '/v2/generate-image-v2', body)
+  return body
+}
+
+export async function submit({ prompt, w, h, seed, styleImage, styleOptions }) {
+  const out = await call('POST', '/v2/generate-image-v2', imageBody({ prompt, w, h, seed, styleImage, styleOptions }))
   return out.background_job_id
 }
 
@@ -284,14 +330,17 @@ export async function mapObject({ description, w, h, view = 'low top-down', seed
  * which is the same trap the odd-canvas 422 was on map-objects, so the fit
  * happens here where it costs nothing.
  *
- * BOTH SIDES START AT 192 and that floor changes what a piece is, rather than
- * being an inconvenience. A season token is about 24 pixels across and an
- * advance cue is smaller, so neither can be asked for at its own size: the
- * existing crest-panther.png is 128x128 and could not be regenerated today. So
- * anything under the floor is drawn as a SHEET, one legal canvas holding a grid
- * of faces cut by marked rectangles, which is also the only way the faces of
- * one family come back the same weight. server/store/ui.mjs carries which of
- * the twenty-one types that applies to.
+ * BOTH SIDES START AT 192 ON THIS ROUTE, so the existing crest-panther.png is
+ * 128x128 and could not be regenerated here. That floor is this route's alone:
+ * /v2/generate-image-v2 runs from 16, and the sheets go there. See the sheet
+ * section below, which also carries the reason a sheet is still right once the
+ * floor is gone.
+ *
+ * AND IT DRAWS PANELS AND ONLY PANELS. Measured 2026-08-31, an icon set of a
+ * compass, a key, a star, a lock and a tick came back as panels, and round blank
+ * chip tokens came back as panels. `elements` decides shape and its twelve names
+ * are all furniture, so no wording reaches past it. That is what moved six of
+ * the twenty-one types off this route entirely.
  *
  * Exported because the store checks the canvas BEFORE the press rather than
  * after it, and a second copy of these five pairs would be five numbers that
@@ -486,6 +535,121 @@ export async function uiAsset(ask) {
     }
   }
   throw new Error('the surface timed out')
+}
+
+/* ---- SHEETS: the marks, which the panel endpoint cannot draw --------------
+ *
+ * /v2/create-ui-asset IS A PANEL KIT GENERATOR AND NOTHING ELSE. Measured
+ * 2026-08-31: asked for an icon set of a compass, a key, a star, a lock and a
+ * tick it returned panels, and asked for round blank chip tokens it returned
+ * panels. work/.kit/icon_set-as-panels.png and work/.kit/chip-as-panels.png are the two paid
+ * pictures and both are a framed bar over a tray of smaller framed bars. No
+ * wording reaches past it, because `elements` is the lever that decides shape
+ * on that route and its twelve names are all furniture. So six of the
+ * twenty-one types in docs/UI-KIT.md cannot be made there at all: chip, pip,
+ * icon_set, cue, stamp and pointer, which server/store/ui.mjs calls the sheet
+ * tier.
+ *
+ * They come here instead. /v2/generate-image-v2 paints an arbitrary subject
+ * with transparency and has no element list, no piece template and no camera,
+ * so what it draws is what the words say.
+ *
+ * THE 192 PIXEL FLOOR IS create-ui-asset'S AND IT IS NOT ON THIS ROUTE. The
+ * schema runs image_size from 16, and the whole reason docs/UI-KIT.md invented a
+ * sheet tier was to work around a floor that does not exist on this path: a
+ * season token is about 24 across and could simply be asked for at 24 here.
+ *
+ * A SHEET IS STILL THE RIGHT ANSWER, for the OTHER reason, and that reason is
+ * the asset stage's own settled law: the faces of one family have to be drawn in
+ * ONE JOB or they come back at different weights and different palettes. That
+ * is why a character's eight headings are one generation and why a state is an
+ * edit rather than a second drawing.
+ *
+ * AND THIS ROUTE HAS A FLOOR OF ITS OWN, AT 171, which is not the same number
+ * and is worth more than the one it replaces. The endpoint's own documentation
+ * gives the output count by the LONGER side: up to 42px it returns 64 images in
+ * an 8x8 grid, 43 to 85 returns 16, 86 to 170 returns 4, and above 170 it
+ * returns ONE. So asking small does not get a small picture, it gets a grid of
+ * VARIANTS of the same mark, which is a different thing from a sheet of
+ * different marks and would be cut into sixty-four copies of a compass. A sheet
+ * canvas therefore stays over 170 on its long side.
+ */
+export const SHEET_ONE_IMAGE = 171
+
+/* The ceiling is UI_GATES because it is the measured one and because a sheet
+ * sits in the same size family as the panels beside it on the shelf. The
+ * schema's own words are "maximum depends on aspect ratio (e.g. 512x512 for
+ * square, 688x384 for 16:9)", which is that table said loosely. */
+export function fitSheet(w, h) {
+  const W = Math.max(1, Math.round(Number(w) || 384))
+  const H = Math.max(1, Math.round(Number(h) || 384))
+  const want = W / H
+  const [, maxW, maxH] = UI_GATES.reduce((best, g) => (Math.abs(Math.log(g[0] / want)) < Math.abs(Math.log(best[0] / want)) ? g : best))
+  const down = Math.min(1, maxW / W, maxH / H)
+  let width = Math.max(16, Math.min(maxW, Math.round(W * down)))
+  let height = Math.max(16, Math.min(maxH, Math.round(H * down)))
+  // and up over the one-image line, because under it the answer is a grid of
+  // variants rather than the one canvas the face cut is arithmetic against
+  const long = Math.max(width, height)
+  if (long < SHEET_ONE_IMAGE) {
+    const up = SHEET_ONE_IMAGE / long
+    width = Math.min(maxW, Math.ceil(width * up))
+    height = Math.min(maxH, Math.ceil(height * up))
+  }
+  return { width, height }
+}
+
+/* Split from the post for the reason uiAssetBody is: the dry run has to be able
+ * to show what would be sent without sending it, and a second copy of the
+ * assembly would prove nothing about the copy that spends. */
+export function sheetBody({ description, width = 384, height = 384, styleImage, styleOptions, seed }) {
+  const say = String(description || '').trim()
+  if (!say) throw new Error('a sheet needs a description')
+  const size = fitSheet(width, height)
+  return imageBody({
+    // the schema's own ceiling, the same 2000 the ui route carries
+    prompt: say.slice(0, 2000),
+    w: size.width,
+    h: size.height,
+    seed,
+    styleImage,
+    styleOptions,
+    // marks are laid over a painted map, so anything opaque behind them is a
+    // rectangle of somebody else's idea of a background painted over the island.
+    // It defaults true here, and it is passed anyway: the default is the
+    // endpoint's and a default is not a decision.
+    noBackground: true,
+  })
+}
+
+export async function sheetImage(ask) {
+  const req = sheetBody(ask)
+  const out = await call('POST', '/v2/generate-image-v2', req)
+  const id = out.background_job_id
+  if (!id) throw new Error('the sheet was queued without a job to collect it from')
+  // the same five minute ceiling and five second tick every other generation in
+  // this file waits on, through the job() and collect() that already exist for
+  // this exact route rather than a third client beside them
+  for (let waited = 0; waited < 300000; waited += 5000) {
+    await new Promise((r) => setTimeout(r, 5000))
+    const j = await job(id)
+    if (j.state === 'failed') throw new Error(String(j.error || 'the sheet failed to draw').slice(0, 200))
+    if (j.state !== 'done') continue
+    if (!j.images.length) throw new Error('the sheet finished with no picture in it')
+    return {
+      b64: j.images[0],
+      jobId: String(id),
+      // off the request that was actually sent, because fitSheet moves a canvas
+      // and the face cut is measured against the picture rather than the ask
+      width: req.image_size.width,
+      height: req.image_size.height,
+      // more than one means the canvas fell under the one-image line and this is
+      // a grid of variants of one mark. fitSheet makes that impossible, and the
+      // count is reported rather than assumed away.
+      count: j.images.length,
+    }
+  }
+  throw new Error('the sheet timed out')
 }
 
 /* ---- STATES: the same thing wearing a different face ---------------------
