@@ -154,6 +154,27 @@ const without = (meta, ...keys) => {
  * above is a second copy. A .mjs on the server cannot import the .ts, and the
  * two exporters writing different geometry is exactly the divergence that lost
  * `placement` for a whole release. If either half changes, change both. */
+/* WHICH SHAPE A REGION ACTUALLY IS, and a second deliberate copy of anchorShape
+ * in src/core/mask.ts for the reason polyBox below is one: a .mjs on the server
+ * cannot import the .ts.
+ *
+ * The row here comes out of the anchors table, so the mode arrives inside the
+ * meta bag rather than on a column. The mode wins when the shape it names has
+ * something in it: an author who armed the draw mode and pressed escape is on
+ * draw with nothing drawn, and shipping that as an area ships an area of no
+ * pixels. Everything that is not a region is a circle, since `r` is its reach
+ * and the two area fields are not its business. */
+const anchorShape = (a) => {
+  const hasPoly = Array.isArray(a.poly) && a.poly.length > 2
+  const hasRect = Array.isArray(a.rect) && a.rect.length === 4
+  if (a.kind !== 'region') return 'circle'
+  const want = a.meta && typeof a.meta.shape === 'string' ? a.meta.shape : ''
+  if (want === 'poly' && hasPoly) return 'poly'
+  if (want === 'rect' && hasRect) return 'rect'
+  if (want === 'circle') return 'circle'
+  return hasPoly ? 'poly' : hasRect ? 'rect' : 'circle'
+}
+
 const polyBox = (poly) => {
   let x0 = Number(poly[0][0])
   let y0 = Number(poly[0][1])
@@ -717,8 +738,20 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
       /* THE AREA, AS BOTH SHAPES WHEN IT WAS DRAWN, and the same rule the
        * browser exporter applies: the two have diverged before and a field
        * written by one of them and not the other is a field with no reader.
-       * See polyBox below for why the box has to go beside the points. */
-      ...(a.poly && a.poly.length > 2 ? { poly: a.poly, rect: polyBox(a.poly) } : a.rect ? { rect: a.rect } : {}),
+       * See polyBox below for why the box has to go beside the points.
+       *
+       * ONLY THE LIVE SHAPE SHIPS. An anchor holds a drawing and a box at once
+       * now, because switching mode in the editor is not allowed to throw either
+       * away, and the game's contains() tests a rect before it tests a radius.
+       * So shipping a dormant rect beside a circle would hand the game an area
+       * the author had switched off. anchorShape is the one answer, mirrored in
+       * src/core/mask.ts. */
+      ...(() => {
+        const shape = anchorShape(a)
+        if (shape === 'poly') return { poly: a.poly, rect: polyBox(a.poly) }
+        if (shape === 'rect') return { rect: a.rect }
+        return {}
+      })(),
       ...(a.stand ? { stand: a.stand } : {}),
       ...(a.to_slug ? { to: a.to_slug } : {}),
       ...(a.to_anchor ? { toAnchor: a.to_anchor } : {}),

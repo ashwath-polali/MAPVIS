@@ -482,6 +482,26 @@ export async function syncEventsToAnchors(mapId, anchors) {
         (q) => Array.isArray(q) && q.length === 2 && Number.isFinite(Number(q[0])) && Number.isFinite(Number(q[1])),
       )
       const polyJson = poly.length >= 3 ? JSON.stringify(poly.map((q) => [Math.round(Number(q[0])), Math.round(Number(q[1]))])) : null
+      const rectOk = Array.isArray(a.rect) && a.rect.length === 4
+
+      /* WHICH OF THE THREE AREA SHAPES IS THE LIVE ONE, folded into the bag the
+       * way `when` is above and for the identical reason: this upsert copies a
+       * fixed list of columns plus the whole bag, the game's readAnchors copies
+       * the same way, and the publish projection does it a third time, so a new
+       * top-level field would be dropped three times over.
+       *
+       * It has to survive because both shapes are now stored side by side. A
+       * rect used to be nulled the moment a poly arrived, which is why touching
+       * the circle button in the editor cost an author their whole drawing.
+       * Nothing is thrown away here any more, so without the mode a reopened map
+       * would have no way to know which of the two the author had chosen. */
+      const wanted = ['circle', 'rect', 'poly'].includes(a.shape)
+        ? a.shape
+        : ['circle', 'rect', 'poly'].includes(meta.shape)
+          ? meta.shape
+          : ''
+      if (a.kind === 'region' && (polyJson || rectOk || wanted)) meta.shape = wanted || (polyJson ? 'poly' : rectOk ? 'rect' : 'circle')
+      else delete meta.shape
       const r = await c.query(
         `insert into anchors (map_id, name, kind, x, y, r, rect, poly, stand, to_slug, to_anchor, placement_id, facing, label, meta)
          values ($1,$2,$3,$4,$5,$6,$7::jsonb,$8::jsonb,$9::jsonb,$10,$11,$12,$13,$14,$15::jsonb)
@@ -505,9 +525,12 @@ export async function syncEventsToAnchors(mapId, anchors) {
           Math.round(a.x),
           Math.round(a.y),
           Math.round(a.r) || 14,
-          // one shape per region, the drawn one winning, exactly as migrateEvent
-          // decides it in the browser. Both would leave the exporters guessing.
-          a.rect && !polyJson ? JSON.stringify(a.rect) : null,
+          /* BOTH SHAPES ARE KEPT, and this line used to be where one of them
+           * died: a rect went in as null whenever a poly existed, so switching
+           * an anchor back to its box after drawing on it got an empty box. The
+           * mode in the bag says which one is authoritative, publish ships only
+           * that one, and neither is destroyed by choosing the other. */
+          rectOk ? JSON.stringify(a.rect.map((n) => Math.round(Number(n)))) : null,
           polyJson,
           a.stand ? JSON.stringify(a.stand) : null,
           a.to || null,
@@ -546,6 +569,9 @@ export async function eventsFromAnchors(mapId) {
     // disagree about what the author wrote. mask.ts migrateEvent does the same
     // lift, and this is the half that runs before the browser sees the document.
     ...(typeof a.meta?.when === 'string' && a.meta.when ? { when: a.meta.when } : {}),
+    // and the same lift for the area mode, so a reopened map shows the shape the
+    // author chose rather than whichever of the two stored shapes is guessed at
+    ...(['circle', 'rect', 'poly'].includes(a.meta?.shape) ? { shape: a.meta.shape } : {}),
     kind: a.kind,
     x: a.x,
     y: a.y,

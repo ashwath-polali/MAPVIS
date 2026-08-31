@@ -32,6 +32,8 @@ import {
   isLookName,
   isPlacementName,
   polyBounds,
+  simplifyPoly,
+  anchorShape,
   ANCHOR_R_MIN,
   ANCHOR_R_MAX,
   MAP_CLASSES,
@@ -42,6 +44,7 @@ import {
   type MapEvent,
   type MapAnchor,
   type AnchorKind,
+  type AnchorShape,
   type AssetLook,
   type MapPath,
   type MapFraming,
@@ -322,11 +325,17 @@ export interface EditorStatus {
   hiddenGroups: string[]
   proposedGroups: string[]
   events: MapEvent[]
-  /* the area being walked round right now, as the count of corners down so far,
-   * -1 when nothing is being drawn. The gesture lives outside React so the
-   * overlay can grow a point per click without a render pass, and this is how
-   * the form knows to say how far along it is. */
+  /* the area being drawn right now, as the count of points sampled so far, -1
+   * when no area is being drawn and 0 while the mode is armed and the author has
+   * not pressed yet. The gesture lives outside React so the line can follow the
+   * hand without a render pass per sample, and this is how the form knows what
+   * to say about it.
+   *
+   * The anchor it belongs to comes with it. Without it the form assumes any
+   * armed gesture is its own, so opening a second anchor while one is mid-draw
+   * lights the wrong mode on the wrong form. */
   polyDraw: number
+  polyDrawId: number
   /* ROUTES AND SHOTS ride the status the way the anchors do, so the panel can
    * list them without reaching into the document. pathDraw is the live gesture
    * and is the count of waypoints down so far, -1 when no line is open, which
@@ -847,6 +856,7 @@ export class Editor {
       proposedGroups: [...this.proposedGroups],
       events: this.doc.events,
       polyDraw: this.newPoly ? this.newPoly.pts.length : -1,
+      polyDrawId: this.newPoly ? this.newPoly.id : 0,
       paths: this.doc.paths,
       pathSel: this.pathSel,
       pathDraw: this.newPath ? this.newPath.length : -1,
@@ -1066,12 +1076,18 @@ export class Editor {
       return
     }
 
-    /* AN AREA BEING WALKED ROUND eats the click for the same reason the route
-     * does: a corner dropped near an anchor must not grab the anchor instead. */
+    /* AN AREA BEING DRAWN eats the press for the same reason the route does: a
+     * drag that starts near an anchor must not grab the anchor instead.
+     *
+     * The press starts a fresh path every time, so an author who does not like
+     * what they let go of just draws again over the top of it. Nothing is
+     * written to the anchor until enter. */
     if (this.newPoly) {
       if (e.button === 2) this.cancelRegionDraw()
       else {
-        this.newPoly.pts.push([x, y])
+        this.newPoly.pts = [[x, y]]
+        this.newPoly.drawing = true
+        this.capture(e)
         this.dirty = true
         this.emit()
       }
@@ -1205,6 +1221,24 @@ export class Editor {
         ev.x = Math.round(x + this.dragEvent.dx)
         ev.y = Math.round(y + this.dragEvent.dy)
         this.touched()
+      }
+      return
+    }
+    /* AN AREA BEING DRAWN FREEHAND, sampled here. Only `dirty` is set: emit()
+     * would run a React render for every pointer move, and the panel has nothing
+     * to say during the drag anyway. The count it does show is emitted once, on
+     * release.
+     *
+     * The same painting pixel twice running is dropped. At any zoom above 1 the
+     * pointer covers several screen pixels inside one painting pixel, so without
+     * this a slow careful drag stores the same point twenty times over and the
+     * simplifier has to throw them away again. */
+    if (this.newPoly?.drawing) {
+      const [x, y] = this.toNative(e)
+      const last = this.newPoly.pts[this.newPoly.pts.length - 1]
+      if (!last || last[0] !== x || last[1] !== y) {
+        this.newPoly.pts.push([x, y])
+        this.dirty = true
       }
       return
     }
@@ -1390,6 +1424,11 @@ export class Editor {
 
   private onUp(_e: PointerEvent) {
     this.panning = null
+    // letting go closes the freehand area and hands it back as a highlight
+    if (this.newPoly?.drawing) {
+      this.closeRegionDrag()
+      return
+    }
     if (this.dragVert) {
       const ev = this.doc.events.find((v) => v.id === this.dragVert!.id)
       this.dragVert = null
@@ -1406,12 +1445,19 @@ export class Editor {
          * on a wall or open water and look completely correct. The hub's only
          * interactive thing sat 22px from the nearest floor for weeks and
          * nothing anywhere said so. */
-        const ok = this.ringHasGround(ev.x, ev.y, ev.r)
-        this.say(
-          ok
-            ? `${ev.name} at ${ev.x}, ${ev.y} · a player can reach it`
-            : `${ev.name} at ${ev.x}, ${ev.y} · NOTHING WALKABLE INSIDE IT · the game will never fire it`,
-        )
+        /* The ring is only what the game tests when the ring is the live shape.
+         * On a region drawn as an area or boxed with two corners the radius is
+         * dormant data, so reporting on it would be reporting on a circle the
+         * game is never going to look at. */
+        if (anchorShape(ev) !== 'circle') this.say(`${ev.name} at ${ev.x}, ${ev.y}`)
+        else {
+          const ok = this.ringHasGround(ev.x, ev.y, ev.r)
+          this.say(
+            ok
+              ? `${ev.name} at ${ev.x}, ${ev.y} · a player can reach it`
+              : `${ev.name} at ${ev.x}, ${ev.y} · NOTHING WALKABLE INSIDE IT · the game will never fire it`,
+          )
+        }
       }
       return
     }
@@ -1478,10 +1524,11 @@ export class Editor {
       this.cancelPick()
       return
     }
-    /* AN AREA BEING WALKED ROUND owns the same four keys a route does, and the
-     * same four the cut outline does, which is the point: one gesture learned
-     * once. Ahead of the crop and the walk test for the same reason the route
-     * is, since either would eat the enter that closes the shape. */
+    /* AN AREA BEING DRAWN owns enter and escape, ahead of the crop and the walk
+     * test for the reason the route is, since either would eat the enter that
+     * saves the shape. Enter accepts what is on screen, escape throws the draft
+     * away and leaves whatever was stored before untouched, and backspace clears
+     * the draft without leaving the mode so the next drag starts clean. */
     if (this.newPoly) {
       if (e.key === 'Enter') {
         e.preventDefault()
@@ -1495,7 +1542,7 @@ export class Editor {
       }
       if (e.key === 'Backspace') {
         e.preventDefault()
-        this.newPoly.pts.pop()
+        this.newPoly.pts = []
         this.dirty = true
         this.emit()
         return
@@ -3829,14 +3876,22 @@ export class Editor {
    * are here too. */
   private newPath: Pt[] | null = null
   /* THE REGION BEING DRAWN, and null the rest of the time. Here rather than in
-   * React for the reason the route above is: every click drops a corner and the
-   * overlay has to show the shape growing under the cursor, so a state update
-   * per click would put a render pass between the press and the pixel.
+   * React because the pointer is sampled on every move event and a state update
+   * per sample would put a render pass between the hand and the line.
    *
-   * It is deliberately the cut outline's gesture. An author has already clicked
-   * corners with enter closing to cut the island out, and a second gesture for
-   * the same act is a second thing to learn for no gain. */
-  private newPoly: { id: number; pts: Pt[] } | null = null
+   * IT IS A FREEHAND DRAG, NOT A CORNER PER CLICK. It was the cut outline's
+   * gesture, on the argument that one gesture learned once is cheaper than two.
+   * Walking a pier corner by corner with the mouse turned out to be slow enough
+   * to be the first thing said about the feature, and a coastline is a curve
+   * that no reasonable number of clicks describes. So the author presses and
+   * draws, and lets go.
+   *
+   * `drawing` is the difference between the two halves of the gesture: true
+   * while the button is down and the path is being sampled, false once it has
+   * been released, simplified and closed and is sitting there as a highlight
+   * waiting for enter. Escape in either half leaves whatever was stored before
+   * completely alone. */
+  private newPoly: { id: number; pts: Pt[]; drawing: boolean } | null = null
   pathSel = 0
   framingSel = 0
   anchorSetSel = 0
@@ -3939,6 +3994,7 @@ export class Editor {
       stand?: [number, number] | null
       rect?: [number, number, number, number] | null
       poly?: [number, number][] | null
+      shape?: AnchorShape
     },
   ) {
     const e = this.doc.events.find((q) => q.id === id)
@@ -3947,23 +4003,25 @@ export class Editor {
       if (patch.stand) e.stand = [Math.round(patch.stand[0]), Math.round(patch.stand[1])]
       else delete e.stand
     }
-    /* THE THREE SHAPES A REGION CAN BE ARE EXCLUSIVE, and that is enforced by
-     * each one clearing the other rather than by a mode field. A rect beside a
-     * poly is two areas both claiming to be this place, and the exporters would
-     * have to pick one. Clearing both is how an author goes back to the circle. */
+    /* THE THREE SHAPES A REGION CAN BE ARE EXCLUSIVE, AND THAT IS THE MODE'S
+     * JOB RATHER THAN DELETION'S.
+     *
+     * Writing a rect used to delete the poly and writing a poly used to delete
+     * the rect, so an author who drew an area and then touched the circle button
+     * lost the drawing outright, with no way back once the map had saved. The
+     * mode says which one is live; the others keep what they were given until
+     * they are explicitly cleared by passing null. */
+    if (patch.shape !== undefined) e.shape = patch.shape
     if (patch.rect !== undefined) {
-      if (patch.rect) {
-        e.rect = patch.rect.map((n) => Math.round(n)) as [number, number, number, number]
-        delete e.poly
-      } else delete e.rect
+      if (patch.rect) e.rect = patch.rect.map((n) => Math.round(n)) as [number, number, number, number]
+      else delete e.rect
     }
     if (patch.poly !== undefined) {
       // fewer than three points is a line, and a line has no inside, so it is
       // refused here rather than stored and left to fire for nobody
-      if (patch.poly && patch.poly.length >= 3) {
+      if (patch.poly && patch.poly.length >= 3)
         e.poly = patch.poly.map(([x, y]) => [Math.round(x), Math.round(y)] as [number, number])
-        delete e.rect
-      } else delete e.poly
+      else delete e.poly
     }
     if (patch.label !== undefined) e.label = patch.label
     if (patch.to !== undefined) e.to = patch.to
@@ -3981,6 +4039,14 @@ export class Editor {
       if (patch.placement) e.placement = patch.placement
       else delete e.placement
     }
+    /* THE MODE IS FOLDED INTO THE BAG THE MOMENT IT CHANGES, the way
+     * setAnchorWhen folds a condition, because the two must never disagree
+     * about what the author chose. The bag is what crosses the anchors table
+     * and both exporters, and it is otherwise only rebuilt when a document is
+     * loaded or saved: without this an export taken in the same session as the
+     * switch would carry the shape the author had just left. */
+    if (patch.shape !== undefined || patch.rect !== undefined || patch.poly !== undefined || patch.kind !== undefined)
+      migrateAnchor(e)
     this.touched()
   }
   updateAnchor = this.updateEvent.bind(this)
@@ -3989,17 +4055,17 @@ export class Editor {
    *
    * A circle and a box were the only two shapes a named place could be, and the
    * hub's waterfront is neither: marking it as a box takes in half the water,
-   * marking it as a circle takes in the volcano. So an author walks the edge of
-   * the thing instead, with the same four keys the cut outline uses.
+   * marking it as a circle takes in the volcano. So the author draws the edge of
+   * the thing, freehand, by pressing and dragging round it.
    *
    * The points land on the anchor as `poly`. What SHIPS is the points and their
    * bounding box together, because the running game tests a region by its box
    * and has no polygon test yet. See polyBounds in mask.ts. */
   drawRegion(id: number) {
     if (!this.doc.events.some((q) => q.id === id)) return
-    this.newPoly = { id, pts: [] }
+    this.newPoly = { id, pts: [], drawing: false }
     this.dirty = true
-    this.say('click round the edge of the place · enter closes it')
+    this.say('draw round the area · let go to close it · enter saves it')
     this.emit()
   }
   cancelRegionDraw() {
@@ -4008,24 +4074,70 @@ export class Editor {
     this.dirty = true
     this.emit()
   }
-  finishRegionDraw() {
-    const drawn = this.newPoly
-    if (!drawn) return
-    this.newPoly = null
-    /* Three corners or nothing lands. Two points are a line, a line has no
-     * inside, and a region built from one is an area no player is ever in and
-     * every grape hung on it goes quiet with nothing saying why. */
-    if (drawn.pts.length < 3) {
+
+  /* THE TOLERANCE THE FREEHAND PATH IS SIMPLIFIED AT, in painting pixels: about
+   * one screen pixel at the zoom the author is drawing at, which is the smallest
+   * error they could possibly see. Zoomed in, a screen pixel is a fraction of a
+   * painting pixel and the shape is kept almost exactly; zoomed out, two
+   * painting pixels of wobble were never visible and go. The floor stops a very
+   * deep zoom from turning the tolerance into nothing and storing every sample.
+   *
+   * Without it a two second drag is several hundred points, all of which go into
+   * the document, the anchors table, both exporters and the game's bundle, and
+   * each of which gets drawn as a draggable handle over the map. */
+  private polyTol() {
+    return Math.max(0.5, 1 / Math.max(0.05, this.z))
+  }
+
+  /* THE RELEASE. The path is simplified, closed and left on screen as a filled
+   * highlight so the author sees exactly what they marked before anything is
+   * written to the anchor.
+   *
+   * A DOT IS NOT A SHAPE. A click that was meant to select something, or a hand
+   * that twitched, arrives here as one or two points covering a couple of pixels,
+   * and storing it would give the map a named place no player can ever be inside
+   * with nothing anywhere saying why. It is dropped and the gesture stays armed,
+   * so the answer to a mis-click is simply to draw. */
+  private closeRegionDrag() {
+    const d = this.newPoly
+    if (!d) return
+    d.drawing = false
+    const span = polyBounds(d.pts.length ? (d.pts as [number, number][]) : [[0, 0]])
+    const travel = Math.max(span[2] - span[0], span[3] - span[1])
+    const pts = simplifyPoly(d.pts as [number, number][], this.polyTol())
+    if (pts.length < 3 || travel < 4) {
+      d.pts = []
       this.dirty = true
-      this.say('an area needs three corners · nothing saved')
+      this.say('that was a dot · press and drag round the area')
       this.emit()
       return
     }
+    d.pts = pts
+    this.dirty = true
+    this.say(`${pts.length} points · enter saves it · esc drops it · draw again to redo it`)
+    this.emit()
+  }
+
+  finishRegionDraw() {
+    const drawn = this.newPoly
+    if (!drawn) return
+    /* Enter with nothing drawn yet leaves the gesture armed rather than closing
+     * it. The author has pressed draw and has not drawn: dropping them out of
+     * the mode would read as the key having done something wrong. */
+    if (drawn.pts.length < 3) {
+      this.say('nothing drawn yet · press and drag round the area')
+      this.emit()
+      return
+    }
+    this.newPoly = null
     this.doc.snap()
-    this.updateEvent(drawn.id, { poly: drawn.pts.map(([x, y]) => [x, y] as [number, number]) })
+    this.updateEvent(drawn.id, {
+      poly: drawn.pts.map(([x, y]) => [x, y] as [number, number]),
+      shape: 'poly',
+    })
     const e = this.doc.events.find((q) => q.id === drawn.id)
     this.dirty = true
-    this.say(`${e ? displayName(e).text : 'the area'} is ${drawn.pts.length} corners`)
+    this.say(`${e ? displayName(e).text : 'the area'} is ${drawn.pts.length} points`)
   }
 
   /* THE PLACEMENT A REFERENCE POINTS AT, resolved the way the game resolves it:
@@ -5236,8 +5348,20 @@ export class Editor {
            * hung on it would go quiet. The box is the honest reading today; an
            * L-shaped plaza tests as the box it sits in until the game learns
            * the points. A rect an author drew by hand ships alone, because
-           * then there are no points to be more exact than it. */
-          ...(e.poly ? { poly: e.poly, rect: polyBounds(e.poly) } : e.rect ? { rect: e.rect } : {}),
+           * then there are no points to be more exact than it.
+           *
+           * ONLY THE LIVE SHAPE SHIPS. An anchor can now hold a drawing and a
+           * box at once, since switching mode is not allowed to throw either of
+           * them away, and the game's contains() tests a rect before it tests a
+           * radius. So shipping a dormant rect beside a circle would hand the
+           * game an area the author had switched off. anchorShape is the one
+           * answer to which is which, asked here and in publish.mjs. */
+          ...(() => {
+            const shape = anchorShape(e)
+            if (shape === 'poly' && e.poly) return { poly: e.poly, rect: polyBounds(e.poly) }
+            if (shape === 'rect' && e.rect) return { rect: e.rect }
+            return {}
+          })(),
           ...(e.stand ? { stand: e.stand } : {}),
           ...(e.to ? { to: e.to } : {}),
           ...(e.toAnchor ? { toAnchor: e.toAnchor } : {}),
@@ -6223,23 +6347,35 @@ export class Editor {
      * they cannot see is an author guessing. Same shape as the mask polygon
      * above and deliberately so. It borrows the selected colour, because the
      * line being laid is by definition the one being worked on. */
-    /* THE AREA BEING WALKED ROUND, growing with the next edge trailing the
-     * cursor. Same shape as the mask polygon and the route above and
-     * deliberately so, in the region's own ink, so what an author is drawing
-     * looks like what it is about to become. */
-    if (this.newPoly) {
+    /* THE AREA BEING DRAWN, in the region's own ink so what is under the hand
+     * looks like what it is about to become.
+     *
+     * The two halves of the gesture look different on purpose. While the button
+     * is down it is an open line following the pointer, because the author is
+     * still deciding where the edge goes. The moment they let go it closes and
+     * fills, because that fill is the answer to the only question they have:
+     * exactly which pixels did I just mark. It is brighter than a stored area,
+     * since it is the one thing on the map that is not saved yet. */
+    if (this.newPoly && this.newPoly.pts.length) {
       const ink = inkFor(ANCHOR_INK, 'region')
       const pts = this.newPoly.pts.map(([px, py]) => [(px + 0.5) * z, (py + 0.5) * z] as Pt)
-      if (pts.length) {
-        g.strokeStyle = ink
-        g.lineWidth = 1.5
-        g.lineJoin = 'round'
-        g.beginPath()
-        pts.forEach((q, i) => (i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1])))
-        if (this.cursor) g.lineTo((this.cursor[0] + 0.5) * z, (this.cursor[1] + 0.5) * z)
-        g.stroke()
+      g.strokeStyle = ink
+      g.lineWidth = 1.5
+      g.lineJoin = 'round'
+      g.lineCap = 'round'
+      g.beginPath()
+      pts.forEach((q, i) => (i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1])))
+      if (!this.newPoly.drawing) {
+        g.closePath()
+        g.globalAlpha = 0.28
         g.fillStyle = ink
-        for (const q of pts) g.fillRect(q[0] - 2, q[1] - 2, 4, 4)
+        g.fill()
+        g.globalAlpha = 1
+      }
+      g.stroke()
+      if (!this.newPoly.drawing) {
+        g.fillStyle = ink
+        for (const q of pts) g.fillRect(q[0] - 1.5, q[1] - 1.5, 3, 3)
       }
     }
     if (this.newPath) {
@@ -6825,26 +6961,36 @@ export class Editor {
       const ink = inkFor(ANCHOR_INK, ev.kind)
       g.strokeStyle = ink
       g.lineWidth = 1.5
-      /* THE AREA, when one was drawn. A region with a rectangle is that
-       * rectangle and not a circle around its middle, on both sides of the
-       * bundle, so the editor has to show the shape the game will test. */
-      if (ev.rect) {
+      /* ONE SHAPE IS DRAWN AND IT IS THE LIVE ONE.
+       *
+       * Every shape this anchor holds used to be drawn at once, so a plaza an
+       * author had walked round came up with a radius ring sitting in the middle
+       * of it: two marks on the map, one of them describing an area the game is
+       * not going to test, and no way to tell which was which. The mode says
+       * which shape is authoritative and only that one appears. The others keep
+       * their data and are simply not on screen.
+       *
+       * While this anchor's area is being redrawn its stored shape is hidden
+       * too, so the draft is the only area under the cursor. */
+      const shape = this.newPoly?.id === ev.id ? 'none' : anchorShape(ev)
+      let top = py - ev.r * z
+      if (shape === 'rect' && ev.rect) {
         const [x0, y0, x1, y1] = ev.rect
         const ax = Math.min(x0, x1) * z
         const ay = Math.min(y0, y1) * z
         g.setLineDash([6, 4])
         g.strokeRect(ax, ay, (Math.abs(x1 - x0) + 1) * z, (Math.abs(y1 - y0) + 1) * z)
         g.setLineDash([])
+        top = ay
       }
       /* THE DRAWN AREA, in the same ink as everything else about this anchor,
        * filled faintly so an author can see which side of the line is inside.
-       * Solid rather than dashed, because a box is derived from this one and
-       * both would be on screen at once if they were drawn the same way.
        *
-       * The corners are handles and are drawn as such: a shape you can correct
-       * looks correctable, and a corner in the water costs one drag rather than
-       * the other eleven points. */
-      if (ev.poly && ev.poly.length > 2) {
+       * The points are handles and are drawn as such: a shape you can correct
+       * looks correctable, and a point in the water costs one drag rather than
+       * the whole outline. They shrink once a freehand shape has enough points
+       * that full-size squares would bury the line they sit on. */
+      if (shape === 'poly' && ev.poly) {
         g.beginPath()
         ev.poly.forEach(([qx, qy], i) =>
           i ? g.lineTo((qx + 0.5) * z, (qy + 0.5) * z) : g.moveTo((qx + 0.5) * z, (qy + 0.5) * z),
@@ -6856,13 +7002,17 @@ export class Editor {
         g.globalAlpha = 1
         g.stroke()
         g.fillStyle = ink
-        for (const [qx, qy] of ev.poly) g.fillRect((qx + 0.5) * z - 2, (qy + 0.5) * z - 2, 4, 4)
+        const hs = ev.poly.length > 16 ? 1.5 : 2
+        for (const [qx, qy] of ev.poly) g.fillRect((qx + 0.5) * z - hs, (qy + 0.5) * z - hs, hs * 2, hs * 2)
+        top = polyBounds(ev.poly)[1] * z
       }
-      g.setLineDash([4, 3])
-      g.beginPath()
-      g.arc(px, py, ev.r * z, 0, Math.PI * 2)
-      g.stroke()
-      g.setLineDash([])
+      if (shape === 'circle') {
+        g.setLineDash([4, 3])
+        g.beginPath()
+        g.arc(px, py, ev.r * z, 0, Math.PI * 2)
+        g.stroke()
+        g.setLineDash([])
+      }
       g.fillStyle = ink
       g.fillRect(Math.round(px) - 1, Math.round(py) - 1, 3, 3)
       /* WHERE A BODY ENDS UP, joined to the thing it is standing at by a line,
@@ -6883,10 +7033,14 @@ export class Editor {
         g.strokeStyle = ink
         g.lineWidth = 1.5
       }
-      // WHAT A PERSON READS, never the identifier. It was `ev.label || ev.name`,
-      // which prints `panthers_maw` onto the painting the moment nobody has
-      // typed a label yet. displayName unpacks it into words instead.
-      this.plate(g, displayName(ev).text, px, py - ev.r * z, ink, true)
+      /* WHAT A PERSON READS, never the identifier. It was `ev.label || ev.name`,
+       * which prints `panthers_maw` onto the painting the moment nobody has
+       * typed a label yet. displayName unpacks it into words instead.
+       *
+       * It hangs off the top of whatever shape is live rather than off the
+       * radius, because a region drawn as an area has no ring under the name and
+       * a 220px radius would float the caption most of a map away from it. */
+      this.plate(g, displayName(ev).text, px, top, ink, true)
     }
     g.restore()
   }

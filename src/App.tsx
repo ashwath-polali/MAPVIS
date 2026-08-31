@@ -17,6 +17,7 @@ import {
   nameOf,
   assetLabel,
   anchorName,
+  anchorShape,
   isLookName,
   lookOf,
   ANCHOR_KINDS,
@@ -25,6 +26,7 @@ import {
   MAP_CLASSES,
   PATH_KINDS,
   type AnchorKind,
+  type MapAnchor,
   type AssetLook,
   type MapClass,
   type PlacedAsset,
@@ -2991,13 +2993,13 @@ export default function App() {
     [rectPick],
   )
 
-  /* THE AREA AN AUTHOR WALKS ROUND, which a circle and a box could not describe.
+  /* THE AREA AN AUTHOR DRAWS, which a circle and a box could not describe.
    *
-   * This one does NOT borrow pickPoint: a corner per click with the shape drawn
-   * growing under the cursor is a held gesture and not a one-shot pick, so it
-   * lives in the editor beside the route and the cut outline. The rectangle pick
-   * is cancelled first, because arming both would put one click into two
-   * different shapes at once. */
+   * This one does NOT borrow pickPoint: pressing and dragging round the edge
+   * with the line following the hand is a held gesture and not a one-shot pick,
+   * so it lives in the editor beside the route and the cut outline. The
+   * rectangle pick is cancelled first, because arming both would put one press
+   * into two different shapes at once. */
   const armPoly = useCallback(
     (id: number) => {
       const e = edRef.current
@@ -3009,6 +3011,33 @@ export default function App() {
       e.drawRegion(id)
     },
     [rectPick],
+  )
+
+  /* CHOOSING A SHAPE IS CHOOSING A MODE, and it is the whole of what the three
+   * buttons do. Two of them used to be able to look on at once, because each
+   * read whether its own data happened to exist rather than which one the author
+   * had chosen, and choosing one deleted the others' data outright.
+   *
+   * So: the mode is written first and always, which is what makes the row
+   * exclusive. The gesture is only armed when the mode being chosen has nothing
+   * in it yet, or when the author presses the mode they are already on, which is
+   * how they redraw. Switching away and back brings the shape back untouched. */
+  const pickShape = useCallback(
+    (id: number, want: 'circle' | 'rect' | 'poly', ev: MapAnchor) => {
+      const e = edRef.current
+      if (!e) return
+      const now = ev.shape ?? anchorShape(ev)
+      const again = now === want
+      if (rectPick && want !== 'rect') {
+        setRectPick(null)
+        e.pickPoint(null)
+      }
+      if (drawingRegion && want !== 'poly') e.cancelRegionDraw()
+      e.updateEvent(id, { shape: want })
+      if (want === 'rect' && (again || !ev.rect)) armRect(id)
+      if (want === 'poly' && (again || !ev.poly)) armPoly(id)
+    },
+    [rectPick, drawingRegion, armRect, armPoly],
   )
 
   // The spend itself, after every confirm has happened. spot is the static
@@ -4259,6 +4288,20 @@ export default function App() {
   // the map's anchors. Every named place, not only the doors.
   const doors = st?.events ?? []
   const editingDoor = doors.find((v) => v.id === doorEdit)
+  /* WHICH OF THE THREE AREA MODES IS LIVE ON THE OPEN FORM, asked once so the
+   * three buttons and the line under them cannot disagree.
+   *
+   * The stored mode leads and the derived answer is the fallback, which is the
+   * difference between "draw is selected and nothing is drawn yet" and "there is
+   * no drawing so this must be a circle". A gesture in flight wins over both,
+   * because arming a mode is choosing it. */
+  const liveShape = !editingDoor
+    ? 'circle'
+    : rectPick?.id === editingDoor.id
+      ? 'rect'
+      : drawingRegion && st?.polyDrawId === editingDoor.id
+        ? 'poly'
+        : (editingDoor.shape ?? anchorShape(editingDoor))
   // the map's routes and its shots, and whichever row of each has its form open
   const paths = st?.paths ?? []
   const editingPath = paths.find((p) => p.id === pathEdit)
@@ -4697,51 +4740,77 @@ export default function App() {
               * things a region is actually for are neither: a pier bends, a
               * plaza turns a corner, a waterfront follows a coast. Marking the
               * hub's dock as a box takes in half the water. So the third option
-              * is the edge itself, walked round with the cut outline's gesture,
-              * which an author has already used to cut the island out.
+              * is the edge itself, drawn freehand by dragging round it.
               *
-              * The three are exclusive and each one clears the others, because a
-              * box beside a drawn shape is two areas both claiming to be this
-              * place and both exporters would have to guess. */}
+              * EXACTLY ONE OF THESE IS LIT AND IT IS THE MODE, not whichever
+              * fields happen to hold data. Two of them could be on at once,
+              * because circle read "no rect and no poly" and draw read "there is
+              * a poly", so an anchor with a drawing showed both. Worse, pressing
+              * one deleted the others' shape, so a mis-click cost an author
+              * their whole drawing. The mode is now the only thing that
+              * switches, and every shape keeps what it was given. */}
           {editingDoor.kind === 'region' && (
             <div className="anchface">
               <span>area</span>
               <div className="anchkinds">
                 <button
-                  className={'kbtn' + (!editingDoor.rect && !editingDoor.poly ? ' on' : '')}
+                  className={'kbtn' + (liveShape === 'circle' ? ' on' : '')}
                   data-tip="a circle of the radius below"
-                  onClick={() => ed?.updateEvent(editingDoor.id, { rect: null, poly: null })}
+                  onClick={() => pickShape(editingDoor.id, 'circle', editingDoor)}
                 >
                   circle
                 </button>
                 <button
-                  className={'kbtn' + (editingDoor.rect || rectPick ? ' on' : '')}
-                  data-tip="two opposite corners"
-                  onClick={() => armRect(editingDoor.id)}
+                  className={'kbtn' + (liveShape === 'rect' ? ' on' : '')}
+                  data-tip={editingDoor.rect ? 'the box you drew · press again to redo it' : 'two opposite corners'}
+                  onClick={() => pickShape(editingDoor.id, 'rect', editingDoor)}
                 >
                   rect
                 </button>
                 <button
-                  className={'kbtn' + (editingDoor.poly || drawingRegion ? ' on' : '')}
-                  data-tip="walk the edge of the place · click corners · enter closes"
-                  onClick={() => armPoly(editingDoor.id)}
+                  className={'kbtn' + (liveShape === 'poly' ? ' on' : '')}
+                  data-tip={
+                    editingDoor.poly
+                      ? 'the area you drew · press again to redo it'
+                      : 'press and drag round the area · let go to close it'
+                  }
+                  onClick={() => pickShape(editingDoor.id, 'poly', editingDoor)}
                 >
                   draw
                 </button>
+                {/* THE ONLY THING THAT THROWS A SHAPE AWAY. Switching mode used
+                    to do it silently, which is how an author lost a drawing by
+                    touching the wrong button. Now it takes this. */}
+                {((liveShape === 'poly' && editingDoor.poly) || (liveShape === 'rect' && editingDoor.rect)) && (
+                  <button
+                    className="arow-x"
+                    data-tip={liveShape === 'poly' ? 'throw the drawn area away' : 'throw the box away'}
+                    onClick={() =>
+                      ed?.updateEvent(
+                        editingDoor.id,
+                        liveShape === 'poly' ? { poly: null, shape: 'circle' } : { rect: null, shape: 'circle' },
+                      )
+                    }
+                  >
+                    <Icon name="x" />
+                  </button>
+                )}
               </div>
             </div>
           )}
           {editingDoor.kind === 'region' && (
             <div className="doorhint">
-              {rectPick
+              {rectPick?.id === editingDoor.id
                 ? rectPick.from
                   ? 'now the opposite corner'
                   : 'click one corner · esc cancels'
-                : drawingRegion
-                  ? `${st?.polyDraw} corners · enter closes · backspace takes one back · esc drops it`
-                  : editingDoor.poly
-                    ? `${editingDoor.poly.length} corners · drag one to correct it · the game gets the box round it too`
-                    : editingDoor.rect
+                : drawingRegion && st?.polyDrawId === editingDoor.id
+                  ? (st?.polyDraw ?? 0) > 0
+                    ? `${st?.polyDraw} points · enter saves it · esc drops it · draw again to redo it`
+                    : 'press and drag round the area · let go to close it'
+                  : liveShape === 'poly' && editingDoor.poly
+                    ? `${editingDoor.poly.length} points · drag one to correct it · the game gets the box round it too`
+                    : liveShape === 'rect' && editingDoor.rect
                       ? `${Math.abs(editingDoor.rect[2] - editingDoor.rect[0])} × ${Math.abs(editingDoor.rect[3] - editingDoor.rect[1])}`
                       : `a circle of ${editingDoor.r}px`}
             </div>
@@ -4819,7 +4888,16 @@ export default function App() {
                  copy of the row's own two visible lines and nothing else, so
                  hovering read back exactly what the pointer was sitting on. */
               data-tip={
-                `${ANCHOR_WHAT[ev.kind]} · ${ev.r}px reach` +
+                /* the reach is the radius only while the radius is the live
+                   shape. On a region drawn as an area the ring is dormant data
+                   and the row would be quoting a number the game never tests. */
+                `${ANCHOR_WHAT[ev.kind]} · ${
+                  anchorShape(ev) === 'poly'
+                    ? `${ev.poly?.length ?? 0} points drawn`
+                    : anchorShape(ev) === 'rect'
+                      ? 'a box'
+                      : `${ev.r}px reach`
+                }` +
                 (ev.kind === 'door'
                   ? ` · leads to ${ev.to || 'nowhere yet'}${ev.toAnchor ? `, arriving at ${ev.toAnchor}` : ''}`
                   : '')

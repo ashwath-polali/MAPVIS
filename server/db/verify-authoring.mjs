@@ -182,6 +182,12 @@ const doc = {
       r: 220,
       to: '',
       label: 'the pier',
+      /* THE MODE, which is what stops the three shapes fighting. It used to be
+       * settled by deletion: a poly landing deleted the rect, so the shapes
+       * could never be on one anchor and nothing had to say which was meant.
+       * That cost an author their drawing every time they touched another mode
+       * button, so both are kept and this says which one is live. */
+      shape: 'poly',
       poly: [
         [6, 26],
         [20, 26],
@@ -204,13 +210,43 @@ const doc = {
       r: 8,
       to: '',
       label: '',
+      shape: 'poly',
       poly: [
         [2, 2],
         [9, 9],
       ],
     },
+    /* AN AREA THAT WAS DRAWN, BOXED, AND THEN SWITCHED BACK TO A CIRCLE, which
+     * is the case that costs an author real work when it goes wrong.
+     *
+     * Ash drew an area, saved, touched the circle button, and the drawing was
+     * gone: writing one shape deleted the others, so a mis-click was
+     * unrecoverable once the map had been saved. All three sets of numbers ride
+     * together now and the mode alone says which is authoritative. This anchor
+     * is on circle while holding both of the others, so the fence checks two
+     * different things at once: that neither stored shape was destroyed by the
+     * choice, and that the bundle ships only the one that was chosen. */
+    {
+      id: 8,
+      name: 'the_switched_place',
+      kind: 'region',
+      x: 26,
+      y: 16,
+      r: 9,
+      to: '',
+      label: 'the switched place',
+      shape: 'circle',
+      rect: [22, 12, 30, 20],
+      poly: [
+        [22, 12],
+        [30, 12],
+        [30, 20],
+        [26, 24],
+        [22, 20],
+      ],
+    },
   ],
-  eventNext: 8,
+  eventNext: 9,
   occs: [{ id: 1, baseline: 41 }],
   occNext: 2,
   // the six numbers describing the body, none of them the defaults
@@ -328,6 +364,16 @@ try {
    * because putDoc is reachable by a hand-written POST and mask.ts is not in
    * front of it: this call went straight to the store. */
   eq('a two-point area is refused rather than stored', back.events.find((e) => e.name === 'the_half_shape')?.poly, undefined)
+  eq('a drawn area remembers that drawing is the mode it is in', pier?.shape, 'poly')
+  /* SWITCHING MODE DOES NOT DESTROY THE OTHER SHAPES. This anchor was drawn,
+   * boxed, and then put back on circle, and all three sets of numbers have to
+   * come back out of postgres. Writing one shape used to null the others in this
+   * very upsert, so an author who touched the wrong button lost the drawing with
+   * no way back once the map had saved. */
+  const switched = back.events.find((e) => e.name === 'the_switched_place')
+  eq('switching to a circle keeps the drawn area', switched?.poly, doc.events[7].poly)
+  eq('switching to a circle keeps the box too', switched?.rect, [22, 12, 30, 20])
+  eq('and the mode it was switched to is what comes back', switched?.shape, 'circle')
   const bp = back.paths?.find((p) => p.name === 'the_approach')
   eq('the route survives the save', bp?.points, doc.paths[0].points)
   eq('the route keeps its direction', [bp?.closed, bp?.twoWay, bp?.facing], [false, false, 'east'])
@@ -470,6 +516,7 @@ try {
   eq('published drawn area, corner for corner', shippedPier?.poly, doc.events[5].poly)
   eq('and the box round it, which is what the running game can actually test', shippedPier?.rect, [6, 26, 34, 40])
   eq('published radius past the old 64 cap', shippedPier?.r, 220)
+  eq('and the bundle says the drawn area is the shape that is live', shippedPier?.meta?.shape, 'poly')
   /* AND THE HALF SHAPE REACHES THE BUNDLE AS A PLAIN CIRCLE. It is still a
    * region and still has a radius; what it does not have is a shape it never
    * had, silently invented somewhere between the form and the game. */
@@ -478,6 +525,24 @@ try {
     (shipped.anchors || []).find((a) => a.name === 'the_half_shape')?.poly,
     undefined,
   )
+  eq(
+    'and it ships no box it never had either',
+    (shipped.anchors || []).find((a) => a.name === 'the_half_shape')?.rect,
+    undefined,
+  )
+
+  /* AND ONLY THE SHAPE THAT IS LIVE REACHES THE GAME.
+   *
+   * This one is on circle and is carrying a drawing and a box it is not using.
+   * The game's contains() tests a rect first and a radius second, so a dormant
+   * rect riding along in the bundle would silently be the area every grape hung
+   * on this name fires in, and the circle the author chose would never be
+   * tested. Keeping a shape and shipping it are two different things. */
+  const shippedSwitched = (shipped.anchors || []).find((a) => a.name === 'the_switched_place')
+  eq('a region switched back to a circle ships no box', shippedSwitched?.rect, undefined)
+  eq('and ships no drawn area either', shippedSwitched?.poly, undefined)
+  eq('while the circle it was switched to is intact', shippedSwitched?.r, 9)
+  eq('and the mode rides along so a later reader can tell', shippedSwitched?.meta?.shape, 'circle')
 
   const sp = (shipped.paths || []).find((p) => p.name === 'the_approach')
   eq('published route', sp?.points, doc.paths[0].points)
@@ -524,9 +589,14 @@ try {
    * and derived, and the game writes derived itself, so a projection that
    * replaced the bag would take both out. */
   eq('the bag that was already there is still under it', pa?.meta?.docId, 1)
-  /* AND AN ANCHOR NOBODY POINTED A CAMERA AT GROWS NOTHING, so a bundle with no
-   * shots on it stays what it was. */
-  eq('an anchor with no shot on it stays as it was', (shipped.anchors || []).find((a) => a.name === 'the_yard')?.meta, { docId: 2 })
+  /* AND AN ANCHOR NOBODY POINTED A CAMERA AT GROWS NO CAMERA, so a bundle with
+   * no shots on it stays what it was. The area mode is in the bag beside docId
+   * because that is the only way a field crosses this boundary intact, and this
+   * anchor is the yard, which is a region drawn as a box. */
+  eq('an anchor with no shot on it grows no camera', (shipped.anchors || []).find((a) => a.name === 'the_yard')?.meta, {
+    docId: 2,
+    shape: 'rect',
+  })
 
   /* OWNING A KEY MEANS OWNING ITS ABSENCE TOO, and neither projection could
    * clear the keys it owns.

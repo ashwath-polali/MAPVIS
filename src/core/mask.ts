@@ -281,6 +281,11 @@ export type AnchorKind = 'point' | 'region' | 'door' | 'post' | 'spawn' | 'trigg
 
 export const ANCHOR_KINDS: AnchorKind[] = ['point', 'region', 'door', 'post', 'spawn', 'trigger']
 
+/* THE THREE SHAPES A REGION CAN BE, and one of them is live at a time. */
+export type AnchorShape = 'circle' | 'rect' | 'poly'
+
+export const ANCHOR_SHAPES: AnchorShape[] = ['circle', 'rect', 'poly']
+
 export interface MapAnchor {
   id: number
   /* author-typed, unique in this map, shaped like a python identifier so a typo
@@ -303,6 +308,24 @@ export interface MapAnchor {
    * stored. Absent means the body aims at x,y, which is what every anchor did
    * before this existed. */
   stand?: [number, number]
+  /* region only. WHICH OF THE THREE SHAPES IS THE ONE THE AUTHOR MEANS.
+   *
+   * It exists because the exclusivity used to be enforced by deletion: writing a
+   * rect deleted the poly, writing a poly deleted the rect, and going back to a
+   * circle deleted both. So an author who drew an area, saved, then touched the
+   * circle button lost the whole drawing with no undo across a reload, which is
+   * the worst thing this panel could possibly do. The mode is the only thing
+   * that says which shape is authoritative now; `rect` and `poly` keep whatever
+   * they were given until an explicit clear throws one away.
+   *
+   * Absent means "work it out from the data", which is what every region
+   * authored before this field existed needs. See anchorShape.
+   *
+   * IT RIDES IN THE META BAG, for the same reason `when` below does: the anchors
+   * upsert, the game's readAnchors and the publish projection each copy a fixed
+   * list of top-level fields plus the whole of meta, so a new top-level field is
+   * dropped three times over. */
+  shape?: AnchorShape
   /* region only. THE FOUR NUMBERS ARE [x0, y0, x1, y1], two opposite corners,
    * and not [x, y, w, h]. The schema comment said one thing and the game's own
    * box test did the other, and nothing was authoritative because no rect had
@@ -397,6 +420,85 @@ export const isAnchorName = (s: string) => /^[a-z][a-z0-9_]{0,47}$/.test(String(
  * and still refuses a number that could only be a typo. */
 export const ANCHOR_R_MIN = 4
 export const ANCHOR_R_MAX = 512
+
+/* WHICH SHAPE THIS ANCHOR ACTUALLY IS, asked once so the form, the overlay and
+ * both exporters can never answer it differently.
+ *
+ * The mode wins, but only when the shape it names has something in it: an author
+ * who pressed draw and then pressed escape is on the draw mode with nothing
+ * drawn, and shipping that as an area would be shipping an area of no pixels. It
+ * falls back to what is there, which is also how every region authored before
+ * the mode field existed reads.
+ *
+ * Only a region has a shape. On every other kind `r` is the reach and the two
+ * area fields are not its business, so asking is how the ring stops being drawn
+ * inside a marked-out plaza and stays drawn on a door. */
+export function anchorShape(e: {
+  kind?: string
+  shape?: string
+  rect?: unknown
+  poly?: unknown
+}): AnchorShape {
+  if (e.kind !== 'region') return 'circle'
+  const hasPoly = Array.isArray(e.poly) && e.poly.length > 2
+  const hasRect = Array.isArray(e.rect) && e.rect.length === 4
+  if (e.shape === 'poly' && hasPoly) return 'poly'
+  if (e.shape === 'rect' && hasRect) return 'rect'
+  if (e.shape === 'circle') return 'circle'
+  return hasPoly ? 'poly' : hasRect ? 'rect' : 'circle'
+}
+
+/* FEWER POINTS FOR THE SAME LINE. Ramer-Douglas-Peucker: keep the two ends, keep
+ * whichever point in between sits furthest off the line between them, and stop
+ * when nothing is further off than the tolerance.
+ *
+ * A freehand drag samples the pointer on every move event, so two seconds of
+ * drawing arrives as several hundred points describing an edge that a couple of
+ * dozen would describe just as well. All of them would go into the document, the
+ * anchors table, both exporters and the game's bundle, and every one of them
+ * would be drawn as a draggable handle. The tolerance is about one screen pixel
+ * at the zoom the author drew at, which is the smallest error they could see: a
+ * point that is not that far off the line between its neighbours is not a corner
+ * they meant to draw, it is the hand shaking. */
+export function simplifyPoly(pts: [number, number][], tol: number): [number, number][] {
+  if (pts.length < 3) return pts.slice()
+  const t2 = Math.max(0.01, tol * tol)
+  const keep = new Array<boolean>(pts.length).fill(false)
+  keep[0] = true
+  keep[pts.length - 1] = true
+  // an explicit stack rather than recursion, because a long drag on a slow map
+  // is thousands of samples and a blown call stack loses the whole shape
+  const stack: [number, number][] = [[0, pts.length - 1]]
+  while (stack.length) {
+    const [a, b] = stack.pop() as [number, number]
+    if (b <= a + 1) continue
+    const [ax, ay] = pts[a]
+    const [bx, by] = pts[b]
+    const dx = bx - ax
+    const dy = by - ay
+    const len2 = dx * dx + dy * dy
+    let far = -1
+    let worst = 0
+    for (let i = a + 1; i < b; i++) {
+      const [px, py] = pts[i]
+      let d2: number
+      if (len2 === 0) d2 = (px - ax) ** 2 + (py - ay) ** 2
+      else {
+        const u = Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / len2))
+        d2 = (px - ax - u * dx) ** 2 + (py - ay - u * dy) ** 2
+      }
+      if (d2 > worst) {
+        worst = d2
+        far = i
+      }
+    }
+    if (far > 0 && worst > t2) {
+      keep[far] = true
+      stack.push([a, far], [far, b])
+    }
+  }
+  return pts.filter((_, i) => keep[i])
+}
 
 /* THE BOX A DRAWN AREA SITS IN, two opposite corners, in the order `rect` uses.
  *
@@ -518,14 +620,38 @@ export function migrateEvent(e: MapAnchor & { type?: string }): MapAnchor {
   const poly = (Array.isArray(e.poly) ? e.poly : [])
     .filter((q) => Array.isArray(q) && q.length === 2 && isFinite(Number(q[0])) && isFinite(Number(q[1])))
     .map((q) => [Math.round(Number(q[0])), Math.round(Number(q[1]))] as [number, number])
-  if (poly.length >= 3) {
-    e.poly = poly
-    /* ONE SHAPE PER REGION. A rect beside a poly is two different areas both
-     * claiming to be this place, and both exporters would have to guess which
-     * the author meant. The drawn one wins because it is the more specific of
-     * the two, and the box that ships is derived from it at export. */
-    delete e.rect
-  } else delete e.poly
+  if (poly.length >= 3) e.poly = poly
+  else delete e.poly
+  /* THE MODE, FOLDED INTO THE BAG AND LIFTED BACK OUT OF IT, the same trip
+   * `when` makes below and for the same reason.
+   *
+   * A rect used to be deleted the moment a poly landed, so the two could never
+   * be on one anchor and the exporters never had to choose. That cost an author
+   * their drawing every time they touched another mode button. Both are kept
+   * now, the mode says which one is authoritative, and the exporters ask
+   * anchorShape rather than guessing from what happens to be present.
+   *
+   * Written only when there is an area to be authoritative over, so a door and a
+   * plain point carry no mode at all and no bundle grows a field for them. */
+  const bagShape = e.meta && typeof (e.meta as { shape?: unknown }).shape === 'string'
+    ? String((e.meta as { shape?: string }).shape)
+    : ''
+  const wanted = (ANCHOR_SHAPES as string[]).includes(String(e.shape))
+    ? String(e.shape)
+    : (ANCHOR_SHAPES as string[]).includes(bagShape)
+      ? bagShape
+      : ''
+  if (e.kind === 'region' && (e.poly || e.rect || wanted)) {
+    const shape = (wanted || anchorShape(e)) as AnchorShape
+    e.shape = shape
+    e.meta = { ...(e.meta || {}), shape }
+  } else {
+    delete e.shape
+    if (e.meta && 'shape' in e.meta) {
+      const { shape: _drop, ...rest } = e.meta as Record<string, unknown>
+      e.meta = rest
+    }
+  }
   if (!isAnchorName(e.name)) {
     e.name = anchorName(e.label || `${e.kind}_${e.id}`)
     e.meta = { ...(e.meta || {}), derived: true }
