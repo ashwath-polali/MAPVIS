@@ -1143,9 +1143,9 @@ export class Editor {
      * EDITABLE, not merely visible. The overlay draws on every step now, and a
      * corner handle that answered a click on the assets step would take the
      * press meant for the art sitting under it. */
-    if (this.eventsEditable && e.button === 0) {
+    if (e.button === 0) {
       for (const ev of [...this.doc.events].reverse()) {
-        if (!ev.poly) continue
+        if (!ev.poly || !this.anchorLive(ev)) continue
         const i = ev.poly.findIndex(([px, py]) => Math.abs(px - x) <= HANDLE_GRAB && Math.abs(py - y) <= HANDLE_GRAB)
         if (i < 0) continue
         this.doc.snap()
@@ -1163,21 +1163,36 @@ export class Editor {
      * nobody can stand on could not be rescued at all. The hub's only
      * interactive thing has been stuck 22px from the nearest floor for exactly
      * this reason. Editable rather than visible, for the reason above. */
-    if (this.eventsEditable && e.button === 0) {
+    if (e.button === 0) {
       /* THE GRAB IS THE DOT, NOT THE WHOLE RING, and that is what the raised
        * radius ceiling forces. This was the full `v.r`, which was safe while r
        * stopped at 64 and is not now: one region authored at 400 would swallow
        * every click on the map, so nothing else could be selected, dragged or
        * painted anywhere near it. */
-      const hit = [...this.doc.events]
-        .reverse()
-        .find((v) => Math.hypot(v.x - x, v.y - y) <= Math.max(6, Math.min(v.r, ANCHOR_GRAB)))
+      const onDot = (v: MapEvent) =>
+        Math.hypot(v.x - x, v.y - y) <= Math.max(6, Math.min(v.r, ANCHOR_GRAB))
+      const hit = [...this.doc.events].reverse().find((v) => this.anchorLive(v) && onDot(v))
       if (hit) {
         this.doc.snap()
         this.dragEvent = { id: hit.id, dx: hit.x - x, dy: hit.y - y }
         this.capture(e)
         e.preventDefault()
         return
+      }
+      /* ONE PRESS CHOOSES IT, THE NEXT ONE MOVES IT, on any step that does not
+       * own anchors. Selecting had one route in and it was opening the row in a
+       * panel that the assets step does not have, so the exception above could
+       * never be reached from the step it was written for. Choosing and nudging
+       * being separate presses is also what stops a stray click on a zone from
+       * quietly dragging the anchor an author only meant to look at. */
+      if (!this.eventsEditable && this.eventsVisible) {
+        const pick = [...this.doc.events].reverse().find(onDot)
+        if (pick) {
+          this.selectAnchor(pick.id)
+          this.say(`${pick.name} · press again to move it`)
+          e.preventDefault()
+          return
+        }
       }
     }
 
@@ -3923,6 +3938,21 @@ export class Editor {
     if (this.eventsEditable === on) return
     this.eventsEditable = on
     this.dirty = true
+  }
+  /* MAY THIS ONE ANCHOR ANSWER A PRESS RIGHT NOW, which is narrower than the
+   * flag above and is the whole of what makes editing safe off the test step.
+   *
+   * `eventsEditable` is the step's blanket yes: on test and export every anchor
+   * drags, which is how they have always been edited. Everywhere else they are
+   * scenery, and they have to stay scenery or a click near a post would grab
+   * the post instead of the art sitting under it.
+   *
+   * The exception is the one anchor the author has selected. Ash, 2026-09-01:
+   * placing art against a zone you cannot nudge means leaving the step to fix a
+   * thing you are looking straight at. One anchor's worth of handles cannot
+   * swallow a map, and every other anchor stays quiet. */
+  anchorLive(ev: MapEvent): boolean {
+    return this.eventsEditable || (this.eventsVisible && ev.id === this.anchorSel)
   }
   /* WHICH ANCHOR THE PANEL HAS OPEN, so the overlay can draw that one brighter.
    * The same shape as pathSel and framingSel and for the same reason: which row
