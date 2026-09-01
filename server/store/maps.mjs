@@ -494,13 +494,19 @@ export async function syncEventsToAnchors(mapId, anchors) {
        * rect used to be nulled the moment a poly arrived, which is why touching
        * the circle button in the editor cost an author their whole drawing.
        * Nothing is thrown away here any more, so without the mode a reopened map
-       * would have no way to know which of the two the author had chosen. */
+       * would have no way to know which of the two the author had chosen.
+       *
+       * EVERY KIND, not only a region. This read `a.kind === 'region' && ...`,
+       * so a zone drawn on a door or a post reached postgres with its points
+       * intact and its mode deleted, and eventsFromAnchors handed back an anchor
+       * the editor then read as a plain circle. A door's zone is the doormat you
+       * can stand on and a post's is the side of the table you can reach. */
       const wanted = ['circle', 'rect', 'poly'].includes(a.shape)
         ? a.shape
         : ['circle', 'rect', 'poly'].includes(meta.shape)
           ? meta.shape
           : ''
-      if (a.kind === 'region' && (polyJson || rectOk || wanted)) meta.shape = wanted || (polyJson ? 'poly' : rectOk ? 'rect' : 'circle')
+      if (polyJson || rectOk || wanted) meta.shape = wanted || (polyJson ? 'poly' : rectOk ? 'rect' : 'circle')
       else delete meta.shape
       const r = await c.query(
         `insert into anchors (map_id, name, kind, x, y, r, rect, poly, stand, to_slug, to_anchor, placement_id, facing, label, meta)

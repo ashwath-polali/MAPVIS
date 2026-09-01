@@ -325,6 +325,12 @@ export interface EditorStatus {
   hiddenGroups: string[]
   proposedGroups: string[]
   events: MapEvent[]
+  /* IS THE ANCHOR OVERLAY DRAWN, and which anchor is the loud one. Both ride the
+   * status because the overlay is on every step now and its switch is the
+   * author's, so a panel has to be able to show the state of a thing the step
+   * change no longer decides. */
+  eventsVisible: boolean
+  anchorSel: number
   /* the area being drawn right now, as the count of points sampled so far, -1
    * when no area is being drawn and 0 while the mode is armed and the author has
    * not pressed yet. The gesture lives outside React so the line can follow the
@@ -459,6 +465,38 @@ const BOARD = '#0e1319' // --board
  * and the ocean chart had its own list with a different colour per kind, so a
  * door was lavender in the tool that made it and orange on the page that places
  * it. Both read src/core/ink.ts now. */
+/* THE FLOOR SPOT AND THE HEADING OFF IT, and they are deliberately ONE colour
+ * that is not the anchor's kind ink. A zone is per kind because the question it
+ * answers is which of six things this is; where a body's feet end and which way
+ * it turns is the same question on all six, and colouring it per kind would have
+ * said there are six kinds of standing. Green is what the spawn cross and the
+ * old stand ring already used for exactly this. */
+const STAND_INK = '#6fd08c'
+
+/* WHAT EVERY MARK ON THE ANCHOR OVERLAY IS CASED IN, and it is the reason the
+ * overlay can be on over a finished painting at all.
+ *
+ * Measured on the hub at 3x: a one-pixel dashed outline in a mid-tone hue laid
+ * over pixel art of about that tone is not faint, it is gone. The quay's edge sat
+ * on sand of its own value and could not be found, and so did the green heading
+ * arrow over a green awning. A darker stroke under the coloured one separates the
+ * mark from whatever it happens to be lying on, which is the same job the caption
+ * plate's dark card has always done for text. --board, at two thirds. */
+const CASE_INK = 'rgba(14,19,25,0.66)'
+
+/* THE EIGHT HEADINGS AS DIRECTIONS ON THE PAINTING, for drawing the facing
+ * arrow. dirFrom in walk.ts turns a direction into one of these words; this is
+ * the trip back, and it is only ever used to draw. */
+const FACE_VEC: Record<string, [number, number]> = {
+  north: [0, -1],
+  'north-east': [0.7071, -0.7071],
+  east: [1, 0],
+  'south-east': [0.7071, 0.7071],
+  south: [0, 1],
+  'south-west': [-0.7071, 0.7071],
+  west: [-1, 0],
+  'north-west': [-0.7071, -0.7071],
+}
 
 /* A ROUTE AS THE PAIRS OF POINTS IT IS ACTUALLY WALKED IN, so the checker and
  * the overlay count legs the same way. A closed route has one more leg than an
@@ -855,6 +893,8 @@ export class Editor {
       hiddenGroups: [...this.hiddenGroups],
       proposedGroups: [...this.proposedGroups],
       events: this.doc.events,
+      eventsVisible: this.eventsVisible,
+      anchorSel: this.anchorSel,
       polyDraw: this.newPoly ? this.newPoly.pts.length : -1,
       polyDrawId: this.newPoly ? this.newPoly.id : 0,
       paths: this.doc.paths,
@@ -931,6 +971,7 @@ export class Editor {
     this.newPoly = null
     this.pathSel = 0
     this.framingSel = 0
+    this.anchorSel = 0
     this.anchorSetSel = 0
     this.rackSel = 0
     this.variantSel = 0
@@ -1097,8 +1138,12 @@ export class Editor {
 
     /* A CORNER OF A DRAWN AREA, tested BEFORE the anchor under it. A region big
      * enough to be a plaza has a ring that covers its own corners, so grabbing
-     * the anchor first would make every handle on the map unreachable. */
-    if (this.eventsVisible && e.button === 0) {
+     * the anchor first would make every handle on the map unreachable.
+     *
+     * EDITABLE, not merely visible. The overlay draws on every step now, and a
+     * corner handle that answered a click on the assets step would take the
+     * press meant for the art sitting under it. */
+    if (this.eventsEditable && e.button === 0) {
       for (const ev of [...this.doc.events].reverse()) {
         if (!ev.poly) continue
         const i = ev.poly.findIndex(([px, py]) => Math.abs(px - x) <= HANDLE_GRAB && Math.abs(py - y) <= HANDLE_GRAB)
@@ -1117,8 +1162,8 @@ export class Editor {
      * two pixels off meant deleting it and clicking again, and a door on ground
      * nobody can stand on could not be rescued at all. The hub's only
      * interactive thing has been stuck 22px from the nearest floor for exactly
-     * this reason. */
-    if (this.eventsVisible && e.button === 0) {
+     * this reason. Editable rather than visible, for the reason above. */
+    if (this.eventsEditable && e.button === 0) {
       /* THE GRAB IS THE DOT, NOT THE WHOLE RING, and that is what the raised
        * radius ceiling forces. This was the full `v.r`, which was safe while r
        * stopped at 64 and is not now: one region authored at 400 would swallow
@@ -1732,7 +1777,8 @@ export class Editor {
       this.showHits = !this.showHits
       this.dirtyMask = true
       this.say(this.showHits ? 'hit marks shown' : 'hit marks hidden')
-    } else if (e.key === 'Enter') this.closePoly()
+    } else if (k === 'a') this.toggleEvents()
+    else if (e.key === 'Enter') this.closePoly()
     else if (e.key === 'Escape') {
       this.poly = []
       this.dirty = true
@@ -3839,13 +3885,54 @@ export class Editor {
   // ---- events: a spot on the map plus an action ---------------------------
   // The first type is a door. The drop is one undo, the delete is one undo;
   // the form edits between them mutate in place and ride whatever snapshot
-  // comes next, so typing a label never floods the history. The workflow
-  // turns the overlay on for the steps that read it (test, export).
-  eventsVisible = false
+  // comes next, so typing a label never floods the history.
+  /* THE OVERLAY IS ON EVERYWHERE AND IT IS THE AUTHOR'S SWITCH, not the
+   * workflow's.
+   *
+   * It was `setEventsVisible(step === 'test' || step === 'export')`, so every
+   * anchor on the map was invisible on the step where art gets placed. That is
+   * the step where it matters most: a post's zone is the side of a table you can
+   * reach, and the table is the thing being dragged. Ash, 2026-08-31: "you place
+   * art blind against reaches you can't see."
+   *
+   * The step no longer writes it. An author who turns it off on a map where
+   * thirty zones bury the painting keeps it off until they say otherwise, which
+   * a per-step default would silently undo on the next click. */
+  eventsVisible = true
   setEventsVisible(on: boolean) {
     if (this.eventsVisible === on) return
     this.eventsVisible = on
     this.dirty = true
+    this.emit()
+  }
+  toggleEvents() {
+    this.setEventsVisible(!this.eventsVisible)
+    this.say(this.eventsVisible ? 'anchors shown' : 'anchors hidden · a shows them')
+  }
+
+  /* MAY A CLICK GRAB AN ANCHOR, which is a different question from whether one
+   * is drawn, and separating the two is what makes the always-on overlay safe.
+   *
+   * The anchor drag and the drawn-corner drag both run before the asset step
+   * gets the pointer at all. Drawing anchors on the assets step without this
+   * would mean every click near a post grabbed the post instead of the art
+   * underneath it, so turning the overlay on would have broken placing. Anchors
+   * are edited on the step that owns them and are scenery everywhere else. */
+  eventsEditable = false
+  setEventsEditable(on: boolean) {
+    if (this.eventsEditable === on) return
+    this.eventsEditable = on
+    this.dirty = true
+  }
+  /* WHICH ANCHOR THE PANEL HAS OPEN, so the overlay can draw that one brighter.
+   * The same shape as pathSel and framingSel and for the same reason: which row
+   * is open is React's business, which mark is drawn loud is this file's. */
+  anchorSel = 0
+  selectAnchor(id: number) {
+    if (this.anchorSel === id) return
+    this.anchorSel = id
+    this.dirty = true
+    this.emit()
   }
 
   /* May this screen paint at all? The workflow sets it per step, so cut and
@@ -6938,11 +7025,32 @@ export class Editor {
 
   // The events, drawn in the tool's own chrome (accent iris over panel dark,
   // never a colour the art uses): the activation ring at its real radius, a
-  // dot on the anchor, the name on a small plate above. Test and export show
-  // them; the paint steps stay clean.
+  // dot on the anchor, the name on a small plate above.
+  /* EVERYTHING AN ANCHOR SAYS ABOUT ITSELF IS ON THE MAP, and none of it waits
+   * for a form to be opened.
+   *
+   * What was here drew the zone and the stand dot and stopped. The heading a
+   * body holds, and which painted thing an anchor is tied to, were both readable
+   * only by opening the form and reading a compass grid and a dropdown, so an
+   * author aiming a post at a table had to alternate between a picture and a
+   * panel to answer one question. Ash, 2026-08-31: "you place art blind against
+   * reaches you can't see", and "confirm a binding by opening a form and reading
+   * a dropdown."
+   *
+   * SO THE SELECTED ONE IS LOUD AND THE REST ARE QUIET. Thirty anchors all drawn
+   * at full strength is a painting nobody can see, and the answer to that is not
+   * to draw fewer of them: the one being worked on takes a wider line and a full
+   * fill, and every other zone drops to a hairline and a wash. */
   private drawEvents(g: CanvasRenderingContext2D, z: number) {
     g.save()
-    for (const ev of this.doc.events) {
+    /* THE SELECTED ONE IS DRAWN LAST, so its plate, its arrow and its tie sit
+     * over the quiet ones rather than under whichever anchor happens to come
+     * after it in the document. */
+    const order = [...this.doc.events].sort(
+      (a, b) => Number(a.id === this.anchorSel) - Number(b.id === this.anchorSel),
+    )
+    for (const ev of order) {
+      const sel = ev.id === this.anchorSel
       /* an anchor bound to something that MOVES is drawn where that thing is
        * right now, so the binding is a thing you can watch working rather than
        * a field you have to take on trust. Read-only: the document still holds
@@ -6959,8 +7067,14 @@ export class Editor {
        * also buys the thing the single hue could not: nine marks on the hub and
        * you can see which of them are doors without reading nine plates. */
       const ink = inkFor(ANCHOR_INK, ev.kind)
+      /* THE TWO STRENGTHS, and they are one number each rather than two colour
+       * tables, so a kind's hue never changes with the selection. */
+      const line = sel ? 2.5 : 1.25
+      const wash = sel ? 0.26 : 0.13
+      const quiet = sel ? 1 : 0.85
       g.strokeStyle = ink
-      g.lineWidth = 1.5
+      g.lineWidth = line
+      g.globalAlpha = quiet
       /* ONE SHAPE IS DRAWN AND IT IS THE LIVE ONE.
        *
        * Every shape this anchor holds used to be drawn at once, so a plaza an
@@ -6974,64 +7088,153 @@ export class Editor {
        * too, so the draft is the only area under the cursor. */
       const shape = this.newPoly?.id === ev.id ? 'none' : anchorShape(ev)
       let top = py - ev.r * z
+      /* ONE PATH FOR ALL THREE SHAPES, so a box, a ring and a walked outline are
+       * filled, cased and stroked by the same three lines and cannot drift into
+       * three different weights.
+       *
+       * THE FILL AND THE CASING ARE BOTH LOAD-BEARING, measured on this painting
+       * at 3x. A 1px dashed outline in a mid-tone hue over pixel art of roughly
+       * that tone is not faint, it is gone: the quay's outline sat on sand the
+       * same value as itself and could not be found. The fill says which side is
+       * inside and the dark casing under the line is what separates the line from
+       * whatever it happens to be lying on, which is the same job the caption
+       * plate's dark card already does for text. */
+      let path: Path2D | null = null
       if (shape === 'rect' && ev.rect) {
         const [x0, y0, x1, y1] = ev.rect
         const ax = Math.min(x0, x1) * z
         const ay = Math.min(y0, y1) * z
-        g.setLineDash([6, 4])
-        g.strokeRect(ax, ay, (Math.abs(x1 - x0) + 1) * z, (Math.abs(y1 - y0) + 1) * z)
-        g.setLineDash([])
+        path = new Path2D()
+        path.rect(ax, ay, (Math.abs(x1 - x0) + 1) * z, (Math.abs(y1 - y0) + 1) * z)
         top = ay
+      } else if (shape === 'poly' && ev.poly) {
+        path = new Path2D()
+        ev.poly.forEach(([qx, qy], i) =>
+          i ? path?.lineTo((qx + 0.5) * z, (qy + 0.5) * z) : path?.moveTo((qx + 0.5) * z, (qy + 0.5) * z),
+        )
+        path.closePath()
+        top = polyBounds(ev.poly)[1] * z
+      } else if (shape === 'circle') {
+        path = new Path2D()
+        path.arc(px, py, ev.r * z, 0, Math.PI * 2)
       }
-      /* THE DRAWN AREA, in the same ink as everything else about this anchor,
-       * filled faintly so an author can see which side of the line is inside.
-       *
-       * The points are handles and are drawn as such: a shape you can correct
+      if (path) {
+        g.globalAlpha = wash
+        g.fillStyle = ink
+        g.fill(path)
+        g.globalAlpha = sel ? 0.7 : 0.5
+        g.strokeStyle = CASE_INK
+        g.lineWidth = line + 2
+        g.stroke(path)
+        g.globalAlpha = quiet
+        g.strokeStyle = ink
+        g.lineWidth = line
+        g.setLineDash(shape === 'circle' ? [4, 3] : shape === 'rect' ? [6, 4] : [])
+        g.stroke(path)
+        g.setLineDash([])
+      }
+      /* THE CORNERS ARE HANDLES AND ARE DRAWN AS SUCH: a shape you can correct
        * looks correctable, and a point in the water costs one drag rather than
        * the whole outline. They shrink once a freehand shape has enough points
-       * that full-size squares would bury the line they sit on. */
-      if (shape === 'poly' && ev.poly) {
-        g.beginPath()
-        ev.poly.forEach(([qx, qy], i) =>
-          i ? g.lineTo((qx + 0.5) * z, (qy + 0.5) * z) : g.moveTo((qx + 0.5) * z, (qy + 0.5) * z),
-        )
-        g.closePath()
-        g.globalAlpha = 0.14
-        g.fillStyle = ink
-        g.fill()
+       * that full-size squares would bury the line they sit on.
+       *
+       * THEY BELONG TO THE SELECTED ONE ALONE, now that every zone is on screen
+       * at once. Thirty drawn shapes wearing every corner they have is a field of
+       * squares over the painting, and only one of them can be dragged anyway:
+       * the corner grab tests the whole list, but an author is correcting the
+       * shape they have open. */
+      if (sel && shape === 'poly' && ev.poly) {
         g.globalAlpha = 1
-        g.stroke()
         g.fillStyle = ink
         const hs = ev.poly.length > 16 ? 1.5 : 2
         for (const [qx, qy] of ev.poly) g.fillRect((qx + 0.5) * z - hs, (qy + 0.5) * z - hs, hs * 2, hs * 2)
-        top = polyBounds(ev.poly)[1] * z
+        g.globalAlpha = quiet
       }
-      if (shape === 'circle') {
-        g.setLineDash([4, 3])
-        g.beginPath()
-        g.arc(px, py, ev.r * z, 0, Math.PI * 2)
-        g.stroke()
+      /* WHICH PAINTED THING THIS NAME IS ON, drawn rather than filed.
+       *
+       * A binding was confirmable only by opening the form and reading a
+       * dropdown, so an author looking at nineteen people on the hub could not
+       * tell which of them carried a name at all. A bound anchor is already drawn
+       * at the placement's live spot, which puts the mark on the thing's feet and
+       * says nothing about which sprite those feet belong to. The bracket is what
+       * says it: the art's own drawn bounds, in the anchor's ink, with a tie up
+       * to it from the mark. */
+      if (home) {
+        const b = this.drawnBox(home)
+        const dx = spot.x - home.x
+        const dy = spot.y - home.y
+        const bx = (b.x0 + dx) * z
+        const by = (b.y0 + dy) * z
+        const bw = b.w * z
+        const bh = b.h * z
+        const tie = new Path2D()
+        tie.rect(bx, by, bw, bh)
+        tie.moveTo(px, py)
+        tie.lineTo(bx + bw / 2, by + bh / 2)
+        g.setLineDash([3, 3])
+        g.globalAlpha = sel ? 0.6 : 0.4
+        g.strokeStyle = CASE_INK
+        g.lineWidth = 3
+        g.stroke(tie)
+        g.globalAlpha = sel ? 0.95 : 0.7
+        g.strokeStyle = ink
+        g.lineWidth = 1
+        g.stroke(tie)
         g.setLineDash([])
+        g.lineWidth = line
+        g.globalAlpha = quiet
       }
+      /* THE ANCHOR'S OWN PIXEL, cased for the reason the zone is: three pixels of
+       * a mid hue on pixel art of that hue is nothing. */
+      g.globalAlpha = 1
+      g.fillStyle = CASE_INK
+      g.fillRect(Math.round(px) - 2.5, Math.round(py) - 2.5, 6, 6)
       g.fillStyle = ink
-      g.fillRect(Math.round(px) - 1, Math.round(py) - 1, 3, 3)
+      g.fillRect(Math.round(px) - 1.5, Math.round(py) - 1.5, 4, 4)
+      g.globalAlpha = quiet
       /* WHERE A BODY ENDS UP, joined to the thing it is standing at by a line,
        * because two loose dots near each other say nothing about which one is
-       * the table and which one is the floor beside it. */
+       * the table and which one is the floor beside it.
+       *
+       * IT IS FILLED NOW, not a hollow ring. Hollow, at a quiet alpha, over a
+       * painting, the floor spot was the one mark on this overlay that genuinely
+       * could not be found without knowing where to look, and it is the mark that
+       * answers the question the zone is drawn for: the zone says what you can
+       * reach from, this says the pixel your feet end on. */
       if (ev.stand) {
         const sx = ev.stand[0] * z
         const sy = ev.stand[1] * z
-        g.strokeStyle = '#6fd08c'
-        g.lineWidth = 1
+        g.globalAlpha = 1
+        g.setLineDash([2, 2])
+        g.strokeStyle = CASE_INK
+        g.lineWidth = 3
         g.beginPath()
         g.moveTo(px, py)
         g.lineTo(sx, sy)
         g.stroke()
-        g.beginPath()
-        g.arc(sx, sy, 3.5, 0, Math.PI * 2)
+        g.strokeStyle = STAND_INK
+        g.lineWidth = 1
         g.stroke()
+        g.setLineDash([])
+        const rad = sel ? 4 : 3
+        g.beginPath()
+        g.arc(sx, sy, rad, 0, Math.PI * 2)
+        g.fillStyle = CASE_INK
+        g.fill()
+        g.beginPath()
+        g.arc(sx, sy, rad - 1.2, 0, Math.PI * 2)
+        g.fillStyle = STAND_INK
+        g.fill()
+        this.facingArrow(g, sx, sy, ev.facing, sel)
         g.strokeStyle = ink
-        g.lineWidth = 1.5
+        g.lineWidth = line
+        g.globalAlpha = quiet
+      } else {
+        /* NO FLOOR MARKED, so the heading is drawn off the anchor itself, which
+         * is where the game aims a body that has no stand-at. An arrow that only
+         * appeared once somebody had marked a floor would hide the field on
+         * exactly the anchors where it is the only thing set. */
+        this.facingArrow(g, px, py, ev.facing, sel)
       }
       /* WHAT A PERSON READS, never the identifier. It was `ev.label || ev.name`,
        * which prints `panthers_maw` onto the painting the moment nobody has
@@ -7040,7 +7243,50 @@ export class Editor {
        * It hangs off the top of whatever shape is live rather than off the
        * radius, because a region drawn as an area has no ring under the name and
        * a 220px radius would float the caption most of a map away from it. */
+      g.globalAlpha = sel ? 1 : 0.8
       this.plate(g, displayName(ev).text, px, top, ink, true)
+      g.globalAlpha = 1
+    }
+    g.restore()
+  }
+
+  /* WHICH WAY A BODY LOOKS WHEN IT GETS HERE, as an arrow on the floor spot.
+   *
+   * `facing` has been typed, tabled, exported and read by arrival() since anchors
+   * shipped, and the only place it was ever visible was a compass grid inside a
+   * form. So an author aiming a shopkeeper at the counter set a heading, closed
+   * the panel, and had nothing on screen to check it against.
+   *
+   * THE GROUND IS SQUASHED AND THE ARROW IS TOO. A heading is worked out from
+   * (dx, dy * yScale) in walk.ts, so north in painting pixels is not straight up
+   * by the same amount east is straight across. Dividing y by the squash puts the
+   * arrow along the line a body walking that heading actually takes, which is the
+   * whole point of drawing it over the painting rather than in a grid. */
+  private facingArrow(g: CanvasRenderingContext2D, x: number, y: number, facing: string | undefined, sel: boolean) {
+    const v = facing ? FACE_VEC[facing] : undefined
+    if (!v) return
+    const ys = Math.max(0.05, this.doc.walk.yScale || 0.72)
+    let [vx, vy] = [v[0], v[1] / ys]
+    const len = Math.hypot(vx, vy) || 1
+    vx /= len
+    vy /= len
+    const gap = sel ? 6 : 5
+    const reach = sel ? 16 : 13
+    const ang = Math.atan2(vy, vx)
+    g.save()
+    g.globalAlpha = 1
+    g.lineCap = 'round'
+    // cased first and then drawn over, the same two passes the zone outline
+    // takes, because a green hairline over a green awning is not a heading
+    for (const pass of [0, 1]) {
+      g.strokeStyle = pass ? STAND_INK : CASE_INK
+      g.fillStyle = pass ? STAND_INK : CASE_INK
+      g.lineWidth = pass ? (sel ? 2 : 1.5) : (sel ? 4.5 : 4)
+      g.beginPath()
+      g.moveTo(x + vx * gap, y + vy * gap)
+      g.lineTo(x + vx * reach, y + vy * reach)
+      g.stroke()
+      this.arrowHead(g, x + vx * (reach + 4), y + vy * (reach + 4), ang, pass ? (sel ? 6 : 5) : (sel ? 7.5 : 6.5))
     }
     g.restore()
   }

@@ -162,12 +162,16 @@ const without = (meta, ...keys) => {
  * meta bag rather than on a column. The mode wins when the shape it names has
  * something in it: an author who armed the draw mode and pressed escape is on
  * draw with nothing drawn, and shipping that as an area ships an area of no
- * pixels. Everything that is not a region is a circle, since `r` is its reach
- * and the two area fields are not its business. */
+ * pixels.
+ *
+ * IT NO LONGER ASKS WHAT KIND THIS IS, matching the copy in src/core/mask.ts.
+ * `kind !== 'region' return circle` was the last of the three gates: with the
+ * form and the upsert opened up, a zone drawn on a door still shipped as a bare
+ * radius, so the author saw their doormat in the editor and the game got a ring.
+ * An anchor with nothing drawn on it still falls through to circle. */
 const anchorShape = (a) => {
   const hasPoly = Array.isArray(a.poly) && a.poly.length > 2
   const hasRect = Array.isArray(a.rect) && a.rect.length === 4
-  if (a.kind !== 'region') return 'circle'
   const want = a.meta && typeof a.meta.shape === 'string' ? a.meta.shape : ''
   if (want === 'poly' && hasPoly) return 'poly'
   if (want === 'rect' && hasRect) return 'rect'

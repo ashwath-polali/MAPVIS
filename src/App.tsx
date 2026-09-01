@@ -44,6 +44,23 @@ const ANCHOR_WHAT: Record<AnchorKind, string> = {
   trigger: 'a spot that fires once when it is reached',
 }
 
+/* WHAT THIS KIND'S ZONE IS, which is a different sentence per kind and is the
+ * reason the control could not simply be un-hidden and left unlabelled.
+ *
+ * A zone used to be a region's alone, and "area" was an honest enough word for
+ * the one thing that had one. Six kinds have one now and it does six jobs: the
+ * doormat you arrive on, the side of the table you can reach, the patch a body
+ * lands in. Naming it per kind is what stops an author drawing the object
+ * instead of drawing the ground beside it. */
+const ANCHOR_ZONE: Record<AnchorKind, string> = {
+  point: 'the ground close enough to count as being here',
+  region: 'the area the player has to be inside for it to fire',
+  door: 'the doormat · stand anywhere in it and the prompt is there',
+  post: 'the side you can reach it from · draw the floor, not the table',
+  spawn: 'the patch a body may land in when it arrives here',
+  trigger: 'the ground that sets it off when it is crossed',
+}
+
 /* THE MARK EACH KIND WEARS IN THE LIST, from the one drawn set.
  *
  * Every anchor row wore a raw ⏻ typed into the markup, which is a font's power
@@ -491,6 +508,28 @@ function Row(props: {
       </span>
       {props.children}
     </button>
+  )
+}
+
+/* THE SWITCH FOR THE WHOLE ANCHOR OVERLAY, in the row grammar every other
+ * toggle in this tool wears.
+ *
+ * It exists because the overlay stopped being the workflow's and became the
+ * author's: every anchor's zone, floor spot, heading and binding are on the map
+ * on every step, which is what an author placing art against a reach needs and
+ * is also exactly the thing that can bury a painting on a map carrying thirty of
+ * them. Two panels show it, one component, so the two can never disagree about
+ * whether it is on. */
+function AnchorsShown({ ed, on }: { ed: Editor | null; on: boolean }) {
+  return (
+    <Row
+      icon="rect"
+      label={on ? 'anchor zones shown' : 'anchor zones hidden'}
+      desc="every zone, floor spot, heading and binding, on the map"
+      kbd="a"
+      on={on}
+      onClick={() => ed?.toggleEvents()}
+    />
   )
 }
 
@@ -1054,8 +1093,19 @@ export default function App() {
      * change, so arriving at test with the bucket still armed from cut meant
      * one click cut a hole in the island. */
     e.setPaintable(s === 'cut' || s === 'levels' || s === 'assets')
-    // the events overlay belongs to the steps that read it
-    e.setEventsVisible(s === 'test' || s === 'export')
+    /* THE OVERLAY IS NOT THE STEP'S ANY MORE, only the GRAB is.
+     *
+     * This was setEventsVisible(test || export), which drew every anchor's zone
+     * on the two steps where nothing is placed and hid all of it on the step
+     * where art goes down. Ash, 2026-08-31: "you place art blind against reaches
+     * you can't see." The zones draw everywhere now and the author turns them off
+     * with the row in the anchors panel.
+     *
+     * Grabbing is still the step's, because the anchor drag runs before the asset
+     * step ever sees the pointer: without this, drawing anchors on the assets
+     * step would mean every click near a post picked up the post rather than the
+     * table it is aimed at. */
+    e.setEventsEditable(s === 'test' || s === 'export')
     if (s === 'cut') {
       e.setView({ cutPreview: true, mask: true })
       if (!keepTool && !isCutTool(e.tool)) e.setTool('cutfill')
@@ -1192,6 +1242,15 @@ export default function App() {
       stale = true
     }
   }, [sceneKey, gotoStep, push])
+
+  /* THE OPEN FORM IS THE LOUD MARK ON THE MAP. Every anchor's zone is drawn now,
+   * so without this a map with thirty of them is thirty equal shapes and no way
+   * to tell which one the panel is editing. One effect rather than a call beside
+   * each of the seven places that move doorEdit, because a selection that is
+   * right in six of them is a highlight an author learns not to trust. */
+  useEffect(() => {
+    edRef.current?.selectAnchor(doorEdit)
+  }, [doorEdit])
 
   // the library is PER MAP: it resets with the painting, and so does the
   // door form state
@@ -4516,6 +4575,7 @@ export default function App() {
         on={doorPick}
         onClick={armDoor}
       />
+      <AnchorsShown ed={ed} on={!!st?.eventsVisible} />
       {editingDoor && (
         <div className="doorform">
           {/* THE NAME IS THE IDENTITY, and it is first for that reason. It is
@@ -4742,6 +4802,15 @@ export default function App() {
               * hub's dock as a box takes in half the water. So the third option
               * is the edge itself, drawn freehand by dragging round it.
               *
+              * AND IT IS OFFERED ON EVERY KIND NOW. This was `kind === 'region'`
+              * and the other five anchors were stuck with a ring round their own
+              * pixel: a table against a wall got a circle hanging half over the
+              * pit behind it, and a door got a ring where the thing an author
+              * means is the doormat you can actually stand on. The zone is the
+              * reach, the reach is not a property of the word in front of it,
+              * and the model has carried shape, rect and poly on every kind the
+              * whole time.
+              *
               * EXACTLY ONE OF THESE IS LIT AND IT IS THE MODE, not whichever
               * fields happen to hold data. Two of them could be on at once,
               * because circle read "no rect and no poly" and draw read "there is
@@ -4749,72 +4818,73 @@ export default function App() {
               * one deleted the others' shape, so a mis-click cost an author
               * their whole drawing. The mode is now the only thing that
               * switches, and every shape keeps what it was given. */}
-          {editingDoor.kind === 'region' && (
-            <div className="anchface">
-              <span>area</span>
-              <div className="anchkinds">
-                <button
-                  className={'kbtn' + (liveShape === 'circle' ? ' on' : '')}
-                  data-tip="a circle of the radius below"
-                  onClick={() => pickShape(editingDoor.id, 'circle', editingDoor)}
-                >
-                  circle
-                </button>
-                <button
-                  className={'kbtn' + (liveShape === 'rect' ? ' on' : '')}
-                  data-tip={editingDoor.rect ? 'the box you drew · press again to redo it' : 'two opposite corners'}
-                  onClick={() => pickShape(editingDoor.id, 'rect', editingDoor)}
-                >
-                  rect
-                </button>
-                <button
-                  className={'kbtn' + (liveShape === 'poly' ? ' on' : '')}
-                  data-tip={
-                    editingDoor.poly
-                      ? 'the area you drew · press again to redo it'
-                      : 'press and drag round the area · let go to close it'
-                  }
-                  onClick={() => pickShape(editingDoor.id, 'poly', editingDoor)}
-                >
-                  draw
-                </button>
-                {/* THE ONLY THING THAT THROWS A SHAPE AWAY. Switching mode used
-                    to do it silently, which is how an author lost a drawing by
-                    touching the wrong button. Now it takes this. */}
-                {((liveShape === 'poly' && editingDoor.poly) || (liveShape === 'rect' && editingDoor.rect)) && (
-                  <button
-                    className="arow-x"
-                    data-tip={liveShape === 'poly' ? 'throw the drawn area away' : 'throw the box away'}
-                    onClick={() =>
-                      ed?.updateEvent(
-                        editingDoor.id,
-                        liveShape === 'poly' ? { poly: null, shape: 'circle' } : { rect: null, shape: 'circle' },
-                      )
-                    }
-                  >
-                    <Icon name="x" />
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-          {editingDoor.kind === 'region' && (
-            <div className="doorhint">
-              {rectPick?.id === editingDoor.id
-                ? rectPick.from
-                  ? 'now the opposite corner'
-                  : 'click one corner · esc cancels'
-                : drawingRegion && st?.polyDrawId === editingDoor.id
-                  ? (st?.polyDraw ?? 0) > 0
-                    ? `${st?.polyDraw} points · enter saves it · esc drops it · draw again to redo it`
+          <div className="anchface">
+            <span>zone</span>
+            <div className="anchkinds">
+              <button
+                className={'kbtn' + (liveShape === 'circle' ? ' on' : '')}
+                data-tip="a circle of the radius below"
+                onClick={() => pickShape(editingDoor.id, 'circle', editingDoor)}
+              >
+                circle
+              </button>
+              <button
+                className={'kbtn' + (liveShape === 'rect' ? ' on' : '')}
+                data-tip={editingDoor.rect ? 'the box you drew · press again to redo it' : 'two opposite corners'}
+                onClick={() => pickShape(editingDoor.id, 'rect', editingDoor)}
+              >
+                rect
+              </button>
+              <button
+                className={'kbtn' + (liveShape === 'poly' ? ' on' : '')}
+                data-tip={
+                  editingDoor.poly
+                    ? 'the area you drew · press again to redo it'
                     : 'press and drag round the area · let go to close it'
-                  : liveShape === 'poly' && editingDoor.poly
-                    ? `${editingDoor.poly.length} points · drag one to correct it · the game gets the box round it too`
-                    : liveShape === 'rect' && editingDoor.rect
-                      ? `${Math.abs(editingDoor.rect[2] - editingDoor.rect[0])} × ${Math.abs(editingDoor.rect[3] - editingDoor.rect[1])}`
-                      : `a circle of ${editingDoor.r}px`}
+                }
+                onClick={() => pickShape(editingDoor.id, 'poly', editingDoor)}
+              >
+                draw
+              </button>
+              {/* THE ONLY THING THAT THROWS A SHAPE AWAY. Switching mode used
+                  to do it silently, which is how an author lost a drawing by
+                  touching the wrong button. Now it takes this. */}
+              {((liveShape === 'poly' && editingDoor.poly) || (liveShape === 'rect' && editingDoor.rect)) && (
+                <button
+                  className="arow-x"
+                  data-tip={liveShape === 'poly' ? 'throw the drawn area away' : 'throw the box away'}
+                  onClick={() =>
+                    ed?.updateEvent(
+                      editingDoor.id,
+                      liveShape === 'poly' ? { poly: null, shape: 'circle' } : { rect: null, shape: 'circle' },
+                    )
+                  }
+                >
+                  <Icon name="x" />
+                </button>
+              )}
             </div>
-          )}
+          </div>
+          {/* WHAT THE ZONE IS FOR, in this kind's own words, because "area" on a
+              door meant nothing until it said doormat. The same three shapes do
+              six different jobs and the hint is the only place that can say
+              which one is being drawn. */}
+          <div className="doorhint">
+            {rectPick?.id === editingDoor.id
+              ? rectPick.from
+                ? 'now the opposite corner'
+                : 'click one corner · esc cancels'
+              : drawingRegion && st?.polyDrawId === editingDoor.id
+                ? (st?.polyDraw ?? 0) > 0
+                  ? `${st?.polyDraw} points · enter saves it · esc drops it · draw again to redo it`
+                  : 'press and drag round the area · let go to close it'
+                : liveShape === 'poly' && editingDoor.poly
+                  ? `${editingDoor.poly.length} points · drag one to correct it · the game gets the box round it too`
+                  : liveShape === 'rect' && editingDoor.rect
+                    ? `${Math.abs(editingDoor.rect[2] - editingDoor.rect[0])} × ${Math.abs(editingDoor.rect[3] - editingDoor.rect[1])}`
+                    : `a circle of ${editingDoor.r}px`}
+          </div>
+          <div className="doorhint">{ANCHOR_ZONE[editingDoor.kind]}</div>
 
           {/* THE RADIUS, TYPEABLE, because the ceiling is 512 and stepping there
               two pixels at a time is 250 presses. The buttons stay for the small
@@ -7737,6 +7807,12 @@ export default function App() {
         </div>
       )}
       {groupStrip}
+      {/* THE ZONES ARE ON THIS STEP AND SO IS THEIR SWITCH. Art is aimed at
+          anchors, so this is the step where seeing them matters most and also the
+          step where a map with thirty of them can be the one thing you cannot
+          work over. The row is here rather than only in the anchors panel because
+          reaching a toggle should not cost a step change and back. */}
+      <AnchorsShown ed={ed} on={!!st?.eventsVisible} />
       {askLog}
       <Keys
         lines={[
@@ -7747,6 +7823,7 @@ export default function App() {
           'arrows nudge, shift 8px · [ ] scale',
           'ctrl c copies · ctrl v pastes · ctrl d duplicates · z undoes',
           'ctrl p pixelates · ctrl t trims the base · both edit the asset itself',
+          'a hides the anchor zones',
         ]}
       />
     </>

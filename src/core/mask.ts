@@ -281,7 +281,13 @@ export type AnchorKind = 'point' | 'region' | 'door' | 'post' | 'spawn' | 'trigg
 
 export const ANCHOR_KINDS: AnchorKind[] = ['point', 'region', 'door', 'post', 'spawn', 'trigger']
 
-/* THE THREE SHAPES A REGION CAN BE, and one of them is live at a time. */
+/* THE THREE SHAPES A ZONE CAN BE, and one of them is live at a time.
+ *
+ * EVERY KIND HAS A ZONE, not only a region. The control was gated to region and
+ * the other five were stuck with a ring round their own pixel, so a table
+ * against a wall got a circle hanging half over the pit behind it and a door got
+ * a ring instead of the doormat you can actually stand on. The reach an author
+ * means is a shape they can see, whatever the anchor is called. */
 export type AnchorShape = 'circle' | 'rect' | 'poly'
 
 export const ANCHOR_SHAPES: AnchorShape[] = ['circle', 'rect', 'poly']
@@ -308,7 +314,7 @@ export interface MapAnchor {
    * stored. Absent means the body aims at x,y, which is what every anchor did
    * before this existed. */
   stand?: [number, number]
-  /* region only. WHICH OF THE THREE SHAPES IS THE ONE THE AUTHOR MEANS.
+  /* WHICH OF THE THREE SHAPES IS THE ONE THE AUTHOR MEANS. Any kind.
    *
    * It exists because the exclusivity used to be enforced by deletion: writing a
    * rect deleted the poly, writing a poly deleted the rect, and going back to a
@@ -326,14 +332,14 @@ export interface MapAnchor {
    * list of top-level fields plus the whole of meta, so a new top-level field is
    * dropped three times over. */
   shape?: AnchorShape
-  /* region only. THE FOUR NUMBERS ARE [x0, y0, x1, y1], two opposite corners,
+  /* THE FOUR NUMBERS ARE [x0, y0, x1, y1], two opposite corners,
    * and not [x, y, w, h]. The schema comment said one thing and the game's own
    * box test did the other, and nothing was authoritative because no rect had
    * ever been authored. The game is the side that already had running code, so
    * the game wins and everything else was moved to it. Order does not matter:
    * both readers take the min and the max. */
   rect?: [number, number, number, number]
-  /* region only. THE SHAPE THE PLACE ACTUALLY IS, in painting pixels, closed
+  /* THE SHAPE THE PLACE ACTUALLY IS, in painting pixels, closed
    * by the reader rather than by a repeated last point.
    *
    * A circle and a box are the only two shapes this tool could describe, and
@@ -430,16 +436,18 @@ export const ANCHOR_R_MAX = 512
  * falls back to what is there, which is also how every region authored before
  * the mode field existed reads.
  *
- * Only a region has a shape. On every other kind `r` is the reach and the two
- * area fields are not its business, so asking is how the ring stops being drawn
- * inside a marked-out plaza and stays drawn on a door. */
+ * IT NO LONGER ASKS WHAT KIND THIS IS. It used to answer circle for anything
+ * that was not a region, which made the whole area control region-only by
+ * arithmetic even where the form offered it. A door's zone is the doormat, a
+ * post's is the side of the table you can reach it from, and neither of those is
+ * a ring round the middle of the thing. An anchor with no area authored still
+ * falls through to circle, which is what every kind did before this. */
 export function anchorShape(e: {
   kind?: string
   shape?: string
   rect?: unknown
   poly?: unknown
 }): AnchorShape {
-  if (e.kind !== 'region') return 'circle'
   const hasPoly = Array.isArray(e.poly) && e.poly.length > 2
   const hasRect = Array.isArray(e.rect) && e.rect.length === 4
   if (e.shape === 'poly' && hasPoly) return 'poly'
@@ -631,8 +639,14 @@ export function migrateEvent(e: MapAnchor & { type?: string }): MapAnchor {
    * now, the mode says which one is authoritative, and the exporters ask
    * anchorShape rather than guessing from what happens to be present.
    *
-   * Written only when there is an area to be authoritative over, so a door and a
-   * plain point carry no mode at all and no bundle grows a field for them. */
+   * Written only when there is an area to be authoritative over, so an anchor
+   * nobody has drawn a zone on carries no mode at all and no bundle grows a
+   * field for it.
+   *
+   * THE KIND IS NOT ASKED. It was `kind === 'region' && ...`, which threw the
+   * mode away the instant a drawn door was migrated, so a zone drawn on a door
+   * survived exactly until the next save and then read back as a circle. The
+   * zone belongs to the anchor, not to the word in front of it. */
   const bagShape = e.meta && typeof (e.meta as { shape?: unknown }).shape === 'string'
     ? String((e.meta as { shape?: string }).shape)
     : ''
@@ -641,7 +655,7 @@ export function migrateEvent(e: MapAnchor & { type?: string }): MapAnchor {
     : (ANCHOR_SHAPES as string[]).includes(bagShape)
       ? bagShape
       : ''
-  if (e.kind === 'region' && (e.poly || e.rect || wanted)) {
+  if (e.poly || e.rect || wanted) {
     const shape = (wanted || anchorShape(e)) as AnchorShape
     e.shape = shape
     e.meta = { ...(e.meta || {}), shape }

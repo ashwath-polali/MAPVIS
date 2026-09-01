@@ -1,5 +1,26 @@
 [
   {
+    "name": "gen-a-low-warm-grey",
+    "kind": "asset",
+    "ask": "a low warm grey stone table on blocky supports with a paper chart",
+    "prompt": "A low table of warm grey stone, its thick slab top chipped along one worn rounded edge, resting on four squat blocky stone piers with dust and faint chisel marks in the grain, an off-white paper chart spread across the top, dog-eared corners lifting and curling, ruled with faded brown ink lines. Isometric pixel art, chunky pixels, limited palette of warm grey, dull taupe-brown and soft bone, near-black brown outline, lit from the upper left, shaded on the right, muted saturation, the object alone as a cut-out sprite on a fully transparent background, the base of the object is where its own material ends.",
+    "at": "2026-09-01T00:36:09.389Z"
+  },
+  {
+    "name": "gen-a-low-table-of",
+    "kind": "asset",
+    "ask": "a low table of pale grey stone with a paper chart",
+    "prompt": "A low table cut from pale grey stone, thick chipped slab top on four squat blocky legs, one corner broken away, a hairline crack across the surface, an off-white paper chart spread on top curling at its dog-eared corners with faded brown ink lines, held down by a small rounded stone weight. Isometric pixel art, chunky pixels, limited palette of pale grey, slate blue-grey and bone white with dull ochre paper, near-black outline, lit from the upper left, shaded lower right, faint warm orange bounce along the lower edges, muted saturation, the object alone as a cut-out sprite on a fully transparent background, the base of the object is where its own material ends.",
+    "at": "2026-09-01T00:14:51.808Z"
+  },
+  {
+    "name": "gen-a-low-stone-table",
+    "kind": "asset",
+    "ask": "a low stone table with a paper chart",
+    "prompt": "A low slab table of chiselled grey stone, its thick rectangular top chipped at two corners with a hairline crack running across, set on two blocky carved supports scuffed pale where they are worn; a curling cream paper chart lies on the top, edges torn and browned, faded ink lines, one corner pinned under a small rounded stone. Isometric pixel art, chunky pixels, limited palette of cool ash grey, slate blue-grey and pale bone stone with cream paper and a warm rust accent, near-black outline, lit from the upper left, shaded lower right with warm dim bounce along the lowest edge, muted saturation, the object alone as a cut-out sprite on a fully transparent background, the base of the object is where its own material ends.",
+    "at": "2026-09-01T00:08:23.702Z"
+  },
+  {
     "name": "cord-board",
     "kind": "motion",
     "ask": "the hanging cords sway gently",

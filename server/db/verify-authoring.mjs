@@ -247,8 +247,65 @@ const doc = {
         [22, 20],
       ],
     },
+    /* A DOOR WITH A DRAWN ZONE, and the reason a zone could not stay a region's
+     * alone. What an author means by a door's reach is the doormat: the strip of
+     * floor in front of the arch a body can actually stand on. A ring round the
+     * painted archway takes in the wall it is cut into and, on a door at the head
+     * of a stair, the drop beside it. The control was gated to region in the
+     * form, the mode was thrown away in migrateEvent and again in the anchors
+     * upsert, and publish flattened whatever survived back to a circle, so this
+     * shape had four separate places to die between the panel and the game.
+     *
+     * L-shaped on purpose, like the pier above: a mat that turns a corner is the
+     * ordinary case rather than the exotic one. */
+    {
+      id: 9,
+      name: 'the_shed_door',
+      kind: 'door',
+      x: 30,
+      y: 38,
+      r: 9,
+      to: 'hub',
+      toAnchor: 'panthers_maw',
+      label: 'the shed',
+      shape: 'poly',
+      poly: [
+        [24, 34],
+        [36, 34],
+        [36, 40],
+        [30, 40],
+        [30, 44],
+        [24, 44],
+      ],
+    },
+    /* AND A POST WITH ONE, which is the case Ash named: a table against a wall is
+     * approachable from the side you can actually reach and not from a circle
+     * hanging over the pit behind it. The zone is the floor beside the thing and
+     * the stand-at is the one pixel inside it a body ends on, so the two answer
+     * different questions and both are authored here. */
+    {
+      id: 10,
+      name: 'the_counter',
+      kind: 'post',
+      x: 14,
+      y: 32,
+      r: 7,
+      to: '',
+      label: 'the counter',
+      facing: 'north',
+      stand: [14, 36],
+      shape: 'poly',
+      poly: [
+        [8, 34],
+        [22, 34],
+        [22, 38],
+        [16, 38],
+        [16, 42],
+        [8, 42],
+      ],
+    },
   ],
-  eventNext: 9,
+  eventNext: 11,
   occs: [{ id: 1, baseline: 41 }],
   occNext: 2,
   // the six numbers describing the body, none of them the defaults
@@ -376,6 +433,54 @@ try {
   eq('switching to a circle keeps the drawn area', switched?.poly, doc.events[7].poly)
   eq('switching to a circle keeps the box too', switched?.rect, [22, 12, 30, 20])
   eq('and the mode it was switched to is what comes back', switched?.shape, 'circle')
+
+  /* A ZONE ON SOMETHING THAT IS NOT A REGION, and this is the fence for the
+   * whole of it.
+   *
+   * Every one of shape, rect and poly has been on MapAnchor since the day they
+   * were added, on every kind. What made the zone a region's alone was three
+   * gates written in three files: the form only offered the control when the kind
+   * was region, migrateEvent only wrote the mode when the kind was region, and
+   * both exporters answered circle for anything that was not one. So an author
+   * who reached a drawn zone onto a door by any other route got the points stored
+   * and the mode dropped, and read it back as a plain radius.
+   *
+   * putDoc is the honest place to check it: it is reachable by a hand-written
+   * POST, mask.ts is not in front of it, and syncEventsToAnchors is the gate the
+   * points and the mode have to get through together. */
+  const shed = back.events.find((e) => e.name === 'the_shed_door')
+  eq('a door keeps the doormat it was drawn', shed?.poly, doc.events[8].poly)
+  eq('and remembers that drawing is the mode it is in', shed?.shape, 'poly')
+  const counter = back.events.find((e) => e.name === 'the_counter')
+  eq('a post keeps the floor beside it that it was drawn', counter?.poly, doc.events[9].poly)
+  eq('and the mode survives on a post too', counter?.shape, 'poly')
+  eq('with the stand-at inside it and the heading beside it', [counter?.stand, counter?.facing], [[14, 36], 'north'])
+
+  /* AND THE ZONE OUTLIVES THE KIND, because the kind is the first thing an
+   * author changes their mind about.
+   *
+   * A door that turns out to want a prompt is a post, and the whole of the
+   * difference is one button in the form. Every gate above keyed the mode off
+   * `kind`, so switching a drawn door to a post threw the mode away on the next
+   * save and the shape read back as a circle: an author lost the outline they had
+   * walked round by pressing a button that has nothing to do with shape. The
+   * points always survived, which made it worse, since they sat in the row doing
+   * nothing with no way to get back to them.
+   *
+   * The fixture goes back in afterwards, so everything below publishes the map it
+   * expects rather than one this check left half-edited. */
+  const swap = JSON.parse(JSON.stringify(doc))
+  swap.events.find((e) => e.name === 'the_shed_door').kind = 'post'
+  await putDoc(map.id, JSON.stringify(swap))
+  const afterSwap = JSON.parse(await getDoc(map.id)).events.find((e) => e.name === 'the_shed_door')
+  eq('a drawn zone survives its anchor changing kind', afterSwap?.poly, doc.events[8].poly)
+  eq('and so does the mode that says the drawing is live', afterSwap?.shape, 'poly')
+  await putDoc(map.id, JSON.stringify(doc))
+  eq(
+    'and it is a door again with its zone intact',
+    JSON.parse(await getDoc(map.id)).events.find((e) => e.name === 'the_shed_door')?.shape,
+    'poly',
+  )
   const bp = back.paths?.find((p) => p.name === 'the_approach')
   eq('the route survives the save', bp?.points, doc.paths[0].points)
   eq('the route keeps its direction', [bp?.closed, bp?.twoWay, bp?.facing], [false, false, 'east'])
@@ -545,6 +650,31 @@ try {
   eq('and ships no drawn area either', shippedSwitched?.poly, undefined)
   eq('while the circle it was switched to is intact', shippedSwitched?.r, 9)
   eq('and the mode rides along so a later reader can tell', shippedSwitched?.meta?.shape, 'circle')
+
+  /* A DOOR'S ZONE AND A POST'S ZONE, ALL THE WAY INTO THE PUBLISHED BUNDLE, in
+   * both shapes, and this is the half of the ungating that the round trip above
+   * cannot prove.
+   *
+   * publish.mjs carries its own copy of anchorShape, because a .mjs on the server
+   * cannot import the .ts, and that copy answered circle for every kind but
+   * region. So a doormat could survive the form, migrateEvent and the anchors
+   * table and still reach the game as a bare radius, with the editor drawing the
+   * shape the author walked round and the engine testing a ring. The two copies
+   * have to say the same thing and this is what makes them.
+   *
+   * THE BOX IS NOT OPTIONAL HERE EITHER. AdventureGame's
+   * src/game/pmap/anchors.ts:224 tests a rect and has no polygon test, and it
+   * only reaches for one on `kind === 'region'`, so today this door's mat is not
+   * read at all over there. The bundle carries both anyway: the points for the
+   * reader that learns them, the box for the reader that lands. */
+  const shippedShed = (shipped.anchors || []).find((a) => a.name === 'the_shed_door')
+  eq('a door ships the doormat it was drawn', shippedShed?.poly, doc.events[8].poly)
+  eq('and the box round it, corner for corner', shippedShed?.rect, [24, 34, 36, 44])
+  eq('and says the drawing is the live shape', shippedShed?.meta?.shape, 'poly')
+  const shippedCounter = (shipped.anchors || []).find((a) => a.name === 'the_counter')
+  eq('a post ships the floor beside it', shippedCounter?.poly, doc.events[9].poly)
+  eq('and its box too', shippedCounter?.rect, [8, 34, 22, 42])
+  eq('with the stand-at and the heading beside them', [shippedCounter?.stand, shippedCounter?.facing], [[14, 36], 'north'])
 
   const sp = (shipped.paths || []).find((p) => p.name === 'the_approach')
   eq('published route', sp?.points, doc.paths[0].points)
