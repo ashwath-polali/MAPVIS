@@ -2725,6 +2725,34 @@ export class Editor {
   // playing a short loop otherwise, and a changed speed leaves them at the old
   // one. One snapshot, so z puts the old timing back.
   refreshPlacementsOf(item: LibItem): number {
+    /* A DIRECTION SET IS NEITHER A FRAME LIST NOR A STILL, and this handled
+     * only those two: for a set of headings it built an empty key and returned
+     * nought. So a character animated AFTER it was placed kept the one-frame
+     * headings it was placed with and stood frozen for good, because the cycle
+     * reads the placement's own dirs and not the library's. Ash, 2026-09-02,
+     * the principal in the Maw, breathing on his own tile and still on the map.
+     * Keyed on the folder the headings live in; every placement drawn from it
+     * takes the new headings and rate, and its resting still moves with them. */
+    if (item.dirs && Object.keys(item.dirs).length) {
+      const first = Object.values(item.dirs).find((l) => l && l.length)?.[0] || ''
+      const folder = first.slice(0, first.lastIndexOf('/') + 1)
+      if (!folder) return 0
+      const inFolder = (u?: string) => !!u && u.startsWith(folder)
+      const list = this.doc.assets.filter(
+        (a) => inFolder(a.src) || (!!a.dirs && Object.values(a.dirs).some((l) => l.some(inFolder))),
+      )
+      if (!list.length) return 0
+      this.doc.snap()
+      for (const a of list) {
+        a.dirs = Object.fromEntries(Object.entries(item.dirs).map(([h, l]) => [h, l.slice()]))
+        a.fps = item.fps || 8
+        const rest = Object.keys(a.dirs).find((k) => (a.src || '').includes('/' + k + '-')) || 'south'
+        const still = a.dirs[rest] && a.dirs[rest][0]
+        if (still) a.src = still
+      }
+      this.touched()
+      return list.length
+    }
     const key =
       item.kind === 'animated'
         ? item.frames && item.frames[0]
