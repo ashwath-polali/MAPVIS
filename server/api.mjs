@@ -1621,6 +1621,19 @@ async function route(req, res, p, url) {
     const ask = String(b.ask || '').trim()
     if (!owner) return send(res, 400, { error: 'no item' })
     if (!ask) return send(res, 400, { error: 'say what it turns into' })
+    /* THE ITEM MAY EXIST ONLY IN THE STORE. readLibItem is a filesystem read,
+     * and on the host work/ is an empty tmp directory, so a sprite the listing
+     * plainly showed came back "not in the library" the moment somebody pressed
+     * animate on it (Ash, 2026-09-01, on a character drawn minutes earlier).
+     * The listing reads library_items; this read the disk; they disagreed the
+     * way export's did before hydrateMap. Same fault, same cure. A laptop pays
+     * nothing, because work/ IS the library there, and a pull that fails falls
+     * through to the same 404 rather than a fresh way to be wrong. */
+    try {
+      await hydrateMap(id, path.join(WORK, id))
+    } catch (e) {
+      console.error('[library] could not hydrate from object storage:', e.message)
+    }
     const it = readLibItem(id, owner)
     if (!it) return send(res, 404, { error: 'that is not in this library' })
     /* Two places have ever recorded where art came from and both are read, in
@@ -1798,6 +1811,19 @@ async function route(req, res, p, url) {
     const ask = String(b.ask || '').replace(/\s+/g, ' ').trim().slice(0, PROMPT_MAX)
     if (!b.name) return send(res, 400, { error: 'no item' })
     if (!ask) return send(res, 400, { error: 'say what it should do' })
+    /* THE ITEM MAY EXIST ONLY IN THE STORE. readLibItem is a filesystem read,
+     * and on the host work/ is an empty tmp directory, so a sprite the listing
+     * plainly showed came back "not in the library" the moment somebody pressed
+     * animate on it (Ash, 2026-09-01, on a character drawn minutes earlier).
+     * The listing reads library_items; this read the disk; they disagreed the
+     * way export's did before hydrateMap. Same fault, same cure. A laptop pays
+     * nothing, because work/ IS the library there, and a pull that fails falls
+     * through to the same 404 rather than a fresh way to be wrong. */
+    try {
+      await hydrateMap(id, path.join(WORK, id))
+    } catch (e) {
+      console.error('[library] could not hydrate from object storage:', e.message)
+    }
     const it = readLibItem(id, name)
     if (!it) return send(res, 404, { error: 'not in the library' })
     const job = String(b.job || '').slice(0, 64)
