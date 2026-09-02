@@ -157,6 +157,17 @@ async function styleRef(slug) {
   const id = safeId(slug)
   let buf = null
   const local = path.join(WORK, id, 'scene.png')
+  /* /api/save already puts the working painting in the store, so a map that
+   * has been saved and never published is a perfectly good reference. On the
+   * host the local copy is never there, so without this the only answer was
+   * the published row and a 400 for everything else. */
+  if (!fs.existsSync(local)) {
+    try {
+      await hydrateMap(id, path.join(WORK, id))
+    } catch (e) {
+      console.error('[styleRef] could not hydrate from object storage:', e.message)
+    }
+  }
   if (fs.existsSync(local)) buf = fs.readFileSync(local)
   if (!buf) {
     const pub = await publishedMap(id, null)
@@ -862,12 +873,17 @@ async function route(req, res, p, url) {
      * is the old behaviour, kept because it is the only thing those rows have,
      * and it is what the fallback below is for. */
     const owner = cleanName(b.owner || '')
-    const mine = owner ? (libraryItems(id).find((x) => x.name === owner) || {}).states || [] : []
+    /* THE LISTING, FROM WHERE IT LIVES. libraryItems walks the tmp folder, which
+     * on the host is empty every request, so a round of states was planned with
+     * no faces to name and never changed picture. asset-state already takes the
+     * store's listing when the platform is on; this does the same. libraryOf
+     * hangs `states` off a row in the shape libraryItems does, so nothing below
+     * changes. */
+    const lib = platformOn() ? await libraryOf(id) : libraryItems(id)
+    const mine = owner ? (lib.find((x) => x.name === owner) || {}).states || [] : []
     const onDisk = mine.length
       ? mine.map((f) => String(f.name || '').trim()).filter(Boolean)
-      : libraryItems(id)
-          .map((it) => String(it.name || '').trim())
-          .filter(Boolean)
+      : lib.map((it) => String(it.name || '').trim()).filter(Boolean)
     /* Bounded by characters, because the prompt is made of characters. See
      * NAMES_CHARS. What is left over is counted here and named in the note
      * below, so a library too big to offer whole says so instead of dropping
@@ -1556,8 +1572,11 @@ async function route(req, res, p, url) {
         if (!frames)
           return send(res, 200, { item: await saveStatic(id, b64, wantName, prompt, t.thing, drawn.objectId), note: STOPPED_STILL })
         const adir = libDirOf(id)
-        let aname = wantName
-        for (let i = 2; fs.existsSync(path.join(adir, aname)); i++) aname = `${wantName}-${i}`
+        /* THE NAME IS CHOSEN AGAINST THE STORE, not the tmp folder. On the host
+         * the folder is empty, so a second take of the same ask slugged to the
+         * same name and silently replaced the first row and its frames.
+         * asset-anim already asks freeLibraryName; this does the same. */
+        const aname = await freeLibraryName(id, wantName)
         const fdir = path.join(adir, aname)
         fs.mkdirSync(fdir, { recursive: true })
         const rel = []
@@ -1634,6 +1653,7 @@ async function route(req, res, p, url) {
     } catch (e) {
       console.error('[library] could not hydrate from object storage:', e.message)
     }
+    await ensureSidecars(id, owner)
     const it = readLibItem(id, owner)
     if (!it) return send(res, 404, { error: 'that is not in this library' })
     /* Two places have ever recorded where art came from and both are read, in
@@ -1824,6 +1844,7 @@ async function route(req, res, p, url) {
     } catch (e) {
       console.error('[library] could not hydrate from object storage:', e.message)
     }
+    await ensureSidecars(id, name)
     const it = readLibItem(id, name)
     if (!it) return send(res, 404, { error: 'not in the library' })
     const job = String(b.job || '').slice(0, 64)
@@ -1985,6 +2006,16 @@ async function route(req, res, p, url) {
     // when a recipe is written to MOVE a sprite that has never moved before
     let wasStill = ''
     if (b.overwrite) {
+    /* THE HOST'S work/ IS EMPTY, so pull what the store holds before reading the
+     * disk. The same fault animate and state had this afternoon and export had
+     * before that: the listing comes from the database, this read came from a
+     * tmp directory, and they disagreed. Costs nothing on a laptop. */
+    try {
+      await hydrateMap(id, path.join(WORK, id))
+    } catch (e) {
+      console.error('[effect-save] could not hydrate from object storage:', e.message)
+    }
+      await ensureSidecars(id, name)
       const target = path.resolve(dir, name)
       if (!target.startsWith(path.resolve(dir) + path.sep)) return send(res, 400, { error: 'bad name' })
       const asDir = fs.existsSync(target) && fs.statSync(target).isDirectory()
@@ -2049,6 +2080,16 @@ async function route(req, res, p, url) {
     const b = await body(req)
     const id = safeId(b.id)
     const name = cleanName(b.name || '')
+    /* THE HOST'S work/ IS EMPTY, so pull what the store holds before reading the
+     * disk. The same fault animate and state had this afternoon and export had
+     * before that: the listing comes from the database, this read came from a
+     * tmp directory, and they disagreed. Costs nothing on a laptop. */
+    try {
+      await hydrateMap(id, path.join(WORK, id))
+    } catch (e) {
+      console.error('[effect-read] could not hydrate from object storage:', e.message)
+    }
+    await ensureSidecars(id, name)
     const dir = path.resolve(libDirOf(id))
     const f = path.resolve(dir, name, 'effect.json')
     if (!f.startsWith(dir + path.sep) || !fs.existsSync(f)) return send(res, 404, { error: 'no effect saved under that name' })
@@ -2271,6 +2312,16 @@ async function route(req, res, p, url) {
     if (!src) return send(res, 400, { error: 'no name' })
     const dir = libDirOf(id)
     fs.mkdirSync(dir, { recursive: true })
+    /* THE HOST'S work/ IS EMPTY, so pull what the store holds before reading the
+     * disk. The same fault animate and state had this afternoon and export had
+     * before that: the listing comes from the database, this read came from a
+     * tmp directory, and they disagreed. Costs nothing on a laptop. */
+    try {
+      await hydrateMap(id, path.join(WORK, id))
+    } catch (e) {
+      console.error('[asset-crop] could not hydrate from object storage:', e.message)
+    }
+    await ensureSidecars(id, cleanName(src))
     const taken = (n) => fs.existsSync(path.join(dir, n)) || fs.existsSync(path.join(dir, n + '.png'))
     /* IN PLACE is the default now. Every edit used to leave a second item
      * behind — palm, palm-trimmed, palm-trimmed-bit2 — and a library of
@@ -2421,8 +2472,20 @@ async function route(req, res, p, url) {
       await dropItem(id, name)
       return send(res, 200, { removed: 'animated' })
     }
-    // it may be gone from disk but still known to the platform
+    /* NOT ON THIS DISK IS NOT THE SAME AS NOT IN THE LIBRARY. On the host the
+     * tmp folder never has the item, so every delete of a listed row printed
+     * "not in the library" while the row was in fact dropped. Ask the store
+     * whether it knew the name, and answer for what actually happened. */
+    let known = false
+    if (platformOn()) {
+      try {
+        known = (await libraryOf(id)).some((x) => x.name === name)
+      } catch (e) {
+        console.error('[library-remove] could not read the store listing:', e.message)
+      }
+    }
     await dropItem(id, name)
+    if (known) return send(res, 200, { removed: 'store' })
     return send(res, 404, { error: 'not in the library' })
   }
 
@@ -4649,6 +4712,37 @@ async function writeRotations(id, plan) {
  * for the whole folder at once; this answers for one, and keeps the things only
  * a re-animate cares about: where the files are, and what dirs.json says beyond
  * dirs and fps. */
+/* REBUILD THE SIDECARS THE STORE NEVER HELD.
+ *
+ * Everything pushed before today went up as frames only, so hydrateMap brings
+ * back a folder with no dirs.json and no effect.json, and readLibItem reads
+ * that folder as nothing. The database row still knows the headings, the
+ * rate, the character that drew it and the effect recipe, so they are written
+ * back from there. New pushes carry both files, so this is for what is already
+ * in the bucket, and it costs one listing only when a file is missing. */
+async function ensureSidecars(id, name) {
+  if (!platformOn()) return
+  const folder = path.join(libDirOf(id), name)
+  if (!fs.existsSync(folder) || !fs.statSync(folder).isDirectory()) return
+  const dj = path.join(folder, 'dirs.json')
+  const ej = path.join(folder, 'effect.json')
+  if (fs.existsSync(dj) && fs.existsSync(ej)) return
+  let it = null
+  try {
+    it = (await libraryOf(id)).find((x) => x.name === name) || null
+  } catch (e) {
+    console.error('[sidecars] could not read the store listing:', e.message)
+    return
+  }
+  if (!it) return
+  if (!fs.existsSync(dj) && it.dirs) {
+    const meta = { dirs: it.dirs, fps: it.fps || 8 }
+    if (it.origin && it.origin.characterId) meta.characterId = it.origin.characterId
+    fs.writeFileSync(dj, JSON.stringify(meta, null, 2))
+  }
+  if (!fs.existsSync(ej) && it.effectJson) fs.writeFileSync(ej, JSON.stringify(it.effectJson, null, 2))
+}
+
 function readLibItem(id, name) {
   const dir = path.resolve(libDirOf(id))
   const folder = path.resolve(dir, name)

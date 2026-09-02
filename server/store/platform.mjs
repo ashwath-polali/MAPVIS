@@ -178,6 +178,12 @@ export async function libraryOf(slug) {
     const st = Array.isArray(r.states) ? r.states : []
     if (st.length) it.states = st
     if (r.origin && (r.origin.objectId || r.origin.characterId)) it.canState = true
+    /* WHAT THE ROW KNOWS THAT THE DISK MAY NOT: an item pushed before the
+     * sidecars went up has frames in the bucket and no dirs.json or effect.json,
+     * so a host rebuilding those files needs the origin and the effect recipe
+     * from here. Handed back whole rather than as flags. */
+    if (r.origin && typeof r.origin === 'object') it.origin = r.origin
+    if (r.effect && typeof r.effect === 'object') it.effectJson = r.effect
     return it
   })
 }
@@ -668,6 +674,14 @@ export async function pushItem(slug, name, workDir) {
       }
     }
   }
+
+  /* THE TWO SIDECARS GO UP WITH THE FRAMES. hydrateMap pulls maps/<id>/ back
+   * onto a host whose work/ is empty, and until today it got every png and
+   * neither json, so a character came back as a folder of headings with no
+   * heading map and readLibItem called it nothing. The row below records the
+   * same facts, but the disk readers read the files, so the files go up too. */
+  if (meta) await s.put(`maps/${id}/library/${name}/dirs.json`, Buffer.from(JSON.stringify(meta)), 'application/json')
+  if (effect) await s.put(`maps/${id}/library/${name}/effect.json`, Buffer.from(JSON.stringify(effect)), 'application/json')
 
   await upsertItem(id, name, n > 1 || Object.keys(dirs).length ? 'animated' : 'static', {
     w,
