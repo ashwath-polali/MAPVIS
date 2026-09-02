@@ -352,6 +352,20 @@ export interface MapAnchor {
    * region with a box and has no polygon test at all, so a bundle carrying only
    * the points would be an area nothing can ever be inside. See polyBounds. */
   poly?: [number, number][]
+  /* WHERE THE CIRCLE SITS, as an offset from the anchor's own pixel.
+   *
+   * A rect and a drawn outline carry absolute corners, so an author can put
+   * either one anywhere. A circle carried only `r`, so it was pinned to x,y
+   * with no way to move it, and for a BOUND anchor x,y is the placement's
+   * origin, which in this projection is the bottom middle of the art. Ash,
+   * 2026-09-01: the ring sat under the front legs of a table and the tabletop
+   * was outside its own zone, with nothing to drag.
+   *
+   * An offset rather than an absolute point, unlike the other two, because the
+   * circle is the one shape that already follows a placement that moves. Storing
+   * a point would freeze a ring that is meant to travel with somebody who paces.
+   * Absent means centred on the anchor, which is every map authored so far. */
+  ring?: [number, number]
   /* door only: the map this leads to */
   to: string
   /* door only: WHICH anchor in that map you arrive at. Without it every door
@@ -647,6 +661,36 @@ export function migrateEvent(e: MapAnchor & { type?: string }): MapAnchor {
    * mode away the instant a drawn door was migrated, so a zone drawn on a door
    * survived exactly until the next save and then read back as a circle. The
    * zone belongs to the anchor, not to the word in front of it. */
+  /* THE RING OFFSET, validated and folded the way `shape` and `when` are, and in
+   * the bag for the same reason: three separate copy lists take a fixed set of
+   * top-level fields plus the whole of meta, so a new column would be dropped by
+   * all three. Two finite numbers or nothing, and a zero offset is stored as
+   * nothing so an untouched ring never grows a field. */
+  const bagRing = e.meta && Array.isArray((e.meta as { ring?: unknown }).ring)
+    ? ((e.meta as { ring?: unknown[] }).ring as unknown[])
+    : null
+  const rawRing = Array.isArray(e.ring) ? (e.ring as unknown[]) : bagRing
+  if (rawRing && rawRing.length === 2 && rawRing.every((n) => isFinite(Number(n)))) {
+    const rx = Math.round(Number(rawRing[0]))
+    const ry = Math.round(Number(rawRing[1]))
+    if (rx || ry) {
+      e.ring = [rx, ry]
+      e.meta = { ...(e.meta || {}), ring: [rx, ry] }
+    } else {
+      delete e.ring
+      if (e.meta && 'ring' in e.meta) {
+        const { ring: _drop, ...rest } = e.meta as Record<string, unknown>
+        e.meta = rest
+      }
+    }
+  } else {
+    delete e.ring
+    if (e.meta && 'ring' in e.meta) {
+      const { ring: _drop, ...rest } = e.meta as Record<string, unknown>
+      e.meta = rest
+    }
+  }
+
   const bagShape = e.meta && typeof (e.meta as { shape?: unknown }).shape === 'string'
     ? String((e.meta as { shape?: string }).shape)
     : ''

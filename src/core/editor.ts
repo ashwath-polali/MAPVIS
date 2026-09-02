@@ -1143,6 +1143,29 @@ export class Editor {
      * EDITABLE, not merely visible. The overlay draws on every step now, and a
      * corner handle that answered a click on the assets step would take the
      * press meant for the art sitting under it. */
+    /* THE RING'S HANDLE, tested before the poly corners and the anchor dot for
+     * the same reason those are ordered that way: while the offset is zero the
+     * handle sits exactly on the dot, and testing the dot first would make the
+     * handle unreachable on every ring that has never been moved. Selected
+     * anchors only, so it can never take a press meant for the art. */
+    if (e.button === 0 && this.anchorSel) {
+      const ev = this.doc.events.find((v) => v.id === this.anchorSel)
+      if (ev && this.anchorLive(ev) && anchorShape(ev) === 'circle') {
+        const home = ev.placement ? this.placementRef(ev.placement) : undefined
+        const spot = home ? this.lifeSpot(home) : { x: ev.x, y: ev.y }
+        const [rx, ry] = ev.ring ?? [0, 0]
+        const hx = spot.x + rx
+        const hy = spot.y + ry
+        if (Math.abs(hx - x) <= HANDLE_GRAB + 2 && Math.abs(hy - y) <= HANDLE_GRAB + 2) {
+          this.doc.snap()
+          this.dragRing = { id: ev.id, dx: hx - x, dy: hy - y }
+          this.capture(e)
+          e.preventDefault()
+          return
+        }
+      }
+    }
+
     if (e.button === 0) {
       for (const ev of [...this.doc.events].reverse()) {
         if (!ev.poly || !this.anchorLive(ev)) continue
@@ -1311,6 +1334,18 @@ export class Editor {
     // a corner of a drawn area being pulled. The shape is corrected in place
     // rather than redrawn from scratch, which is the whole reason the handles
     // are draggable: one corner in the water should not cost the other eleven.
+    if (this.dragRing) {
+      const [x, y] = this.toNative(e)
+      const ev = this.doc.events.find((v) => v.id === this.dragRing!.id)
+      if (ev) {
+        const home = ev.placement ? this.placementRef(ev.placement) : undefined
+        const spot = home ? this.lifeSpot(home) : { x: ev.x, y: ev.y }
+        const rx = Math.round(x + this.dragRing.dx - spot.x)
+        const ry = Math.round(y + this.dragRing.dy - spot.y)
+        this.updateAnchor(ev.id, { ring: rx || ry ? [rx, ry] : null })
+      }
+      return
+    }
     if (this.dragVert) {
       const [x, y] = this.toNative(e)
       const ev = this.doc.events.find((v) => v.id === this.dragVert!.id)
@@ -1493,6 +1528,15 @@ export class Editor {
     // letting go closes the freehand area and hands it back as a highlight
     if (this.newPoly?.drawing) {
       this.closeRegionDrag()
+      return
+    }
+    if (this.dragRing) {
+      const ev = this.doc.events.find((v) => v.id === this.dragRing!.id)
+      this.dragRing = null
+      if (ev)
+        this.say(
+          ev.ring ? `${displayName(ev).text} · ring ${ev.ring[0]}, ${ev.ring[1]}` : `${displayName(ev).text} · ring centred`,
+        )
       return
     }
     if (this.dragVert) {
@@ -3988,6 +4032,7 @@ export class Editor {
    * its index in that anchor's points. An index rather than the point itself,
    * because the array is rewritten by updateEvent on every move */
   private dragVert: { id: number; i: number; dx: number; dy: number } | null = null
+  private dragRing: { id: number; dx: number; dy: number } | null = null
 
   /* THE ROUTE BEING LAID, and null the rest of the time.
    *
@@ -4117,6 +4162,7 @@ export class Editor {
       stand?: [number, number] | null
       rect?: [number, number, number, number] | null
       poly?: [number, number][] | null
+      ring?: [number, number] | null
       shape?: AnchorShape
     },
   ) {
@@ -4138,6 +4184,10 @@ export class Editor {
     if (patch.rect !== undefined) {
       if (patch.rect) e.rect = patch.rect.map((n) => Math.round(n)) as [number, number, number, number]
       else delete e.rect
+    }
+    if (patch.ring !== undefined) {
+      if (patch.ring) e.ring = [Math.round(patch.ring[0]), Math.round(patch.ring[1])]
+      else delete e.ring
     }
     if (patch.poly !== undefined) {
       // fewer than three points is a line, and a line has no inside, so it is
@@ -4168,7 +4218,13 @@ export class Editor {
      * and both exporters, and it is otherwise only rebuilt when a document is
      * loaded or saved: without this an export taken in the same session as the
      * switch would carry the shape the author had just left. */
-    if (patch.shape !== undefined || patch.rect !== undefined || patch.poly !== undefined || patch.kind !== undefined)
+    if (
+      patch.shape !== undefined ||
+      patch.rect !== undefined ||
+      patch.poly !== undefined ||
+      patch.ring !== undefined ||
+      patch.kind !== undefined
+    )
       migrateAnchor(e)
     this.touched()
   }
@@ -7124,6 +7180,9 @@ export class Editor {
        * too, so the draft is the only area under the cursor. */
       const shape = this.newPoly?.id === ev.id ? 'none' : anchorShape(ev)
       let top = py - ev.r * z
+      // where the ring actually landed, so the handle below can be put on it
+      let cx = px
+      let cy = py
       /* ONE PATH FOR ALL THREE SHAPES, so a box, a ring and a walked outline are
        * filled, cased and stroked by the same three lines and cannot drift into
        * three different weights.
@@ -7151,8 +7210,17 @@ export class Editor {
         path.closePath()
         top = polyBounds(ev.poly)[1] * z
       } else if (shape === 'circle') {
+        /* THE RING IS DRAWN WHERE THE AUTHOR PUT IT, not on the anchor's own
+         * pixel. For a bound anchor that pixel is the placement's origin, which
+         * in this projection is the bottom middle of the art, so an untouched
+         * ring on a table sits under its front legs. The offset rides on top of
+         * `spot`, so a ring on somebody who paces still travels with her. */
+        const [rx, ry] = ev.ring ?? [0, 0]
+        cx = px + rx * z
+        cy = py + ry * z
         path = new Path2D()
-        path.arc(px, py, ev.r * z, 0, Math.PI * 2)
+        path.arc(cx, cy, ev.r * z, 0, Math.PI * 2)
+        top = cy - ev.r * z
       }
       if (path) {
         g.globalAlpha = wash
@@ -7168,6 +7236,18 @@ export class Editor {
         g.setLineDash(shape === 'circle' ? [4, 3] : shape === 'rect' ? [6, 4] : [])
         g.stroke(path)
         g.setLineDash([])
+      }
+      /* THE RING'S OWN HANDLE, on the selected anchor only, for the same reason
+       * a drawn outline's corners are handles: a shape you can correct should
+       * look correctable. It is a square so it cannot be mistaken for the round
+       * dot that marks the anchor itself, and the two are only in the same place
+       * while the offset is still zero. */
+      if (sel && shape === 'circle') {
+        g.globalAlpha = 1
+        g.fillStyle = CASE_INK
+        g.fillRect(cx - 4, cy - 4, 8, 8)
+        g.fillStyle = ink
+        g.fillRect(cx - 3, cy - 3, 6, 6)
       }
       /* THE CORNERS ARE HANDLES AND ARE DRAWN AS SUCH: a shape you can correct
        * looks correctable, and a point in the water costs one drag rather than
