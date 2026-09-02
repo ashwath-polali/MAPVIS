@@ -1252,6 +1252,19 @@ export default function App() {
     edRef.current?.selectAnchor(doorEdit)
   }, [doorEdit])
 
+  /* AND THE SAME SELECTION COMING BACK THE OTHER WAY, because an anchor can now
+   * be chosen by pressing it on the map and not only by opening a row. Without
+   * this the canvas knew which one was chosen and the form did not, so the one
+   * step that has no row list could select an anchor and never show it.
+   *
+   * Zero is deliberately not synced back: closing the form sets doorEdit to 0,
+   * and echoing that here would immediately reopen whatever the canvas still
+   * held. A press chooses, a close closes. */
+  useEffect(() => {
+    const sel = st?.anchorSel ?? 0
+    if (sel && sel !== doorEdit) setDoorEdit(sel)
+  }, [st?.anchorSel])
+
   // the library is PER MAP: it resets with the painting, and so does the
   // door form state
   useEffect(() => {
@@ -4462,121 +4475,15 @@ export default function App() {
       ]
     : []
 
-  const testPanel = !has ? (
-    needPainting
-  ) : (
-    <>
-      <div className="panel-cap">prove it on foot before it ships</div>
-      <Sec>walk</Sec>
-      <Row
-        icon="walk"
-        label={st?.walking ? 'stop the walk test' : 'walk the map'}
-        desc="wasd or arrows · blocked moves flash red"
-        kbd="space"
-        on={st?.walking}
-        onClick={() => ed?.toggleWalk()}
-      />
-      {/* THE START POINT LOOKS LIKE IT COMPETES WITH A SPAWN ANCHOR AND IT DOES
-          NOT. The game resolves arrival in three steps: the anchor a door named
-          in its `arrive at`, then any spawn anchor on this map, then this. So
-          this is where somebody lands who opened the map cold with no door
-          involved, and a spawn anchor is a named address a door can aim at.
-          Both are real and neither is redundant. The desc says the order now,
-          because two controls that both look like "the spawn" and never say
-          which one wins is a question an author should not have to read the
-          engine to answer. */}
-      <Row
-        icon="pin"
-        label="set start point"
-        desc="under the cursor, or the walker mid-test · last resort: a door's arrive at wins, then a spawn anchor, then this"
-        onClick={() => ed?.setSpawnHere()}
-      />
-      {/* THE BODY THIS MAP IS DRAWN FOR, and it sits under the walk test
-          because the walker on screen is the thing these numbers describe.
-          *
-          * All six ride into map.json, the game reads all six, this tool's own
-          * walk law reads them and the anchor checker reads two back out. They
-          * had no control and no column, so every map MAPVIS ever produced
-          * shipped an 18 px character at 34 px/s on ground squashed 0.72,
-          * whether it was a 688 px island seen from far above or a room drawn
-          * at character scale. The ten-second arithmetic that caps how big a
-          * room can be is 688 divided by twice the speed, so this is the number
-          * under the rest of them. */}
-      <Sec>the body it is drawn for</Sec>
-      {/* THE SENTENCE UNDER THIS BLOCK IS GONE. It was twenty-six words
-          explaining six fields that are already called height, speed, hip out,
-          hip up, squash and step, so it spent three lines of a 272px column
-          restating the labels. What a field means that its name does not say
-          now lives on the field, on hover, where somebody who does not know can
-          ask and somebody who does is not charged for it. */}
-      <div className="walkcfg">
-        <NumField
-          label="height"
-          tip="how tall the body is in painting pixels · 18 is a person on an island map"
-          value={st?.walk.charH ?? 18}
-          onCommit={(v) => ed?.setWalk({ charH: v })}
-        />
-        <NumField
-          label="speed"
-          tip="painting pixels a second · the map's width over twice this is how long it takes to cross"
-          value={st?.walk.speed ?? 34}
-          onCommit={(v) => ed?.setWalk({ speed: v })}
-        />
-        <NumField
-          label="hip out"
-          tip="how far to each side the two floor probes sit, so a body cannot walk with one foot in the sea"
-          value={st?.walk.hip ?? 2}
-          onCommit={(v) => ed?.setWalk({ hip: v })}
-        />
-        <NumField
-          label="hip up"
-          tip="how far above the feet those probes sit"
-          value={st?.walk.hipDY ?? 1}
-          onCommit={(v) => ed?.setWalk({ hipDY: v })}
-        />
-        <NumField
-          label="squash"
-          tip="how much shorter a step north is than a step east, because the ground is seen at an angle"
-          value={st?.walk.yScale ?? 0.72}
-          dp={2}
-          step={0.02}
-          onCommit={(v) => ed?.setWalk({ yScale: v })}
-        />
-        <NumField
-          label="step"
-          tip="the biggest level change a body can climb without stairs"
-          value={st?.walk.near ?? 10}
-          onCommit={(v) => ed?.setWalk({ near: v })}
-        />
-      </div>
-      <Sec>check the ground</Sec>
-      <Row
-        icon="heal"
-        label="fix gaps"
-        desc="closes 1px seams between shapes"
-        onClick={() => ed?.heal()}
-      />
-      <Row
-        icon="flag"
-        label="check reach"
-        desc="stranded ground turns red"
-        onClick={() => ed?.check()}
-      />
-      {/* THIS PANEL HAS NEVER ONLY MADE DOORS. Six kinds sit in the form below
-          and a door is one of them, but the button and the header both still
-          said door, from back when it was the only kind there was. An author
-          reading the sidebar had no way to find out that a post, a region or a
-          spawn is made here, so the words now say what the thing does. */}
-      <Sec>anchors</Sec>
-      <Row
-        icon="door"
-        label={doorPick ? 'click the map for the anchor' : 'add anchor'}
-        desc={doorPick ? 'right-click or esc cancels' : 'a named spot code can address'}
-        on={doorPick}
-        onClick={armDoor}
-      />
-      <AnchorsShown ed={ed} on={!!st?.eventsVisible} />
-      {editingDoor && (
+  /* THE ANCHOR FORM IS A VARIABLE, NOT A BLOCK INSIDE ONE PANEL.
+   *
+   * It only ever rendered inside the test step, so an anchor clicked anywhere
+   * else could be selected and dragged and still not have its kind switched,
+   * its zone redrawn or its binding read. Ash, 2026-09-01: clicking an anchor
+   * should open the same form wherever you are. Both panels are built in this
+   * one scope, so this is a variable rather than a component and none of the
+   * fifteen pieces of state it reads has to be threaded through props. */
+  const anchorForm = editingDoor ? (
         <div className="doorform">
           {/* THE NAME IS THE IDENTITY, and it is first for that reason. It is
               the string a member writes in python. The label below is only what
@@ -4944,7 +4851,123 @@ export default function App() {
             )}
           </div>
         </div>
-      )}
+  ) : null
+
+  const testPanel = !has ? (
+    needPainting
+  ) : (
+    <>
+      <div className="panel-cap">prove it on foot before it ships</div>
+      <Sec>walk</Sec>
+      <Row
+        icon="walk"
+        label={st?.walking ? 'stop the walk test' : 'walk the map'}
+        desc="wasd or arrows · blocked moves flash red"
+        kbd="space"
+        on={st?.walking}
+        onClick={() => ed?.toggleWalk()}
+      />
+      {/* THE START POINT LOOKS LIKE IT COMPETES WITH A SPAWN ANCHOR AND IT DOES
+          NOT. The game resolves arrival in three steps: the anchor a door named
+          in its `arrive at`, then any spawn anchor on this map, then this. So
+          this is where somebody lands who opened the map cold with no door
+          involved, and a spawn anchor is a named address a door can aim at.
+          Both are real and neither is redundant. The desc says the order now,
+          because two controls that both look like "the spawn" and never say
+          which one wins is a question an author should not have to read the
+          engine to answer. */}
+      <Row
+        icon="pin"
+        label="set start point"
+        desc="under the cursor, or the walker mid-test · last resort: a door's arrive at wins, then a spawn anchor, then this"
+        onClick={() => ed?.setSpawnHere()}
+      />
+      {/* THE BODY THIS MAP IS DRAWN FOR, and it sits under the walk test
+          because the walker on screen is the thing these numbers describe.
+          *
+          * All six ride into map.json, the game reads all six, this tool's own
+          * walk law reads them and the anchor checker reads two back out. They
+          * had no control and no column, so every map MAPVIS ever produced
+          * shipped an 18 px character at 34 px/s on ground squashed 0.72,
+          * whether it was a 688 px island seen from far above or a room drawn
+          * at character scale. The ten-second arithmetic that caps how big a
+          * room can be is 688 divided by twice the speed, so this is the number
+          * under the rest of them. */}
+      <Sec>the body it is drawn for</Sec>
+      {/* THE SENTENCE UNDER THIS BLOCK IS GONE. It was twenty-six words
+          explaining six fields that are already called height, speed, hip out,
+          hip up, squash and step, so it spent three lines of a 272px column
+          restating the labels. What a field means that its name does not say
+          now lives on the field, on hover, where somebody who does not know can
+          ask and somebody who does is not charged for it. */}
+      <div className="walkcfg">
+        <NumField
+          label="height"
+          tip="how tall the body is in painting pixels · 18 is a person on an island map"
+          value={st?.walk.charH ?? 18}
+          onCommit={(v) => ed?.setWalk({ charH: v })}
+        />
+        <NumField
+          label="speed"
+          tip="painting pixels a second · the map's width over twice this is how long it takes to cross"
+          value={st?.walk.speed ?? 34}
+          onCommit={(v) => ed?.setWalk({ speed: v })}
+        />
+        <NumField
+          label="hip out"
+          tip="how far to each side the two floor probes sit, so a body cannot walk with one foot in the sea"
+          value={st?.walk.hip ?? 2}
+          onCommit={(v) => ed?.setWalk({ hip: v })}
+        />
+        <NumField
+          label="hip up"
+          tip="how far above the feet those probes sit"
+          value={st?.walk.hipDY ?? 1}
+          onCommit={(v) => ed?.setWalk({ hipDY: v })}
+        />
+        <NumField
+          label="squash"
+          tip="how much shorter a step north is than a step east, because the ground is seen at an angle"
+          value={st?.walk.yScale ?? 0.72}
+          dp={2}
+          step={0.02}
+          onCommit={(v) => ed?.setWalk({ yScale: v })}
+        />
+        <NumField
+          label="step"
+          tip="the biggest level change a body can climb without stairs"
+          value={st?.walk.near ?? 10}
+          onCommit={(v) => ed?.setWalk({ near: v })}
+        />
+      </div>
+      <Sec>check the ground</Sec>
+      <Row
+        icon="heal"
+        label="fix gaps"
+        desc="closes 1px seams between shapes"
+        onClick={() => ed?.heal()}
+      />
+      <Row
+        icon="flag"
+        label="check reach"
+        desc="stranded ground turns red"
+        onClick={() => ed?.check()}
+      />
+      {/* THIS PANEL HAS NEVER ONLY MADE DOORS. Six kinds sit in the form below
+          and a door is one of them, but the button and the header both still
+          said door, from back when it was the only kind there was. An author
+          reading the sidebar had no way to find out that a post, a region or a
+          spawn is made here, so the words now say what the thing does. */}
+      <Sec>anchors</Sec>
+      <Row
+        icon="door"
+        label={doorPick ? 'click the map for the anchor' : 'add anchor'}
+        desc={doorPick ? 'right-click or esc cancels' : 'a named spot code can address'}
+        on={doorPick}
+        onClick={armDoor}
+      />
+      <AnchorsShown ed={ed} on={!!st?.eventsVisible} />
+      {anchorForm}
       {doors.length > 0 && (
         <div className="evrows">
           {doors.map((ev) => (
@@ -7813,6 +7836,7 @@ export default function App() {
           work over. The row is here rather than only in the anchors panel because
           reaching a toggle should not cost a step change and back. */}
       <AnchorsShown ed={ed} on={!!st?.eventsVisible} />
+      {anchorForm}
       {askLog}
       <Keys
         lines={[

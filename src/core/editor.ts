@@ -1193,6 +1193,12 @@ export class Editor {
           e.preventDefault()
           return
         }
+        /* AND PRESSING THE MAP ITSELF LETS GO OF IT. The form opens from this
+         * press now, and the step it opens on has no row list to close it with,
+         * so without this an anchor chosen once stayed chosen and its handles
+         * stayed live until the author left the step. Falls through rather than
+         * returning: the press still belongs to whatever is under it. */
+        if (this.anchorSel) this.selectAnchor(0)
       }
     }
 
