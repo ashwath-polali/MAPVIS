@@ -577,7 +577,7 @@ async function route(req, res, p, url) {
     fs.mkdirSync(sdir, { recursive: true })
     const file = path.join(sdir, 'painting.png')
     fs.writeFileSync(file, Buffer.from(stripDataURL(b.image), 'base64'))
-    const card = await readStyleCard(file, String(b.job || ''))
+    const card = await readStyleCard(file, String(b.job || ''), [stripDataURL(b.image)])
     if (!card) return send(res, 502, { error: 'the map did not read' })
     fs.writeFileSync(cacheFile, JSON.stringify(card, null, 2))
     return send(res, 200, { card, cached: false })
@@ -763,6 +763,10 @@ async function route(req, res, p, url) {
         mapFile,
         boxFile,
         box: boxFile ? box : null,
+        // the bytes the files above were written from, so a planner with no
+        // disk sees the same pictures the cli reads off it
+        images: [mapB64, ...(boxFile ? [boxB64] : [])],
+        paths: [mapFile, ...(boxFile ? [boxFile] : [])],
         previous: String(b.previous || ''),
         job: String(b.job || ''),
       })
@@ -798,6 +802,8 @@ async function route(req, res, p, url) {
         id,
         mapFile,
         boxFile,
+        images: [mapB64, boxB64],
+        paths: [mapFile, boxFile],
         box,
         count,
         kind: b.kind === 'animated' ? 'animated' : 'static',
@@ -837,6 +843,9 @@ async function route(req, res, p, url) {
     fs.mkdirSync(dir, { recursive: true })
     const mapFile = path.join(dir, 'map.png')
     fs.writeFileSync(mapFile, Buffer.from(mapB64, 'base64'))
+    // the same bytes, for a planner that cannot read this disk
+    const images = [mapB64]
+    const paths = [mapFile]
     const box = b.bounds && Number(b.bounds.w) > 1 ? b.bounds : null
     const walkPct = Math.max(0, Math.min(1, Number(b.walkPct) || 0))
     const walkOnly = !!b.walkOnly
@@ -1072,6 +1081,9 @@ async function route(req, res, p, url) {
         ].join('\n'),
         180000,
         String(b.job || ''),
+        undefined,
+        images,
+        paths,
       )
       const o = planJSON(raw, 'kind')
       if (!o || !o.kind) throw new Error('no answer')
@@ -2136,12 +2148,14 @@ async function route(req, res, p, url) {
     } catch (e) {
       return send(res, 500, { error: 'the sheet did not write · ' + String(e.message || e).slice(0, 160) })
     }
+    // the strip's own bytes, for a planner with no disk to read it from
+    const sheetB64 = fs.readFileSync(file).toString('base64')
     const custom = String(b.kind || '') === 'custom'
     const type = String(b.type || '')
     const job = String(b.job || '')
     const v = custom
-      ? await reviewWritten(file, ask, frames.length, cleanCode(b.code), cleanControls(b.controls), b.params, job, !!b.sprite)
-      : await reviewRule(file, ask, frames.length, type, b.params, job)
+      ? await reviewWritten(file, ask, frames.length, cleanCode(b.code), cleanControls(b.controls), b.params, job, !!b.sprite, [sheetB64])
+      : await reviewRule(file, ask, frames.length, type, b.params, job, [sheetB64])
     if (!v) return send(res, 502, { error: 'the planner did not answer', strip: file })
     return send(res, 200, { strip: file, ...v })
   }
@@ -2183,9 +2197,13 @@ async function route(req, res, p, url) {
      * goes stale and would have the reviewer judging against another session's
      * crop. Missing is fine and the look falls back to the sprites alone. */
     const mapFile = path.join(WORK, id, '.ask', 'map.png')
+    const hasMap = fs.existsSync(mapFile)
     const v = await reviewObjects({
       file,
-      map: fs.existsSync(mapFile) ? mapFile : '',
+      map: hasMap ? mapFile : '',
+      // the strip and the map as bytes, in the order the prompt names them
+      images: [fs.readFileSync(file).toString('base64'), ...(hasMap ? [fs.readFileSync(mapFile).toString('base64')] : [])],
+      paths: [file, ...(hasMap ? [mapFile] : [])],
       ask,
       prompt: String(b.prompt || ''),
       // read off the prompt that drew it, the same way the generator read it, so
@@ -6228,7 +6246,7 @@ function housePrompt({ subject, detail, palette, clause, view }) {
  * because a prompt assembled in code cannot respond to what the map looks
  * like, and every clause that used to be bolted on is something a model
  * looking at the picture can decide better. */
-async function planMake({ ask, what, kind, id, mapFile, boxFile, box, previous, job }) {
+async function planMake({ ask, what, kind, id, mapFile, boxFile, box, previous, job, images = [], paths = [] }) {
   const sprite = what === 'sprite'
   const lines = [
     `You are writing ONE prompt for a pixel-art sprite generator (PixelLab). Read the image file` +
@@ -6517,7 +6535,7 @@ async function planMake({ ask, what, kind, id, mapFile, boxFile, box, previous, 
     `Answer with ONLY this JSON, no prose:`,
     sprite ? SPRITE_ANSWER : OBJECT_ANSWER,
   )
-  const raw = await runPlanner(lines.join('\n'), 240000, job)
+  const raw = await runPlanner(lines.join('\n'), 240000, job, undefined, images, paths)
   // a sprite still answers one finished prompt; an object answers the two
   // halves and never the joined sentence, so the anchor moves with it
   const o = planJSON(raw, sprite ? 'prompt' : 'subject')
@@ -6735,7 +6753,7 @@ function spriteAnim(raw, kind, skeleton, motion, ask) {
  * map's coordinate system. Every item carries its own finished prompt, because
  * a set of things wants variety: three palms that are the same png three times
  * is a worse answer than three palms drawn differently. */
-async function planScene({ ask, id, mapFile, boxFile, box, count, kind, job }) {
+async function planScene({ ask, id, mapFile, boxFile, box, count, kind, job, images = [], paths = [] }) {
   const lines = [
     `You are filling one area of a hand-painted pixel-art game map with objects. Read the two ` +
       `image files below ONCE EACH with the Read tool, then answer in your next message. Do not ` +
@@ -6804,7 +6822,7 @@ async function planScene({ ask, id, mapFile, boxFile, box, count, kind, job }) {
       `materials, 25 to 60 words","style":"chunky pixels, ... , muted saturation","w":64,"h":80,` +
       `"x":0,"y":0,"motion":""}]}`,
   ].filter((l) => l !== null)
-  const raw = await runPlanner(lines.join('\n'), 300000, job)
+  const raw = await runPlanner(lines.join('\n'), 300000, job, undefined, images, paths)
   const o = planJSON(raw, 'items')
   if (!o || !Array.isArray(o.items) || !o.items.length) throw new Error('the interpreter did not answer')
   const clean = (v, n) => String(v || '').replace(/\s+/g, ' ').trim().slice(0, n)
@@ -7304,7 +7322,7 @@ function denyNoPlanner(res, what) {
 // the end of any sprite description. The planner is handed the file's absolute
 // path and asked to read it: no crop, no spot, no click, and no image ever
 // goes near the generator. Free, and cached, so a map is looked at once.
-async function readStyleCard(file, job) {
+async function readStyleCard(file, job, images = []) {
   try {
     const raw = await runPlanner(
       `Look at this painting and describe ITS OWN look, so a sprite drawn later can be made to ` +
@@ -7324,6 +7342,9 @@ async function readStyleCard(file, job) {
         `{"palette":"...","light":"...","outline":"...","scale":"...","clause":"..."}`,
       180000,
       job,
+      undefined,
+      images,
+      paths,
     )
     const o = planJSON(raw, 'clause')
     if (!o || !o.clause) return null
@@ -7764,7 +7785,7 @@ function verdictOf(o) {
  * because it is already right. The knobs are NOT up for revision: a person may
  * already have turned them, and a body that reads a knob that no longer exists
  * draws an empty frame. */
-async function reviewWritten(file, ask, frames, code, controls, params, job, sprite) {
+async function reviewWritten(file, ask, frames, code, controls, params, job, sprite, images = []) {
   const knobs = (controls || []).map((c) => `p.${c.key} (${c.label}, ${c.min}..${c.max})`).join(', ')
   try {
     const raw = await runPlanner(
@@ -7796,6 +7817,9 @@ async function reviewWritten(file, ask, frames, code, controls, params, job, spr
         `or, when it is right:\n{"verdict":"good","why":"reads as what was asked for"}`,
       120000,
       job,
+      undefined,
+      images,
+      paths,
     )
     const o = planJSON(raw)
     if (!o) return null
@@ -7809,7 +7833,7 @@ async function reviewWritten(file, ask, frames, code, controls, params, job, spr
 /* One of the seven rules, looked at. There is no code to rewrite here, so the
  * answer is better numbers instead, which is the same free improvement without
  * writing a renderer. */
-async function reviewRule(file, ask, frames, type, params, job) {
+async function reviewRule(file, ask, frames, type, params, job, images = []) {
   const start = EFFECT_START[type] || EFFECT_START.rise
   const now = cleanEffectParams(params, start)
   try {
@@ -7840,6 +7864,9 @@ async function reviewRule(file, ask, frames, type, params, job) {
         `or, when it is right:\n{"verdict":"good","why":"reads as what was asked for"}`,
       120000,
       job,
+      undefined,
+      images,
+      paths,
     )
     const o = planJSON(raw)
     if (!o) return null
@@ -7886,7 +7913,7 @@ async function reviewRule(file, ask, frames, type, params, job) {
  * So the reviewer is handed the camera that was chosen and judges against THAT.
  * The ban on it writing a camera of its own stays, because its fix goes back
  * out as a prompt and the projection is code's to write. */
-async function reviewObjects({ file, map, ask, prompt, view, n, what, size, job }) {
+async function reviewObjects({ file, map, ask, prompt, view, n, what, size, job, images = [], paths = [] }) {
   const many = n !== 1
   const lines = [
     `Look at what a pixel-art generator just made and say whether it answers what was asked for.`,
@@ -8001,7 +8028,7 @@ async function reviewObjects({ file, map, ask, prompt, view, n, what, size, job 
       `they stand among are flat","fix":"<the corrected prompt>"}`,
   )
   try {
-    const raw = await runPlanner(lines.join('\n'), 120000, job)
+    const raw = await runPlanner(lines.join('\n'), 120000, job, undefined, images, paths)
     // anchored on best, because a model asked to look at a strip likes to warm
     // up by saying what it is looking at, and that first little object parses
     // fine while carrying none of the answer
@@ -8249,7 +8276,7 @@ export function stopJob(job) {
  * A NoPlanner thrown from here is not a fault. It means this account cannot
  * reach claude right now, and the caller decides between falling through to the
  * author's own words and denying a feature that is purely claude. */
-async function runPlanner(prompt, timeoutMs, job, user, images) {
+async function runPlanner(prompt, timeoutMs, job, user, images, paths) {
   return ask({
     /* THE ACCOUNT COMES FROM THE REQUEST, NOT FROM THE CALLER.
      *
@@ -8271,6 +8298,9 @@ async function runPlanner(prompt, timeoutMs, job, user, images) {
     prompt,
     timeoutMs,
     images,
+    // where the caller wrote those images, in the same order, so a relay can
+    // recreate them where the prompt says they are
+    paths,
     jobKey: job || '',
     // the stop button still has to reach a local process, so the registry that
     // makes that possible is handed the child rather than owning the spawn

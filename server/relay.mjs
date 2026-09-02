@@ -1,3 +1,5 @@
+import path from 'node:path'
+import fs from 'node:fs'
 // The linked machine.
 //
 //   node server/relay.mjs
@@ -63,7 +65,25 @@ async function tick() {
   const started = Date.now()
   try {
     // the same cli, the same flags, the same answer MAPVIS has always used
-    const raw = await viaCli(job.payload.prompt, 300000)
+    /* THE PICTURES COME WITH THE JOB. The host wrote them to its own tmp
+     * directory and named those paths in the prompt; this machine has neither.
+     * Each image is written here and the host's path is swapped for this one,
+     * so the cli reads exactly what the host meant it to and the prompt's
+     * wording never changes. Before this the planner on the laptop was asked
+     * to read /tmp files that only ever existed on a serverless instance. */
+    let prompt = String(job.payload.prompt || '')
+    const imgs = Array.isArray(job.payload.images) ? job.payload.images : []
+    const paths = Array.isArray(job.payload.paths) ? job.payload.paths : []
+    if (imgs.length) {
+      const dir = path.join(os.tmpdir(), 'mapvis-relay', String(job.id))
+      fs.mkdirSync(dir, { recursive: true })
+      imgs.forEach((b64, i) => {
+        const local = path.join(dir, `${i}.png`)
+        fs.writeFileSync(local, Buffer.from(String(b64), 'base64'))
+        if (paths[i]) prompt = prompt.split(String(paths[i])).join(local)
+      })
+    }
+    const raw = await viaCli(prompt, 300000)
     let text = raw
     try {
       // the cli wraps its answer; unwrapping here means the server sees one

@@ -45,6 +45,18 @@ const localRelay = () => env().MAPVIS_LOCAL_RELAY === '1'
  * costs on every call, measured in docs/MAPVIS-ASSETS.md. Images ride in the
  * message rather than as file paths, which is what lets .ask/, .style/ and
  * .propose/ stop existing. */
+/* THE PATHS IN THE PROMPT ARE THE ATTACHMENTS. Every planner prompt names the
+ * files it wants looked at by absolute path, because the cli reads them off
+ * disk. The api has no disk and no Read tool, so the same bytes ride in the
+ * message and this one line says where they are. The prompt's own wording does
+ * not change, which is what lets the three providers share one prompt. */
+const attachedNote = (n) =>
+  n
+    ? `The ${n === 1 ? 'image file' : `${n} image files`} named by absolute path below ${n === 1 ? 'is' : 'are'} ` +
+      `attached to this message${n === 1 ? '' : ', in that same order'}. You have no Read tool here: look at the ` +
+      `attachment${n === 1 ? '' : 's'} and do not try to open the path${n === 1 ? '' : 's'}.\n\n`
+    : ''
+
 async function viaKey(key, prompt, timeoutMs, images = []) {
   const ctl = new AbortController()
   const t = setTimeout(() => ctl.abort(), timeoutMs)
@@ -54,7 +66,7 @@ async function viaKey(key, prompt, timeoutMs, images = []) {
         type: 'image',
         source: { type: 'base64', media_type: 'image/png', data: b64 },
       })),
-      { type: 'text', text: prompt },
+      { type: 'text', text: attachedNote(images.length) + prompt },
     ]
     const r = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -90,7 +102,7 @@ async function viaKey(key, prompt, timeoutMs, images = []) {
  * If nothing claims it before the timeout the job is marked and NoPlanner is
  * thrown, which is the degrade signal. A laptop being closed is a normal
  * condition, not a fault. */
-async function viaRelay(userId, prompt, timeoutMs, images = [], jobKey = '') {
+async function viaRelay(userId, prompt, timeoutMs, images = [], jobKey = '', paths = []) {
   const live = await one(
     `select id from relay_links where user_id = $1 and 'claude' = any(capabilities)
        and last_seen_at > now() - interval '90 seconds' limit 1`,
@@ -100,7 +112,9 @@ async function viaRelay(userId, prompt, timeoutMs, images = [], jobKey = '') {
 
   const job = await one(
     `insert into jobs (user_id, kind, provider, payload) values ($1,'planner','claude',$2::jsonb) returning id`,
-    [userId, JSON.stringify({ prompt, images, key: jobKey })],
+    // the host's own paths for those images, in order, so the laptop that
+    // claims this can put the bytes where the prompt says they are
+    [userId, JSON.stringify({ prompt, images, paths, key: jobKey })],
   )
 
   const until = Date.now() + timeoutMs
@@ -168,7 +182,7 @@ export function viaCli(prompt, timeoutMs, onProcess) {
 
 // ---- the one call the rest of the server makes -----------------------------
 
-export async function ask({ user, prompt, timeoutMs = 240000, images = [], jobKey = '', onProcess }) {
+export async function ask({ user, prompt, timeoutMs = 240000, images = [], paths = [], jobKey = '', onProcess }) {
   // With no accounts configured at all this is still the local tool it always
   // was, so the cli answers and nothing changed.
   if (!user) return viaCli(prompt, timeoutMs, onProcess)
@@ -179,7 +193,7 @@ export async function ask({ user, prompt, timeoutMs = 240000, images = [], jobKe
     // a relay on this very machine is just the cli, and going out to the
     // database and back to reach a process sitting right here would be silly
     if (localRelay()) return viaCli(prompt, timeoutMs, onProcess)
-    return viaRelay(user.id, prompt, timeoutMs, images, jobKey)
+    return viaRelay(user.id, prompt, timeoutMs, images, jobKey, paths)
   }
   throw new NoPlanner('none')
 }
