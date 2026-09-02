@@ -103,7 +103,7 @@ import {
   GAME_WORLD, ISLAND_STATES, SEA_KINDS, MARK_KINDS,
 } from './store/world.mjs'
 import { env } from './db/env.mjs'
-import { keyFor } from './store/auth.mjs'
+import { keyFor, lendKey } from './store/auth.mjs'
 import {
   signUp,
   signIn,
@@ -321,7 +321,8 @@ async function serve(req, res, p, url) {
     const user = await currentUser(req)
     if (user) {
       const how = await keyFor(user.id, 'pixellab')
-      ctx = { http: true, user, pixellabKey: how?.mode === 'key' ? how.key : null }
+      // a pasted key or one a linked machine lent: either way the host can call
+      ctx = { http: true, user, pixellabKey: how?.key || null }
     }
   } catch {
     /* no database configured is the local tool it has always been */
@@ -3714,6 +3715,17 @@ async function relayApi(req, res, p) {
        where id = $1`,
       [link.id, String(b.name || '').slice(0, 80), caps],
     )
+    /* THE MACHINE LENDS ITS PIXELLAB KEY when it says it can do pixellab. The
+     * host has no key of its own and cannot proxy minutes-long generations
+     * through this queue, so the linked laptop hands over the one it already
+     * uses and the host calls pixellab directly with it. */
+    if (caps.includes('pixellab') && typeof b.pixellab === 'string' && b.pixellab.trim()) {
+      try {
+        await lendKey(link.user_id, 'pixellab', b.pixellab)
+      } catch (e) {
+        console.error('[relay] could not take the lent pixellab key:', e.message)
+      }
+    }
     /* One job, taken atomically. `for update skip locked` is what makes two
      * machines on the same account safe: each grabs a different row instead of
      * both running the same question and billing it twice. */
@@ -5012,6 +5024,24 @@ async function animatePlan(it, ask, id, job, b) {
  * so this runs once per item and then never. */
 async function characterFor(it, given) {
   const looksId = (s) => /^[a-f0-9-]{16,64}$/i.test(String(s || ''))
+  // an id the client pinned, or one already written down beside the art
+  const pinned = looksId(given) ? String(given) : it.meta && looksId(it.meta.characterId) ? String(it.meta.characterId) : ''
+  /* THE PINNED ID FIRST. This used to list the whole account before it read
+   * the id sitting in dirs.json, so a sprite that knew exactly which character
+   * drew it still paid for a 700-row listing and failed when that listing
+   * failed. One detail read answers for a pinned sprite; the listing is the
+   * rescue for one with nothing written down. */
+  if (pinned) {
+    try {
+      const d = await pixellab.characterDetail(pinned)
+      const rot = (d && d.rotation_urls) || {}
+      if (Object.keys(rot).length) {
+        const s = (d && d.size) || {}
+        return { id: pinned, w: Number(s.width) || 48, h: Number(s.height) || 48, from: looksId(given) ? 'asked' : 'dirs' }
+      }
+    } catch {
+    }
+  }
   let list
   try {
     list = await accountCharacters()
@@ -5023,28 +5053,11 @@ async function characterFor(it, given) {
     w: (row.size && Number(row.size.width)) || 48,
     h: (row.size && Number(row.size.height)) || 48,
   })
-  // an id the client pinned, or one already written down beside the art
-  const pinned = looksId(given) ? String(given) : it.meta && looksId(it.meta.characterId) ? String(it.meta.characterId) : ''
   if (pinned) {
-    const row = list.find((c) => String(c.id) === pinned)
     // a character deleted on their side would 422 after the price had been
     // shown, and finding that out here costs nothing
+    const row = list.find((c) => String(c.id) === pinned)
     if (row) return { ...sized(row), from: looksId(given) ? 'asked' : 'dirs' }
-    /* Absent from the listing is not the same as gone. The listing is a page of
-     * what existed when it was read, so a character made a minute ago is not on
-     * it yet, and three of the hub's people were called deleted while their art
-     * sat on disk beside the id that drew it. Ask about the one id directly,
-     * which is free and authoritative. */
-    try {
-      const d = await pixellab.characterDetail(pinned)
-      const rot = (d && d.rotation_urls) || {}
-      if (Object.keys(rot).length) {
-        const s = (d && d.size) || {}
-        return { id: pinned, w: Number(s.width) || 48, h: Number(s.height) || 48, from: 'detail' }
-      }
-    } catch {
-      /* falls through to the honest answer below */
-    }
     return { why: 'the character this was drawn from is no longer on the account' }
   }
   const asks = readAsks(it.id).filter((a) => a && a.kind === 'character' && a.prompt)

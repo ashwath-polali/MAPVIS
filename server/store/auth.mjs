@@ -245,8 +245,26 @@ export async function keyFor(userId, service) {
   const row = await one(`select ${col}_provider p, ${col}_key_enc k from users where id = $1`, [userId])
   if (!row) return null
   if (row.p === 'key' && row.k) return { mode: 'key', key: openKey(row.k) }
-  if (row.p === 'relay') return { mode: 'relay', key: null }
+  /* A LINKED MACHINE LENDS ITS KEY. The planner rides the relay as a job the
+   * laptop runs, but pixellab is called from here directly and needs a key in
+   * hand, so "relay" for art meant a green dot and NoPixellab on every press.
+   * The relay now sends the laptop's token when it links, it is sealed into the
+   * same column a pasted key goes in, and it comes back here under the mode the
+   * account chose, so Settings keeps saying linked machine and is telling the
+   * truth. Absent, the mode still says relay and the key is still null. */
+  if (row.p === 'relay') return { mode: 'relay', key: row.k ? openKey(row.k) : null }
   return { mode: 'none', key: null }
+}
+
+/* The key a linked machine lends, sealed like a pasted one. Only into an account
+ * that chose relay for that service: a chosen key or a chosen none is not
+ * overridden by whatever machine happens to poll. */
+export async function lendKey(userId, service, key) {
+  if (!['claude', 'pixellab'].includes(service)) throw new Error('unknown service')
+  const k = String(key || '').trim()
+  if (!k) return
+  const col = service === 'claude' ? 'claude' : 'pixellab'
+  await q(`update users set ${col}_key_enc = $2 where id = $1 and ${col}_provider = 'relay'`, [userId, sealKey(k)])
 }
 
 // ---- the ledger ------------------------------------------------------------

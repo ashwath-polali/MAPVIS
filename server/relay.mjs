@@ -27,6 +27,12 @@ const BASE = (E.MAPVIS_URL || 'http://localhost:5274').replace(/\/+$/, '')
 const TOKEN = E.MAPVIS_RELAY_TOKEN
 const NAME = E.MAPVIS_RELAY_NAME || os.hostname()
 const CAPS = (E.MAPVIS_RELAY_CAPS || 'claude').split(',').map((s) => s.trim()).filter(Boolean)
+/* A MACHINE WITH A PIXELLAB TOKEN CAN DO PIXELLAB, and says so without being
+ * told to in caps. The host cannot run a generation through this queue, so
+ * what it gets from this machine is the token itself, sent with the first
+ * claim and again now and then so a restarted host is not left without it. */
+if (E.PIXELLAB_TOKEN && !CAPS.includes('pixellab')) CAPS.push('pixellab')
+let claims = 0
 
 if (!TOKEN) {
   console.error(
@@ -52,7 +58,9 @@ const say = (m) => console.log(`[relay] ${m}`)
 async function tick() {
   // Claiming and heartbeating are the same call. A relay that is asking for
   // work is by definition alive, so there is no second timer to forget.
-  const { job } = await call('/api/relay/claim', { name: NAME, caps: CAPS })
+  const lend = E.PIXELLAB_TOKEN && claims % 400 === 0 ? { pixellab: E.PIXELLAB_TOKEN } : {}
+  claims++
+  const { job } = await call('/api/relay/claim', { name: NAME, caps: CAPS, ...lend })
   if (!job) {
     if (!quiet) {
       say('linked and waiting')
