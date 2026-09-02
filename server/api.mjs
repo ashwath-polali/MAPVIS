@@ -1952,7 +1952,7 @@ async function route(req, res, p, url) {
        * like any other replaced bytes and only removed once the folder is whole:
        * a crash in between leaves the original standing, which is the safe way
        * round. */
-      if (it.shape === 'still') keepPrevFile(id, it.file, name + '.png')
+      if (it.shape === 'still') await keepPrevFile(id, it.file, name + '.png')
       await swapFolder(id, name, st.stage, null)
       if (it.shape === 'still') fs.rmSync(it.file, { force: true })
       // an item that carried a written recipe does not carry it any more.
@@ -2065,7 +2065,7 @@ async function route(req, res, p, url) {
      * first. Both halves matter: the item keeps ONE library row, and a crash in
      * between leaves the original standing rather than nothing at all. */
     if (wasStill) {
-      keepPrevFile(id, wasStill, name + '.png')
+      await keepPrevFile(id, wasStill, name + '.png')
       fs.rmSync(wasStill, { force: true })
     }
     const meta = b.meta && typeof b.meta === 'object' ? b.meta : {}
@@ -2300,7 +2300,7 @@ async function route(req, res, p, url) {
       if (fs.statSync(from).isDirectory()) {
         const to = path.join(dir, name)
         // the current art goes to .prev too, so reverting is itself reversible
-        keepPrevDir(id, to, name)
+        await keepPrevDir(id, to, name)
         fs.rmSync(to, { recursive: true, force: true })
         fs.mkdirSync(to, { recursive: true })
         for (const f of fs.readdirSync(from)) {
@@ -2312,7 +2312,7 @@ async function route(req, res, p, url) {
         if (fs.existsSync(flat)) fs.rmSync(flat)
       } else {
         const to = path.join(dir, name + '.png')
-        if (fs.existsSync(to)) keepPrevFile(id, to, name + '.png')
+        if (fs.existsSync(to)) await keepPrevFile(id, to, name + '.png')
         const asDir = path.join(dir, name)
         if (fs.existsSync(asDir)) fs.rmSync(asDir, { recursive: true, force: true })
         fs.copyFileSync(from, to)
@@ -2373,8 +2373,8 @@ async function route(req, res, p, url) {
       // the same two helpers the animate and swap paths use, so an in-place
       // edit cannot roll its own original away. See PREV_MAX.
       const png = path.join(dir, name + '.png')
-      if (fs.existsSync(png)) keepPrevFile(id, png, name + '.png')
-      else keepPrevDir(id, path.join(dir, name), name)
+      if (fs.existsSync(png)) await keepPrevFile(id, png, name + '.png')
+      else await keepPrevDir(id, path.join(dir, name), name)
     }
     /* a set of VIEWS goes back under its own names, not as 0.png, 1.png.
      * Without this an edit on eight-sided art wrote frame files beside the
@@ -5406,26 +5406,37 @@ function prevPath(id, as, isDir) {
   return path.join(prev, `${stem}-${PREV_MAX}${ext}`)
 }
 
-function keepPrevFile(id, from, as) {
+async function keepPrevFile(id, from, as) {
   try {
     fs.copyFileSync(from, prevPath(id, as, false))
   } catch {
     /* a backup that cannot be written is not a reason to block the edit */
   }
-  keepVersion(id, as.replace(/\.png$/i, ''))
+  await keepVersion(id, as.replace(/\.png$/i, ''))
 }
 
 /* The same keep, in the store, so an undo works on a machine that never saw the
  * edit. Not awaited: the disk copy above is what this request depends on, and
  * blocking a generation on a bucket copy would make every edit slower for a
  * safety net that is allowed to be a moment behind. */
-function keepVersion(id, name) {
+async function keepVersion(id, name) {
   if (!platformOn()) return
-  snapshotVersion(id, name).catch((e) => console.error(`[versions] could not keep ${id}/${name}:`, e.message))
+  /* AWAITED, because this used to be fire-and-forget. On a laptop the copy
+   * finished in the background; on the host the instance freezes the moment the
+   * response goes out, the promise is dropped, and no version ever lands. So
+   * every in-place edit on the deployed app was destructive with nothing behind
+   * it, and revert answered "no earlier copy" to a person who had just watched
+   * a pixelate wreck their fire (hearth-2, 2026-09-02). It copies the live
+   * store blobs, so it has to finish BEFORE the rewrite pushes over them. */
+  try {
+    await snapshotVersion(id, name)
+  } catch (e) {
+    console.error(`[versions] could not keep ${id}/${name}:`, e.message)
+  }
 }
 
 // the folder half of the same law, for a heading set or an animation's frames
-function keepPrevDir(id, from, as) {
+async function keepPrevDir(id, from, as) {
   try {
     if (!fs.existsSync(from) || !fs.statSync(from).isDirectory()) return
     const to = prevPath(id, as, true)
@@ -5437,7 +5448,7 @@ function keepPrevDir(id, from, as) {
   } catch {
     /* a backup that cannot be written is not a reason to block the edit */
   }
-  keepVersion(id, as)
+  await keepVersion(id, as)
 }
 
 /* The old bytes out, the new bytes in, ONE library row either way.
@@ -5453,7 +5464,7 @@ async function swapFolder(id, name, stage, meta) {
    * rollover in its most direct form: re-animating a figure twice deleted the
    * original eight headings outright. It goes through the shared helper now,
    * so take one is kept and take two lands beside it. */
-  keepPrevDir(id, folder, name)
+  await keepPrevDir(id, folder, name)
   fs.mkdirSync(folder, { recursive: true })
   const keep = new Set()
   for (const f of fs.readdirSync(stage)) {
