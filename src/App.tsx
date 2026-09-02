@@ -235,6 +235,21 @@ const LOOK_CELLS = 6
  * So the ask goes to the router whole and it answers the skeleton, the view,
  * the size and what moving MEANS for that thing. See MakePlan in api.ts. */
 const CHAR_DIRS = 8
+/* WHAT A STYLED BODY COSTS AND HOW BIG IT IS ASKED FOR. Pro mode is twenty to
+ * forty generations; twenty is the floor, and size 80 is what bought the floor
+ * against a 56x67 reference (Thor). Pro fails fast when the size is under the
+ * reference's content, and the server clamps sprites to 32..96, so 80 sits
+ * safely inside both. The number on the button has to be this one. */
+const PRO_BODY = 20
+const STYLE_SIZE = 80
+/* WHERE THE GAME'S STYLE LIVES: three keys in the map's own bag. The id is
+ * what pro mode is handed, the view is sent with it so the result is not
+ * dragged to the wrong pitch, and the name is what the panel prints. In the
+ * bag rather than in this file so MAPVIS stays a general tool: this game
+ * points them at Thor, another account points them at its own. */
+const STYLE_ID = 'styleCharacter'
+const STYLE_VIEW = 'styleCharacterView'
+const STYLE_NAME = 'styleCharacterName'
 
 // a running wait, said the way a clock says it
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
@@ -808,6 +823,15 @@ export default function App() {
    * with four or eight directions and cycles hung on it. Anything that walks a
    * harbour is the second kind, so the browser shows both and says which. */
   const [chars, setChars] = useState<{ items: api.AccountCharacter[]; busy: boolean; err: string } | null>(null)
+  /* THE TOGGLE: draw the next sprite in the game's style. Off is standard
+   * mode and the template rig, which is every sprite this tool made before
+   * and is one generation. On is a pro body styled on the character the map's
+   * bag names, and is twenty. Off by default so nobody buys twenty by
+   * accident; the price on the button changes the moment it is switched. */
+  const [styleOn, setStyleOn] = useState(false)
+  const styleId = String(st?.props.meta?.[STYLE_ID] || '')
+  const styleView = String(st?.props.meta?.[STYLE_VIEW] || '')
+  const styleName = String(st?.props.meta?.[STYLE_NAME] || '')
   const [accTab, setAccTab] = useState<'objects' | 'sprites'>('objects')
   const [genPrompt, setGenPrompt] = useState('')
   const [genType, setGenType] = useState<'static' | 'animated'>('static')
@@ -1431,6 +1455,17 @@ export default function App() {
       .then((r) => setChars({ items: r.items, busy: false, err: '' }))
       .catch((e) => setChars({ items: [], busy: false, err: String(e instanceof Error ? e.message : e).slice(0, 120) }))
   }, [acc.open, accTab, chars])
+  // the same free listing, fetched when the style toggle is on and the map
+  // has not yet been told whose style that is, so the one-time pick has
+  // something to pick from
+  useEffect(() => {
+    if (!styleOn || chars) return
+    setChars({ items: [], busy: true, err: '' })
+    api
+      .accountCharacters()
+      .then((r) => setChars({ items: r.items, busy: false, err: '' }))
+      .catch((e) => setChars({ items: [], busy: false, err: String(e instanceof Error ? e.message : e).slice(0, 120) }))
+  }, [styleOn, chars])
 
   /* one character into this map's library, with its walk cycle if it has one */
   const takeCharacter = useCallback(
@@ -1639,6 +1674,18 @@ export default function App() {
               nDirections: CHAR_DIRS,
               anim: route.anim,
               mode: 'standard',
+              /* THE STYLED BODY overrides the mode, the size and the view.
+               * The view has to be the reference's own: pro drags the result
+               * to its angle, and a router picking low top-down for a room
+               * whose props are low would fight a reference drawn high. */
+              ...(styleOn && styleId
+                ? {
+                    mode: 'pro' as const,
+                    styleCharacterId: styleId,
+                    size: STYLE_SIZE,
+                    ...(styleView ? { view: styleView as api.SpriteRoute['view'] } : {}),
+                  }
+                : {}),
             })
             if (e.sceneId !== sid) break
             setLib((prev) => [...(prev || []).filter((x) => x.name !== r.item.name), r.item])
@@ -1730,7 +1777,7 @@ export default function App() {
       // nothing said whether the body was the one that was asked for.
       void lookAt(sid, p, plan.prompt, made)
     },
-    [genCount, charRun, askGate, lookAt, push],
+    [genCount, charRun, askGate, lookAt, push, styleOn, styleId, styleView],
   )
 
   // the search box, one call behind the typing so a full listing is not walked
@@ -6088,7 +6135,9 @@ export default function App() {
    * body, the faces and the round off one press is that nobody has to count
    * them, which only holds if the number they see is the number they buy. */
   const spriteFaces = makeWhat === 'sprite' ? (genPlan?.faces || []).length : 0
-  const perTake = makeWhat === 'sprite' ? 1 + spriteDirs + spriteFaces : genType === 'animated' ? 2 : 1
+  // a body drawn in the game's style is a pro body, and a pro body is twenty
+  const styled = makeWhat === 'sprite' && styleOn && !!styleId
+  const perTake = makeWhat === 'sprite' ? (styled ? PRO_BODY : 1) + spriteDirs + spriteFaces : genType === 'animated' ? 2 : 1
   const genCost = genCount * perTake
   // the big preview's zoom: the largest whole multiple that still fits the
   // panel, so a tall plume and a wide splash both land inside the column
@@ -7201,7 +7250,7 @@ export default function App() {
             : 'pixellab is drawing · already paid for'
           : /* said honestly: this is minutes, not the seconds an object takes,
              * and the motion is what most of them go on */
-            `${CHAR_DIRS} ways${genType === 'animated' ? ' + motion' : ''} · ${genType === 'animated' ? 'five to fifteen minutes' : 'two to five minutes'}${takeWord}${usd ? ` · ${usd} left` : ''}`
+            `${CHAR_DIRS} ways${genType === 'animated' ? ' + motion' : ''}${styled ? ` · in the game's style` : ''} · ${genType === 'animated' ? 'five to fifteen minutes' : 'two to five minutes'}${takeWord}${usd ? ` · ${usd} left` : ''}`
         : makeWhat === 'fill'
           ? `${genBox ? `the boxed ${genBox.w}×${genBox.h}` : 'box an area'} · ${fillWord}${usd ? ` · ${usd} left` : ''}`
           : /* the ask turned out to be several. It says so here rather than
@@ -7456,8 +7505,58 @@ export default function App() {
       {spriteRoute && (
         <>
           <div className="planmeta">
-            {spriteRoute.skeleton} rig · {spriteRoute.view} · {spriteRoute.size}px · {CHAR_DIRS} ways
+            {styled
+              ? `pro · ${styleView || spriteRoute.view} · ${STYLE_SIZE}px · ${CHAR_DIRS} ways · ${PRO_BODY} for the body`
+              : `${spriteRoute.skeleton} rig · ${spriteRoute.view} · ${spriteRoute.size}px · ${CHAR_DIRS} ways`}
           </div>
+          {/* IN THE GAME'S STYLE. The template rig cannot be made to match a
+              character that already exists, whatever the description says; a
+              reference's eight rotations can. One switch, because the
+              reference is the map's business and not this ask's: it is named
+              once in the bag and every styled sprite after that matches it. */}
+          <Row
+            icon="rect"
+            label={styleOn ? "in the game's style" : 'in the template style'}
+            desc={
+              styleOn
+                ? styleId
+                  ? `a pro body matched to ${styleName || 'the map\'s style character'} · ${PRO_BODY} instead of 1`
+                  : 'pick whose style this map draws people in, once'
+                : `rig-drawn · 1 for the body · switch on to match ${styleName || 'the game\'s character'}`
+            }
+            on={styleOn}
+            onClick={() => setStyleOn((v) => !v)}
+          />
+          {styleOn && !styleId && (
+            <label className="anchfield">
+              <span>whose style · one of your eight-way characters</span>
+              <select
+                value=""
+                onChange={(ev) => {
+                  const c = (chars?.items || []).find((q) => q.id === ev.target.value)
+                  if (!c) return
+                  // written once into the map's own bag, where the export
+                  // panel already lets it be read and changed by hand
+                  ed?.setProps({
+                    meta: { ...(st?.props.meta || {}), [STYLE_ID]: c.id, [STYLE_VIEW]: c.view, [STYLE_NAME]: c.name },
+                  })
+                }}
+              >
+                <option value="">choose…</option>
+                {(chars?.items || [])
+                  .filter((c) => c.directions === 8)
+                  .map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                      {c.size ? ` · ${c.size}` : ''}
+                      {c.view ? ` · ${c.view}` : ''}
+                    </option>
+                  ))}
+              </select>
+              {chars?.busy && <div className="plannote">reading your characters…</div>}
+              {chars?.err && <div className="anchwarn">{chars.err}</div>}
+            </label>
+          )}
           <div className="planmeta">
             {spriteRoute.anim.how === 'none'
               ? 'stands still'

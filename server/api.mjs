@@ -1156,6 +1156,11 @@ async function route(req, res, p, url) {
           directions: Number(c.directions) || 0,
           animations: Number(c.animation_count) || 0,
           size: c.size && c.size.width ? `${c.size.width}x${c.size.height}` : '',
+          // the camera it was drawn for. A pro-mode style reference drags the
+          // new sprite to ITS angle, so a caller matching one has to send the
+          // same view or spend twenty generations on a figure at the wrong
+          // pitch. Thor is high top-down while this map's props are low.
+          view: String(c.view || ''),
           thumb: (c.rotation_urls && (c.rotation_urls.south || Object.values(c.rotation_urls)[0])) || '',
         }))
       return send(res, 200, { items, total: items.length })

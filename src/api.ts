@@ -320,6 +320,8 @@ export interface AccountCharacter {
   directions: number
   animations: number
   size: string
+  // which camera it was drawn for; blank when the account did not say
+  view: string
   thumb: string
 }
 export const accountCharacters = () =>
@@ -384,6 +386,12 @@ export const characterGen = (
     // standard is one generation. pro is twenty to forty and can never be a
     // default here, and the price on the button assumes standard.
     mode?: 'standard' | 'pro' | 'v3'
+    /* ONE OF YOUR OWN EIGHT-WAY CHARACTERS, whose rotations guide every
+     * direction of this one. Pro only. This is how a new person comes back in
+     * Thor's build and rendering instead of the template rig's: measured
+     * 2026-09-01, four standard-mode principals were flat upright humanoids
+     * whatever the words said, and the first pro one styled on Thor was right. */
+    styleCharacterId?: string
   },
 ) => jpost<{ item: LibItem; note?: string }>('/api/character-gen', { id, ...o })
 
