@@ -1889,11 +1889,23 @@ async function route(req, res, p, url) {
          * spend rather than as a repair afterwards. */
         let byDir = null
         if (b.recover) {
-          const found = await recoverCharacterMotion(plan)
+          // a named group is one this client started and is waiting on; a bare
+          // true is the old repair, whatever complete motion is on the account
+          const found = await recoverCharacterMotion(plan, typeof b.recover === 'string' ? b.recover : '')
           if (!found) return send(res, 409, { error: 'nothing already paid for was found on this one' })
           byDir = found.byDir
         } else {
-          byDir = await runCharacterMotion(plan, seed, gate, halt)
+          try {
+            byDir = await runCharacterMotion(plan, seed, gate, halt)
+          } catch (e) {
+            if (!(e instanceof Pending)) throw e
+            return send(res, 200, {
+              pending: true,
+              group: e.group,
+              plan,
+              note: 'pixellab is still drawing · the frames are paid for and will be collected when they are done',
+            })
+          }
         }
         // past here every generation is bought and every frame is theirs, so
         // the download runs to the end whatever a stop says. Stopping is not
@@ -5152,7 +5164,17 @@ async function runCharacterMotion(plan, seed, gate, halt) {
   })
   // the wait is told what was already there for the same reason: without it, a
   // character that already moves reports finished on the first tick
-  d = await raceStop(gate, pixellab.awaitAnimation(plan.characterId, h, { timeoutMs: WALK_WAIT, known: before }))
+  try {
+    d = await raceStop(
+      gate,
+      pixellab.awaitAnimation(plan.characterId, h, { timeoutMs: onHost() ? HOST_WAIT : WALK_WAIT, known: before }),
+    )
+  } catch (e) {
+    // out of budget on the host is pending, not failure: the frames are paid
+    // for and will be there when the client asks again for this group
+    if (onHost() && /timed out/.test(String((e && e.message) || e))) throw new Pending(group)
+    throw e
+  }
   let byDir = newGroupDirs(d, group, before, heads, rot)
   /* The job can report finished a moment before the detail lists the group it
    * made. That happened on the hub's two knights: the frames were on their side,
@@ -5208,14 +5230,22 @@ function withStills(byDir, rot) {
  * and sitting there. Re-running the ask would charge for it twice, so this finds
  * the newest group that is not a rotation and hands back its frames. Free, and
  * the reason it exists is that the reading above was once wrong. */
-async function recoverCharacterMotion(plan) {
+async function recoverCharacterMotion(plan, group = '') {
   const d = await pixellab.characterDetail(plan.characterId)
   const rot = (d && d.rotation_urls) || {}
   const rotSet = new Set(Object.values(rot).filter((u) => typeof u === 'string'))
   const groups = Array.isArray(d && d.animations) ? d.animations : []
   const wanted = new Set(plan.headings || [])
+  /* THE GROUP THAT WAS ASKED FOR, when one was. A character that already moves
+   * has a complete group on the account, and "best" would hand that back the
+   * moment a pending press asked, leaving the motion it just paid for unread.
+   * Named, this waits for that group and only that group, and answers null
+   * until every heading of it is there. */
+  const named = (g) =>
+    [g.display_name, g.animation_type, g.animation_name].some((n) => String(n || '').toLowerCase() === group.toLowerCase())
+  const pool = group ? groups.filter(named) : groups
   let best = null
-  for (const g of groups) {
+  for (const g of pool) {
     const byDir = {}
     for (const dd of Array.isArray(g.directions) ? g.directions : []) {
       const k = String(dd.direction || '').toLowerCase()
@@ -5232,6 +5262,7 @@ async function recoverCharacterMotion(plan) {
    * a complete set of eight. Recovering that writes stills over the art and
    * reports success, which is how the fishmonger lost his motion AND the id that
    * could have got it back. Nothing moving is a failure, not a result. */
+  if (group && best && best.hit < wanted.size) return null
   return best && best.moves ? best : null
 }
 
@@ -6066,6 +6097,25 @@ const SPRITE_MAX = 96
 // a clock.
 const CHAR_WAIT = 600000
 const WALK_WAIT = 900000
+/* THE HOST CANNOT WAIT THAT LONG. A Vercel function is cut off at 300 seconds
+ * (vercel.json), and an eight-way written animation takes five to fifteen
+ * minutes. Waiting for it inside the request meant the function died mid-poll,
+ * the client's timer died with it, nothing was saved, and PixelLab kept both
+ * the frames and the charge: measured 2026-09-02, two complete breathing
+ * animations on one character and 55 generations gone for a press that
+ * "did nothing". So on the host the wait has a budget, and running out of it
+ * is not a failure: the route answers pending with the name of the group it
+ * started, the frames are already bought, and the client collects that group
+ * with recover once it is finished. */
+const HOST_WAIT = 230000
+const onHost = () => !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME)
+class Pending extends Error {
+  constructor(group) {
+    super('still drawing')
+    this.name = 'Pending'
+    this.group = String(group || '')
+  }
+}
 
 /* THE HOUSE PROMPT.
  *

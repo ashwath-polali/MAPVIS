@@ -715,9 +715,21 @@ export interface AnimPlan {
  * the way characterGen's does. */
 export const assetAnimate = (
   id: string,
-  o: { name: string; ask: string; plan?: AnimPlan; confirm?: true; job?: string },
+  o: {
+    name: string
+    ask: string
+    plan?: AnimPlan
+    confirm?: true
+    job?: string
+    /* collect frames an earlier press already paid for instead of drawing
+     * again. The host answers `pending` with the group it started when a
+     * generation outlives its function budget; sending that group back here
+     * is how the client finishes the job for free. A bare true is the older
+     * repair: whatever complete motion is on the account. */
+    recover?: true | string
+  },
 ) =>
-  jpost<{ plan?: AnimPlan; item?: LibItem; note?: string; free?: boolean }>('/api/asset-animate', {
+  jpost<{ plan?: AnimPlan; item?: LibItem; note?: string; free?: boolean; pending?: boolean; group?: string }>('/api/asset-animate', {
     id,
     ...o,
   })

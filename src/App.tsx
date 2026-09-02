@@ -2321,9 +2321,40 @@ export default function App() {
       setAnimRun({ at: Date.now(), plan })
       e.setBusy(`animating ${item.name}`)
       try {
-        const r = await api.assetAnimate(sid, { name: item.name, ask, plan, confirm: true, job })
+        let r = await api.assetAnimate(sid, { name: item.name, ask, plan, confirm: true, job })
+        /* STILL DRAWING IS NOT DONE AND NOT FAILED. The host cannot hold a
+         * request open for a fifteen-minute animation, so it answers pending
+         * with the group it started, and this side keeps the timer and asks
+         * again for that group until the frames are there. Every ask past the
+         * first is free: the generation was bought on the first press. Before
+         * this the request simply died, nothing was said, and the next press
+         * bought it again. */
+        if (r.pending) {
+          push(`${item.name} · ${r.note || 'pixellab is still drawing'}`)
+          const want = r.group || true
+          let got: typeof r | null = null
+          for (let i = 0; i < 40 && !got; i++) {
+            await new Promise((res) => setTimeout(res, 30000))
+            if (e.sceneId !== sid || stopRef.current) return
+            try {
+              const q = await api.assetAnimate(sid, { name: item.name, ask, plan, confirm: true, recover: want, job })
+              if (q.item) got = q
+            } catch {
+              // not finished yet, or the listing blinked: ask again in half a minute
+            }
+          }
+          if (!got) {
+            push(`${item.name} · still not collected after twenty minutes · press animate again with the same words and it will be collected, not redrawn`)
+            return
+          }
+          r = got
+        }
         // a scene swap mid-run would file the result under the wrong map
-        if (e.sceneId !== sid || !r.item) return
+        if (e.sceneId !== sid) return
+        if (!r.item) {
+          push(`${item.name} · nothing came back`)
+          return
+        }
         const next = r.item
         setLib((prev) => [...(prev || []).filter((x) => x.name !== next.name), next])
         // same names, new bytes: without this the editor answers every draw out
