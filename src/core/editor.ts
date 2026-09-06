@@ -6760,8 +6760,22 @@ export class Editor {
        * off the clock alone made a figure stood at the end of a leg march on the
        * spot. Frozen on its first frame while it waits, which is the standing
        * pose the cycle was drawn from. Which picture, and whether the gait runs,
-       * both come off the behaviour; assetFrame holds the rest. */
-      const img = this.assetFrame(a, now, L ? L.facing : undefined, L ? L.art : 0, !L || L.moving)
+       * both come off the behaviour; assetFrame holds the rest.
+       *
+       * AND A PLACEMENT WITH NO BEHAVIOUR AT ALL IS THE SAME ANSWER, which this
+       * had backwards as `!L || L.moving`: no life read as MOVING, so every
+       * standing figure ran its cycle forever without going anywhere. Ash saw it
+       * on 2026-09-05, on the hub, where six of the eleven people have no life
+       * and every one of them was marching on the spot facing forward.
+       *
+       * The reason it was written that way is real and is served elsewhere: an
+       * animated PROP with no life, smoke or a waterfall, must keep looping. That
+       * is the `kind === 'animated'` branch below, which runs off `now` and never
+       * reads this flag. A heading set is different in kind. Measured across the
+       * hub's whole library, every multi-frame heading came out of the sprite
+       * pipeline and is a WALK, and the only thing that breathes on the spot does
+       * it through `life.bob`, which is a behaviour and not a frame list. */
+      const img = this.assetFrame(a, now, L ? L.facing : undefined, L ? L.art : 0, !!L && L.moving)
       // an unaccepted sparkle group rides ghosted until the check keeps it
       const ghost = this.proposedGroups.has(a.group)
       if (ghost) g.globalAlpha = 0.55
