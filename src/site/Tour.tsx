@@ -174,16 +174,13 @@ export function useTour({
 
         const t = (now - t0) / 1000
         const pts: Array<{ x: number; y: number; r: number }> = []
-        const frame: Array<{ r: Ready; x: number; y: number; a: number; face: string; flip: boolean; moving: boolean }> = []
+        const frame: Array<{ r: Ready; x: number; y: number; a: number; face: string; flip: boolean }> = []
         for (const r of live) {
           let dx = 0
           let dy = 0
           let alpha = 1
           let face = 'south'
           let flip = false
-          /* NO BEHAVIOUR IS NOT MOVING, and it used to read as moving here by
-           * never being asked. `lifeAt` has always answered this. */
-          let moving = false
           if (r.life) {
             const s = lifeAt(r.life, t, { x: r.p.x, y: r.p.y })
             dx = s.dx
@@ -191,9 +188,8 @@ export function useTour({
             alpha = s.alpha
             face = s.facing
             flip = s.flip
-            moving = s.moving
           }
-          frame.push({ r, x: r.p.x + dx, y: r.p.y + dy, a: alpha, face, flip, moving })
+          frame.push({ r, x: r.p.x + dx, y: r.p.y + dy, a: alpha, face, flip })
           pts.push({ x: r.p.x + dx, y: r.p.y + dy, r: 3 })
         }
         separate(pts, meta.yScale ?? 0.72, 1)
@@ -205,14 +201,9 @@ export function useTour({
 
         for (const f of frame) {
           const r = f.r
-          /* A WALK CYCLE IS A GAIT, so it runs only while the figure travels.
-           * Cycling it off the wall clock made every standing figure stride on
-           * the spot, and a placement with no life at all never stopped. Frame 0
-           * is the resting pose every heading set is drawn from. Same rule as
-           * editor.ts, Walk.tsx and the game's own PmapScene. */
           const set = r.dirs[f.face] || r.dirs.south
           const pic = set?.length
-            ? set[f.moving ? Math.floor(t * r.fps) % set.length : 0]
+            ? set[Math.floor(t * r.fps) % set.length]
             : r.frames.length
               ? r.frames[Math.floor(t * r.fps) % r.frames.length]
               : r.still

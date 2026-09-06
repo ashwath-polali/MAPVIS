@@ -169,16 +169,13 @@ export function LivingMap({
         // every placement, y-sorted so a figure in front of a hut is in front
         const now2 = t
         const pts: Array<{ x: number; y: number; r: number }> = []
-        const frame: Array<{ r: Ready; x: number; y: number; a: number; face: string; flip: boolean; moving: boolean }> = []
+        const frame: Array<{ r: Ready; x: number; y: number; a: number; face: string; flip: boolean }> = []
         for (const r of live) {
           let dx = 0
           let dy = 0
           let alpha = 1
           let face = 'south'
           let flip = false
-          /* NO BEHAVIOUR IS NOT MOVING, and it used to read as moving here by
-           * never being asked. `lifeAt` has always answered this. */
-          let moving = false
           if (r.life) {
             const at = lifeAt(r.life, now2, { x: r.p.x, y: r.p.y })
             dx = at.dx
@@ -186,9 +183,8 @@ export function LivingMap({
             alpha = at.alpha
             face = at.facing
             flip = at.flip
-            moving = at.moving
           }
-          frame.push({ r, x: r.p.x + dx, y: r.p.y + dy, a: alpha, face, flip, moving })
+          frame.push({ r, x: r.p.x + dx, y: r.p.y + dy, a: alpha, face, flip })
           pts.push({ x: r.p.x + dx, y: r.p.y + dy, r: 3 })
         }
         // the same push-apart the editor and the game use, so a crowd here
@@ -203,13 +199,8 @@ export function LivingMap({
         for (const f of frame) {
           const r = f.r
           let pic: HTMLImageElement | undefined
-          /* A WALK CYCLE IS A GAIT, so it runs only while the figure travels.
-           * Cycling it off the wall clock made every standing figure stride on
-           * the spot, and a placement with no life at all never stopped. Frame 0
-           * is the resting pose every heading set is drawn from. Same rule as
-           * editor.ts, Walk.tsx and the game's own PmapScene. */
           const set = r.dirs[f.face] || r.dirs.south
-          if (set && set.length) pic = set[f.moving ? Math.floor(now2 * r.fps) % set.length : 0]
+          if (set && set.length) pic = set[Math.floor(now2 * r.fps) % set.length]
           else if (r.frames.length) pic = r.frames[Math.floor(now2 * r.fps) % r.frames.length]
           else pic = r.still
           if (!pic) continue
