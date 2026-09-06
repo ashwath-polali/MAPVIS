@@ -107,6 +107,44 @@ export async function createMap({ slug, ownerId, title = '', w, h, base, spawn =
 
 // ---- the document ----------------------------------------------------------
 
+/* The five things on a placement that a person TYPED, as opposed to the ten
+ * that describe where it sits and what it is drawn from. Geometry can be put
+ * back by dragging; a behaviour is minutes of authoring and a name is the only
+ * address python can reach the placement through. These are the ones worth
+ * making a copy of before a save takes them away. */
+const AUTHORED = ['life', 'name', 'looks', 'lookName', 'when']
+
+/* Keep the placements that are about to lose authored work, and say what went.
+ * Returns a line for the save report, or null when nothing was lost, which is
+ * every ordinary save. Never throws: a save must not fail because the copy
+ * could not be filed, since refusing the write would cost the author the edit
+ * they just made on top of the one already gone. */
+async function keepLostAuthoring(mapId, wasAssets, nowAssets) {
+  try {
+    const before = new Map((Array.isArray(wasAssets) ? wasAssets : []).map((a) => [String(a.id), a]))
+    if (!before.size) return null
+    const lost = []
+    for (const a of Array.isArray(nowAssets) ? nowAssets : []) {
+      const was = before.get(String(a && a.id))
+      if (!was) continue
+      for (const k of AUTHORED) if (was[k] != null && (a[k] === undefined || a[k] === null)) lost.push(`${a.id}.${k}`)
+    }
+    if (!lost.length) return null
+    const at = new Date().toISOString().replace(/[:.]/g, '-')
+    const key = keys.docRescue(mapId, at)
+    await store().put(key, Buffer.from(JSON.stringify({ mapId, at, lost, assets: wasAssets }, null, 1)), 'application/json')
+    console.error(
+      `[doc] a save removed authored work from ${lost.length} field(s) on map ${mapId}: ` +
+        `${lost.slice(0, 12).join(', ')}${lost.length > 12 ? ` and ${lost.length - 12} more` : ''}. ` +
+        `the placements as they were are kept at ${key}`,
+    )
+    return `rescued ${lost.length}`
+  } catch (e) {
+    console.error('[doc] could not keep the placements a save is about to overwrite:', e.message)
+    return null
+  }
+}
+
 // Takes exactly what mask.ts serialize() produced. Returns which halves were
 // actually written, so the caller (and the doctor, and anyone reading a log)
 // can see the skipping working rather than trusting that it does.
@@ -234,6 +272,33 @@ export async function putDoc(mapId, docString) {
   const cur = await one('select doc_sha from maps where id = $1', [mapId])
 
   if (cur?.doc_sha !== rowSha) {
+    /* AUTHORED FIELDS DO NOT GET TO VANISH QUIETLY.
+     *
+     * On 2026-09-05 the hub's row came back with `life` gone from all 22
+     * placements that carried a behaviour, and the one placement name gone with
+     * it, while every geometry and art field on all 94 survived untouched. The
+     * people stopped wandering and stood on the spot playing their walk cycles.
+     *
+     * Nothing on this side drops those. The document arrives, d.assets is stored
+     * verbatim, and the exporter copies life straight through. So a browser sent
+     * a document that had already lost them and the row simply took it. The only
+     * reason the work came back at all is that a fortnight-old doc.json on one
+     * laptop happened to still hold every behaviour, and it agreed with the
+     * published bundle on all 22. That is luck, not a system.
+     *
+     * Deleting a behaviour or a name is a real thing an author does, so this
+     * does not refuse the save. It keeps what is about to be overwritten and
+     * says so out loud, which is the same bargain library items already got in
+     * 1ce72d2. A loss that leaves a rescue file and a line in the log is one
+     * somebody can undo; this one left neither.
+     *
+     * Inside the sha check on purpose. The placements are about 100 kb and the
+     * editor autosaves every four seconds, so reading them on every beat would
+     * cost 90 mb an hour to answer a question that only has an answer when
+     * something is actually being written. */
+    const was = await one('select assets from maps where id = $1', [mapId])
+    const rescued = await keepLostAuthoring(mapId, was?.assets, assets)
+    if (rescued) wrote.push(rescued)
     await q(
       `update maps set
          w = $2, h = $3,

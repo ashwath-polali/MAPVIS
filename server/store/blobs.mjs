@@ -464,6 +464,8 @@ export const keys = {
   state: (mapId, item, face, heading, i) => `maps/${mapId}/states/${item}/${face}/${heading}/${i}.png`,
   statePrefix: (mapId, item, face) => `maps/${mapId}/states/${item}/${face}/`,
   version: (mapId, item, seq) => `maps/${mapId}/versions/${item}/${seq}/`,
+  // the placements as they stood just before a save took authored work off them
+  docRescue: (mapId, at) => `maps/${mapId}/rescue/${at}-assets.json`,
   publish: (slug, v) => `publish/${slug}/v${v}/`,
   map: (mapId) => `maps/${mapId}/`,
 }
