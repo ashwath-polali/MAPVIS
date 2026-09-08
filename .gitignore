@@ -75,6 +75,8 @@ __pycache__/
 
 .vercel
 .env*
+# the template, names only and no values, is the one env file that ships
+!.env.example
 
 # scratch probes
 .probe.mjs
