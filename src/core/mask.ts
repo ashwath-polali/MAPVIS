@@ -847,6 +847,13 @@ export interface MapProps {
   class: MapClass
   /* the school offering this map is about, joining it to a grape */
   islandId: string
+  /* WHERE THE PAINT ACTUALLY IS INSIDE THE CANVAS, as [w, h, ox, oy], stated
+   * rather than measured. Absent means measured, and measured is nearly always
+   * the better answer: both exporters scan the scene's own alpha and get the
+   * real extent off the bytes that ship. This is the correction for a painting
+   * whose edge is a faint alpha halo the scan reads as picture, which makes the
+   * footprint too big and the centre wrong. */
+  paint?: [number, number, number, number]
   meta: Record<string, unknown>
 }
 
@@ -2075,6 +2082,9 @@ export class MaskDoc {
             title: typeof d.props.title === 'string' ? d.props.title : '',
             class: MAP_CLASSES.includes(d.props.class as MapClass) ? (d.props.class as MapClass) : 'island',
             islandId: typeof d.props.islandId === 'string' ? d.props.islandId : '',
+            ...(Array.isArray(d.props.paint) && d.props.paint.length === 4 && d.props.paint.every((n) => isFinite(Number(n)))
+              ? { paint: d.props.paint.map((n) => Math.round(Number(n))) as [number, number, number, number] }
+              : {}),
             meta: d.props.meta && typeof d.props.meta === 'object' ? d.props.meta : {},
           }
         /* A ROUTE OR A SHOT FROM A HAND-EDITED SAVE HAS TO COME BACK AS DATA OR

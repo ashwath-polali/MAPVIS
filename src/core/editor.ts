@@ -3080,14 +3080,28 @@ export class Editor {
 
   /* WHAT THIS MAP IS, as opposed to what is drawn on it. Every field here
    * either had no home at all or had one that died before the bundle. */
-  setProps(patch: Partial<MapProps>) {
+  /* null on `paint` clears it, which undefined cannot mean: undefined is "this
+   * patch does not mention it", the same split updateEvent makes. */
+  setProps(patch: Omit<Partial<MapProps>, 'paint'> & { paint?: [number, number, number, number] | null }) {
     const p = this.doc.props
     const next: MapProps = { ...p }
     if (patch.title !== undefined) next.title = String(patch.title).slice(0, 120)
     if (patch.class !== undefined && MAP_CLASSES.includes(patch.class)) next.class = patch.class
     if (patch.islandId !== undefined) next.islandId = String(patch.islandId).trim().slice(0, 64)
     if (patch.meta !== undefined && patch.meta && typeof patch.meta === 'object') next.meta = patch.meta
-    if (next.title === p.title && next.class === p.class && next.islandId === p.islandId && next.meta === p.meta)
+    // four numbers or nothing, and nothing is how you go back to measured
+    if (patch.paint !== undefined) {
+      if (patch.paint && patch.paint.length === 4 && patch.paint.every((n) => isFinite(n)))
+        next.paint = patch.paint.map((n) => Math.round(n)) as [number, number, number, number]
+      else delete next.paint
+    }
+    if (
+      next.title === p.title &&
+      next.class === p.class &&
+      next.islandId === p.islandId &&
+      next.meta === p.meta &&
+      String(next.paint) === String(p.paint)
+    )
       return false
     this.doc.snap()
     this.doc.props = next
@@ -5644,7 +5658,11 @@ export class Editor {
          * thrown away whole. Measured off the bytes that ship, which is the only
          * thing that can be right, and the server measures the same bytes the
          * same way at publish so both exporters say one thing. */
-        base: paintedBoxOf(scene),
+        /* stated when an author has stated it, measured otherwise, which is
+         * every map so far. See MapProps.paint. */
+        base: this.doc.props.paint
+          ? { w: this.doc.props.paint[0], h: this.doc.props.paint[1], ox: this.doc.props.paint[2], oy: this.doc.props.paint[3] }
+          : paintedBoxOf(scene),
         /* WHAT THIS MAP IS AND WHAT IT CALLS ITSELF. The engine guessed `class`
          * from whether the border was transparent, on every map, while this
          * tool knew the answer the whole time; `title` never left the database.

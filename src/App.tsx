@@ -1061,6 +1061,7 @@ export default function App() {
   const [idDraft, setIdDraft] = useState<string | null>(null)
   // null until somebody asks, because finding them is three flood fills
   const [stairs, setStairs] = useState<StairRegion[] | null>(null)
+  const [paintDraft, setPaintDraft] = useState<string | null>(null)
   const [idSaid, setIdSaid] = useState('')
   // the effect box: the ask, the armed map click, the plan the click produced
   // and the params a human is tuning. fxFrames is the render, redone locally on
@@ -8231,6 +8232,33 @@ export default function App() {
           </div>
         ))}
       </div>
+      {/* WHERE THE PAINT IS INSIDE THE CANVAS. Measured off the bytes that ship,
+          on both sides, and that is nearly always right. This is the correction
+          for a painting whose edge is a faint alpha halo the scan reads as
+          picture, which makes the island's footprint too big and its centre
+          wrong. Blank goes back to measured. */}
+      <label className="anchfield">
+        <span>painting · w, h, ox, oy inside the canvas</span>
+        <input
+          className="anchname"
+          value={paintDraft ?? (st?.props.paint ? st.props.paint.join(', ') : '')}
+          placeholder="measured off the picture"
+          onChange={(e) => setPaintDraft(e.target.value)}
+          onBlur={() => {
+            if (paintDraft === null) return
+            const n = paintDraft
+              .split(/[ ,]+/)
+              .filter(Boolean)
+              .map(Number)
+            ed?.setProps({ paint: n.length === 4 && n.every((v) => isFinite(v)) ? (n as [number, number, number, number]) : null })
+            setPaintDraft(null)
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === 'Escape') e.currentTarget.blur()
+          }}
+          spellCheck={false}
+        />
+      </label>
       {/* THE STAIRS THE PAINT ALREADY DESCRIBES, and the one thing about them a
           person could not do, which is name one. map.json.stairs is machine
           made and stays that way; pressing a row puts a named region over it so
