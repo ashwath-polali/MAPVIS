@@ -42,6 +42,18 @@ export interface Occluder {
   baseline: number
 }
 
+/* AN OUTLINE THAT WAS DRAWN, KEPT. Three tools take polygon points, all three
+ * rasterize into a plane and clear the list, and nothing ever stored it, so the
+ * same outline is traced by hand for the level, again for the cut and again for
+ * the occluder. This is that outline, kept so the second and third are a press.
+ * The planes stay the only truth about the map; a stencil is a stencil. */
+export interface Stencil {
+  id: number
+  pts: [number, number][]
+}
+// no more than this many, newest first, so the list stays a tool and not a log
+export const STENCIL_KEEP = 12
+
 /* A placed asset: a piece of life set ON the painting after mechanics exist.
  * x,y is the FEET anchor in painting pixels (sprite anchor 0.5, 1); the game
  * y-sorts by y. sx/sy scale each axis against the png's native size, rot is
@@ -105,6 +117,16 @@ export interface PlacedAsset {
    * A placement with none is always there, which is every placement on every map
    * that exists today. */
   when?: string
+  /* WHAT THIS THING BLOCKS ON THE GROUND, as [cx, cy, rx, ry] in painting
+   * pixels around the feet anchor. An ellipse, because the ground is squashed
+   * by yScale and a circle drawn on it reads as one.
+   *
+   * MEASURED WHEN ABSENT, and absent is the right default: publish scans the
+   * png's own alpha at the base band and gets a better answer than anybody
+   * types. This is the correction for when it does not, which is a sprite with
+   * a faint alpha halo, a shadow painted into the frame, or a thing whose
+   * drawn base is not the part a body should bump into. Absent means measured. */
+  foot?: [number, number, number, number]
 }
 
 /* ONE APPEARANCE of a placement: exactly the four fields that say what to draw.
@@ -614,6 +636,12 @@ export function migrateFraming(f: MapFraming): MapFraming | null {
  * because dragging the anchor left them where they were. Two bodies is far
  * enough to stand beside a wide table and near enough that a body aiming at it
  * has plainly gone to the thing rather than to somewhere else. */
+/* THE KEYS IN AN ANCHOR'S BAG THAT BELONG TO THE TOOL. An author's key/value
+ * grid must not offer these: `when` and `shape` are fields with their own
+ * controls that only ride in the bag, and `derived` and `docId` are MAPVIS's
+ * own record of where a name came from. */
+export const ANCHOR_META_RESERVED = ['when', 'shape', 'derived', 'docId', 'shots', 'variants']
+
 export const STAND_REACH_BODIES = 2
 export const standReach = (charH: number) => Math.max(1, Math.round(charH)) * STAND_REACH_BODIES
 
@@ -1338,6 +1366,8 @@ export class MaskDoc {
   hits: Uint8Array
   occs: Occluder[] = []
   occNext = 1
+  stencils: Stencil[] = []
+  stencilNext = 1
   assets: PlacedAsset[] = []
   assetNext = 1
   events: MapEvent[] = []
@@ -1957,6 +1987,8 @@ export class MaskDoc {
        * it the nastiest of the fourteen. */
       occs: this.occs,
       occNext: this.occNext,
+      stencils: this.stencils,
+      stencilNext: this.stencilNext,
       walk: this.walk,
       props: this.props,
       paths: this.paths,
@@ -1994,6 +2026,8 @@ export class MaskDoc {
           spawn?: Pt
           occs?: Occluder[]
           occNext?: number
+          stencils?: Stencil[]
+          stencilNext?: number
           walk?: Partial<WalkCfg>
           props?: Partial<MapProps>
           paths?: MapPath[]
@@ -2018,6 +2052,22 @@ export class MaskDoc {
             .map((o) => ({ id: Math.round(Number(o.id)), baseline: Math.round(Number(o.baseline)) }))
           this.occNext =
             Number(d.occNext) > 0 ? Math.round(Number(d.occNext)) : this.occs.reduce((m, o) => Math.max(m, o.id), 0) + 1
+        }
+        // kept outlines, sanitised the way an anchor's poly is: three points is
+        // the floor, because two are a line and a line fills nothing
+        if (Array.isArray(d.stencils)) {
+          this.stencils = d.stencils
+            .filter((k) => k && isFinite(Number(k.id)) && Array.isArray(k.pts) && k.pts.length >= 3)
+            .map((k) => ({
+              id: Math.round(Number(k.id)),
+              pts: k.pts
+                .filter((q) => Array.isArray(q) && q.length === 2 && isFinite(Number(q[0])) && isFinite(Number(q[1])))
+                .map((q) => [Number(q[0]), Number(q[1])] as [number, number]),
+            }))
+            .filter((k) => k.pts.length >= 3)
+            .slice(0, STENCIL_KEEP)
+          this.stencilNext =
+            Number(d.stencilNext) > 0 ? Math.round(Number(d.stencilNext)) : this.stencils.reduce((m, k) => Math.max(m, k.id), 0) + 1
         }
         if (d.walk) this.walk = { ...defaultCfg(), ...numbersOnly(d.walk) }
         if (d.props)

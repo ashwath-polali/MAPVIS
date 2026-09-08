@@ -16,6 +16,10 @@ import {
   assetLabel,
   lookOf,
   migrateAnchor,
+  ANCHOR_META_RESERVED,
+  type StairRegion,
+  type Stencil,
+  STENCIL_KEEP,
   migratePath,
   migrateFraming,
   migrateAnchorSet,
@@ -306,6 +310,8 @@ export interface EditorStatus {
    * first one's baseline again after drawing a second */
   occs: { id: number; baseline: number }[]
   occSel: number
+  // the outlines already drawn, newest first
+  stencils: Stencil[]
   /* the six numbers describing the body this map is drawn for, and what the map
    * calls itself. Both ride the status so a panel can render them without
    * reaching into the document. */
@@ -876,6 +882,7 @@ export class Editor {
       lastBaseline: lastOcc ? lastOcc.baseline : 0,
       occs: this.doc.occs.map((o) => ({ id: o.id, baseline: o.baseline })),
       occSel: lastOcc ? lastOcc.id : 0,
+      stencils: this.doc.stencils,
       walk: { ...this.doc.walk },
       props: { ...this.doc.props },
       note: this.note,
@@ -1934,9 +1941,47 @@ export class Editor {
     } else {
       this.doc.fillPoly(this.poly, this.value, 'lvl')
     }
+    this.keepStencil(this.poly)
     this.poly = []
     this.touched()
   }
+
+  /* THE OUTLINE, KEPT ON THE WAY OUT. An author traces one shape for the level,
+   * the same shape again for the cut and a third time for the occluder, because
+   * closePoly rasterized and cleared and nothing ever stored the points. */
+  private keepStencil(pts: [number, number][]) {
+    if (pts.length < 3) return
+    this.doc.stencils.unshift({ id: this.doc.stencilNext++, pts: pts.map(([x, y]) => [x, y] as [number, number]) })
+    this.doc.stencils.length = Math.min(this.doc.stencils.length, STENCIL_KEEP)
+  }
+
+  // the kept outline laid down again with whatever tool and level are live now
+  applyStencil(id: number) {
+    const k = this.doc.stencils.find((q) => q.id === id)
+    if (!k) return false
+    this.doc.snap()
+    if (this.tool === 'occ') {
+      const o = this.doc.addOccluder(k.pts)
+      this.plates = null
+      this.say(`occluder ${o.id}, baseline y ${o.baseline}`)
+    } else if (this.tool === 'cutpoly') {
+      this.doc.fillPoly(k.pts, 1, 'cut')
+      this.say('cut')
+    } else {
+      this.doc.fillPoly(k.pts, this.value, 'lvl')
+      this.say(`level ${this.value}`)
+    }
+    this.touched()
+    return true
+  }
+
+  deleteStencil(id: number) {
+    const i = this.doc.stencils.findIndex((q) => q.id === id)
+    if (i < 0) return
+    this.doc.stencils.splice(i, 1)
+    this.touched()
+  }
+
   setCutTol(n: number) {
     this.cutTol = clamp(Math.round(n), 0, 120)
     this.emit()
@@ -4137,7 +4182,7 @@ export class Editor {
       r: kind === 'door' ? 14 : 12,
       label: '',
       to: '',
-    })
+    }, this.doc.walk.charH)
     this.doc.events.push(e)
     this.touched()
     this.say(`${kind} at ${e.x}, ${e.y} · give it a name code can use`)
@@ -4261,7 +4306,7 @@ export class Editor {
       patch.ring !== undefined ||
       patch.kind !== undefined
     )
-      migrateAnchor(e)
+      migrateAnchor(e, this.doc.walk.charH)
     this.touched()
   }
   updateAnchor = this.updateEvent.bind(this)
@@ -5333,8 +5378,63 @@ export class Editor {
     this.say(clean ? `${name} shows when ${clean}` : `${name} always shows`)
   }
 
-  /* THE CONDITION ON ONE PLACEMENT, which beats its group's where both exist.
-   * CONTROL NEEDED: a `when` field on the placement inspector in App.tsx. */
+  /* THE STAIRS THIS MAP HAS, on demand rather than every frame: it is three
+   * flood fills over the whole plane and the answer only changes when somebody
+   * paints a ramp. */
+  stairList(): StairRegion[] {
+    return this.doc.stairRegions()
+  }
+
+  /* A STAIR MADE ADDRESSABLE, by putting a named region over it.
+   *
+   * map.json.stairs is a machine fact: the ramp pixels say where a stair is and
+   * nobody types that. What nobody could do was NAME one, so a grape had no way
+   * to say which stair it meant. Rather than invent a second naming scheme keyed
+   * to a rectangle that moves when the paint moves, this makes the thing the
+   * tool already knows how to name, and the author names it in the form they
+   * already use. */
+  markStair(r: StairRegion): number {
+    const [x0, y0, x1, y1] = r.rect
+    const id = this.addAnchor('region', Math.round((x0 + x1) / 2), Math.round((y0 + y1) / 2))
+    this.updateEvent(id, { rect: [x0, y0, x1, y1], shape: 'rect' })
+    const e = this.doc.events.find((q) => q.id === id)
+    if (e) e.name = this.freeAnchorName(`stair_${r.connects[0]}_${r.connects[1]}`)
+    this.touched()
+    return id
+  }
+
+  /* WHAT A PLACEMENT BLOCKS, typed instead of measured. Four numbers or null
+   * to go back to the measurement, and null is what almost every placement
+   * wants. See PlacedAsset.foot for when a person needs the other thing. */
+  setFoot(ids: string[], foot: [number, number, number, number] | null) {
+    const want = new Set(ids)
+    const picked = this.doc.assets.filter((a) => want.has(a.id))
+    if (!picked.length) return 0
+    this.doc.snap()
+    for (const a of picked) {
+      if (foot && foot.every((n) => isFinite(n))) a.foot = foot.map((n) => Math.round(n)) as [number, number, number, number]
+      else delete a.foot
+    }
+    this.touched()
+    this.say(foot ? `${picked.length} block ${foot[2]}x${foot[3]} at ${foot[0]}, ${foot[1]}` : `${picked.length} back to measured`)
+    return picked.length
+  }
+
+  /* ONE GROUP ONTO EVERY PICKED PLACEMENT. The group select sat on the single
+   * inspector only, so a crowd of forty had to be regrouped forty times, which
+   * is why the hub's people are in one group nobody chose. */
+  setAssetGroup(ids: string[], group: string) {
+    const want = new Set(ids)
+    const picked = this.doc.assets.filter((a) => want.has(a.id))
+    if (!picked.length) return 0
+    this.doc.snap()
+    for (const a of picked) this.editAsset(a.id, { group })
+    this.touched()
+    this.say(`${picked.length} in ${group}`)
+    return picked.length
+  }
+
+  /* THE CONDITION ON ONE PLACEMENT, which beats its group's where both exist. */
   setAssetWhen(ids: string[], when: string) {
     const want = new Set(ids)
     const picked = this.doc.assets.filter((a) => want.has(a.id))
@@ -5349,16 +5449,39 @@ export class Editor {
     return picked.length
   }
 
+  /* ONE KEY ON ONE ANCHOR'S BAG, which is the stated extension point and had
+   * only machine writers, so the bag a grape reads carried MAPVIS bookkeeping
+   * and nothing an author chose. null removes the key and '' keeps it holding
+   * nothing, the same split setMapMeta makes and for the same reason.
+   *
+   * The keys MAPVIS writes itself are refused, because an author overwriting
+   * `derived` or `shape` would be editing the tool's own record through a box
+   * that looks like their own. */
+  setAnchorMeta(id: number, key: string, value: string | null) {
+    const e = this.doc.events.find((q) => q.id === id)
+    if (!e) return false
+    const k = String(key || '').trim()
+    if (!k || ANCHOR_META_RESERVED.includes(k)) return false
+    this.doc.snap()
+    const meta = { ...(e.meta || {}) }
+    if (value === null) delete meta[k]
+    else meta[k] = value
+    if (Object.keys(meta).length) e.meta = meta
+    else delete e.meta
+    migrateAnchor(e, this.doc.walk.charH)
+    this.touched()
+    return true
+  }
+
   /* THE CONDITION ON AN ANCHOR: a door barred until a cord is earned, a berth
    * that does not exist until the ship is repaired. It goes through migrateEvent
-   * so the field and the meta bag it rides in cannot disagree.
-   * CONTROL NEEDED: a `when` field on the anchor inspector in App.tsx. */
+   * so the field and the meta bag it rides in cannot disagree. */
   setAnchorWhen(id: number, when: string) {
     const e = this.doc.events.find((q) => q.id === id)
     if (!e) return
     this.doc.snap()
     e.when = String(when || '').trim().slice(0, 240)
-    migrateAnchor(e)
+    migrateAnchor(e, this.doc.walk.charH)
     this.touched()
   }
 
@@ -6067,7 +6190,7 @@ export class Editor {
         const list = Array.isArray(exported.anchors) ? exported.anchors : exported.events
         if (Array.isArray(list) && list.length) {
           this.doc.events = list.map((e, i) =>
-            migrateAnchor({ id: i + 1, ...(e as object) } as MapAnchor & { type?: string }),
+            migrateAnchor({ id: i + 1, ...(e as object) } as MapAnchor & { type?: string }, this.doc.walk.charH),
           )
           this.doc.eventNext = this.doc.events.reduce((m, e) => Math.max(m, e.id), 0) + 1
         }

@@ -30,6 +30,8 @@ import {
   type AssetLook,
   type MapClass,
   type PlacedAsset,
+  ANCHOR_META_RESERVED,
+  type StairRegion,
 } from './core/mask'
 
 /* What each kind is FOR, in the words an author would use. Shown on the kind
@@ -746,6 +748,46 @@ function WhenField({ what, value, onCommit }: { what: string; value: string; onC
   )
 }
 
+/* FOUR NUMBERS FOR WHAT A PLACEMENT BLOCKS, or blank for measured.
+ *
+ * Blank is not the absence of an answer here, it is the better answer: publish
+ * scans the png's own alpha and beats anything a person types. This is the
+ * correction for a sprite whose drawn base is not the part a body should bump
+ * into, which is a shadow in the frame or an alpha halo. */
+function FootField({
+  value,
+  onCommit,
+}: {
+  value?: [number, number, number, number]
+  onCommit: (f: [number, number, number, number] | null) => void
+}) {
+  const [draft, setDraft] = useState<string | null>(null)
+  const shown = draft ?? (value ? value.join(', ') : '')
+  return (
+    <label className="insp-row">
+      <span data-tip="cx, cy across and down from the feet, then the two radii">blocks</span>
+      <input
+        value={shown}
+        placeholder="measured"
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => {
+          if (draft === null) return
+          const n = draft
+            .split(/[ ,]+/)
+            .filter(Boolean)
+            .map(Number)
+          onCommit(n.length === 4 && n.every((v) => isFinite(v)) ? (n as [number, number, number, number]) : null)
+          setDraft(null)
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === 'Escape') e.currentTarget.blur()
+        }}
+        spellCheck={false}
+      />
+    </label>
+  )
+}
+
 // the effect preview: the rendered frames looping on a canvas at one zoom.
 // Pixel art, so nothing is smoothed and nothing is tweened between frames, and
 // the clock is the effect's own fps so the panel plays what the map will play.
@@ -1017,6 +1059,8 @@ export default function App() {
   // the map's own id, held while it is typed, because a rename is a server call
   // that can be refused and half a slug is not a thing to send
   const [idDraft, setIdDraft] = useState<string | null>(null)
+  // null until somebody asks, because finding them is three flood fills
+  const [stairs, setStairs] = useState<StairRegion[] | null>(null)
   const [idSaid, setIdSaid] = useState('')
   // the effect box: the ask, the armed map click, the plan the click produced
   // and the params a human is tuning. fxFrames is the render, redone locally on
@@ -4342,6 +4386,32 @@ export default function App() {
           />
         </label>
       )}
+      {/* THE OUTLINES ALREADY DRAWN. Closing a polygon used to rasterize it and
+          throw the points away, so tracing one shape for the level, the cut and
+          the occluder was tracing it three times. Pressing one lays it down
+          again with whatever tool and level are live now. */}
+      {(st?.stencils.length ?? 0) > 0 && (
+        <>
+          <Sec>outlines you drew</Sec>
+          {st!.stencils.map((k) => (
+            <div className="manyrow" key={k.id}>
+              <button
+                className="abtn tiny"
+                data-tip="lay it down again with the tool and level that are live now"
+                onClick={() => {
+                  ed?.applyStencil(k.id)
+                  push(`outline ${k.id} laid down again`)
+                }}
+              >
+                use {k.pts.length}-point outline
+              </button>
+              <button className="arow-x" data-tip="forget it" onClick={() => ed?.deleteStencil(k.id)}>
+                ×
+              </button>
+            </div>
+          ))}
+        </>
+      )}
       <Sec>what you are painting</Sec>
       <div className="chips">
         {PAL.map((p) => (
@@ -4905,6 +4975,44 @@ export default function App() {
               only visible from its own form, so an author looking at stele_2
               cannot tell it is one of the five that python iterates. */}
           {anchorIn.length > 0 && <div className="doorhint">in {anchorIn.join(' · ')}</div>}
+          {/* THE BAG A GRAPE READS, which is the stated extension point and had
+              no author writer at all: everything in it was MAPVIS bookkeeping,
+              shipped to every grape. One row per key and a blank pair at the
+              end, the same shape the map's own bag uses. The tool's own keys
+              are not listed, because they have their own controls. */}
+          <div className="metarows">
+            <div className="doorhint">what a grape can read off this anchor</div>
+            {[
+              ...Object.entries(editingDoor.meta ?? {}).filter(([k]) => !ANCHOR_META_RESERVED.includes(k)),
+              ['', ''],
+            ].map(([k, v], i) => (
+              <div className="metarow" key={k || 'new' + i}>
+                <input
+                  className="anchname"
+                  defaultValue={k}
+                  placeholder="key"
+                  onBlur={(e) => {
+                    const nk = e.target.value.trim()
+                    if (nk === k) return
+                    // the new name takes the old one's value, and clearing the
+                    // name is how a key is removed
+                    if (nk) ed?.setAnchorMeta(editingDoor.id, nk, String(v ?? ''))
+                    if (k) ed?.setAnchorMeta(editingDoor.id, k, null)
+                  }}
+                  spellCheck={false}
+                />
+                <input
+                  defaultValue={String(v ?? '')}
+                  placeholder="value"
+                  onBlur={(e) => {
+                    const kk = (e.currentTarget.parentElement?.querySelector('input') as HTMLInputElement)?.value.trim()
+                    if (kk) ed?.setAnchorMeta(editingDoor.id, kk, e.target.value)
+                  }}
+                  spellCheck={false}
+                />
+              </div>
+            ))}
+          </div>
           <div className="dooracts">
             <button
               className="abtn"
@@ -6574,13 +6682,18 @@ export default function App() {
           ))}
         </select>
       </label>
-      {/* WHEN THIS ONE IS THERE, and it beats its group's where both exist.
-          Typed, tabled, exported and resolved by whenOf with no way for
-          anybody to enter a value. */}
+      {/* WHEN THIS ONE IS THERE, and it beats its group's where both exist. */}
       <WhenField
         what="this one"
         value={selA.when ?? ''}
         onCommit={(v) => ed?.setAssetWhen([selA.id], v)}
+      />
+      {/* WHAT IT BLOCKS ON THE GROUND. Measured off the sprite's own alpha at
+          publish, which is right nearly always, so blank is the answer here and
+          four numbers are the correction. */}
+      <FootField
+        value={selA.foot}
+        onCommit={(f) => ed?.setFoot([selA.id], f)}
       />
       {/* a group's condition is inherited rather than copied, so a placement
           with none of its own is not unconditional and must not read as if it
@@ -6935,6 +7048,10 @@ export default function App() {
    * Stacking is worth a word: the game y-sorts, so "in front" means standing
    * lower down the map, and the button says so rather than implying a z-index
    * the exported bundle does not have. */
+  /* the group every picked placement is already in, or blank when they differ,
+     so the select never claims a crowd is somewhere only one of them is */
+  const manyPicked = assets.filter((a) => selAll.includes(a.id))
+  const manyGroup = manyPicked.every((a) => a.group === manyPicked[0]?.group) ? (manyPicked[0]?.group ?? '') : ''
   const manyPanel = many && (
     <div className="insp many">
       <div className="insp-head">
@@ -6957,6 +7074,25 @@ export default function App() {
         </button>
       </div>
       {lifeOpen && lifeBoxFor(selAll[0])}
+      {/* one group onto the whole pick. The select next door acts on one
+          placement, so a crowd was regrouped one at a time. */}
+      <label className="insp-row">
+        <span>group</span>
+        <select
+          value={manyGroup}
+          onChange={(e) => {
+            const n = ed?.setAssetGroup(selAll, e.target.value) ?? 0
+            push(`${n} → ${e.target.value}`)
+          }}
+        >
+          <option value="">mixed</option>
+          {groupNames.map((g) => (
+            <option key={g} value={g}>
+              {g}
+            </option>
+          ))}
+        </select>
+      </label>
       <div className="manygrid">
         {(
           [
@@ -8095,6 +8231,35 @@ export default function App() {
           </div>
         ))}
       </div>
+      {/* THE STAIRS THE PAINT ALREADY DESCRIBES, and the one thing about them a
+          person could not do, which is name one. map.json.stairs is machine
+          made and stays that way; pressing a row puts a named region over it so
+          a grape has something to address. Behind a press because it is three
+          flood fills over the whole plane. */}
+      <Sec>stairs</Sec>
+      <div className="manyrow">
+        <button className="abtn tiny" onClick={() => setStairs(ed?.stairList() ?? [])}>
+          find them
+        </button>
+        {stairs !== null && <span className="doorhint">{stairs.length} found</span>}
+      </div>
+      {(stairs ?? []).map((r, i) => (
+        <div className="manyrow" key={`${r.value}-${r.rect.join(',')}`}>
+          <span className="doorhint">
+            {r.connects[0]} to {r.connects[1]} · {r.px}px at {r.rect[0]}, {r.rect[1]}
+          </span>
+          <button
+            className="abtn tiny"
+            data-tip="put a named region over it, so python can address this stair"
+            onClick={() => {
+              ed?.markStair(r)
+              push(`stair ${i + 1} marked · name it on step 3`)
+            }}
+          >
+            name it
+          </button>
+        </div>
+      ))}
       <Sec>what gets written</Sec>
       <div className="manifest">
         <div className="manifest-to">
