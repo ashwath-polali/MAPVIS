@@ -1,23 +1,6 @@
 import path from 'node:path'
 import fs from 'node:fs'
-// The linked machine.
-//
-//   node server/relay.mjs
-//
-// This is what makes the club account work. It holds no api key: it runs the
-// model cli that is already installed and already paid for on this machine,
-// and posts the answers back to a MAPVIS that may be hosted anywhere.
-//
-// It polls rather than being called, which is the only shape that works from a
-// laptop with no public address, behind a school network, that closes at night.
-// When it stops checking in the platform notices within ninety seconds and
-// degrades: the router features send the author's own words straight to
-// pixellab and the purely-claude features say they need a key. Nothing hangs
-// waiting for a machine that went to sleep.
-//
-// When the linked machine goes away for good, somebody sets the account's
-// provider to 'key' from a dropdown, this stops mattering, and nothing else
-// changes.
+// the linked machine, run with `node server/relay.mjs`; it polls rather than being called because a laptop behind a school network has no public address, and the platform degrades within ninety seconds of it going quiet
 import os from 'node:os'
 import { env } from './db/env.mjs'
 import { viaCli } from './store/planner.mjs'
@@ -27,10 +10,7 @@ const BASE = (E.MAPVIS_URL || 'http://localhost:5274').replace(/\/+$/, '')
 const TOKEN = E.MAPVIS_RELAY_TOKEN
 const NAME = E.MAPVIS_RELAY_NAME || os.hostname()
 const CAPS = (E.MAPVIS_RELAY_CAPS || 'claude').split(',').map((s) => s.trim()).filter(Boolean)
-/* A MACHINE WITH A PIXELLAB TOKEN CAN DO PIXELLAB, and says so without being
- * told to in caps. The host cannot run a generation through this queue, so
- * what it gets from this machine is the token itself, sent with the first
- * claim and again now and then so a restarted host is not left without it. */
+/* a machine with a pixellab token says so without being told, and lends the token itself because the host cannot run a generation through this queue */
 if (E.PIXELLAB_TOKEN && !CAPS.includes('pixellab')) CAPS.push('pixellab')
 let claims = 0
 
@@ -73,12 +53,7 @@ async function tick() {
   const started = Date.now()
   try {
     // the same cli, the same flags, the same answer MAPVIS has always used
-    /* THE PICTURES COME WITH THE JOB. The host wrote them to its own tmp
-     * directory and named those paths in the prompt; this machine has neither.
-     * Each image is written here and the host's path is swapped for this one,
-     * so the cli reads exactly what the host meant it to and the prompt's
-     * wording never changes. Before this the planner on the laptop was asked
-     * to read /tmp files that only ever existed on a serverless instance. */
+    /* the pictures come with the job and their paths are rewritten here, because the prompt names the host's own tmp files and this machine has neither */
     let prompt = String(job.payload.prompt || '')
     const imgs = Array.isArray(job.payload.images) ? job.payload.images : []
     const paths = Array.isArray(job.payload.paths) ? job.payload.paths : []

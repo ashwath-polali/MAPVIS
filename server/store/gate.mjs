@@ -1,28 +1,4 @@
-/* THE PUBLISH GATE: the checks that already existed, run at the moment they
- * matter instead of by hand afterwards.
- *
- * Second most demanded item in the authoring sweep after the two map
- * properties. check-anchors.mjs already did the hip-band standability test off
- * a published levels.png, and its own header says "this is the test that should
- * have existed before the first door was placed" — and it is a CLI somebody has
- * to remember to run, against a version that has already shipped. The editor's
- * walk test, heal seams and reach check are buttons that write nothing into the
- * bundle and do not run at export. Nothing checked connectivity from the spawn,
- * nothing tested map.spawn at all, and nothing validated `to` or `toAnchor`
- * against the registry that is one query away.
- *
- * Meanwhile the requirement was already written down twice in the game repo, in
- * stations.ts and objective.ts, in a repo a member never opens. So a member
- * found out in a browser rather than in the tool, and a hall missing an anchor
- * published cleanly and failed when a student walked in.
- *
- * A version is immutable, so refusing costs a retry and publishing costs a
- * version number nobody can correct. It refuses.
- *
- * WHERE THE CONTRACT LIVES: here, in MAPVIS, per map class. That is a ruling
- * and it is reversible: a grape may want to extend it later with anchors its
- * own code needs, and the shape below is a list to add to rather than replace.
- */
+/* the publish gate refuses rather than warns, because a version is immutable and shipping a dead door costs a version number nobody can correct; the contract lives here, per map class */
 
 /* what a map of each class has to carry before it is worth publishing. Kept
  * small on purpose: every line here is a thing an author cannot ship without,
@@ -84,10 +60,7 @@ function standTest(levels, mapJson) {
   return { w, h, tol, at, standable }
 }
 
-/* WHERE A BODY ACTUALLY HAS TO BE ABLE TO GET TO. An anchor with standable
- * ground under it that no walk from the spawn can reach is exactly as dead as
- * one on a wall, and it is the failure a 1px seam produces: invisible below 6x,
- * and the reach button in the editor writes nothing into the bundle. */
+/* standable ground is not enough: an anchor no walk from the spawn reaches is as dead as one on a wall, which is what a 1px seam produces */
 function reachableFrom(sx, sy, t) {
   const { w, h, standable, at, tol } = t
   const seen = new Uint8Array(w * h)
@@ -143,32 +116,13 @@ function ringOk(a, t, reached) {
  * standable ground and not for a reachable ring. */
 const INTERACTIVE = new Set(['door', 'post', 'point'])
 
-/* THE GATE. Two lists of sentences, each naming the thing and what to do about
- * it. A PROBLEM is something that can never work and it stops the publish; a
- * WARNING is a fact the author should know and is said in the log. No problems
- * means publish. Nothing here throws: the caller decides what a problem costs,
- * and it costs the version. */
+/* a problem stops the publish and a warning goes in the log, and nothing here throws because the caller decides what a problem costs */
 export function gateMap({ mapJson, anchors, levels, slugs }) {
   const problems = []
   const warnings = []
   const cls = mapJson.class || 'island'
 
-  /* ---- the map graph, checked against a registry nothing had ever consulted.
-   *
-   * The hub's one door has pointed at `panther-maw`, a map that does not
-   * exist, since the day it was placed, and nothing anywhere said so.
-   *
-   * BUT A DOOR TO A MAP THAT IS NOT PAINTED YET IS A DESIGN, NOT A MISTAKE.
-   * The Maw's two side tunnels end at real named doors pointing at rooms
-   * nobody has painted, deliberately, so the place reads as having more of
-   * itself past the walls, and the game already renders "<label> · the way is
-   * barred" for exactly that. Refusing it would make the tool refuse the
-   * thing the design asks for.
-   *
-   * So the two cases are told apart by whether there is something close by. A
-   * target one edit away from a real map is a typo and stops the publish; a
-   * target nothing resembles is a room that has not been built and is said out
-   * loud instead. */
+  /* a door target one edit away from a real map is a typo and stops the publish, and one nothing resembles is an unpainted room the design wants and is only warned about */
   const known = new Set(slugs || [])
   for (const a of anchors) {
     if (!a.to || known.has(a.to)) continue

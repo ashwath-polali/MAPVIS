@@ -1,30 +1,11 @@
-// NEEDS WIRING: api.mjs has to call foldersApi() from route(); see the note at
-// the bottom of this file for the one line and where it goes.
-//
-// Folders and hand-set order on the dashboard, the whole of it.
-//
-// This is organisation and nothing else. A map with no folder row is a map the
-// home page lists exactly as it always did, so every path in here is allowed to
-// fail and leave the dashboard correct. That is why the read is one GET the
-// page can drop on the floor rather than something /api/my-maps was extended
-// with: adding it there would have made an error in a preference wipe out the
-// list of somebody's work, and the list of work is the point of the page.
-//
-// Nothing in this file deletes a map, and there is no query below that can
-// reach one. Dropping a folder drops folder rows; the cascades run the other
-// way, so removing a map takes its memberships with it and never the reverse.
-// A previous session destroyed a real map during a test, so it is worth saying
-// plainly: the only delete here names folders and folder_maps.
+// NEEDS WIRING: api.mjs has to call foldersApi() from route(), see the note at the bottom; every path here may fail and leave the dashboard correct, and the only delete names folders and folder_maps
 import { q, one, many, tx } from '../db/pool.mjs'
 import { currentUser } from './auth.mjs'
 import { platformOn } from './platform.mjs'
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-// Folder ids reach postgres as uuids, and a string that is not one is a 22P02
-// thrown from inside the driver rather than a 400 the page can read. Checked
-// here so a stale id in a browser tab answers "no such folder" instead of
-// looking like the database fell over.
+// checked here because a non-uuid is a 22P02 thrown inside the driver rather than a 400 the page can read
 const uuid = (s) => (UUID.test(String(s || '')) ? String(s) : null)
 
 const slug = (s) => String(s || '').slice(0, 60)
@@ -33,13 +14,7 @@ const name = (s) => String(s || '').replace(/\s+/g, ' ').trim().slice(0, 48)
 
 // ---- reading ---------------------------------------------------------------
 
-/* Every folder this account has, each with the slugs inside it in the order
- * they were dragged into, plus the order of the all-maps list.
- *
- * One query per table rather than one joined query, because the joined version
- * returns a map's slug once per folder it is in and the page then has to undo
- * that. Three small selects against an account's own rows is not the thing that
- * costs anything here. */
+/* one query per table and not one joined query, because a join returns a slug once per folder it is in and the page has to undo that */
 export async function listFolders(ownerId) {
   const folders = await many(
     'select id, name, sort from folders where owner_id = $1 order by sort, created_at',
@@ -96,10 +71,7 @@ export async function renameFolder(ownerId, id, wanted) {
   return r.rowCount > 0
 }
 
-/* Drops the folder and the rows saying what was in it. The maps themselves are
- * untouched and reappear on the all-maps list the moment the page reloads,
- * which is why this is not a two-step confirm the way deleting a map is: there
- * is nothing here to lose. */
+/* no two-step confirm, because the maps are untouched and reappear on the all-maps list the moment the page reloads */
 export async function removeFolder(ownerId, id) {
   const fid = uuid(id)
   if (!fid) return false
@@ -148,15 +120,7 @@ export async function setMapFolders(ownerId, mapSlug, ids) {
 
 // ---- the order things are listed in ----------------------------------------
 
-/* The client sends the whole visible sequence after a drag, not one moved id
- * and an index. Two reasons and both are measured elsewhere in this codebase
- * rather than guessed: a single index has to be computed against a list the
- * server cannot see, and any scheme that reindexes neighbours can leave two
- * rows holding the same rank the moment two drags overlap. A full sequence has
- * one writer and one answer.
- *
- * folderId null means the all-maps list, which has no membership row to hang a
- * sort index on and so gets its own table. */
+/* the client sends the whole sequence and not one moved id, because reindexing neighbours leaves two rows on the same rank when two drags overlap */
 export async function orderMaps(ownerId, folderId, slugs) {
   const seq = (Array.isArray(slugs) ? slugs : []).map(slug).filter(Boolean).slice(0, 500)
   if (!seq.length) return false
@@ -196,18 +160,7 @@ export async function orderMaps(ownerId, folderId, slugs) {
 
 // ---- the http side ---------------------------------------------------------
 
-/* One handler for every folders path, returning true when it answered.
- *
- * It is shaped this way so api.mjs keeps one line about folders instead of six
- * route blocks, and so this whole feature can be removed by deleting that line.
- *
- *   GET  /api/folders               { folders: [{id,name,maps:[slug]}], order: [slug] }
- *   POST /api/folders/create        { name, map? }   map, if given, goes straight in
- *   POST /api/folders/rename        { folder, name }
- *   POST /api/folders/remove        { folder }       the folder only, never a map
- *   POST /api/folders/set           { map, folders: [id] }  the full answer from the checkboxes
- *   POST /api/folders/order         { folder|null, maps: [slug] }  the whole visible sequence
- */
+/* one handler for every folders path, returning true when it answered, so api.mjs keeps one line and the feature is removed by deleting it */
 export async function foldersApi(req, res, p) {
   if (p !== '/api/folders' && !p.startsWith('/api/folders/')) return false
 
@@ -273,12 +226,7 @@ export async function foldersApi(req, res, p) {
   return true
 }
 
-/* api.mjs owns send() and body() and neither is exported, so they are repeated
- * here rather than that file being edited to export them. body() reuses the
- * same req._body slot on purpose: the ownership gate in route() drains the
- * request stream, and a stream can only be read once, so a second reader that
- * did not look at the cached promise would wait forever for data that had
- * already arrived. */
+/* body() reuses the same req._body slot on purpose, because the ownership gate drains the stream and a second reader ignoring the cached promise waits forever */
 function send(res, code, obj) {
   const b = Buffer.from(JSON.stringify(obj))
   res.statusCode = code
@@ -308,14 +256,4 @@ function body(req) {
   }))
 }
 
-/* TO WIRE THIS UP, in server/api.mjs route(), next to the other handler
- * dispatches near the top and BEFORE the POST ownership gate:
- *
- *   if (await foldersApi(req, res, p)) return
- *
- * with `import { foldersApi } from './store/folders.mjs'` at the head of the
- * file. Before the gate because these bodies carry a folder uuid in `folder`
- * and a map slug in `map`, never in `id`, so the gate would read no map name
- * out of them and every folder write would pass it unchecked anyway. The
- * ownership check that matters is in the queries above, where owner_id is in
- * the where clause of every write. */
+/* to wire this up, call `if (await foldersApi(req, res, p)) return` in api.mjs route() BEFORE the POST ownership gate, which reads no map name out of these bodies anyway */

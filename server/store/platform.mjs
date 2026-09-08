@@ -1,11 +1,4 @@
-// The database-backed versions of the three things api.mjs used to do with the
-// filesystem: save and load a document, list a library, and serve a png.
-//
-// The URL space does not change. The editor still asks for
-// /work/<slug>/library/base.png and still gets a png back; it simply comes out
-// of object storage now. Keeping the old shape is what lets the whole backend
-// move without touching 17,000 lines of client, and it is why the placement
-// urls already sitting inside every saved document keep resolving.
+// the url space does not change, because the placement urls already inside every saved document have to keep resolving
 import crypto from 'node:crypto'
 import { q, one, many } from '../db/pool.mjs'
 import { store, keys, onBlobWrite, takeBucketOps } from './blobs.mjs'
@@ -21,11 +14,7 @@ export const platformOn = () => {
   return E.MAPVIS_STORAGE !== 'work' && !!(E.DATABASE_POOLED_URL || E.DATABASE_URL)
 }
 
-// May a route fall back to work/ when the platform cannot answer? Yes normally,
-// because an author's work must never be lost to a database being unreachable.
-// The gate sets MAPVIS_NO_DISK=1 to take that away and prove the map really
-// lives off this laptop, which a passing test with a working disk underneath it
-// would not prove at all.
+// disk fallback stays on so a database blip cannot lose an author's work, and MAPVIS_NO_DISK=1 takes it away so a gate can prove the map really lives off this laptop
 export const diskAllowed = () => env().MAPVIS_NO_DISK !== '1'
 
 // slug -> map id. Cached because it is asked on every png request and a map's
@@ -39,21 +28,7 @@ export async function mapIdFor(slug, { create = false } = {}) {
   if (hit && (hit.id || Date.now() - hit.at < MISS_MS)) return hit.id
   let m = await getMapBySlug(slug)
   if (!m && create) {
-    /* A NEW MAP BELONGS TO WHOEVER MADE IT.
-     *
-     * This assigned every map to BOOTSTRAP_EMAIL, which is fine on one laptop
-     * where that account is the only one, and wrong the moment a second person
-     * signs up: their very first save created a map owned by the club, and the
-     * ownership gate then locked them out of the thing they had just made. It
-     * is the bug that would have made "anyone can make an account" false in
-     * practice, and it got sharper once ownership started being enforced on
-     * reads as well as writes.
-     *
-     * A script has no request around it, so it still falls back to the
-     * bootstrap account; that is import-work and make-scene, run by hand on the
-     * machine that owns the data. An HTTP request with no signed-in user gets
-     * nothing, because the alternative is letting a stranger create rows and
-     * bucket objects on somebody else's account by naming a slug. */
+    /* a new map belongs to whoever made it, and an http request with no signed-in user gets nothing, or a stranger creates rows on somebody else's account by naming a slug */
     const req = request()
     if (req.http && !req.user) return null
     const ownerId =
@@ -80,12 +55,7 @@ export const forgetMap = (slug) => ids.delete(slug)
 
 export async function saveDocument(slug, docString) {
   const id = await mapIdFor(slug, { create: true })
-  /* mapIdFor refuses to invent a map for a caller with no account, and that
-   * refusal has to arrive here as a sentence rather than as a null that travels
-   * two more functions and surfaces as a not-null constraint violation on
-   * map_blobs.map_id. The caller turns this into a 401; without it the failure
-   * looked like the database being unreachable and fell through to the disk
-   * fallback, which on a host writes to /tmp and silently loses the work. */
+  /* the refusal is a sentence and not a null, because a null read as a database outage falls through to the disk fallback and writes to /tmp on a host */
   if (!id) {
     const e = new Error('sign in to create a map')
     e.name = 'NoOwner'
@@ -98,19 +68,7 @@ export async function saveDocument(slug, docString) {
   return { bytes: docString.length, savedAt: t ? +new Date(t.updated_at) : Date.now(), ...r }
 }
 
-/* THE PAINTING HAS TO LEAVE THE MACHINE THAT LOADED IT.
- *
- * /api/save wrote work/<slug>/scene.png and stopped, so the picture a map is
- * MADE of was the one part of it that never reached the platform until an
- * export, which is hundreds of edits later. Two ways that bites and both are
- * real: a map started on the laptop opens on the deployed site saying there is
- * no painting, and a map started ON the deployed site writes its painting into
- * a Vercel tmpdir that is gone by the next request.
- *
- * Same key serveFromStore already reads, so nothing else changes: the disk copy
- * stays the fast path and the bucket is the copy that survives. Found from the
- * game side on 2026-08-28, opening a freshly made panther-maw on the host.
- */
+/* the painting goes to the bucket on save, because writing only work/<slug>/scene.png puts it in a Vercel tmpdir that is gone by the next request */
 export async function savePainting(slug, buf) {
   const id = await mapIdFor(slug, { create: true })
   if (!id) {
@@ -134,12 +92,7 @@ export async function loadDocument(slug) {
 
 // ---- the library -----------------------------------------------------------
 
-// One select, where the filesystem version walked the directory and probed for
-// dirs.json, then 0.png, then effect.json, opening a file descriptor per item
-// to read 24 bytes of png header. On the hub that was 71 probes per listing.
-//
-// The returned shape is exactly what libraryItems() returned, because App.tsx
-// reads it directly and this is a backend swap, not a redesign.
+// one select where the filesystem version cost 71 probes per listing on the hub, and the returned shape is unchanged because App.tsx reads it directly
 export async function libraryOf(slug) {
   const id = await mapIdFor(slug)
   if (!id) return []
@@ -165,10 +118,7 @@ export async function libraryOf(slug) {
         Object.entries(r.dirs).map(([h, list]) => [h, list.map((k) => '/work/' + k.replace(`maps/${id}/`, `${slug}/`))]),
       )
     }
-    /* A direction set owns no flat still, so its thumbnail is the first frame
-     * of the heading a character faces by default. Without this the panel asks
-     * for <name>.png, which for a sprite is a key that was never written, and
-     * the tile renders empty. */
+    /* a direction set owns no flat still, so without a first-frame thumbnail the panel asks for a <name>.png that was never written */
     if (r.frame_count === 0) {
       const facing = it.dirs && (it.dirs.south || it.dirs[Object.keys(it.dirs)[0]])
       it.src = facing?.length ? facing[0] : `${base}/${r.name}.png`
@@ -178,24 +128,14 @@ export async function libraryOf(slug) {
     const st = Array.isArray(r.states) ? r.states : []
     if (st.length) it.states = st
     if (r.origin && (r.origin.objectId || r.origin.characterId)) it.canState = true
-    /* WHAT THE ROW KNOWS THAT THE DISK MAY NOT: an item pushed before the
-     * sidecars went up has frames in the bucket and no dirs.json or effect.json,
-     * so a host rebuilding those files needs the origin and the effect recipe
-     * from here. Handed back whole rather than as flags. */
+    /* the origin and the effect recipe come back whole, because an item pushed before the sidecars has frames in the bucket and no dirs.json */
     if (r.origin && typeof r.origin === 'object') it.origin = r.origin
     if (r.effect && typeof r.effect === 'object') it.effectJson = r.effect
     return it
   })
 }
 
-/* Who owns a map, cached, because this is asked on every png.
- *
- * Opening a map is a couple of hundred image requests and each one has to be
- * checked, so an uncached select here would be a couple of hundred round trips
- * added to the thing this whole session has been trying to make cheaper. An
- * owner effectively never changes, and the miss is re-asked every half minute,
- * so handing back a stale answer is bounded and the failure mode is that a map
- * transferred seconds ago stays readable by its old owner for thirty seconds. */
+/* cached because opening a map is a couple of hundred png requests each needing this check, and the cost of thirty seconds of staleness is an old owner reading a just-transferred map */
 const OWNER_TTL = 30_000
 const owners = new Map()
 export async function ownerOfSlug(slug) {
@@ -216,17 +156,7 @@ export const forgetOwner = (slug) => owners.delete(slug)
 
 // ---- what the bucket has been asked to do, and the line it will not cross ---
 
-/* R2 HAS NO SPEND CAP, SO THE CAP LIVES HERE.
- *
- * Cloudflare bills overage and offers no dashboard setting to stop at the free
- * tier, so "we will simply not go over" is a hope unless something enforces it.
- * The free allowance is 10 million reads and 1 million writes a month. These
- * default to eighty percent of that, which leaves room to notice and react
- * rather than room to be surprised.
- *
- * Deliberately low-frequency: the totals are read at most once a minute and
- * written at most once per request, so the guard costs far less than the thing
- * it guards. */
+/* r2 has no spend cap so the cap lives here, at eighty percent of the free 10 million reads and 1 million writes a month */
 const LIMITS = () => ({
   b: Number(env().R2_MONTHLY_READ_LIMIT || 8_000_000),
   a: Number(env().R2_MONTHLY_WRITE_LIMIT || 800_000),
@@ -286,10 +216,7 @@ export async function noteBucketUsage() {
 
 // ---- serving a png ---------------------------------------------------------
 
-// /work/<slug>/library/base.png            -> maps/<id>/library/base.png
-// /work/<slug>/library/gull/3.png          -> maps/<id>/library/gull/3.png
-// /work/<slug>/scene.png                   -> maps/<id>/scene.png
-// /work/<slug>/states/troll/boulder/...    -> maps/<id>/states/troll/boulder/...
+// /work/<slug>/<anything> maps to maps/<id>/<anything>, so the slug is swapped for the id and the rest of the path is kept
 export async function blobKeyForWorkPath(rel) {
   const parts = String(rel).split('/').filter(Boolean).map(decodeURIComponent)
   if (parts.length < 2) return null
@@ -301,13 +228,7 @@ export async function blobKeyForWorkPath(rel) {
 
 const MIME = { png: 'image/png', json: 'application/json', jpg: 'image/jpeg' }
 
-/* THE TAG IS KNOWN BEFORE THE BYTES ARE, WHICH IS THE WHOLE POINT.
- *
- * blob_shas records the sha of every object at the moment it is written, so
- * "has this changed" is a primary-key lookup rather than a download. Without
- * it the ETag below was computed from bytes that had just been fetched, so a
- * 304 cost a full bucket read and reopening a map on the host spent 156 of
- * them to learn that nothing had changed. */
+/* blob_shas records a sha at write time so "has this changed" is a primary-key lookup, or a 304 costs a full bucket read and reopening a map spends 156 of them */
 const tagOf = (sha) => '"' + sha + '"'
 
 async function knownTag(key) {
@@ -348,11 +269,7 @@ export async function serveFromStore(res, rel, req) {
   const key = await blobKeyForWorkPath(rel)
   if (!key) return false
 
-  /* ANSWERED WITHOUT TOUCHING THE BUCKET AT ALL.
-   *
-   * This is the branch that makes reopening a map free. If the caller already
-   * holds the current bytes and Postgres knows their sha, there is nothing to
-   * fetch and nothing to send. */
+  /* answered without touching the bucket, which is the branch that makes reopening a map free */
   const known = req && req.headers['if-none-match'] ? await knownTag(key) : null
   if (known && req.headers['if-none-match'] === known) {
     res.setHeader('ETag', known)
@@ -370,30 +287,12 @@ export async function serveFromStore(res, rel, req) {
   }
   res.setHeader('Content-Type', MIME[key.split('.').pop().toLowerCase()] || 'application/octet-stream')
 
-  /* THE AUTHOR'S WORKING COPY, WHICH CHANGES UNDER THEM, AND STILL MUST NOT BE
-   * RE-DOWNLOADED EVERY TIME.
-   *
-   * This was no-store, which is the honest answer to "these bytes can change"
-   * and the wrong one. no-store means the browser keeps nothing, so re-opening
-   * a map pulled every png in its library down again, and the dashboard pulled
-   * every thumbnail again on every visit.
-   *
-   * An ETag says the same thing without the cost. The tag is the content, so it
-   * changes exactly when the picture changes and never when it has not, and a
-   * browser holding the current bytes gets a 304 with no body. What it cannot
-   * do is show a stale picture: a changed png is a changed tag, which is a
-   * full response. */
+  /* an etag and not no-store, because no-store makes the browser keep nothing and re-download every png in a library on every open */
   const etag = '"' + crypto.createHash('sha1').update(buf).digest('base64url') + '"'
   res.setHeader('ETag', etag)
   res.setHeader('Cache-Control', 'private, no-cache')
 
-  /* BACKFILL, so this object is only ever paid for once.
-   *
-   * The write hook records a sha for anything written from now on, but every
-   * object that already existed when this table was added has no row, and a
-   * bucket move writes bytes through a path that predates it too. Recording
-   * the tag on the first read means the next revalidation is answered out of
-   * Postgres, without a migration that would have to walk the whole bucket. */
+  /* the tag is backfilled on first read, because an object written before this table existed has no row and a migration would have to walk the whole bucket */
   if (platformOn()) {
     q(
       `insert into blob_shas (key, sha, bytes, updated_at) values ($1,$2,$3, now())
@@ -414,25 +313,7 @@ export async function serveFromStore(res, rel, req) {
   return true
 }
 
-/* PUT THE MAP'S BYTES WHERE THE EXPORTER CAN SEE THEM.
- *
- * Export resolves every placement's source through resolveAssetFile, which is
- * a filesystem call: it joins a path under work/ and returns null when the file
- * is not there. On a laptop that is always fine, because work/ IS the library.
- * On the host work/ is an empty tmp directory and the library lives in the
- * bucket, so every source resolved to null, every placement was skipped by the
- * `if (!look0) continue` a few lines down from the call, no frames reached the
- * atlas, and the bundle published as a success carrying an island with nothing
- * on it. Nobody caught it because the gate never exercises /api/export.
- *
- * Rather than teach four call sites and the naming logic to read bytes from two
- * places, the bytes are brought to the place that already works. Anything
- * already on disk is left alone, so this costs nothing at all on the machine
- * that made the map, and on the host it is one listing plus the files that are
- * genuinely missing.
- *
- * Returns what it had to fetch, so the caller can say so out loud rather than
- * quietly spending a few hundred reads. */
+/* the bytes are pulled to disk because export resolves every placement through a filesystem call, and on a host that returned null for all of them and published an empty island as a success */
 export async function hydrateMap(slug, dir) {
   if (!platformOn()) return { pulled: 0, bytes: 0, skipped: 0 }
   const fs = await import('node:fs')
@@ -457,16 +338,7 @@ export async function hydrateMap(slug, dir) {
     else want.push([key, f])
   }
 
-  /* FETCHED IN PARALLEL, BECAUSE THE FUNCTION HAS FIVE MINUTES AND THE HUB HAS
-   * FOURTEEN HUNDRED FILES.
-   *
-   * Measured one at a time: 1,383 objects took 260 seconds, against a
-   * maxDuration of 300. That is not a margin, it is a coin toss, and the export
-   * would have started failing the moment the map grew. Twelve at a time is the
-   * same number of requests and roughly a twentieth of the wall clock, and it
-   * stays well under the ceiling the meter enforces. Kept modest rather than
-   * maximal because this shares a connection with everything else the request
-   * is doing. */
+  /* twelve lanes, because 1,383 objects one at a time measured 260 seconds against a maxDuration of 300 */
   const LANES = 12
   let next = 0
   await Promise.all(
@@ -475,18 +347,7 @@ export async function hydrateMap(slug, dir) {
         const i = next++
         if (i >= want.length) return
         const [key, f] = want[i]
-        /* RETRIED, BECAUSE THE CLIENT IS DELIBERATELY MAXATTEMPTS:1.
-         *
-         * That setting is right for its own reason: against a capped bucket a
-         * refusal is an answer and retrying three times just makes the export
-         * outlive the browser. But it also means a transient reset loses the
-         * object outright, and twelve lanes at once produce those. Measured:
-         * ten of 1,383 files vanished this way, silently, which would have been
-         * ten missing frames in a published bundle reported as a success.
-         *
-         * So the retry lives here rather than in the client, where it applies to
-         * a bulk copy that can afford it and not to the single reads a request
-         * is waiting on. */
+        /* the retry lives here and not in the client, whose maxAttempts:1 is right, because ten of 1,383 files vanished silently to transient resets at twelve lanes */
         let got = null
         for (let attempt = 0; attempt < 3 && !got; attempt++) {
           try {
@@ -560,17 +421,7 @@ async function upsertItem(mapId, name, kind, o) {
 
 // ---- pushing a just-written item into the store -----------------------------
 
-// The generation routes are intricate: collision loops that probe for a free
-// filename, a .stage folder swapped in atomically, .prev kept so an edit can be
-// undone. All of that is tested and none of it is worth rewriting.
-//
-// So disk stays the scratch area where those run, and this is called the moment
-// one finishes: it reads what landed and pushes it to the store, which is the
-// durable copy. Four call sites, because there are only four functions that
-// ever finish a library write.
-//
-// It also means a hosted server works with an ephemeral disk, since the bytes
-// are in object storage before the request ends.
+// disk stays the scratch area the generation routes run in, and this pushes what landed to the store before the request ends, so an ephemeral disk still works
 export async function pushItem(slug, name, workDir) {
   if (!platformOn()) return null
   const fs = await import('node:fs')
@@ -628,23 +479,7 @@ export async function pushItem(slug, name, workDir) {
     if (!dirs[heading].length) delete dirs[heading]
   }
 
-  /* A DIRECTION SET ARRIVES AS FLAT FILES BESIDE dirs.json, NOT AS SUBFOLDERS.
-   *
-   * The character writer lays down <name>/<heading>-<i>.png. Everything above
-   * looks for <name>/<i>.png or <name>/<heading>/<i>.png, so a sprite matched
-   * neither: it fell through as kind 'static' with dirs null, and libraryOf
-   * then pointed src at <name>.png, a key nobody ever wrote. That is why all
-   * nineteen people on the hub, plus the troll and the gull, were blank tiles
-   * in the library panel. Measured on disk: work/hub/library/troll/ holds
-   * dirs.json and east-0.png through west-7.png and no 0.png at all.
-   *
-   * dirs.json is the authority rather than the filename pattern: it already
-   * lists each heading's files in order, so reading it means this keeps working
-   * if the writer ever renames them. The pattern scan is only the fallback for
-   * a folder whose dirs.json went missing, and it tries the two-word headings
-   * first so north-east never reads as north. Either way the key keeps the
-   * relative path the file had, because blobKeyForWorkPath translates /work/
-   * urls to bucket keys by position. */
+  /* a direction set is flat files beside dirs.json and not subfolders, dirs.json is the authority, and the fallback scan tries two-word headings first so north-east never reads as north */
   const HEADINGS = ['north-east', 'north-west', 'south-east', 'south-west', 'north', 'south', 'east', 'west']
   if (!Object.keys(dirs).length) {
     const take = async (heading, file, into) => {
@@ -675,11 +510,7 @@ export async function pushItem(slug, name, workDir) {
     }
   }
 
-  /* THE TWO SIDECARS GO UP WITH THE FRAMES. hydrateMap pulls maps/<id>/ back
-   * onto a host whose work/ is empty, and until today it got every png and
-   * neither json, so a character came back as a folder of headings with no
-   * heading map and readLibItem called it nothing. The row below records the
-   * same facts, but the disk readers read the files, so the files go up too. */
+  /* the two sidecars go up with the frames, because hydrateMap pulls the pngs back onto an empty work/ and the disk readers read the files rather than the row */
   if (meta) await s.put(`maps/${id}/library/${name}/dirs.json`, Buffer.from(JSON.stringify(meta)), 'application/json')
   if (effect) await s.put(`maps/${id}/library/${name}/effect.json`, Buffer.from(JSON.stringify(effect)), 'application/json')
 
@@ -698,28 +529,7 @@ export async function pushItem(slug, name, workDir) {
   return { name, frames: n, dirs: Object.keys(dirs).length, faces }
 }
 
-/* ---- ONE DOCK KIT, TWENTY MAPS, AND WHY IT IS A COPY -----------------------
- *
- * A barrel drawn once should stand on every island that has a harbour, instead
- * of twenty maps each spending a generation on their own barrel. The shape that
- * first looks right is a library row belonging to no map, and it is not worth
- * what it costs: library_items.map_id is not null with unique (map_id, name),
- * every key is maps/<mapId>/library/..., and blobKeyForWorkPath,
- * resolveAssetFile, hydrateMap, the /work/ url space and the POST ownership
- * gate all read a map id out of a path. A nullable map_id has to be answered
- * for in all six, and one of them is the gate that decides whether a stranger
- * may write into your library. That is a lot of blast radius for a convenience.
- *
- * So this DUPLICATES THE BYTES. It costs object storage and it costs no
- * pixellab spend at all, which is the only cost that was ever the point. Inside
- * the bucket a copy is server-side, so no frame is downloaded and re-uploaded,
- * and the copy is usually what an author wanted anyway: a barrel dropped into
- * the Maw gets palette-matched to black stone, and a true share would have
- * changed the barrel on the hub too.
- *
- * Every frame and every state face, not just 0.png. A partial copy is the
- * failure this is written against: a walking character copied as one still is a
- * person who faces south forever, and nothing anywhere would say so. */
+/* a shared item duplicates the bytes rather than nulling map_id, which six readers derive a map id from including the write gate, and it copies every frame and every state face because a partial copy is a character facing south forever */
 export async function copyLibraryItem(fromSlug, name, toSlug, as) {
   if (!platformOn()) return null
   const fromId = await mapIdFor(fromSlug)
@@ -796,13 +606,7 @@ export async function copyLibraryItem(fromSlug, name, toSlug, as) {
   return { name: to, from: fromSlug, files: held.length, frames: src.frame_count, faces }
 }
 
-/* The same thing wearing another face: a troll's boulder, a character's every
- * heading. A face lives one folder deeper than the library does, because a
- * character state comes back as whole headings and nesting keeps a heading's
- * frames in order without encoding the order into the filename.
- *
- * The client reads a face's size and fps to draw it, so those become columns
- * rather than something re-derived by opening a png per face on every listing. */
+/* a face lives one folder deeper than the library because a state comes back as whole headings, and its size and fps are columns rather than a png opened per face on every listing */
 export async function pushStates(slug, item, workDir) {
   if (!platformOn()) return 0
   const fs = await import('node:fs')
@@ -901,17 +705,7 @@ const readJson = (fs, f) => {
 
 const originOf = (fs, path, workDir, name) => readJson(fs, path.join(workDir, 'origin.json'))?.[name] || null
 
-/* ---- versions: what .prev holds, kept where the laptop is not --------------
- *
- * An in-place edit rewrites the item and z puts the pixels back. On disk that
- * is the .prev folder, capped at 8 so an edit cannot roll its own original
- * away. None of that survives the laptop, and an undo that only works on one
- * machine is not an undo.
- *
- * Snapshotting copies inside the bucket rather than downloading and re-uploading
- * the bytes, so keeping a version costs one server-side copy per file and no
- * transfer at all. Called at the moment before an item is overwritten, when what
- * is in the store still IS the previous version. */
+/* what .prev holds, kept off the laptop and capped at 8 so an edit cannot roll its own original away; the snapshot copies inside the bucket, so it costs no transfer */
 const PREV_MAX = 8
 
 export async function snapshotVersion(slug, name) {

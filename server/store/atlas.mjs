@@ -1,35 +1,12 @@
-// Pack every frame a map owns into one image.
-//
-// THE PROBLEM THIS EXISTS FOR: the hub publishes 800 pngs. Opening it once is
-// 800 downloads. Backblaze's free tier allows 2,500 a day, so three page loads
-// emptied it and the bucket started refusing reads mid-session. A map that
-// costs 800 requests to open cannot be handed to a classroom, whatever the
-// storage costs.
-//
-// Packed, a map is five files: map.json, scene.png, levels.png, atlas.png and
-// atlas.json. Same pixels, same bytes give or take the packing gaps, 160x fewer
-// transactions. Nothing is resampled, nothing is re-encoded lossily, and every
-// frame comes back out at exactly the size it went in.
-//
-// The individual pngs are still published beside it. Storage is not the
-// constraint, transactions are, and keeping them means a reader written before
-// the atlas existed keeps working.
+// every frame packs into one image, because 800 loose pngs emptied a 2,500-a-day allowance in three page loads; nothing is resampled and the loose pngs still ship
 import { decodePNG, encodePNG } from '../sheet.mjs'
 
-/* WHAT THE SHEET HAS TO FIT INSIDE.
- *
- * WebGL reports MAX_TEXTURE_SIZE and the 4 GB school Chromebooks this targets
- * report 4096. A sheet with either side over that cannot be uploaded at all, so
- * every frame on it fails to draw, and the failure arrives on the machine in the
- * classroom rather than on the machine that published. */
+/* the school chromebooks report 4096, and a sheet over that cannot be uploaded at all, so the failure lands in the classroom rather than at publish */
 export const MAX_TEXTURE_SIZE = 4096
 
 const pow2 = (n) => 1 << Math.ceil(Math.log2(Math.max(1, n)))
 
-/* Shelf packing: sort tall-first, lay left to right, drop to a new row when the
- * shelf is full. It is not the tightest algorithm published, and for a few
- * hundred small sprites of similar height it lands within a few percent of one
- * while being twenty lines instead of two hundred. */
+/* shelf packing, within a few percent of the tightest algorithm on a few hundred small sprites and twenty lines instead of two hundred */
 export function packAtlas(files, { max = MAX_TEXTURE_SIZE, pad = 1 } = {}) {
   const items = []
   for (const [name, buf] of files) {
@@ -42,22 +19,7 @@ export function packAtlas(files, { max = MAX_TEXTURE_SIZE, pad = 1 } = {}) {
   }
   if (!items.length) return null
 
-  /* THE WIDEST FRAME IS A FLOOR ON THE WIDTH, NOT THE ANSWER.
-   *
-   * Letting the widest frame decide outright packed the hub as 256 x 6422. Its
-   * widest frame is 154 px, which rounds up to a 256 wide sheet, and 794 frames
-   * laid on 256 px shelves is a strip six thousand rows tall, well past the
-   * 4096 above. The `max` cap never came into it, because the width was already
-   * far below the cap.
-   *
-   * Fill is not what is being traded here. Measured over the hub's 794 frames:
-   * 256 wide gives 6422 tall, 512 gives 3063, 1024 gives 1538 and 2048 gives
-   * 790, and the fill sits between 86 and 93 percent at every one of them. Only
-   * the aspect ratio moves. So the width is chosen from the total area instead:
-   * the square root of everything to be packed, rounded up to a power of two,
-   * which is the width a square sheet would want. The widest frame still holds
-   * it up from below, because a frame wider than the sheet would be written past
-   * the end of its own row and land in the next one. */
+  /* the width comes from the total area and the widest frame is only a floor, because letting the widest frame decide packed the hub as 256 x 6422, past the texture limit */
   const widest = items.reduce((m, i) => Math.max(m, i.w + pad * 2), 0)
   const area = items.reduce((s, i) => s + (i.w + pad * 2) * (i.h + pad * 2), 0)
   const width = Math.max(256, pow2(widest), Math.min(max, pow2(Math.ceil(Math.sqrt(area)))))
@@ -80,12 +42,7 @@ export function packAtlas(files, { max = MAX_TEXTURE_SIZE, pad = 1 } = {}) {
   }
   const height = y + shelf + pad
 
-  /* REFUSED OUT LOUD RATHER THAN SHIPPED UNDRAWABLE.
-   *
-   * A sheet over the texture limit is not a slow bundle, it is a bundle where
-   * nothing appears, and it looks perfectly fine from the publisher's side. The
-   * shelf packer cannot do better than this without a different algorithm, so
-   * there is nothing to fall back to and the honest move is to stop. */
+  /* refused out loud, because a sheet over the texture limit is a bundle where nothing appears and looks fine from the publisher's side */
   if (width > MAX_TEXTURE_SIZE || height > MAX_TEXTURE_SIZE)
     throw new Error(
       `the atlas for these ${items.length} frame(s) comes out ${width}x${height}, and a texture cannot be larger than ` +
@@ -114,12 +71,7 @@ export function packAtlas(files, { max = MAX_TEXTURE_SIZE, pad = 1 } = {}) {
   }
 }
 
-/* Rewrite the placement list so it points into the sheet.
- *
- * The shape stays what every reader already understands: src, frames and dirs
- * keep their names and their order, and each entry gains its rectangle. A
- * reader that knows about the atlas draws from one image; one that does not
- * still has the path it always had. */
+/* src, frames and dirs keep their names and order and only gain a rectangle, so a reader that has never heard of the atlas still has its paths */
 export function atlasify(assets, index) {
   const at = (u) => index.frames[u] || null
   const one = (o) => {

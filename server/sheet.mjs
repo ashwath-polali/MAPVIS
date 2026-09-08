@@ -1,18 +1,4 @@
-/* Contact sheets, so what the tool just made can be LOOKED AT.
- *
- * The planner reads images off disk by absolute path, which is the proven
- * pattern already used by the style card. That means everything the tool makes
- * has to become one file first: eight frames of an effect are eight separate
- * pngs, and eight separate looks would be eight separate answers. So the frames
- * are laid out left to right in one strip, blown up so a 2px thread is visible,
- * and put on a mid-grey field so light pixels and dark pixels both read against
- * it. One image, one look, one verdict.
- *
- * There is no image library in this project and there is not going to be one,
- * so the png work is here: enough of a decoder to read what the client and
- * pixellab write, and enough of an encoder to write a flat rgba strip back.
- * Both halves are free and local. Nothing on this path touches pixellab.
- */
+/* contact sheets, because the planner reads one image off disk and eight separate frames would be eight separate answers; the png codec is here since there is no image library and there is not going to be one */
 import zlib from 'node:zlib'
 
 // ---- png in ---------------------------------------------------------------
@@ -201,10 +187,7 @@ const DIGITS = [
   0b111100111001111, 0b111100111101111, 0b111001001001001, 0b111101111101111, 0b111101111001111,
 ]
 
-/* The frames, left to right, blown up with no smoothing. images is a list of
- * { w, h, data } from decodePNG; every cell is bottom-aligned so a row of
- * sprites stands on one line. label puts an index number over each cell, which
- * is the whole way an answer of "the second one" can name what it means. */
+/* every cell is bottom-aligned so a row of sprites stands on one line, and the index label is how an answer of "the second one" can mean anything */
 export function contactSheet(images, o = {}) {
   const live = images.filter((im) => im && im.w > 0 && im.h > 0)
   if (!live.length) throw new Error('nothing to lay out')

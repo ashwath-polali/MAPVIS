@@ -190,11 +190,19 @@ export async function putDoc(mapId, docString) {
     yScale: num(wk.yScale, 0.72),
     near: Math.round(num(wk.near, 10)),
   }
+  /* WHERE THE PAINT IS, STATED. Four finite numbers or nothing, and nothing is
+   * the normal answer: publish scans the bytes that ship and beats a typed
+   * number. paint_set is what stops that scan overwriting a correction. */
+  const paint =
+    Array.isArray(pr.paint) && pr.paint.length === 4 && pr.paint.every((n) => Number.isFinite(Number(n)))
+      ? pr.paint.map((n) => Math.round(Number(n)))
+      : null
   const props = {
     title: typeof pr.title === 'string' ? pr.title : '',
     class: MAP_CLASSES.includes(pr.class) ? pr.class : 'island',
     islandId: typeof pr.islandId === 'string' ? pr.islandId : '',
     meta: pr.meta && typeof pr.meta === 'object' ? pr.meta : {},
+    ...(paint ? { paint } : {}),
   }
   /* the occluder baselines, because the polygons ride in the planes png and a per-id typed baseline was rebuilt from the bottom edge on every open and lost */
   const occs = Array.isArray(d.occs)
@@ -235,13 +243,25 @@ export async function putDoc(mapId, docString) {
     ? d.groups.filter((g) => g && typeof g.name === 'string' && g.name && (g.when || g.label))
     : []
 
+  // the outlines an author drew, three points minimum, newest first and capped
+  const stencils = (Array.isArray(d.stencils) ? d.stencils : [])
+    .filter((k) => k && Number.isFinite(Number(k.id)) && Array.isArray(k.pts) && k.pts.length >= 3)
+    .map((k) => ({
+      id: Math.round(Number(k.id)),
+      pts: k.pts
+        .filter((q2) => Array.isArray(q2) && q2.length === 2 && Number.isFinite(Number(q2[0])) && Number.isFinite(Number(q2[1])))
+        .map((q2) => [Number(q2[0]), Number(q2[1])]),
+    }))
+    .filter((k) => k.pts.length >= 3)
+    .slice(0, 12)
+
   /* IN THE SHA OR IT NEVER SAVES. A field left out of this list is a field the
    * four-second autosave decides is unchanged, so drawing a route and nothing
    * else would write nothing at all and the work would be gone on reload. */
   const rowSha = sha(
     JSON.stringify([
       w, h, d.base?.w ?? w, d.base?.h ?? h, d.base?.ox ?? 0, d.base?.oy ?? 0, d.spawn, d.assetNext, walk, props, occs,
-      paths, framings, sets, racks, variants, assetGroups,
+      paths, framings, sets, racks, variants, assetGroups, stencils,
     ]) + assetsSha,
   )
   const cur = await one('select doc_sha from maps where id = $1', [mapId])
@@ -264,6 +284,14 @@ export async function putDoc(mapId, docString) {
          paths = $24::jsonb, framings = $25::jsonb,
          sets = $26::jsonb, racks = $27::jsonb,
          variants = $28::jsonb, asset_groups = $29::jsonb,
+         stencils = $35::jsonb,
+         /* a stated extent lands in the paint_* columns and marks itself, so
+          * publish leaves it alone; unstated leaves whatever publish measured */
+         paint_w = case when $34 then $30 else paint_w end,
+         paint_h = case when $34 then $31 else paint_h end,
+         paint_ox = case when $34 then $32 else paint_ox end,
+         paint_oy = case when $34 then $33 else paint_oy end,
+         paint_set = $34,
          doc_sha = $12, updated_at = now()
        where id = $1`,
       [
@@ -297,6 +325,12 @@ export async function putDoc(mapId, docString) {
         JSON.stringify(racks),
         JSON.stringify(variants),
         JSON.stringify(assetGroups),
+        paint?.[0] ?? 0,
+        paint?.[1] ?? 0,
+        paint?.[2] ?? 0,
+        paint?.[3] ?? 0,
+        !!paint,
+        JSON.stringify(stencils),
       ],
     )
     wrote.push(`doc ${(assetsJson.length / 1024).toFixed(1)}kb`)
@@ -378,7 +412,11 @@ export async function getDoc(mapId) {
       class: m.class || 'island',
       islandId: m.island_id || '',
       meta: m.meta || {},
+      // only when a person stated it; otherwise the four numbers are a measurement and the document says nothing
+      ...(m.paint_set ? { paint: [m.paint_w, m.paint_h, m.paint_ox, m.paint_oy] } : {}),
     },
+    stencils: Array.isArray(m.stencils) ? m.stencils : [],
+    stencilNext: (Array.isArray(m.stencils) ? m.stencils : []).reduce((a, k) => Math.max(a, Number(k.id) || 0), 0) + 1,
     occs: Array.isArray(m.occs) ? m.occs : [],
     occNext: (Array.isArray(m.occs) ? m.occs : []).reduce((a, o) => Math.max(a, Number(o.id) || 0), 0) + 1,
     paths: Array.isArray(m.paths) ? m.paths : [],

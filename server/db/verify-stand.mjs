@@ -1,14 +1,9 @@
-// The stand-point reach law, on both sides of the wire, with no database and no
-// bucket: this is the one check a stranger can run on a fresh clone.
-//
+// The stand-point reach law on both sides of the wire, with no database and no bucket, so a stranger can run it on a fresh clone.
+
 //   node server/db/verify-stand.mjs
-//
-// A stand point is the floor beside a thing, so it is a step away by definition,
-// and nothing used to stop it being a step away across the whole map: two on the
-// hub ended up 60 and 214 pixels from the anchor they belong to. The browser
-// holds the rule in src/core/mask.ts and the server holds its own copy in
-// server/store/maps.mjs, because putDoc is reachable by a hand-written POST. Two
-// copies of one law is two chances to disagree, so this runs both.
+
+// Two on the hub ended up 60 and 214 pixels from their anchor. The browser holds the rule in src/core/mask.ts and the server
+// keeps its own copy in maps.mjs, because putDoc is reachable by a hand-written POST, so this runs both against each other.
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'

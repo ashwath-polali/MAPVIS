@@ -1,16 +1,4 @@
-// Export is a save, not a finish line.
-//
-// Maps live in a database, any map can be reopened and edited at any time, and re-exporting updates that map in the game. So export and
-// publish are not two acts. Pressing export writes an immutable version into
-// object storage and records it, and the game reads whichever version it asks
-// for.
-//
-// Immutable is the important half. Version N's bytes live at publish/<slug>/vN/
-// forever and nothing ever rewrites them, which means:
-//   - re-exporting can never break a class that is mid-session
-//   - a game build can pin a version it was tested against
-//   - every byte can be cached forever by a cdn, so the free tier's read
-//     allowance is never touched twice for the same file
+// export is a save: version N's bytes live at publish/<slug>/vN/ forever and are never rewritten, so a class mid-session cannot break and a cdn can cache them for good
 import crypto from 'node:crypto'
 import { q, one, many, tx } from '../db/pool.mjs'
 import { store, keys } from './blobs.mjs'
@@ -24,26 +12,7 @@ export const MAP_CLASSES = ['island', 'room', 'hall']
 
 const sha = (b) => crypto.createHash('sha256').update(b).digest('hex')
 
-/* WHERE THE PAINT IS, MEASURED OFF THE BYTES THAT ACTUALLY SHIP.
- *
- * `base` in the bundle claimed to be "the painting, as opposed to the canvas it
- * sits in" and was neither. It is bw/bh/ox/oy, the DROPPED IMAGE's size and
- * offset, which only move under growCanvas and know nothing about the cut, and
- * the cut is the thing that makes the sea transparent. On the hub the file was
- * dropped at 688x640 with its margin already baked in, so the manifest said
- * 688x640 at 0,0 while scene.png is opaque only in x 7..675, y 194..570. That
- * overstates the island's area by 75 percent and puts its centre 62 pixels
- * north, and the consumer had to hand-copy the real numbers into a fallback to
- * work around it. Worse, 688*640 is past the pixel ceiling one generation can
- * hold, so the game refused the whole composition on that field alone.
- *
- * Alpha 8 rather than 128, because the cut writes a hard zero and generated art
- * has soft edges, so a high threshold would eat a coastline. The chart's own
- * skinOf uses 128 on a downsampled thumbnail, where it is measuring what the eye
- * reads rather than what the engine draws.
- *
- * A picture with nothing opaque in it answers with the whole raster, because
- * "this map is nothing" is a worse claim than "this map is its canvas". */
+/* measured off the shipped bytes, because `base` is the dropped image and read 688x640 on a hub opaque only in x 7..675, y 194..570; alpha 8 so a soft coastline is not eaten */
 export function paintedBox(png) {
   const { w, h, data } = decodePNG(png)
   let x0 = w
@@ -62,23 +31,7 @@ export function paintedBox(png) {
   return { w: x1 - x0 + 1, h: y1 - y0 + 1, ox: x0, oy: y0 }
 }
 
-/* THE ORDER THE HEADINGS OF A VIEW SET ARE WRITTEN IN, AND IT IS LOAD BEARING.
- *
- * The game does not read the `facing` an exporter writes. It re-derives the
- * resting heading with `Object.keys(views).find(k => src.endsWith(k + '-0.png'))`,
- * and 'south-west-0.png'.endsWith('west-0.png') is true, so whichever key was
- * written first wins. With the plain headings first, 17 of the hub's 38
- * direction sets resolved to the wrong view and 15 of those landed on a
- * one-frame heading, where the game's `set.length > 1` test fails and they never
- * animate at all. MAPVIS's own editor preview got it right by testing array
- * membership, so the editor and the game disagreed about which way the same
- * figure faced, with nothing wrong in the pixels or the JSON.
- *
- * JSON.stringify and Object.keys both keep insertion order, so writing the
- * compounds first is the whole fix, and the game repo needs no change. It lives
- * here because two publishers write these sets and two copies of this list is
- * how they end up facing different ways. An unknown heading sorts last, where it
- * cannot shadow anything. */
+/* compounds first, because the game re-derives a heading with endsWith and 'south-west-0.png' ends with 'west-0.png', which sent 17 of the hub's 38 sets to the wrong view */
 export const DIR_ORDER = ['north-east', 'north-west', 'south-east', 'south-west', 'east', 'west', 'north', 'south']
 
 export const orderedHeadings = (keys) =>
@@ -88,30 +41,7 @@ export const orderedHeadings = (keys) =>
     return (ia < 0 ? DIR_ORDER.length : ia) - (ib < 0 ? DIR_ORDER.length : ib)
   })
 
-/* SHOTS, FOLDED ONTO THE ANCHOR THEY NAME.
- *
- * A DELIBERATE SECOND COPY of shotZoom and shotsOntoMeta in src/core/mask.ts,
- * for the same reason life.ts is copied verbatim between the two repos: this
- * file is node ESM reading postgres and that one is browser TypeScript reading a
- * document, and neither can import the other without dragging half a build into
- * the wrong process. The two exporters have diverged before, so if either half
- * changes, change both, and the fence that catches it is
- * server/db/verify-authoring.mjs, which publishes a map and reads the projection
- * back out of the bundle.
- *
- * The reason for the projection itself: MAPVIS keeps shots in a list of their
- * own and the game has never had a reader for it. What the game reads is the
- * anchor's `meta` bag, `meta.framings[name]` first and `meta.framing` as the
- * unnamed default, with the fields spelt exactly zoom, dx, dy and name.
- *
- * ZOOM CROSSES IN A DIFFERENT UNIT THAN IT IS STORED IN. `zoom` on the row is
- * the editor's view, screen pixels per painting pixel, an integer notch. The
- * game multiplies whatever it is handed by the scale the map loaded at, so a
- * shot armed at notch 3 would arrive as three times the opening view, which is a
- * face filling the screen. `overFit`, written when the shot was armed, says how
- * many times tighter than the whole map the view was, and 1.18 is the game's own
- * pull-out constant from PmapScene.tsx:828-829. MAPVIS carries the consumer's
- * constant because MAPVIS is the side that moves. */
+/* shots fold onto the anchor's meta bag because the game has no reader for a shot list, and zoom crosses as overFit/1.18 rather than the editor's notch, which would arrive as a face filling the screen; a deliberate second copy of src/core/mask.ts, change both */
 const GAME_OPENING_PULL = 1.18
 
 const shotZoom = (f) => {
@@ -123,22 +53,7 @@ const shotZoom = (f) => {
   return Math.round((rel / GAME_OPENING_PULL) * 1000) / 1000
 }
 
-/* OWNING A KEY MEANS OWNING ITS ABSENCE TOO.
- *
- * Both projections were additive only: with no shots on an anchor they handed
- * the incoming bag straight back, so a `framings` or `framing` key already
- * sitting in it shipped as a live camera the shot list no longer contained. That
- * is reachable and it is permanent. restoreFromDisk pulls map.json's anchors
- * into the document carrying the PROJECTED meta from the previous export, and it
- * does not restore the framings list, so the bag holds a shot the panel shows
- * none of. syncEventsToAnchors then copies the bag whole into the anchors table
- * and every later publish reads it back and re-ships it. The author sees zero
- * shots, cannot edit or delete the camera, and the game keeps pushing in on it.
- * The consumer never cross-checks: framingOf reads meta.framings[name] and then
- * meta.framing and nothing else.
- *
- * A DELIBERATE SECOND COPY of the same function in src/core/mask.ts. If either
- * half changes, change both. */
+/* a projection owns its key's absence too, or a framings key left in the bag from an earlier export ships as a camera the author can neither see nor delete; second copy of src/core/mask.ts, change both */
 const without = (meta, ...keys) => {
   if (!meta || typeof meta !== 'object') return undefined
   const out = { ...meta }
@@ -146,33 +61,8 @@ const without = (meta, ...keys) => {
   return Object.keys(out).length ? out : undefined
 }
 
-/* THE BOX A DRAWN AREA SITS IN, two opposite corners, in the order `rect` uses.
- *
- * This is what makes a poly safe to ship. AdventureGame's
- * src/game/pmap/anchors.ts:224 tests a region by its rect and has no polygon
- * test at all, so a bundle carrying only the points would be a place no player
- * is ever inside and every grape hung on it would go quiet. The points ship for
- * the reader that learns them; until then an L-shaped plaza tests as its box.
- *
- * A DELIBERATE SECOND COPY of polyBounds in src/core/mask.ts, the way `without`
- * above is a second copy. A .mjs on the server cannot import the .ts, and the
- * two exporters writing different geometry is exactly the divergence that lost
- * `placement` for a whole release. If either half changes, change both. */
-/* WHICH SHAPE A REGION ACTUALLY IS, and a second deliberate copy of anchorShape
- * in src/core/mask.ts for the reason polyBox below is one: a .mjs on the server
- * cannot import the .ts.
- *
- * The row here comes out of the anchors table, so the mode arrives inside the
- * meta bag rather than on a column. The mode wins when the shape it names has
- * something in it: an author who armed the draw mode and pressed escape is on
- * draw with nothing drawn, and shipping that as an area ships an area of no
- * pixels.
- *
- * IT NO LONGER ASKS WHAT KIND THIS IS, matching the copy in src/core/mask.ts.
- * `kind !== 'region' return circle` was the last of the three gates: with the
- * form and the upsert opened up, a zone drawn on a door still shipped as a bare
- * radius, so the author saw their doormat in the editor and the game got a ring.
- * An anchor with nothing drawn on it still falls through to circle. */
+/* a poly ships with its box because the game tests a region by its rect and has no polygon test, so points alone are a place nobody is ever inside; second copy of src/core/mask.ts, change both */
+/* the meta mode wins only when the shape it names has something in it, and no gate on kind, or a zone drawn on a door ships as a bare radius */
 const anchorShape = (a) => {
   const hasPoly = Array.isArray(a.poly) && a.poly.length > 2
   const hasRect = Array.isArray(a.rect) && a.rect.length === 4
@@ -205,12 +95,7 @@ const shotsOntoMeta = (framings, anchor, meta) => {
   const one = (f) => ({ zoom: shotZoom(f), dx: f.dx ?? 0, dy: f.dy ?? 0 })
   const set = {}
   for (const f of mine) set[f.name] = one(f)
-  /* WHICH ONE IS THE DEFAULT matters more than it looks: look_at asks for a shot
-   * with no name at all, and a script naming a shot the map does not carry falls
-   * back to the same slot, so an anchor with named shots and no default has a
-   * dead camera on both paths. The entry shot takes it if one hangs here,
-   * otherwise the oldest, because ids only count upwards and the first shot
-   * somebody armed on a station is the one they framed it with. */
+  /* a default is always written, because look_at asks for a shot with no name and an unnamed miss falls back to the same slot */
   const def = mine.find((f) => f.entry) || mine.reduce((a, b) => ((a.id ?? 0) <= (b.id ?? 0) ? a : b))
   /* MERGED, NEVER SWAPPED IN. panthers_maw on the real hub already carries docId
    * and derived, and the game writes `derived` itself when it has to invent a
@@ -218,27 +103,7 @@ const shotsOntoMeta = (framings, anchor, meta) => {
   return { ...(had || {}), framings: set, framing: { ...one(def), name: def.name } }
 }
 
-/* VARIANT SETS FOLDED ONTO THE ANCHOR THEY HANG ON, and the same deliberate
- * second copy shotsOntoMeta is, for the same reason: this file is node ESM
- * reading postgres and src/core/mask.ts is browser TypeScript reading a
- * document, and neither can import the other without dragging half a build into
- * the wrong process. The two exporters have diverged before. If either half
- * changes, change both, and the fence that catches it is
- * server/db/verify-authoring.mjs, which publishes a map and reads the projection
- * back out of the bundle.
- *
- * WHY THE BAG AND NOT A TOP-LEVEL FIELD. Read off the running game before it was
- * written: AdventureGame's src/game/pmap/anchors.ts builds its Anchor from a
- * fixed list of top-level fields and then copies `meta` whole, so anything new at
- * the top level is dropped by the reader that already ships. PmapScene keys every
- * placement into `placedById` by both its MAPVIS id and its author name, and
- * `show(anchor, visible)` resolves `anchor.placement` through that map. So a set
- * written as states pointing at placement NAMES needs no new reader shape and no
- * new lookup over there, only a loop.
- *
- * NO DEFAULT IS INVENTED HERE, which is the difference from a shot. A missing
- * shot has to fall back to something or the camera is dead. A set whose `initial`
- * is empty means nothing is showing, and that is a state an author chose. */
+/* variants go in the meta bag and not at the top level, because the game's Anchor reader takes a fixed field list and copies meta whole; no default is invented, an empty initial is a state an author chose */
 const variantsOntoMeta = (variants, anchor, meta) => {
   const all = Array.isArray(variants) ? variants : []
   const mine = all.filter((v) => v && v.anchor === anchor)
@@ -258,43 +123,7 @@ const variantsOntoMeta = (variants, anchor, meta) => {
   return { ...(had || {}), variants: set }
 }
 
-/* WHAT A PLACEMENT STANDS ON, MEASURED OFF ITS OWN ART.
- *
- * A published placement used to carry no collision shape at all, so the walk
- * page invented one: a circle of radius 3 at the anchor, the same for a barrel
- * and for a market stall. That is wrong in both directions at once. A 26px stall
- * blocked a 3px dot and you walked through the rest of it, while on a quay two
- * or three pixels across the same dot was a fence. The comment in Walk.tsx that
- * held the hard test switched off said exactly this: "a building's collision is
- * its footprint, not a circle at its anchor".
- *
- * So the footprint is measured here, once, at publish, where the png bytes are
- * already in hand and nothing has to be decoded in a game loop. It ships as
- * `foot: [ox, oy, rx, ry]`, an ellipse in painting pixels relative to the
- * placement's anchor. Optional on purpose: a bundle published before this
- * existed has no `foot` and a reader that has never heard of one ignores it, so
- * both sides stay backward compatible.
- *
- * THE CONTACT BAND, NOT THE WHOLE SPRITE. Only the bottom few rows of drawn
- * pixels touch the ground. That is what makes a tree a trunk you walk into and a
- * canopy you walk under, and it is why this is not editor.ts's bodyRadius, which
- * is 0.6 of the WHOLE ink width and belongs to a different job: that number
- * sizes the keep-out circle two figures shove each other out of, tuned over
- * 30000 frames for how a crowd looks. This one answers where the ground is
- * solid. Do not unify them.
- *
- * THE ANCHOR IS THE FRONT OF THE BASE, NOT ITS MIDDLE. A placement is drawn with
- * the bottom edge of its frame on the anchor, so the pixels where the object
- * meets the floor are the near edge of its base and the base itself runs away
- * from the camera, up the screen. The ellipse is therefore pushed up by its own
- * ry so its near rim sits on the drawn feet.
- *
- * ry COMES FROM rx, BECAUSE THE GROUND IS SQUASHED. A base that reads 2rx across
- * the screen is 2*rx*yScale deep up it, which is the same squash bodyAt and
- * separate already measure distance in. Taking ry from the band's own few rows
- * instead would give every object a flat sliver you could stand behind while
- * standing inside it.
- */
+/* the footprint is the bottom contact band and not the whole sprite, so a tree is a trunk you walk into under a canopy; it is not editor.ts's bodyRadius and the two must not be unified, and the ellipse is pushed up by its own ry because the anchor is the front of the base */
 const FOOT_ALPHA = 40 // the repo-wide alpha threshold, same as Walk.tsx's trimToFeet
 const FOOT_BAND = 4 // how deep the ground contact band is, in painting pixels
 
@@ -354,10 +183,7 @@ function measureFoot(img, a, yScale) {
   // an offset, and a mirrored frame carries it the other way
   let ox = ((x0 + x1 + 1) / 2 - w / 2) * sx
   if (a.flipX) ox = -ox
-  /* a rotated frame is not measured again, it is covered: the axis-aligned box
-   * around the turned ellipse. 13 of the hub's 94 placements carry a rotation
-   * and all of them are small, so a few tenths of a pixel of slack is cheaper
-   * than a second geometry nobody can check. */
+  /* a rotated frame is covered by the axis-aligned box around the turned ellipse, because a second geometry nobody can check costs more than the slack */
   if (a.rot) {
     const c = Math.abs(Math.cos(a.rot))
     const s = Math.abs(Math.sin(a.rot))
@@ -373,18 +199,14 @@ function measureFoot(img, a, yScale) {
   return [r2(ox), r2(-lift - ry), r2(rx), r2(ry)]
 }
 
-/* Every placement gets its footprint attached, movers included: it is a
- * measurement of the art rather than a permission to block, and the reader stays
- * the one that decides who is solid.
- *
- * An EFFECT is exempt and gets a zero footprint. Smoke, a waterfall, a water
- * wash across the sand, a lighthouse sweep and the glow over a door are drawn
- * over the ground rather than standing on it, and there are 19 of them on the
- * hub. Reading their contact band would put an 86px wall across the beach. */
+/* every placement gets a footprint because it measures the art rather than granting permission to block, except an effect, whose contact band would put an 86px wall across the beach */
 export function footprints(assets, files, yScale) {
   const seen = new Map()
   return assets.map((a) => {
     if (!a || typeof a !== 'object') return a
+    /* an authored footprint beats the scan, which is the correction for a halo or a painted-in shadow; four finite numbers or the measurement stands */
+    if (Array.isArray(a.foot) && a.foot.length === 4 && a.foot.every((n) => Number.isFinite(Number(n))))
+      return { ...a, foot: a.foot.map((n) => Number(n)) }
     if (a.group === 'effects') return { ...a, foot: [0, 0, 0, 0] }
     const url = restFrame(a)
     if (!seen.has(url)) {
@@ -403,19 +225,7 @@ export function footprints(assets, files, yScale) {
   })
 }
 
-/* A PUBLISHED FILE NEVER CHANGES, SO IT SHOULD BE FETCHED ONCE.
- *
- * publish/<slug>/v<N>/ is immutable by design, which means the second read of
- * any file in it is guaranteed to return exactly what the first one did. Going
- * back to the bucket for it is a transaction spent to learn nothing.
- *
- * That matters because the free tier allows 2,500 downloads a day and a day of
- * building blew through it: every reload of a map page, every walk test, every
- * dashboard thumbnail was a fresh read of bytes the server had already seen.
- *
- * Small files only, and a bounded number of them. map.json and atlas.json are
- * what get asked for over and over; scene.png and the atlas sheet are hundreds
- * of kilobytes and belong to the browser's cache, not this one. */
+/* a published file is immutable so it is fetched once, because the free tier allows 2,500 downloads a day and a day of building blew through it; small files only */
 const HOT_MAX = 200
 const HOT_BYTES = 8 * 1024 * 1024
 const hot = new Map()
@@ -432,27 +242,7 @@ export function hotGet(key) {
 
 export function hotPut(key, buf) {
   if (buf.length > 512 * 1024) return buf
-  /* THE COUNTER HAS TO FORGET WHAT IT IS REPLACING.
-   *
-   * hotBytes was added to on every put and only subtracted from on eviction, so
-   * a key put twice had its bytes counted twice while the Map held one copy.
-   * The caller guards with hotGet first, but two requests for the same published
-   * file both miss and both put, which is ordinary rather than rare.
-   *
-   * Measured on that shape, 60 files of 100 KB each put twice, comfortably
-   * inside a 200 entry 8 MB cache: the old counter reached 8,294,400 bytes while
-   * really holding 2,150,400, so 6.1 MB of the ceiling was spent on bytes that
-   * were not there, and the cache kept 21 of the 60 files instead of all of
-   * them. The drift never comes back, because evicting an entry only refunds
-   * what the Map is holding under it. So the count pins itself just under the
-   * ceiling and stays there, and from then on almost every put is evicted
-   * immediately and almost every read goes back to the bucket. That is the
-   * 2,500-a-day transaction burn this cache was written to stop, arriving
-   * silently and looking exactly like a working cache. With the subtraction it
-   * holds 60 of 60 with zero drift.
-   *
-   * Deleted before being re-set rather than just adjusted, so a re-put also
-   * counts as a touch and moves the key to the fresh end. */
+  /* a re-put must refund the bytes it replaces, or the counter drifts up permanently and the cache evicts almost everything while looking like it works */
   const prev = hot.get(key)
   if (prev) {
     hot.delete(key)
@@ -460,12 +250,7 @@ export function hotPut(key, buf) {
   }
   hot.set(key, buf)
   hotBytes += buf.length
-  /* `hot.size &&` because entries().next().value on an empty Map is undefined
-   * and destructuring undefined throws, which would turn every later read in
-   * this process into a 500 until a cold start. The eviction above happens to
-   * refund enough to stop just short of that, so it is a guard rather than a
-   * fix for something reproduced, but the loop must not be one accounting
-   * change away from taking the process out. */
+  /* `hot.size &&` because entries().next().value on an empty Map is undefined and destructuring it throws every later read into a 500 */
   while (hot.size && (hot.size > HOT_MAX || hotBytes > HOT_BYTES)) {
     const [k, v] = hot.entries().next().value
     hot.delete(k)
@@ -474,25 +259,8 @@ export function hotPut(key, buf) {
   return buf
 }
 
-// Everything the game fetches, written under one version prefix.
-//
-// files is a Map of relative path inside the bundle -> Buffer, exactly the
-// shape the export route already builds for the assets folder, so the caller
-// hands over what it was going to write to disk anyway.
-/* A FREE TIER THAT BILLS INSTEAD OF STOPPING NEEDS THE STOP PUT BACK.
- *
- * Backblaze refused to serve once the daily allowance was gone. That broke the
- * site and never cost a penny. R2 does the opposite: it keeps working and
- * charges for the overage, and Cloudflare has no hard spend cap to switch on.
- * So the ceiling has to live here, in the code.
- *
- * Publishing is the only thing that writes objects in bulk, about 950 an
- * export, and writes are the class with the smallest monthly allowance. This
- * counts what this month's publishes already wrote, straight off their
- * manifests, and refuses the export that would cross the line instead of
- * letting it through and being invoiced for it.
- *
- * Set well under the real limit so the refusal comes with room to spare. */
+// everything the game fetches under one version prefix, from a Map of bundle-relative path to Buffer
+/* the spend ceiling lives in code because R2 bills for overage instead of stopping, and a publish writes about 950 objects */
 const WRITE_CEILING = 800_000
 
 async function writesThisMonth() {
@@ -527,25 +295,17 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
   const prefix = keys.publish(slug, version)
   const s = store()
 
-  // The anchors go in from the database rather than from whatever the client
-  // sent, because the anchors table is the contract and the document's events
-  // array is the older shape. Both ship: anchors[] is what the api and python
-  // will read, events[] is what the game reads today, and writing both means no
-  // bundle that works now stops working.
+  // anchors come from the table and not the client, and both anchors[] and the older events[] ship so no working bundle stops working
   const anchors = await many(
     `select name, kind, x, y, r, rect, poly, stand, to_slug, to_anchor, placement_id, facing, label, meta
      from anchors where map_id = $1 order by kind, name`,
     [m.id],
   )
-  /* WHAT THE MAP CALLS ITSELF AND WHAT IT IS, which the bundle has never
-   * carried. title is a real column, is written as the slug at creation, is
-   * read by the dashboard, and died here: publishBundle never selected it, so
-   * every named place a student reads is a slug or a string hand-typed in the
-   * game repo. class is the same story from the other end, a fact MAPVIS knows
-   * and never said, so the engine guesses it from the border on every map. */
+  /* title and class are selected here because the bundle never carried them, so every place name was a slug and the engine guessed class from the border */
   const props = await one(
     `select m.title, m.class, m.island_id, m.meta, m.char_h, m.char_hip, m.char_hipdy, m.speed, m.yscale, m.step_tol,
-            m.base_w, m.base_h, m.base_ox, m.base_oy, m.paths, m.framings, m.sets, m.racks,
+            m.base_w, m.base_h, m.base_ox, m.base_oy, m.paint_set, m.paint_w, m.paint_h, m.paint_ox, m.paint_oy,
+            m.paths, m.framings, m.sets, m.racks,
             m.variants, m.asset_groups, m.cover_fact,
             u.email as owner_email
      from maps m join users u on u.id = m.owner_id where m.id = $1`,
@@ -554,6 +314,7 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
   /* MEASURED BEFORE THE BUNDLE IS ASSEMBLED, and never fatal: a scene this
    * decoder cannot read is a reason to fall back to the columns, not a reason to
    * refuse a publish that is otherwise fine. */
+  const stated = props?.paint_set ? { w: props.paint_w, h: props.paint_h, ox: props.paint_ox, oy: props.paint_oy } : null
   let paint = null
   try {
     if (images?.['scene.png']) paint = paintedBox(images['scene.png'])
@@ -566,68 +327,33 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
     slug,
     version,
     ...(props?.title ? { title: props.title } : {}),
-    /* CLASS IS NEVER OPTIONAL, and it is the only one of these that must not be.
-     * The rest are absent when nobody typed them and the reader has a sane
-     * blank; class absent makes the engine guess island from the border of the
-     * painting, which is a guess about a fact this side already knows. */
+    /* class is never optional, because absent makes the engine guess island from the border of a fact this side already knows */
     class: MAP_CLASSES.includes(props?.class) ? props.class : 'island',
     ...(props?.island_id ? { islandId: props.island_id } : {}),
     ...(props?.meta && Object.keys(props.meta).length ? { meta: props.meta } : {}),
-    /* THE WALK CONTRACT FROM THE ROW, not from whatever the browser sent.
-     * Same reason the anchors come from the table: the row is the contract and
-     * it is the one an author can set out of band, and a stale tab must not be
-     * able to publish an 18 px character over a map that was set to 36. */
+    /* the walk contract comes from the row, so a stale tab cannot publish an 18 px character over a map set to 36 */
     encoding: { ...(mapJson?.encoding || {}), stepTolerance: props?.step_tol ?? 10 },
     character: { heightPx: props?.char_h ?? 18, hip: props?.char_hip ?? 2, hipDY: props?.char_hipdy ?? 1 },
     speed: Number(props?.speed ?? 34),
     yScale: Number(props?.yscale ?? 0.72),
-    /* THE PAINTING'S OWN SIZE, MEASURED HERE RATHER THAN ASKED OF A COLUMN.
-     * See paintedBox at the top of this file: base_* is where the dropped FILE
-     * sits, and the field is read as where the PAINT is, which on the hub is a
-     * 75 percent overstatement and a centre 62 pixels out. Measured off the
-     * scene.png that is about to be written, so the number describes the bytes
-     * this version actually ships. It is written back to the row below, so the
-     * ocean's composition serves the same four numbers this bundle carries. */
-    base: paint || {
+    /* measured off the scene.png about to be written and not asked of base_*, which overstates the hub by 75 percent and puts its centre 62 pixels out */
+    /* stated beats measured beats the dropped file's box. paint_set says a person
+     * typed the four numbers, which is the case the scan is wrong in. */
+    base: stated || paint || {
       w: props?.base_w ?? mapJson?.w ?? 0,
       h: props?.base_h ?? mapJson?.h ?? 0,
       ox: props?.base_ox ?? 0,
       oy: props?.base_oy ?? 0,
     },
-    /* WHO MADE THIS AND WHEN, inside the bundle rather than only in a row.
-     *
-     * Twelve islands means twelve authors, and a bundle that has left the
-     * platform is a file with no idea where it came from: a member debugging
-     * their own island in the game had nothing on the map that named them, and
-     * a version that turns out to be wrong could not be traced back to the
-     * press that made it without a database query nobody watching the game can
-     * run. The email is the account that owns the map, which is the same thing
-     * the dashboard already shows that person about themselves. */
+    /* provenance rides inside the bundle, because a file that has left the platform cannot be traced back to the press that made it without a database query */
     provenance: { owner: props?.owner_email || '', publishedAt: new Date().toISOString(), version },
     ...(props?.cover_fact ? { coverFact: props.cover_fact } : {}),
-    /* ROUTES AND SHOTS FROM THE ROW, for the same reason the walk contract and
-     * the anchors come from it: a stale tab must not be able to republish a
-     * route somebody moved four seconds ago. Absent when empty, so a bundle
-     * from before they existed does not grow two empty arrays.
-     *
-     * NOTHING IN THE GAME READS `paths` YET, and that is written here rather
-     * than left for the next session to rediscover. The nearest running shape
-     * over there is what findPath returns: `Pt = { x, y }` in painting pixels,
-     * walked forward by index from zero and addressed by `.x` and `.y`
-     * (AdventureGame src/game/pmap/path.ts:32). The pairs below would have to
-     * become objects for a reader to take this as a route with no adapter. Not
-     * converted here, because there is no reader to be right for: movement in
-     * src/vine/intents.ts names an anchor and nothing else, so a grape cannot
-     * even say the word for a route today. */
+    /* routes come from the row so a stale tab cannot republish one somebody moved, and the points stay as pairs because nothing in the game reads `paths` to be right for yet */
     ...(Array.isArray(props?.paths) && props.paths.length
       ? {
           paths: props.paths.map((p) => ({
             name: p.name,
-            /* what travels the line, which the local exporter has always
-             * written and this one dropped. A walk is held to the floor, a sail
-             * is expected to leave it and a camera has no feet, so a reader with
-             * no kind has to guess whether a route over open water is a defect.
-             * Defaulted for rows written before PathKind existed. */
+            /* what travels the line, because without it a reader has to guess whether a route over open water is a defect */
             kind: p.kind || 'walk',
             points: p.points,
             closed: !!p.closed,
@@ -638,14 +364,7 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
           })),
         }
       : {}),
-    /* THE SHOT LIST IS THE AUTHORING RECORD AND NOT THE CAMERA. Every shot hung
-     * on an anchor is also folded into that anchor's meta bag below, which is
-     * the only place the game looks for one. This array stays because it is what
-     * the panel edits and what the api hands python, and because a shot on raw
-     * coordinates has nowhere else to go: the game's framing is an offset from
-     * an anchor and carries no position of its own. `entry` is here on the same
-     * terms, honestly: the arrival path in the game returns a position and a
-     * facing and never touches zoom, so nothing reads it yet. */
+    /* the shot list is the authoring record and not the camera, which the game only reads off the anchor's meta bag; a shot on raw coordinates has nowhere else to go */
     ...(Array.isArray(props?.framings) && props.framings.length
       ? {
           framings: props.framings.map((f) => ({
@@ -664,28 +383,7 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
           })),
         }
       : {}),
-    /* THE NAMED COLLECTIONS OF ANCHORS, from the row for the same reason
-     * everything else here comes from the row: a stale tab must not be able to
-     * republish a set somebody edited four seconds ago.
-     *
-     * TWO EXPORTERS, AND THEY HAVE DIVERGED BEFORE. The other half of this is
-     * bundle() in src/core/editor.ts and the shape below is the same shape, field
-     * for field. `placement` is the standing reminder: it lived in the type, the
-     * form, the document and the table, and was dropped by BOTH exporters, so the
-     * `show` intent could not fire on any bundle MAPVIS was able to produce.
-     *
-     * NOTHING IN THE GAME READS EITHER YET. Written down rather than left for the
-     * next session: AdventureGame's src/game/pmap/anchors.ts keys anchors by name
-     * and can only ask `ofKind` about several at once, nothing there groups
-     * anchors or indexes a slot, and every anchor-taking intent in
-     * src/vine/intents.ts takes one `anchor: string`. There was no running shape
-     * to match, so this is the minimum that says the thing, and the reader belongs
-     * in that anchors.ts beside `get` and `ofKind` when it is built.
-     *
-     * A RACK SHIPS ITS SLOT NUMBERS AND NOT ITS ID, which is the opposite of what
-     * a route or a shot does with a counter. `slot` is the address: it is what
-     * hook[3] means, it is handed out once and never reused, and a save that says
-     * slot 3 is filled has to mean the same hook every run. */
+    /* sets and racks match bundle() in src/core/editor.ts field for field, because the two exporters diverged before and both dropped `placement`; a rack ships slot numbers, which are the address a save means */
     ...(Array.isArray(props?.sets) && props.sets.length
       ? {
           sets: props.sets.map((s) => ({
@@ -711,11 +409,7 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
           })),
         }
       : {}),
-    /* THE VARIANT SET LIST IS THE AUTHORING RECORD AND NOT THE SWITCH. Every set
-     * is also folded into its anchor's meta bag below, which is the only place
-     * the game can read one. This array stays for the reason the shot list does:
-     * it is what the panel edits, what the api hands python, and it carries the
-     * labels a person reads, which the projection drops. */
+    /* the variant list is the authoring record and not the switch, and it carries the labels a person reads, which the projection drops */
     ...(Array.isArray(props?.variants) && props.variants.length
       ? {
           variants: props.variants.map((v) => ({
@@ -732,12 +426,7 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
           })),
         }
       : {}),
-    /* THE GROUP ROWS, which are the one place a condition shared by a dozen
-     * placements is written once. Every placement in assets.json already carries
-     * the resolved string, put there by editor.ts bundle() where the rows live,
-     * so no reader needs this; it is what an author edits and what a re-open
-     * reads back, and without it a reopened map shows a dozen placements each
-     * carrying a condition and no group that owns any of them. */
+    /* the group rows ship for the re-open, because assets.json already carries the resolved condition and a reopened map would show no group owning any of them */
     ...(Array.isArray(props?.asset_groups) && props.asset_groups.length
       ? { groups: props.asset_groups }
       : {}),
@@ -747,17 +436,7 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
       x: a.x,
       y: a.y,
       ...(a.r ? { r: a.r } : {}),
-      /* THE AREA, AS BOTH SHAPES WHEN IT WAS DRAWN, and the same rule the
-       * browser exporter applies: the two have diverged before and a field
-       * written by one of them and not the other is a field with no reader.
-       * See polyBox below for why the box has to go beside the points.
-       *
-       * ONLY THE LIVE SHAPE SHIPS. An anchor holds a drawing and a box at once
-       * now, because switching mode in the editor is not allowed to throw either
-       * away, and the game's contains() tests a rect before it tests a radius.
-       * So shipping a dormant rect beside a circle would hand the game an area
-       * the author had switched off. anchorShape is the one answer, mirrored in
-       * src/core/mask.ts. */
+      /* only the live shape ships, because an anchor holds a drawing and a box at once and the game's contains() tests a rect before a radius */
       ...(() => {
         const shape = anchorShape(a)
         if (shape === 'poly') return { poly: a.poly, rect: polyBox(a.poly) }
@@ -767,11 +446,7 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
       ...(a.stand ? { stand: a.stand } : {}),
       ...(a.to_slug ? { to: a.to_slug } : {}),
       ...(a.to_anchor ? { toAnchor: a.to_anchor } : {}),
-      /* the placement this name is on. Selected above and then dropped here,
-       * which is the last of the four places the field died between the anchor
-       * form and the game. `show` reads it as its entire body, so until this
-       * line existed one of the fifteen intents could not fire on any bundle
-       * MAPVIS was capable of producing. */
+      /* the placement this name is on, which `show` reads as its entire body and which was dropped here for four releases */
       ...(a.placement_id ? { placement: a.placement_id } : {}),
       ...(a.facing ? { facing: a.facing } : {}),
       ...(a.label ? { label: a.label } : {}),
@@ -785,24 +460,9 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
     })),
   }
 
-  /* THE GATE, BEFORE A SINGLE OBJECT IS WRITTEN.
-   *
-   * A version is immutable: its bytes live at a version-scoped prefix forever
-   * and nothing rewrites them. So refusing costs a retry and publishing a map
-   * with a dead door costs a version number nobody can correct. Every check
-   * below already existed somewhere — as a CLI nobody remembers to run, as a
-   * button in the editor that writes nothing, or as a hardcoded list in the
-   * game repo — and none of them ran here.
-   *
-   * `to` is checked against the registry, which is one query away and has never
-   * been consulted: the hub's one door has pointed at a map that does not exist
-   * since the day it was placed. `toAnchor` needs the far map's anchor list, so
-   * it is asked for here rather than inside the gate, which has no database. */
+  /* the gate runs before a single object is written, because a version is immutable and a dead door costs a version number nobody can correct */
   const slugs = (await many('select slug from maps')).map((r) => r.slug)
-  /* checked against `map.anchors` and not against the rows they came from,
-   * because that array IS what is about to ship. The rows are snake_case and
-   * the bundle is camelCase, and a gate reading the wrong one of those passes
-   * everything by looking at fields that are always undefined. */
+  /* checked against map.anchors and not the rows, because the rows are snake_case and a gate reading those passes everything on undefined fields */
   const { problems, warnings } = gateMap({
     mapJson: map,
     anchors: map.anchors,
@@ -824,24 +484,7 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
     )
   }
 
-  /* A SET OR A RACK NAMING AN ANCHOR THAT IS NOT HERE.
-   *
-   * The whole reason a set is worth authoring rather than typing five strings
-   * into python is that completeness becomes a question somebody can be asked,
-   * and this is where it gets asked with something at stake. A member's grape
-   * iterating `steles` and silently getting four of them back is the failure
-   * this refuses: four steles look exactly like five to everything downstream,
-   * the badge that fires on the set being complete never fires, and nothing
-   * anywhere says why.
-   *
-   * Checked against `map.anchors`, which IS what is about to ship, and not
-   * against the rows it came from. Same rule the gate above states: the rows are
-   * snake_case, the bundle is camelCase, and a check reading the wrong one of
-   * those passes everything by comparing fields that are always undefined.
-   *
-   * THE MISSING NAME IS IN THE SENTENCE. A refusal that says "a set is broken"
-   * sends an author back to read five names off a screen; one that says which
-   * name is missing is a fix. */
+  /* a set naming a missing anchor is refused, because four steles look exactly like five downstream and the badge on completeness never fires */
   {
     const have = new Set(map.anchors.map((a) => a.name))
     const missing = (names) => [...new Set(names.filter((n) => !have.has(n)))]
@@ -854,13 +497,7 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
             `${gone.length === 1 ? 'it' : 'them'} out of the set.`,
         )
     }
-    /* A VARIANT SET IS CHECKED AGAINST THE PLACEMENTS AND NOT THE ANCHORS, which
-     * is why it has its own pass. A member names a placement by the author name,
-     * and a name nothing on the map answers to reads on screen as the state
-     * simply not working: the set switches, nothing appears, and there is no
-     * error anywhere. The anchor the set hangs on is checked too, because a set
-     * projected onto a name that is not there lands in no bag at all and the
-     * whole set is silently absent from the bundle. */
+    /* a variant is checked against the placements and its own anchor, because a wrong placement name reads as the state not working and a wrong anchor lands the set in no bag at all */
     const named = new Set(
       (assetsJson?.assets || []).map((a) => a && a.name).filter((n) => typeof n === 'string' && n),
     )
@@ -907,55 +544,14 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
   for (const w of warnings) console.warn(`[publish] ${slug}: ${w}`)
   step('gate passed')
 
-  /* ONE LAYOUT, DECIDED HERE, NOT BY WHICHEVER CALLER TURNED UP.
-   *
-   * The two publishers disagreed about whether the assets/ folder is part of a
-   * key. publish-work.mjs walks the folder and includes it; the export route
-   * sets bare keys and then writes an assets.json pointing at "assets/...". So
-   * a map published from the export BUTTON wrote its 794 objects one folder
-   * shallower than its own manifest said, and every loose asset fetch 404'd.
-   * Measured: hub v3, published that way, has 0 of 794 png keys prefixed, while
-   * v4 and v5 from the command line have 794 of 794. The atlas hid it, because
-   * an atlas reader never asks for the loose file, so the export reported
-   * success and even logged that the map cost six requests.
-   *
-   * The prefix was already normalised, but only for the atlas index a few lines
-   * down. Doing it once here, at the boundary, makes the caller's convention
-   * irrelevant, which is the only version of this that stays fixed. It also
-   * stops a library item named "scene" writing scene.png and being overwritten
-   * by the map painting. */
+  /* the assets/ prefix is normalised here at the boundary, because the two publishers disagreed and one wrote 794 objects a folder shallower than its own manifest */
   const inAssets = (k) => 'assets/' + String(k).replace(/^\/+/, '').replace(/^assets\//, '')
   const all = new Map([...files].map(([k, v]) => [inAssets(k), v]))
 
-  /* EVERY FRAME PACKED INTO ONE SHEET.
-   *
-   * The hub publishes 800 pngs, and opening it once cost 800 downloads, which
-   * emptied Backblaze's 2,500-a-day free allowance in three page loads. Packed,
-   * a map is five requests. Nothing is resampled and nothing is re-encoded
-   * lossily; the frames come back out at exactly the size they went in.
-   *
-   * The loose pngs still ship alongside. Storage is not the constraint,
-   * transactions are, and keeping them means a reader written before this
-   * existed is untouched. */
+  /* every frame packs into one sheet, because 800 loose pngs emptied a 2,500-a-day allowance in three page loads and packed a map is five requests */
   let packed = null
   if (files.size) {
-    /* KEYED THE WAY THE PLACEMENTS ASK FOR THEM.
-     *
-     * files is keyed by path inside assets/ ("gull/0.png") while every url in
-     * assets.json carries the folder ("assets/gull/0.png"). Packing the raw
-     * keys built an index nothing could look itself up in, so every frame
-     * missed, fell back to a loose file, and the atlas shipped as 333 KB of
-     * dead weight beside the 794 downloads it was written to prevent. It looked
-     * like it worked because the fallback works.
-     *
-     * NORMALISED RATHER THAN PREFIXED, because the two callers disagreed. The
-     * export route passes bare keys ("gull/0.png") and publish-work.mjs walks
-     * the folder passing them already prefixed ("assets/gull/0.png"), so adding
-     * the folder unconditionally produced "assets/assets/gull/0.png" for every
-     * frame the command-line publisher handed over. Nothing matched, all 94
-     * placements shipped loose, and the bundle cost 800 requests to open while
-     * reporting success. Stripping first means the caller's convention stops
-     * mattering, which is the only version of this that stays fixed. */
+    /* the index is keyed the way assets.json asks, normalised rather than prefixed, because either mismatch makes every frame miss and fall back to a loose file while reporting success */
     // the same normalisation `all` was built with above, so the index and the
     // objects can no longer be keyed differently from one another
     packed = packAtlas(new Map([...files].map(([k, v]) => [inAssets(k), v])))
@@ -968,11 +564,7 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
 
   for (const [name, buf] of Object.entries(images)) if (buf) all.set(name, buf)
   all.set('map.json', Buffer.from(JSON.stringify(map, null, 2)))
-  /* the collision shape of every placement, measured off the art on the way
-   * through. It happens here rather than in the export route so that all three
-   * publishers get it: the editor's export, publish-work.mjs and reexport.mjs
-   * all end up in this function and none of them has to know footprints exist.
-   * yScale comes off the map because the squash is per map. */
+  /* measured here rather than in the export route, so all three publishers get footprints without knowing they exist */
   // off the map that is shipping, which is the row, so a footprint is squashed
   // by the same number the bundle tells the game to squash distance by
   const placed = footprints(assetsJson.assets || [], files, map.yScale > 0 ? map.yScale : 0.72)
@@ -992,21 +584,7 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
     ),
   )
 
-  /* WRITTEN IN LANES, BECAUSE 801 OBJECTS ONE AT A TIME DOES NOT FIT THE FUNCTION.
-   *
-   * Every put also awaits a Postgres upsert into blob_shas through the write
-   * hook in blobs.mjs, so publishing the hub sequentially is about 1,600 round
-   * trips inside a function whose maxDuration is 300 seconds. hydrateMap already
-   * measured this exact shape on the read side: 1,383 objects one at a time took
-   * 260 seconds, which is not a margin but a coin toss, and twelve lanes made it
-   * roughly a twentieth of the wall clock for the same number of requests.
-   * Twelve here for the same reason, and it stays well under the ceiling the
-   * meter enforces.
-   *
-   * The manifest is assembled afterwards out of an array indexed by position,
-   * never from inside a lane. That keeps it complete and keeps its key order
-   * equal to the order of `all` however the lanes interleave, so two publishes
-   * of the same bundle produce the same jsonb rather than the same set shuffled. */
+  /* twelve lanes, because 1,383 objects one at a time measured 260 seconds against a 300 second maxDuration; the manifest is assembled afterwards by index so lane order cannot reshuffle it */
   const entries = [...all]
   step(`${entries.length} object(s) to write`)
   const wrote = new Array(entries.length)
@@ -1018,15 +596,7 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
         const i = next++
         if (i >= entries.length) return
         const [rel, buf] = entries[i]
-        /* RETRIED, BECAUSE THE CLIENT IS DELIBERATELY MAXATTEMPTS:1.
-         *
-         * That setting is right for its own reason, which is that a capped
-         * bucket's refusal is an answer and retrying it just makes the export
-         * outlive the browser. But hydrateMap measured ten of 1,383 objects
-         * vanishing to transient resets once twelve were in flight at once, and
-         * a put lost that way is a file missing from a bundle that reported
-         * success. The retry therefore lives here, over a bulk copy that can
-         * afford the wait, rather than in the client. */
+        /* the retry lives here and not in the client, whose maxAttempts:1 is right, because ten of 1,383 objects vanished to transient resets at twelve in flight */
         let err = null
         for (let attempt = 0; attempt < 3; attempt++) {
           try {
@@ -1053,21 +623,7 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
     bytes += wrote[i].bytes
   }
 
-  /* A PUBLISH ROW MUST NOT OUTLIVE ITS BYTES.
-   *
-   * Measured on 2026-08-27: ten of the thirteen rows in publishes pointed at
-   * prefixes holding nothing at all. hub v1 to v3 and every site-* row were
-   * written against a bucket that has since been left behind, and nothing ever
-   * noticed, because the row is what /api/v1/maps reads. It advertised seven
-   * maps as published and all seven answered 503 when the game went for the
-   * bytes. A row is a claim that a version can be fetched, and the moment before
-   * making the claim is the only honest place to check it.
-   *
-   * Listed back from the bucket rather than counted out of the put loop above,
-   * because the puts are the thing being doubted: an object lost to a reset, a
-   * prefix written one folder off and a bucket quietly refusing all look
-   * identical from this side of the call. One listing costs one class A
-   * operation per thousand keys, against the 801 writes it is checking. */
+  /* the bucket is listed back before the row is written, because a row is a claim that a version can be fetched and ten of thirteen once pointed at empty prefixes */
   const have = new Set((await s.list(prefix)).map((o) => String(o.key || o)))
   step('bucket listed back')
   const missing = Object.keys(manifest).filter((rel) => !have.has(prefix + rel))
@@ -1087,13 +643,9 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
   // this the home page kept leading with whichever map happened to be saved
   // last, while the one just re-exported sat further down the grid.
   await q('update maps set updated_at = now() where id = $1', [m.id])
-  /* AND THE PAINTED EXTENT LANDS IN THE ROW, so the ocean's composition serves
-   * the same numbers this bundle carries. Its own columns rather than base_*,
-   * because base_* is round-tripped back into the document by getDoc and is what
-   * re-grows a map on reload, so overwriting it would put the painting back in
-   * the wrong place the next time somebody opened the map. Written after the
-   * bytes are in the bucket, because it describes bytes that exist. */
-  if (paint)
+  /* the painted extent lands in its own columns and never over base_*, which getDoc round-trips and which re-grows a map on reload */
+  // never over a stated extent: paint_set means a person corrected the scan
+  if (paint && !props?.paint_set)
     await q('update maps set paint_w = $2, paint_h = $3, paint_ox = $4, paint_oy = $5 where id = $1', [
       m.id,
       paint.w,
@@ -1102,25 +654,8 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
       paint.oy,
     ])
 
-  /* A PUBLISH THAT WOULD COST HUNDREDS OF REQUESTS TO OPEN IS A BUG.
-   *
-   * The hub shipped 800 loose pngs, and opening it three times emptied a free
-   * tier's entire daily download allowance. The atlas fixes that structurally,
-   * but an atlas that silently fails to match also 'works' by falling back to
-   * exactly the thing it was written to prevent, which is how it hid for a
-   * whole day.
-   *
-   * So the cost of opening this map is measured here, at publish, every time,
-   * and said out loud. Six is the floor: map.json, scene, levels, assets.json,
-   * atlas.png, atlas.json. If this number is ever in the hundreds again,
-   * something regressed and the log says so before anybody's bucket does. */
-  /* MEASURE THE ARRAY THAT SHIPPED, NOT THE ONE IT CAME FROM.
-   *
-   * atlasify returns new objects rather than mutating in place, so filtering
-   * assetsJson.assets asked the pre-atlas array whether it had atlas fields.
-   * It never does. loose therefore always equalled the full placement count and
-   * the warning always fired, which made the one tripwire guarding this
-   * unreadable: it cried wolf on a good bundle and on a broken one alike. */
+  /* the cost of opening the map is said out loud every publish, six being the floor, because an atlas that fails to match falls back and still works */
+  /* measured on the array that shipped, because atlasify returns new objects and filtering the pre-atlas one made the warning fire every time */
   const loose = atlased
     ? atlased.filter((a) => !a.srcAt && !a.framesAt && !a.dirsAt).length
     : placed.length
@@ -1130,10 +665,7 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
       `[publish] ${slug} v${version}: ${loose} placement(s) missed the atlas, so opening this map costs about ${cost} requests`,
     )
   else console.log(`[publish] ${slug} v${version}: opening this map costs 6 requests`)
-  /* said out loud for the same reason the atlas cost is: a bundle where nothing
-   * measured a footprint still loads and still walks, it just walks the old way,
-   * and that is exactly the kind of silent fallback the atlas hid behind for a
-   * day. If this is 0 on a map with placements, the frames did not come through. */
+  /* said out loud because a bundle with no footprints still loads and walks the old way, so 0 on a map with placements means the frames did not come through */
   if (placed.length)
     console.log(
       `[publish] ${slug} v${version}: ${feet} of ${placed.length} placement(s) measured a footprint, ${solid} of them solid`,

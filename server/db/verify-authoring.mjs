@@ -2447,6 +2447,73 @@ try {
       await q('delete from maps where id = $1', [id])
     }
   }
+  /* AND A PERSON CAN CORRECT THE SCAN. Measuring the bytes that ship is right
+   * nearly always; a painting whose edge is a faint alpha halo is the case it is
+   * wrong in, and before this there was no way to say so. paint_set is what keeps
+   * the next publish from scanning over the correction. */
+  {
+    const stated = [12, 9, 3, 2]
+    await putDoc(map.id, JSON.stringify({ ...doc, props: { ...doc.props, paint: stated } }))
+    const back2 = JSON.parse(await getDoc(map.id))
+    eq('a stated painting extent survives the save', back2.props?.paint, stated)
+    const pub2 = await publishBundle(SLUG, {
+      mapJson: bundleMap,
+      assetsJson: pubAssets,
+      images: { 'levels.png': levelsPNG, 'scene.png': scenePNG },
+      files: new Map(),
+    })
+    const row2 = await publishedMap(SLUG)
+    const shipped2 = JSON.parse((await store().get(row2.blob_prefix + 'map.json')).toString('utf8'))
+    eq('and the bundle carries it instead of the scan', [shipped2.base?.w, shipped2.base?.h, shipped2.base?.ox, shipped2.base?.oy], stated)
+    eq(
+      'and publishing does not scan back over it',
+      Object.values(await one('select paint_w, paint_h, paint_ox, paint_oy from maps where id = $1', [map.id])),
+      stated,
+    )
+    pub2.version > pub.version ? ok(`and it published as v${pub2.version}`) : no('the second publish did not make a version')
+    // and clearing it hands the map back to the measurement
+    await putDoc(map.id, JSON.stringify(doc))
+    const back3 = JSON.parse(await getDoc(map.id))
+    back3.props?.paint === undefined ? ok('clearing it goes back to measured') : no(`a cleared extent came back ${back3.props?.paint}`)
+  }
+
+  /* AND A PERSON CAN CORRECT WHAT A PLACEMENT BLOCKS. publish scans the png's
+   * own alpha at the base band, which is right nearly always; a sprite with a
+   * faint halo or a shadow painted into the frame is the case it is wrong in,
+   * and there was no way to say so. */
+  {
+    const hand = [1, -2, 3, 4]
+    const withFoot = { ...pubAssets, assets: pubAssets.assets.map((a) => (a.id === 'a3' ? { ...a, foot: hand } : a)) }
+    await publishBundle(SLUG, {
+      mapJson: bundleMap,
+      assetsJson: withFoot,
+      images: { 'levels.png': levelsPNG, 'scene.png': scenePNG },
+      files: new Map(),
+    })
+    const r = await publishedMap(SLUG)
+    const shippedA = JSON.parse((await store().get(r.blob_prefix + 'assets.json')).toString('utf8'))
+    eq('an authored footprint reaches the bundle instead of the scan', shippedA.assets.find((a) => a.id === 'a3')?.foot, hand)
+    /* and correcting one placement does not hand the rest the same number. This
+     * fixture ships no pngs, so nothing else can be measured and the honest
+     * answer for the rest is no footprint at all rather than a borrowed one. */
+    const other = shippedA.assets.find((a) => a.id === 'a1')?.foot
+    other === undefined ? ok('and no other placement borrowed it') : no(`another placement came back ${JSON.stringify(other)}`)
+  }
+
+  /* THE OUTLINES AN AUTHOR DREW. Three tools take polygon points and all three
+   * rasterize and clear, so one outline was traced by hand three times. They are
+   * a stencil and not a shape the map has: nothing reads them but the tool. */
+  {
+    const drawn = [{ id: 1, pts: [[1, 1], [9, 1], [9, 7]] }, { id: 2, pts: [[2, 2], [4, 2], [4, 4], [2, 4]] }]
+    await putDoc(map.id, JSON.stringify({ ...doc, stencils: drawn, stencilNext: 3 }))
+    const back4 = JSON.parse(await getDoc(map.id))
+    eq('the drawn outlines survive the save', back4.stencils, drawn)
+    eq('and the next id comes back past the highest one', back4.stencilNext, 3)
+    // two points is a line and a line fills nothing, so it is refused rather than stored
+    await putDoc(map.id, JSON.stringify({ ...doc, stencils: [{ id: 1, pts: [[1, 1], [9, 1]] }] }))
+    eq('a two-point outline is refused', JSON.parse(await getDoc(map.id)).stencils, [])
+    await putDoc(map.id, JSON.stringify(doc))
+  }
 } finally {
   await q('delete from maps where id = $1', [map.id])
 }

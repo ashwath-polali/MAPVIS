@@ -1,38 +1,4 @@
-/* PixelLab, server side only. The token never leaves this process.
- *
- * It is read from PIXELLAB_TOKEN, or from a token file if one is configured.
- *
- * Endpoints in use:
- *   POST /v2/generate-image-v2         -> { background_job_id }, a map painting,
- *                                         and the sheets of small marks the ui
- *                                         route cannot draw on create-ui-asset
- *   GET  /v2/background-jobs/{id}      -> { status, ...images somewhere inside }
- *   POST /v1/generate-image-pixflux    -> the image inline, for small assets
- *   POST /v2/animate-with-text-v3      -> { background_job_id }, frames of one sprite
- *   POST /v2/map-objects               -> { background_job_id, object_id }, one object, bare or drawn INTO a map crop
- *   GET  /v2/map-objects/{object_id}   -> 423 while running, download_url when done
- *   GET  /v2/objects                   -> { objects, total }, everything this account already owns
- *   GET  /v2/objects/{object_id}       -> one of them, with the storage url of its png
- *   POST /v2/create-character-with-8-directions -> { character_id, background_job_id }, one person or animal
- *   POST /v2/create-character-with-4-directions -> the same, when four headings are enough
- *   POST /v2/create-character-pro      -> the same, 20-40 generations, can style-match a character you own
- *   POST /v2/create-character-v3       -> the same, 2-9 generations, the only one taking a reference image
- *   POST /v2/animate-character         -> { background_job_ids, directions }, one generation PER direction,
- *                                         mode template off a named walk, or mode v3 off written motion words
- *   GET  /v2/characters                -> { characters, total }, every character on the account
- *   GET  /v2/characters/{id}           -> status, rotation_urls, and animations carrying frame urls
- *   POST /v2/create-ui-asset           -> { ui_asset_id, background_job_id, status, usage }, one panel of
- *                                         chrome, and ONLY a panel: asked for an
- *                                         icon set it returns panels
- *   GET  /v2/ui-assets/{id}            -> { status, image_url, size, progress_percent, eta_seconds }, 200 throughout
- *   GET  /v2/ui-assets                 -> the list. GET ONLY: a POST here is 405, which is what was being sent
- *   DELETE /v2/ui-assets/{id}          -> { success }, the only other verb that path takes
- *   GET  /v1/balance                   -> { usd }
- *
- * GET /v2/openapi.json IS FREE AND NAMES EVERY ROUTE AND EVERY FIELD. Read it
- * rather than guessing at a shape, and rather than probing: it is the whole
- * schema, it costs nothing, and it is what settled every ui fact below.
- */
+/* pixellab, server side only, and the token never leaves this process; GET /v2/openapi.json is free and names every route and field, so read it rather than guessing or probing */
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -50,19 +16,7 @@ export class NoPixellab extends Error {
   }
 }
 
-/* WHOSE SUBSCRIPTION THIS SPENDS.
- *
- * The signed-in account's own key comes first, always. This file used to read
- * one machine-wide token and use it for everybody, which was correct when there
- * was exactly one user and became a hole the moment anyone else could sign up:
- * every generation a new account made would have been billed to whoever owned
- * that token.
- *
- * The machine's own token is the fallback and only that. On a laptop it is what
- * has always happened and nothing changed. On a host there is no token file to
- * read, so an account with no key gets NoPixellab and generation is simply
- * unavailable, which is the decided behaviour: no pixellab means no generation,
- * and everything else still works. */
+/* the signed-in account's own key always comes first, because a machine-wide token bills every new account's generations to whoever owns it */
 export function token() {
   const mine = currentPixellabKey()
   if (mine) return mine
@@ -98,43 +52,7 @@ async function call(method, route, body) {
 
 export const balance = () => call('GET', '/v1/balance')
 
-/* THE BODY, BUILT WITHOUT SENDING IT, for the reason uiAssetBody was split the
- * same way: a request that can only be read by paying for it is a request
- * nobody ever checks.
- *
- * OFF THE PUBLISHED SCHEMA, GenerateImageV2Request, and not off a guess:
- *
- *   description    REQUIRED, 1 to 2000 characters, no default
- *   image_size     REQUIRED, no default, and ITS OWN additionalProperties is
- *                  false as well. width 16 to 792, height 16 to 688, BOTH
- *                  required with no default
- *   no_background  defaults TRUE here, which is the opposite of what a map
- *                  wants and exactly what a cut-out wants
- *   seed           integer
- *   reference_images  up to 4, for SUBJECT guidance. Not sent by anything. This
- *                  is the field shaped like the /v2/map-objects trap, where a
- *                  picture handed over gets continued instead of drawn into
- *   style_image    a ReferenceImage, `{ image: Base64Image, size: {w,h} }`, and
- *                  NOT the bare Base64Image /v2/create-ui-asset takes. Sending
- *                  that route's shape here is extra_forbidden
- *   style_options  the four booleans, all defaulting true
- *
- * additionalProperties is false on the request too, so one stray field is a 422
- * for the whole call.
- *
- * THERE IS NO VIEW, CAMERA, ELEMENT OR PIECE PARAMETER ON THIS ROUTE AT ALL.
- * That is why the sheets come here. /v2/create-ui-asset scaffolds from its
- * twelve element names and returns a panel kit whatever the words ask for:
- * measured 2026-08-31, an icon set came back panels and round chip tokens came
- * back panels, so six of the twenty-one types could not be made on it.
- *
- * PROBING THIS ROUTE IS FREE IN A WAY THE UI ROUTE IS NOT. Both `description`
- * and `image_size` are required with no default, and image_size's own width and
- * height are required with no default too, so `{}` and `{"image_size":{}}` are
- * both refused at validation before any work happens. On /v2/create-ui-asset an
- * empty image_size VALIDATES, defaults to 256x256, draws and is charged for,
- * which is what 40 generations were spent learning.
- */
+/* built without sending it, because a request only readable by paying for it is never checked; additionalProperties is false so one stray field is a 422, style_image is a ReferenceImage and not the bare Base64Image the ui route takes, and this route has no view, camera or element parameter at all */
 export function imageBody({ prompt, w, h, seed, styleImage, styleOptions, noBackground = false }) {
   const body = {
     description: prompt,
@@ -144,13 +62,7 @@ export function imageBody({ prompt, w, h, seed, styleImage, styleOptions, noBack
   if (seed != null) body.seed = seed
   if (styleImage) {
     body.style_image = { image: { type: 'base64', base64: styleImage.base64 }, size: { width: styleImage.w, height: styleImage.h } }
-    /* THE STYLE REFERENCE'S FOUR ASPECTS ARE INDEPENDENT, and that is the whole
-     * point of exposing them. A new map usually wants the craft of a map that
-     * already works, the crisp outline and the shading structure, while keeping
-     * its own colours: the Maw is black and grey stone and must not inherit the
-     * hub's tropical palette. Sending all four was fine while every map was the
-     * same island; it is wrong the moment two maps are meant to look
-     * different. */
+    /* the four style aspects are independent, because a map usually wants another map's outline and shading while keeping its own palette */
     body.style_options = {
       color_palette: true, outline: true, detail: true, shading: true,
       ...(styleOptions || {}),
@@ -164,13 +76,7 @@ export async function submit({ prompt, w, h, seed, styleImage, styleOptions }) {
   return out.background_job_id
 }
 
-// One small asset, synchronously: v1 pixflux answers with the image in the
-// response body instead of a background job. NOTHING CALLS THIS ANY MORE. It
-// drew the asset library until 2026-08-19 and it is what "asset generation
-// just sucks" was about: pixflux paints a freeform illustration, so it stands
-// whatever it is given on an invented plinth, and a palm came back on a stone
-// slab. Both asset routes now go through mapObject below. Kept because it is
-// the only synchronous image call on the api and it costs nothing to keep.
+// nothing calls this: pixflux paints a freeform illustration and stands whatever it is given on an invented plinth, so a palm came back on a stone slab
 export async function pixflux({ description, w = 96, h = 96, seed }) {
   const body = {
     description,
@@ -184,43 +90,10 @@ export async function pixflux({ description, w = 96, h = 96, seed }) {
   return imgs[0]
 }
 
-// One object, transparent, from POST /v2/map-objects. This is the endpoint the
-// 47 objects on the account that were judged good were actually made with:
-// they are 1-direction, non-square (110x230, 400x280, 240x340) and carry a
-// "low top-down" view, none of which /v2/create-1-direction-object can even
-// express (that one is square 16..256, view top-down|sidescroller, and its own
-// schema prices it at 20-40 generations a call while entering a review state
-// at any size under 171). This one bills like a single generation.
-//
-/* WHAT THIS ENDPOINT TAKES, read off the live v2 openapi 2026-08-25, and what
- * of it is deliberately not sent.
- *
- * NOT SENT: background_image and color_image. The schema describes them as
- * style matching and a forced palette, and on paper they are the answer to the
- * one thing words cannot fix, which is the generator's own idea of what colour
- * a noun is. They were measured twice, twenty-two generations, and they are
- * not. Handed a picture of somewhere, this endpoint CONTINUES that picture
- * instead of drawing the subject into it: with an oval mask it returns the
- * mask full of blurred map, and without one, at the exact canvas it demands, it
- * returns the crop's own content restyled. A bookshelf came back as roof tiles.
- * It is a tool for editing a map in place. The map belongs to the router, which
- * can look at it and reason; it does not belong to the generator, which can
- * only copy it. Do not rewire this without proving a subject survives first.
- *
- * ALSO NOT SENT: outline, shading, detail, text_guidance_scale. Real channels
- * with real enums, and every object in this library that has been judged good
- * was made on their defaults. Worth trying one at a time. Not worth three at
- * once under a route that works.
- *
- * It answers with a job; the documented poll is GET /v2/map-objects/{object_id},
- * 423 Locked while running, download_url on 200. The download url auto-expires
- * after 8 hours, so the png is fetched the moment it exists. */
+// map-objects is the route the 47 good objects were made on, non-square with a low top-down view, and it bills like one generation
+/* never send background_image or color_image: measured over 22 generations, this endpoint CONTINUES a picture it is given instead of drawing into it, and a bookshelf came back as roof tiles */
 export async function mapObject({ description, w, h, view = 'low top-down', seed }) {
-  /* Both sides even, because the endpoint refuses an odd one and says so only
-   * after the router has spent thirteen seconds choosing it. Measured: a 150x95
-   * canvas came back 422 "must both be divisible by 2", and a caller that only
-   * learns this from a 422 loses the ask. Rounding down keeps it inside every
-   * cap it has already passed. */
+  /* both sides even, because an odd one is a hard 422 raised only after the router has spent thirteen seconds choosing the size */
   const even = (n) => Math.max(32, Math.floor(Number(n) / 2) * 2)
   const req = {
     description,
@@ -245,107 +118,14 @@ export async function mapObject({ description, w, h, view = 'low top-down', seed
     if (j.status === 'completed' && j.download_url) {
       const png = await fetch(j.download_url)
       if (!png.ok) throw new Error('cutout download failed ' + png.status)
-      /* the object id comes back too, and dropping it was the reason a thing
-       * could never be given a second state. Every state endpoint keys off the
-       * id of what it is editing, and once these bytes are on disk there is no
-       * way back to it: the account holds 769 objects and matching one by its
-       * prompt is the fragile guesswork characterFor already has to do. */
+      /* the object id comes back too, because every state endpoint keys off it and once the bytes are on disk there is no way back to it */
       return { b64: Buffer.from(await png.arrayBuffer()).toString('base64'), objectId: out.object_id }
     }
   }
   throw new Error('generation timed out')
 }
 
-/* ---- UI: the furniture the game draws OVER a map -------------------------
- *
- * A dialogue box, a meter, a card, a button. Not a map object and not a
- * character: it has no world position, no camera and no body, and it is the one
- * class of art this file could not make at all.
- *
- * THE ROUTE IS POST /v2/create-ui-asset AND IT WAS POST /v2/ui-assets, WHICH IS
- * A 405. That guess made the whole button dead: the create never left, so no
- * author could ever draw a piece, and the row failed with a Method Not Allowed
- * in it.
- *
- * THE WHOLE REQUEST MODEL, off the published schema and not off a guess.
- * CreateUIAssetRequest takes exactly these and additionalProperties is FALSE,
- * so one stray field is a 422 for the whole call:
- *
- *   description    required, 1 to 2000 characters
- *   image_size     { width, height }, each 192 to 688, and ITS OWN
- *                  additionalProperties is false as well
- *   elements       list of the twelve names below, auto-positioned
- *   pieces         shape template, rounded_rect | circle | polygon
- *   style_image    a Base64Image object, { type, base64, format }
- *   color_palette  a phrase, up to 200 characters
- *   no_background  defaults true
- *   seed           integer
- *   name           a friendly name kept on the saved asset
- *   project_id     assigns the finished asset to a pixellab project. Not sent:
- *                  MAPVIS does not keep projects, and a parameter nothing can
- *                  fill is the half-plumbed shape docs/AUTHORING.md names.
- *
- * The answer is { ui_asset_id, background_job_id, status, usage }. THERE IS NO
- * download_url on this route: the finished picture is `image_url` on the poll,
- * and download_url was carried over from /v2/map-objects.
- *
- * HOW THE ROUTE WAS FOUND, AND THE PROOF IS THE 422. The schema names four ui
- * paths: /generate-ui-v2, /create-ui-asset, /ui-assets and
- * /ui-assets/{ui_asset_id}. Then each candidate was posted an INVALID body, `{}`,
- * which fastapi refuses at validation before any work happens and therefore
- * costs nothing, and the status separates the three cases cleanly:
- *
- *   POST /v2/ui-assets        405 Method Not Allowed  · that path is GET-only
- *   POST /v2/ui-asset         404 Not Found           · no such path
- *   POST /v2/ui-panels        404 Not Found           · no such path
- *   POST /v2/create-ui-asset  422 body.description Field required
- *
- * A 422 IS THE SIGNAL. It means the method and the path matched and a handler's
- * own request model rejected the body, which no wrong route can produce. The
- * same probe proved the BODY was wrong in three more ways, because
- * CreateUIAssetRequest sets additionalProperties false: `width`, `height` and
- * `style_image_base64` all came back extra_forbidden. So the size is nested in
- * `image_size` and the reference is a Base64Image object, and every one of those
- * would have been a refusal after the route was fixed.
- *
- * THE POLL IS NOT A 423 EITHER. That was carried over from /v2/map-objects.
- * GET /v2/ui-assets/{id} answers 200 the whole way through with a status word
- * and a null image_url, and the finished picture is `image_url` and never
- * `download_url`. A non-uuid in that path is a 422, which is how the path was
- * confirmed without holding a real id.
- *
- * The aspect gate is the endpoint's own and the five pairs below are it,
- * verbatim: 688x512 answers "exceeds the max for this aspect ratio (600x448).
- * Max per axis: square 512x512, 16:9 688x384, 9:16 384x688."
- *
- * IT IS THE EXPENSIVE ONE, in the pro bracket rather than the one-generation
- * bracket map objects sit in, and that is the reason nothing calls it
- * speculatively and why one press draws one piece. The number is not put in
- * front of an author: telling somebody what a press costs before telling them
- * what they get is why the old page read as a bill.
- *
- * The size is aspect-gated and the two maxima DO NOT COMBINE: 688 is only
- * reachable with a 16:9 partner and 512 only as a square, so 688x512 resolves
- * to 4:3 and is refused. That refusal arrives after the request has been sent,
- * which is the same trap the odd-canvas 422 was on map-objects, so the fit
- * happens here where it costs nothing.
- *
- * BOTH SIDES START AT 192 ON THIS ROUTE, so the existing crest-panther.png is
- * 128x128 and could not be regenerated here. That floor is this route's alone:
- * /v2/generate-image-v2 runs from 16, and the sheets go there. See the sheet
- * section below, which also carries the reason a sheet is still right once the
- * floor is gone.
- *
- * AND IT DRAWS PANELS AND ONLY PANELS. Measured 2026-08-31, an icon set of a
- * compass, a key, a star, a lock and a tick came back as panels, and round blank
- * chip tokens came back as panels. `elements` decides shape and its twelve names
- * are all furniture, so no wording reaches past it. That is what moved six of
- * the twenty-one types off this route entirely.
- *
- * Exported because the store checks the canvas BEFORE the press rather than
- * after it, and a second copy of these five pairs would be five numbers that
- * disagree with the generator the first time one is edited.
- */
+/* the ui route is POST /v2/create-ui-asset, additionalProperties false so one stray field is a 422, the poll is 200 throughout and the picture is image_url; the five aspect gates do not combine so 688x512 is refused after the send, both sides start at 192, and it draws panels and only panels */
 export const UI_GATES = [
   [16 / 9, 688, 384],
   [9 / 16, 384, 688],
@@ -366,67 +146,24 @@ export function fitUi(w, h) {
   }
 }
 
-/* THE TWELVE NAMES THE ENDPOINT SCAFFOLDS FROM, off the schema's own field
- * description, and they are fenced here because NOTHING VALIDATES THEM.
- *
- * SENDING ONE AT ALL IS THE DIFFERENCE BETWEEN A PANEL AND A KIT, measured over
- * four rolls. With `elements` omitted the endpoint decides for itself and
- * returns a SHEET of loose interface parts, with the piece somebody actually
- * asked for sitting at the top and cropped off the edge of the canvas. With
- * `elements: ['window']` it returns one complete centred panel, every time.
- * That is why several piece types in server/store/ui.mjs carry a one-name list
- * and why the few that carry none say out loud that they mean it.
- *
- * `elements` types as a plain list of strings, so a name outside this list is
- * accepted at the door, reaches the handler, and spends. That is the one place
- * on this route where a typo costs money instead of a 422, and the generate
- * route lets an author override the preset's list by hand. Measured with a
- * deliberately invalid seed alongside: `nonsense_widget` drew no complaint of
- * its own, which is exactly the shape of a fence that is not there. */
+/* the twelve element names are fenced here because the api types them as plain strings, so a typo reaches the handler and spends instead of returning a 422 */
 export const UI_ELEMENTS = [
   'button', 'icon_button', 'toolbar', 'tab', 'panel', 'window',
   'health_bar', 'avatar', 'triangle', 'pentagon', 'hexagon', 'octagon',
 ]
 
-/* AND THE THREE SHAPES A TEMPLATE PIECE CAN BE. Coordinates are on a virtual
- * editor canvas whose LONGER side spans 0 to 512, which is not the output size:
- * a 16:9 panel is authored on 512x288 whatever it is finally drawn at. Anything
- * that is not one of these three is a 422, so it is refused here rather than
- * after an author has pressed and watched a row fail. */
+/* the three template shapes, on a virtual canvas whose longer side spans 0 to 512 and not the output size, refused here because anything else is a 422 */
 const PIECE_KINDS = { rounded_rect: ['x', 'y', 'w', 'h'], circle: ['x', 'y', 'r'], polygon: ['x', 'y', 'r', 'sides'] }
 
-/* THE BODY, BUILT WITHOUT SENDING IT, and the split exists so a spend is never
- * what tells anybody what the request looked like.
- *
- * Ash spent about 280 generations on 2026-08-30 rediscovering one recipe, and
- * the two that produced it, `elements` and `style_image`, are both fields a
- * caller could silently omit: work/.kit/panel.png is a paid picture whose only
- * defect is that the call dropped the element list. There was no way to look at
- * a request before paying for it, so the only instrument was the picture.
- *
- * Everything up to the post lives here and uiAsset calls it, so a dry run and a
- * real one cannot diverge: it is not a second copy of the assembly, it IS the
- * assembly. It also needs no token, so it answers on a machine with no key.
- */
+/* the body is built without sending it and uiAsset calls this, so a dry run and a real one cannot diverge and a spend is never what tells anybody what the request looked like */
 export function uiAssetBody({ description, width = 256, height = 256, palette, elements, pieces, styleImageBase64, seed, name }) {
   const say = String(description || '').trim()
   if (!say) throw new Error('a surface needs a description')
   const size = fitUi(width, height)
-  /* THE SIZE IS NESTED AND IT WAS FLAT. CreateUIAssetRequest sets
-   * additionalProperties false, so the old `width` and `height` at the top level
-   * came back extra_forbidden and would have refused the call even once the
-   * route was right. The schema caps this at 2000 rather than 1000. */
+  /* the size is nested, because top-level width and height come back extra_forbidden under additionalProperties false */
   const req = {
     description: say.slice(0, 2000),
-    /* ONLY EVER PROBE THIS API BY OMITTING A REQUIRED FIELD. 40 generations
-     * were spent finding this route's shape by posting `image_size: {}`, which
-     * looks like an obviously invalid body and is not: both width and height
-     * DEFAULT to 256, so an empty object validates, reaches the handler, draws
-     * a 256x256 picture and is charged for. An empty `{}` at the top level is
-     * safe because `description` is required with no default, so fastapi
-     * refuses it before any work happens. That is the difference, and it is the
-     * only free probe: a missing required field is refused, a missing OPTIONAL
-     * field is filled in and paid for. */
+    /* only ever probe this api by omitting a REQUIRED field: `image_size: {}` defaults to 256x256, draws and is charged for, which cost 40 generations */
     image_size: { width: size.width, height: size.height },
     // chrome sits on top of a map, so it is cut out for the same reason every
     // map object is: anything opaque behind it is a rectangle of somebody
@@ -441,21 +178,10 @@ export function uiAssetBody({ description, width = 256, height = 256, palette, e
       throw new Error(`the generator has no element called "${unknown[0]}" · it scaffolds from ${UI_ELEMENTS.join(', ')}`)
     req.elements = want
   }
-  /* ONE PRESS DRAWS ONE PIECE (Ash, 2026-08-30), and the refusal is here as
-   * well as at the route because this is the line that spends the money. A
-   * batch is the shape that turns one bad prompt into five bad pictures and
-   * leaves nobody looking at the first one before the second is paid for.
-   *
-   * `pieces` used to be accepted here and never sent by anything, which is the
-   * half-plumbed pattern docs/AUTHORING.md names: a field a caller could fill
-   * and no form could reach. It reaches now, and it carries at most one. */
+  /* one press draws one piece, refused here as well as at the route because a batch turns one bad prompt into five paid-for bad pictures */
   if (Array.isArray(pieces) && pieces.length) {
     if (pieces.length > 1) throw new Error(`one press draws one piece, and this asked for ${pieces.length}`)
-    /* A LIST OF NAMES IS NOT A LIST OF SHAPES, and the route upstream was
-     * folding one into the other. Each piece is an object carrying an id, a
-     * kind and that kind's own coordinates, so a bare string is a 422 on every
-     * one of the three shapes at once and the author is told a piece is not a
-     * dictionary, which is not a sentence anybody can act on. */
+    /* a list of names is not a list of shapes: each piece is an object with an id, a kind and that kind's coordinates, and a bare string is a 422 */
     const one = pieces[0]
     const need = one && typeof one === 'object' && !Array.isArray(one) ? PIECE_KINDS[one.kind] : null
     if (!need)
@@ -464,26 +190,7 @@ export function uiAssetBody({ description, width = 256, height = 256, palette, e
       throw new Error(`a ${one.kind} needs an id and ${need.join(', ')}, on a canvas whose longer side runs 0 to 512`)
     req.pieces = pieces
   }
-  /* THE STRONGEST LEVER THIS ENDPOINT HAS, AND HALF OF WHAT A PIECE NEEDS.
-   *
-   * A style image transfers MATERIAL: the palette, the outline weight, the
-   * wear, the motifs. It transfers NO LAYOUT at all. So it is the only thing
-   * that can make a new piece the same wood as the chrome the game already
-   * ships, and it can do nothing whatever about ornament landing in the middle
-   * of an edge, which is what both failed rolls died of. The words are the
-   * other half and neither lever substitutes for the other.
-   *
-   * The route sends this from public/chrome, chosen by piece type, rather than
-   * taking a reference somebody pasted. See the comment at /api/ui/generate.
-   *
-   * It does not carry the risk the map did on /v2/map-objects, where
-   * background_image made the endpoint CONTINUE a picture it was given and a
-   * bookshelf came back as roof tiles. There is no subject in a style image and
-   * nothing for it to continue.
-   *
-   * IT IS A Base64Image AND IT WAS A BARE STRING under `style_image_base64`,
-   * which the probe answered extra_forbidden. Same wrapper `submit` already
-   * sends on /v2/generate-image-v2. */
+  /* a style image transfers material and no layout at all, so it cannot fix ornament landing in the middle of an edge; it is a Base64Image object and a bare string is extra_forbidden */
   if (styleImageBase64) req.style_image = { type: 'base64', base64: String(styleImageBase64), format: 'png' }
   if (seed != null) req.seed = seed
   if (name) req.name = String(name).slice(0, 60)
@@ -496,15 +203,7 @@ export async function uiAsset(ask) {
   const id = out.ui_asset_id
   if (!id) throw new Error('the surface was queued without an id to collect it from')
 
-  /* 30 to 90 seconds typical; the same five minute ceiling and five second tick
-   * mapObject settled on. NOT the same statuses, and that is the half of this
-   * function that was wrong independently of the route: there is no 423 and no
-   * 410 here. The read answers 200 all the way through, carrying `processing`
-   * with a null image_url and a progress percent, then `completed` with the url.
-   *
-   * A 404 does not end the wait, for the reason awaitCharacter gives: the row is
-   * not always queryable the instant the post answers, and losing a paid
-   * generation to one blip is not worth the tighter code. */
+  /* no 423 and no 410 on this route, it answers 200 all the way through, and a 404 does not end the wait because the row is not queryable the instant the post answers */
   let misses = 0
   for (let waited = 0; waited < 300000; waited += 5000) {
     await new Promise((r) => setTimeout(r, 5000))
@@ -519,10 +218,7 @@ export async function uiAsset(ask) {
     const st = String(j.status || '').toLowerCase()
     if (DEAD.includes(st)) throw new Error(String(j.error || j.message || 'the surface failed to draw').slice(0, 200))
     if (j.image_url) {
-      /* fetched the instant it exists, because a cdn url is not promised
-       * forever and a surface that has been paid for must not be lost to a slow
-       * caller. The size comes off what the endpoint says it drew rather than
-       * off what was asked for, the same reason setUiImage reads the IHDR. */
+      /* fetched the instant it exists, because the cdn url is not promised forever and a paid surface must not be lost to a slow caller */
       return {
         b64: (await fetchPNG(j.image_url)).toString('base64'),
         uiAssetId: String(id),
@@ -537,49 +233,10 @@ export async function uiAsset(ask) {
   throw new Error('the surface timed out')
 }
 
-/* ---- SHEETS: the marks, which the panel endpoint cannot draw --------------
- *
- * /v2/create-ui-asset IS A PANEL KIT GENERATOR AND NOTHING ELSE. Measured
- * 2026-08-31: asked for an icon set of a compass, a key, a star, a lock and a
- * tick it returned panels, and asked for round blank chip tokens it returned
- * panels. work/.kit/icon_set-as-panels.png and work/.kit/chip-as-panels.png are the two paid
- * pictures and both are a framed bar over a tray of smaller framed bars. No
- * wording reaches past it, because `elements` is the lever that decides shape
- * on that route and its twelve names are all furniture. So six of the
- * twenty-one types in docs/UI-KIT.md cannot be made there at all: chip, pip,
- * icon_set, cue, stamp and pointer, which server/store/ui.mjs calls the sheet
- * tier.
- *
- * They come here instead. /v2/generate-image-v2 paints an arbitrary subject
- * with transparency and has no element list, no piece template and no camera,
- * so what it draws is what the words say.
- *
- * THE 192 PIXEL FLOOR IS create-ui-asset'S AND IT IS NOT ON THIS ROUTE. The
- * schema runs image_size from 16, and the whole reason docs/UI-KIT.md invented a
- * sheet tier was to work around a floor that does not exist on this path: a
- * season token is about 24 across and could simply be asked for at 24 here.
- *
- * A SHEET IS STILL THE RIGHT ANSWER, for the OTHER reason, and that reason is
- * the asset stage's own settled law: the faces of one family have to be drawn in
- * ONE JOB or they come back at different weights and different palettes. That
- * is why a character's eight headings are one generation and why a state is an
- * edit rather than a second drawing.
- *
- * AND THIS ROUTE HAS A FLOOR OF ITS OWN, AT 171, which is not the same number
- * and is worth more than the one it replaces. The endpoint's own documentation
- * gives the output count by the LONGER side: up to 42px it returns 64 images in
- * an 8x8 grid, 43 to 85 returns 16, 86 to 170 returns 4, and above 170 it
- * returns ONE. So asking small does not get a small picture, it gets a grid of
- * VARIANTS of the same mark, which is a different thing from a sheet of
- * different marks and would be cut into sixty-four copies of a compass. A sheet
- * canvas therefore stays over 170 on its long side.
- */
+/* sheets come here because create-ui-asset draws panels whatever it is asked for, and a family stays one job or it comes back at different weights; this route's floor is 171 on the long side, under which it returns a grid of variants of one mark instead of one picture */
 export const SHEET_ONE_IMAGE = 171
 
-/* The ceiling is UI_GATES because it is the measured one and because a sheet
- * sits in the same size family as the panels beside it on the shelf. The
- * schema's own words are "maximum depends on aspect ratio (e.g. 512x512 for
- * square, 688x384 for 16:9)", which is that table said loosely. */
+/* the ceiling is UI_GATES because that table is the measured one and the schema only says the maximum depends on aspect ratio */
 export function fitSheet(w, h) {
   const W = Math.max(1, Math.round(Number(w) || 384))
   const H = Math.max(1, Math.round(Number(h) || 384))
@@ -614,10 +271,7 @@ export function sheetBody({ description, width = 384, height = 384, styleImage, 
     seed,
     styleImage,
     styleOptions,
-    // marks are laid over a painted map, so anything opaque behind them is a
-    // rectangle of somebody else's idea of a background painted over the island.
-    // It defaults true here, and it is passed anyway: the default is the
-    // endpoint's and a default is not a decision.
+    // passed anyway even though it defaults true, because the default is the endpoint's and a default is not a decision
     noBackground: true,
   })
 }
@@ -652,31 +306,7 @@ export async function sheetImage(ask) {
   throw new Error('the sheet timed out')
 }
 
-/* ---- STATES: the same thing wearing a different face ---------------------
- *
- * A troll that turns into a boulder does not need a boulder. It needs ITSELF,
- * curled up, and those are not the same picture: one is drawn from scratch in
- * its own palette at its own size, the other is an edit of the drawing that is
- * already there. Generating the boulder separately is how you get a 32px grey
- * rock standing in for a 64px mossy troll, and how a library fills with orphan
- * rows called boulder-2 that mean nothing on their own.
- *
- * Pixellab models this natively and MAPVIS has never touched it. Every object
- * on the account already carries state_name "base" and a group_id; the shelf
- * was there and empty. Two endpoints, one per kind, and the kind is the same
- * object/character split this file already turns on:
- *
- *   POST /v2/objects/{id}/states   -> edits the image, new object, same group
- *   POST /v2/create-character-state -> edits ALL 4 or 8 rotations consistently,
- *                                      new character, same group
- *
- * Both answer a NEW id plus a background job, so the art is collected off the
- * new id the same way the original was.
- *
- * The character one carries use_color_palette_from_reference, which is the
- * whole point in one flag: the edited rotations snap to the source's existing
- * palette, so a state cannot drift off the thing it is a state OF. It defaults
- * to on here for the same reason it is not offered in the ui. */
+/* a state is an EDIT of the drawing that is already there, not a second drawing, or a 32px grey rock stands in for a 64px mossy troll; use_color_palette_from_reference is what keeps it from drifting */
 export async function objectState({ objectId, edit, name, seed }) {
   const req = { edit_description: String(edit).slice(0, 1000) }
   if (name) req.state_name = String(name).slice(0, 100)
@@ -723,26 +353,7 @@ export async function characterState({ characterId, edit, name, seed, size }) {
   return { characterId: id, usage: out.usage || null, detail: await awaitCharacter(id) }
 }
 
-/* CHARACTERS, which is what pixellab calls anything built on a skeleton.
- *
- * Not the same thing as an object. An object is a prop: a crate, a well, a
- * tree, drawn flat and once. A character is rigged, comes in 4 or 8 directions
- * of the SAME body, and can be given motion, one generation per direction.
- *
- * The skeleton is a RIG, not a species. There are six of them, mannequin and
- * five four-legged bodies, and that is all there will ever be: no dragon, no
- * robot, no bird. Anything outside the six is drawn on the nearest rig by body
- * plan and made itself by the words of the prompt. Deciding which rig is the
- * router's job in api.mjs; nothing in this file has an opinion about it.
- *
- * The object/character split is pixellab's, not ours, and it matters: their own
- * docs say do NOT use the eight-direction OBJECT endpoint for something with a
- * body, because the identity transfer is unreliable and it comes back a generic
- * figure instead of yours. An earlier version of this file wired exactly that,
- * for exactly that use, and it was wrong.
- *
- * Both of these are reads and cost nothing.
- */
+/* never use the eight-direction OBJECT endpoint for anything with a body: pixellab's own docs say the identity transfer is unreliable and it returns a generic figure instead of yours */
 export const characterPage = (limit, offset) =>
   call('GET', `/v2/characters?limit=${Math.max(1, Math.min(100, limit))}&offset=${Math.max(0, offset)}`)
 
@@ -759,29 +370,10 @@ export async function allCharacters() {
   return out
 }
 
-/* MAKING one, which does cost generations.
- *
- * There is no POST /v2/characters. The v2 openapi document names four create
- * routes and the mode picks between them: standard is one generation and is the
- * only one that can be asked for four headings, pro is 20-40 and is the only
- * one that takes style_character_id, v3 is 2-9 and is the only one that takes a
- * reference image. Read from that document rather than probed, because probing
- * a create route spends the generation it is probing.
- *
- * Sizes are the character, not the canvas: pixellab pads the frame by about 40
- * percent to leave room for the animation to swing through, so a 48px character
- * lands on a 68px canvas with the feet up off the bottom. Whoever writes these
- * to disk has to base-trim them or the figure floats.
- *
- * The api is not consistent about which word means finished, so a state is read
- * against a list of words rather than compared to one.
- */
+/* four create routes, never probed because probing one spends the generation; a size is the CHARACTER and pixellab pads the frame about 40 percent, so 48px lands on a 68px canvas and has to be base-trimmed */
 const DONE = ['completed', 'success', 'succeeded', 'done', 'ready']
 const DEAD = ['failed', 'error', 'cancelled', 'canceled']
-// the four the live v2 schema names on the standard create routes. oblique used
-// to sit here and is not in that schema at all: read off /v2/openapi.json
-// 2026-08-23, every create-character route says "side, low top-down, high
-// top-down, perspective". pro and v3 name only the first three.
+// the four views the live schema names on the standard create routes, and oblique is not one of them; pro and v3 name only the first three
 const VIEWS = ['low top-down', 'high top-down', 'side', 'perspective']
 const QUADRUPEDS = ['bear', 'cat', 'dog', 'horse', 'lion']
 
@@ -870,14 +462,7 @@ export async function createCharacter({
   return String(cid)
 }
 
-/* Wait for the rotations. The detail read is free, so the poll is the cheap
- * part of a job the schema prices at two to five minutes; the ceiling is ten
- * because a five minute one would fail on the slow tail of that range.
- *
- * A read that throws does not end the wait. The character row is not always
- * visible the instant the post answers, and losing a paid generation to one
- * blip is not worth the tighter code. Three failures in a row is a real fault.
- */
+/* the ceiling is ten minutes against a job priced at two to five, and a read that throws does not end the wait because the row is not visible the instant the post answers */
 export async function awaitCharacter(characterId, { timeoutMs = 600000 } = {}) {
   if (!characterId) throw new Error('no character to wait on')
   const every = 5000
@@ -907,17 +492,7 @@ export async function awaitCharacter(characterId, { timeoutMs = 600000 } = {}) {
   throw new Error('the character timed out')
 }
 
-/* A walk cycle from pixellab's own template library, one generation per
- * direction. Template mode defaults to every heading the character has, which
- * for an eight-direction character is eight generations.
- *
- * The group is named after the template so it reads back the way the account
- * import already looks for a walk: that path matches /walk/ against
- * animation_type or display_name, so 'walking-8-frames' is found by both.
- *
- * /v2/characters/animations is the same handler under a second path. This one
- * is the name the tooling uses.
- */
+/* one generation per direction, and template mode defaults to every heading the character has, so an eight-direction character is eight generations */
 export async function animateCharacter({ characterId, templateAnimationId, directions, seed }) {
   if (!characterId) throw new Error('no character to animate')
   const tpl = String(templateAnimationId || '').trim()
@@ -934,28 +509,7 @@ export async function animateCharacter({ characterId, templateAnimationId, direc
   return startAnimation(req, want, tpl)
 }
 
-/* THE SAME ENDPOINT, MOTION WRITTEN INSTEAD OF PICKED.
- *
- * mode v3 takes action_description in place of a template id, so the movement
- * is a sentence rather than a name off a list. That is the whole reason this
- * exists: a dragon does not walk, it hovers and beats its wings, and there is
- * no hovering template and never will be one. The same goes for a ghoul that
- * lurches and a robot whose servos idle. A quadruped needs it too, because the
- * four-legged templates are named per body and cannot be known before the body
- * has been drawn.
- *
- * directions is NOT optional here and that is measured, not assumed: the live
- * schema says template mode defaults to every direction the character has and
- * CUSTOM MODE DEFAULTS TO SOUTH ONLY. Leave it out and a dragon comes back
- * facing one way with the budget for eight still unspent and the sprite
- * useless. So the caller names all eight.
- *
- * keep_first_frame false stores exactly frameCount frames instead of
- * frameCount + the reference pose, so the loop has no duplicate at its seam.
- *
- * Priced at ceil(w * h * frames / 65536) per direction, which is one per
- * direction at 96px and under. That is why the sprite size is capped there.
- */
+/* mode v3 writes the motion instead of picking a template, and directions is NOT optional here because custom mode defaults to south only; priced at ceil(w*h*frames/65536) per direction, which is one at 96px and under */
 export async function animateCharacterAction({ characterId, action, frameCount = 8, directions, name = 'motion', seed }) {
   if (!characterId) throw new Error('no character to animate')
   const act = String(action || '').replace(/\s+/g, ' ').trim()
@@ -990,15 +544,7 @@ async function startAnimation(req, want, group) {
   return { ...out, jobIds, directions: going, templateAnimationId: group }
 }
 
-/* heading to frame urls, in order, for the group named after the template.
- * Nothing carrying that name means every group is read, which is right for a
- * character just generated because the walk is the only thing on it.
- *
- * known, when given, is every frame the character carried BEFORE this job, and
- * a heading made only of those has not landed. The skip belongs here rather
- * than in the caller: the first group holding a heading wins, so on a character
- * that already moves an old walk listed first would mask the new frames and
- * they would never be looked at again. */
+/* `known` is every frame the character carried before this job, and the skip belongs here because the first group holding a heading wins and an old walk would mask the new frames */
 function framesByDir(detail, tpl, known) {
   const groups = Array.isArray(detail && detail.animations) ? detail.animations : []
   const named = tpl
@@ -1016,24 +562,7 @@ function framesByDir(detail, tpl, known) {
   return out
 }
 
-/* Wait for those frames, then answer the character detail again so the caller
- * reads the per-direction urls off one object.
- *
- * The character is what gets polled, because the frames landing on it is the
- * thing being waited for and it is one read a tick instead of one per job. The
- * jobs are swept every sixth tick, thirty seconds, only so a failed direction
- * surfaces as an error rather than sitting until the ceiling.
- *
- * known is every frame url the character ALREADY carried, and it exists because
- * of what a live read says: an animation group comes back with no id at all,
- * animation_type carrying the template's name and display_name null. So when
- * the api does not echo a written animation's name, framesByDir falls back to
- * reading every group, and on a character that already moves that is the OLD
- * motion, sitting there complete, and the wait ends the instant it starts.
- * Frame urls are path-based, unsigned and identical across reads (measured
- * 2026-08-23), so they are the one honest test of what is new. Nothing that
- * animates a fresh character passes this, and nothing changes for them.
- */
+/* the character is polled rather than the jobs, one read a tick, and `known` is needed because an animation group can come back unnamed, so on a character that already moves the wait would end on the OLD motion */
 export async function awaitAnimation(characterId, handle, { timeoutMs = 600000, known } = {}) {
   if (!characterId) throw new Error('no character to wait on')
   const h = handle || {}
@@ -1066,12 +595,7 @@ export async function awaitAnimation(characterId, handle, { timeoutMs = 600000, 
   throw new Error('the animation timed out')
 }
 
-// One sprite animated from a text motion description, via
-// /v2/animate-with-text-v3 (found by probing: /v1/animate-image and friends
-// 404, this one 422-names first_frame + action as its required fields). It
-// answers with a background job; poll until the frames arrive. At 64x64 and
-// 8 frames the pixel budget (w*h*frames <= 524288) prices the job at one
-// generation.
+// one sprite from written motion on /v2/animate-with-text-v3, priced at one generation while w*h*frames stays under 524288
 export async function animate({ base64, action, frameCount = 8, seed }) {
   const req = {
     first_frame: { type: 'base64', base64 },
@@ -1096,23 +620,14 @@ export async function animate({ base64, action, frameCount = 8, seed }) {
   throw new Error('animation timed out')
 }
 
-// ---- what the account already owns --------------------------------------
-// Reads, not generations. GET /v2/objects is the paged list (limit 1..100,
-// offset), answering { objects, total, usage }; every entry carries id, name,
-// prompt, size, directions, status and a public preview_url. GET
-// /v2/objects/{id} adds rotation_urls and the raw storage_urls map, which is
-// where a 1-direction object's png actually sits (under the key "unknown",
-// with every rotation null). Neither costs anything.
+// reads and not generations, and a 1-direction object's png sits in storage_urls under the key "unknown" with every rotation null
 
 export const objectPage = (limit, offset) =>
   call('GET', `/v2/objects?limit=${Math.max(1, Math.min(100, limit))}&offset=${Math.max(0, offset)}`)
 
 export const objectDetail = (id) => call('GET', '/v2/objects/' + encodeURIComponent(id))
 
-// every object on the account. The first page also answers with the total, so
-// the rest go out together instead of one after another: seven calls in series
-// took eight seconds and in parallel it is closer to two. The caller still
-// caches the result, so this runs once per session, not per keystroke.
+// the pages after the first go out together, because seven calls in series took eight seconds and in parallel it is closer to two
 export async function allObjects() {
   const first = await objectPage(100, 0)
   const out = Array.isArray(first.objects) ? [...first.objects] : []
@@ -1123,10 +638,7 @@ export async function allObjects() {
   return out
 }
 
-// a png that already exists, off pixellab's own cdn. These urls are documented
-// as no-auth and the cdn in front of them answers 401 to a Bearer header it
-// did not ask for, so the bare fetch goes first and the token is only tried if
-// the bare one is turned away.
+// the bare fetch goes first because the cdn answers 401 to a Bearer header it did not ask for, and the token is only tried after a refusal
 export async function fetchPNG(url) {
   let r = await fetch(url)
   if (r.status === 401 || r.status === 403) r = await fetch(url, { headers: { Authorization: 'Bearer ' + token() } })

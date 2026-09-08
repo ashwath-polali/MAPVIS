@@ -1,15 +1,4 @@
-// Where the bytes live. Every png a map owns: the painting, the three mask
-// planes, the library, the states, the published bundles.
-//
-// This talks the S3 API and nothing else, which is the whole point. Backblaze
-// B2, Cloudflare R2, AWS S3 and MinIO all speak it, so the provider is an
-// endpoint in .env rather than a rewrite. We are on B2 because its 10 GB free
-// tier is permanent and needs no credit card; if that ever stops being true,
-// changing providers is four lines of config and a copy.
-//
-// With no S3_* configured it falls back to the work/ folder, so the tool still
-// runs for someone who has signed up for nothing. That fallback is not a dev
-// convenience, it is the degraded-not-broken rule applied to storage.
+// this talks the S3 api and nothing else so the provider is an endpoint in .env, and with no S3_* configured it falls back to work/ so the tool still runs for somebody signed up for nothing
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -31,21 +20,7 @@ export function store() {
   return (cached = memo(meter(E.S3_ACCESS_KEY_ID && E.S3_ENDPOINT ? s3Store(E) : localStore())))
 }
 
-/* A BUG MUST NOT BE ABLE TO RUN UP A BILL.
- *
- * B2 stops when its daily cap is gone, which is a broken site and a free
- * lesson. R2 does not stop, it invoices, and there is no spend cap to set in
- * the dashboard. That difference is the whole risk of moving, and it is not
- * about ordinary use: at the measured 249 reads to open a map, R2's ten
- * million free reads a month are forty thousand map opens. Nobody reaches that
- * by working. A loop reaches it in a minute.
- *
- * So the ceiling is per process and deliberately far above anything real. A
- * serverless instance serving one map open spends a few hundred; publishing
- * the biggest map spends a few thousand. Twenty thousand means something is
- * looping, and the right answer to that is to stop rather than to keep paying.
- * Counted by class because R2 prices them differently and a runaway ListObjects
- * is twelve times worse than a runaway GetObject. */
+/* a per-process ceiling far above anything real, because r2 invoices instead of stopping and twenty thousand operations means something is looping */
 let ceiling = null
 const OP_CEILING = () => (ceiling ??= Number(env().S3_MAX_OPS || 20000))
 const ops = { a: 0, b: 0, tripped: false }
@@ -53,17 +28,7 @@ const ops = { a: 0, b: 0, tripped: false }
 export const bucketOps = () => ({ ...ops, ceiling: OP_CEILING() })
 export const resetBucketOps = () => { ops.a = 0; ops.b = 0; ops.tripped = false }
 
-/* What has been spent since this was last asked, taken and zeroed in one step.
- *
- * Read once at the end of a request so the month's total can be incremented by
- * a single row update. Counting into the database per operation would mean a
- * Postgres write for every png, which costs more than the thing it measures.
- *
- * DELIBERATELY A SECOND COUNTER. The ceiling above has to keep counting for the
- * whole life of the process, because that is what makes it a loop detector;
- * zeroing it here would reset the guard on every request and a loop spread over
- * many requests would never trip it. So this one is only for bookkeeping and
- * the two never share a variable. */
+/* deliberately a second counter, because zeroing the ceiling's one per request would stop it detecting a loop spread over many requests */
 const since = { a: 0, b: 0 }
 export function takeBucketOps() {
   const d = { a: since.a, b: since.b }
@@ -98,39 +63,12 @@ function meter(b) {
   }
 }
 
-/* THE SAME BYTES ARE NEVER FETCHED TWICE.
- *
- * A published version is immutable and is cached forever by the browser, but
- * the editor's own working copy is not, and it was being served with no-store
- * and no memory behind it. So every open of a map went to the bucket for every
- * png in its library, every dashboard thumbnail went again, and a free tier's
- * 2,500 daily transactions were gone in an afternoon of ordinary use.
- *
- * The working copy really does change under the author, so it cannot simply be
- * cached and forgotten. What makes this safe is that every change to a key goes
- * through put, del, delPrefix or copy in this same object, so a write is the
- * one moment the cached copy can become wrong, and a write evicts it. A reader
- * can therefore never be handed bytes that some earlier writer replaced.
- *
- * Bounded because this runs in a serverless function: least recently used falls
- * off first, and anything genuinely large is passed straight through rather
- * than held. */
+/* safe to cache a changing working copy because every write goes through put, del, delPrefix or copy in this object and evicts the key; bounded lru, since this runs in a serverless function */
 const MEM_MAX = 400
 const MEM_BYTES = 48 * 1024 * 1024
 const MEM_ONE = 2 * 1024 * 1024
 
-/* WHO WANTS TO KNOW WHEN BYTES CHANGE.
- *
- * The sha of every object is kept in Postgres so a revalidation can be answered
- * without a download, and that record is only trustworthy if it is updated at
- * the moment of the write. This is how it hears about one.
- *
- * A hook rather than an import because this file talks the S3 API and nothing
- * else, deliberately. Reaching into the database from here would make the
- * storage adapter depend on there BEING a database, and the local backend
- * exists precisely for when there is not. platform.mjs registers a handler when
- * the platform is on, and when it is off nothing is registered and nothing
- * changes. */
+/* a hook and not an import, because reaching into the database from here would make the storage adapter depend on there being one */
 const writeHooks = []
 export const onBlobWrite = (fn) => writeHooks.push(fn)
 const announce = async (kind, key, body) => {
@@ -157,27 +95,7 @@ function memo(b) {
 
   return {
     ...b,
-    /* THE ONE THING THIS CACHE CANNOT HEAR ABOUT: A WRITE FROM ANOTHER PROCESS.
-     *
-     * Every comment above is about writes that pass through this object, and
-     * those are handled. A write that does not is invisible: the entries below
-     * are only ever evicted by put, del, delPrefix or copy IN THIS PROCESS, so
-     * a CLI script, a second dev server or another serverless instance can
-     * replace an object and this one will keep answering with what it holds
-     * until it is restarted.
-     *
-     * Measured 2026-08-30 and it is not theoretical. A script called setUiImage
-     * for `panel` with 67035 bytes; the row and the bucket both took it; the
-     * dev server kept serving the 56644 bytes it had cached, on both image
-     * routes, until it was restarted. So an author redrawing a piece was shown
-     * the old picture with nothing anywhere saying why, which is the kind of
-     * lie that costs an afternoon.
-     *
-     * There is no way for this file to detect that on its own, because knowing
-     * would mean a bucket read, which is the cost the cache exists to avoid. So
-     * the caller that CAN tell says so: server/store/ui.mjs keeps the sha of
-     * the bytes on the row it already reads, and calls this when what it was
-     * handed does not hash to what the row says. */
+    /* a write from another process is invisible here and this file cannot detect it without a bucket read, so a caller holding a sha calls forget when the bytes do not match */
     forget: (key) => drop(key),
     forgetPrefix: (prefix) => dropPrefix(prefix),
     async get(key) {
@@ -185,26 +103,7 @@ function memo(b) {
       if (hit) { mem.delete(key); mem.set(key, hit); return hit }
       const buf = await b.get(key)
       if (buf && buf.length <= MEM_ONE) {
-        /* THE SAME DRIFT publish.mjs's hot CACHE HAD, FOR THE SAME REASON.
-         *
-         * held was added to on every insert without refunding whatever was
-         * already under that key. The early return above hides it most of the
-         * time, but two reads of the same key in flight at once both miss and
-         * both land here, and this file is read in parallel by design: hydrateMap
-         * runs twelve lanes and publishBundle now writes in twelve.
-         *
-         * Measured on the equivalent counter in publish.mjs, 60 keys each put
-         * twice: 6.1 MB of a cache's ceiling was held by bytes that were not
-         * there, and it kept 21 of 60 entries instead of all 60. Evicting never
-         * refunds the difference, so the count settles just under the ceiling
-         * and the cache goes quietly useless, which here means every open of a
-         * map goes to the bucket for every png in its library again.
-         *
-         * `mem.size &&` on the loop guards the other end. drop(undefined) finds
-         * nothing and subtracts nothing, so a loop that reaches an empty map
-         * with held still over the ceiling spins forever with no await in it and
-         * the event loop never runs again. The refund above is what keeps it
-         * from getting there; the guard is what makes it unable to. */
+        /* a re-put refunds what it replaces or the count drifts up permanently and the cache goes quietly useless, and `mem.size &&` stops an empty map spinning the eviction loop forever */
         const prev = mem.get(key)
         if (prev) held -= prev.length
         mem.set(key, buf)
@@ -271,35 +170,9 @@ function s3Store(E) {
           credentials: { accessKeyId: E.S3_ACCESS_KEY_ID, secretAccessKey: E.S3_SECRET_ACCESS_KEY },
           // b2 and r2 both want path-style rather than a bucket subdomain
           forcePathStyle: true,
-          /* A REFUSAL IS AN ANSWER, SO STOP ASKING AGAIN.
-           *
-           * The sdk retries with backoff by default, which is right for a
-           * flaky connection and wrong for a cap: the bucket is not going to
-           * change its mind inside three hundred milliseconds. Exporting reads
-           * a source per placement, so on a capped bucket ninety-four refusals
-           * each became three refusals plus waiting, and the export outlived
-           * the browser's own timeout. That is what "export failed to fetch"
-           * was. One attempt makes a capped read fail in milliseconds, which
-           * lets the caller fall back to disk while the request is still
-           * alive. */
+          /* one attempt, because a capped bucket will not change its mind in 300ms and the sdk's backoff made 94 refusals outlive the browser */
           maxAttempts: 1,
-          /* AND A SOCKET THAT NEVER ANSWERS IS NOT AN ANSWER AT ALL.
-           *
-           * One attempt with no clock on it is the other half of a hang. The
-           * sdk ships no timeouts unless it is handed some: measured on this
-           * install, the resolved handler reports connectionTimeout,
-           * requestTimeout and socketTimeout all undefined, and the handler
-           * treats a falsy value as "never give up". A publish writes about
-           * eight hundred objects over twelve lanes, so one stalled socket out
-           * of eight hundred used to be enough to make the whole export wait
-           * for nothing, forever, burning no cpu and writing no version. That
-           * looks exactly like the bug that was actually keepalive, and it is
-           * why three hours went into the wrong half of the system.
-           *
-           * requestTimeout is time between bytes rather than a total, so a
-           * genuinely slow upload is unaffected and only a dead one is cut.
-           * The three-attempt loop in publish.mjs fires on the throw, so a
-           * stall is now a retry instead of a stop. */
+          /* the sdk ships NO timeouts unless handed some and treats a falsy one as never give up, so one stalled socket used to hang a whole publish forever */
           requestHandler: { connectionTimeout: 10_000, requestTimeout: 60_000 },
         }),
       }

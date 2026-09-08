@@ -1,21 +1,4 @@
-// How this account reaches Claude, and what happens when it cannot.
-//
-// Three providers behind one call, because ten places in api.mjs ask a planner
-// a question and none of them should know or care which one answered:
-//
-//   key    the account's own anthropic key, called over http
-//   relay  a machine linked to this account runs the model cli locally and
-//          posts the answer back. This is how the club account works: no key is
-//          stored, one machine is wired in, and if it goes away somebody
-//          switches this to 'key' from a dropdown
-//   none   no claude. Not an error by itself: the caller decides whether its
-//          feature is purely claude and must be denied, or whether it can fall
-//          through and send the author's own words straight to pixellab
-//
-// The rule: if the api key fails, things that route to the model
-// route directly to pixellab instead. A feature that is purely claude denies
-// the user until they have a valid key. A tool that is useless without a key is
-// not a bridge.
+// three providers behind one call (key, relay, none), and when claude fails anything that can degrade sends the author's own words straight to pixellab instead
 import { spawn } from 'node:child_process'
 import { q, one } from '../db/pool.mjs'
 import { keyFor } from './auth.mjs'
@@ -33,23 +16,13 @@ export class NoPlanner extends Error {
 
 const MODEL = env().PLANNER_MODEL || 'claude-opus-4-8'
 
-/* A relay on this very machine is just the cli, and going out to the database
- * and back to reach a process sitting right here would be silly. Read through a
- * function so a test can turn it off, since on a host it does not exist and a
- * host is what most of this module is for. */
+/* a relay on this machine is just the cli, so it skips the round trip through the database; read through a function so a test can turn it off */
 const localRelay = () => env().MAPVIS_LOCAL_RELAY === '1'
 
 // ---- the account's own key -------------------------------------------------
 
-/* The anthropic api directly. Also removes the 3.77s process start the cli
- * costs on every call, measured in docs/MAPVIS-ASSETS.md. Images ride in the
- * message rather than as file paths, which is what lets .ask/, .style/ and
- * .propose/ stop existing. */
-/* THE PATHS IN THE PROMPT ARE THE ATTACHMENTS. Every planner prompt names the
- * files it wants looked at by absolute path, because the cli reads them off
- * disk. The api has no disk and no Read tool, so the same bytes ride in the
- * message and this one line says where they are. The prompt's own wording does
- * not change, which is what lets the three providers share one prompt. */
+/* the api directly, which also removes the 3.77s process start the cli costs on every call */
+/* the paths in the prompt ARE the attachments, because the api has no disk and no Read tool, and one line says so rather than rewording every prompt */
 const attachedNote = (n) =>
   n
     ? `The ${n === 1 ? 'image file' : `${n} image files`} named by absolute path below ${n === 1 ? 'is' : 'are'} ` +
@@ -95,13 +68,7 @@ async function viaKey(key, prompt, timeoutMs, images = []) {
 
 // ---- a linked machine ------------------------------------------------------
 
-/* Post the question as a job and wait for a relay to answer it. The relay long
- * polls, runs the local model cli, and posts the result back, so an existing
- * subscription is the compute budget and no key is stored anywhere.
- *
- * If nothing claims it before the timeout the job is marked and NoPlanner is
- * thrown, which is the degrade signal. A laptop being closed is a normal
- * condition, not a fault. */
+/* an unclaimed job times out into NoPlanner, which is the degrade signal, because a closed laptop is a normal condition and not a fault */
 async function viaRelay(userId, prompt, timeoutMs, images = [], jobKey = '', paths = []) {
   const live = await one(
     `select id from relay_links where user_id = $1 and 'claude' = any(capabilities)

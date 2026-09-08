@@ -1,9 +1,4 @@
-// Passwords and the api-key vault.
-//
-// Two different jobs that people constantly confuse. A password must be SLOW
-// and one-way, because the only thing we ever do is check it. An api key must
-// be reversible, because we have to hand the real key to PixelLab, so it is
-// encrypted rather than hashed and the master key lives in the environment.
+// a password is slow and one-way because it is only ever checked, and an api key is encrypted rather than hashed because the real key has to reach pixellab
 import crypto from 'node:crypto'
 import { need } from '../db/env.mjs'
 
@@ -54,10 +49,7 @@ export async function verifyPassword(password, stored) {
 
 // ---- session and relay tokens ----------------------------------------------
 
-// The token goes to the client once; only its hash is stored, so a stolen
-// database cannot be replayed as a login. sha256 and not scrypt on purpose:
-// these are 256 bits of real randomness, so there is nothing to brute force
-// and a slow hash would only slow every request down.
+// only the hash is stored so a stolen database cannot be replayed, and sha256 not scrypt because 256 random bits have nothing to brute force
 export const newToken = () => crypto.randomBytes(32).toString('base64url')
 export const hashToken = (t) => crypto.createHash('sha256').update(String(t)).digest('hex')
 
@@ -104,12 +96,7 @@ export function anchorName(s) {
 
 export const isAnchorName = (s) => /^[a-z][a-z0-9_]{0,47}$/.test(String(s))
 
-/* The same rule for a PLACEMENT's name, with one extra fence: it may not look
- * like a machine id. The game resolves a placement reference against the names
- * and the ids together, so that an anchor bound before the thing was named
- * keeps working, and `a55` allowed as a name would let one string mean two
- * objects on the same map. Kept in step with isPlacementName in
- * src/core/mask.ts, which is the copy the editor refuses with. */
+/* a placement name may not look like a machine id, because the game resolves names and ids together and `a55` would mean two objects on one map */
 /* TYPE FIRST, and that is not pedantry. String(undefined) is "undefined",
  * which passes the pattern, so an unnamed placement shipped as literally named
  * `undefined` and two of them collided on one map. Found by exporting one. */

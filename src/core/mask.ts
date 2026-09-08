@@ -390,10 +390,7 @@ export function clampStand(
   charH: number,
 ): [number, number] {
   const reach = standReach(charH)
-  /* ROUNDED BEFORE IT IS MEASURED, not after. Rounding a point that sits just
-   * inside the circle can push it back out by up to 0.71px, so measuring first
-   * and rounding second let a legal-looking point be saved at 36.4 against a
-   * reach of 36. Caught by the sweep in the stand check. */
+  // ROUNDED BEFORE IT IS MEASURED: rounding a point just inside can push it back out, saving 36.4 against a reach of 36
   const sx = Math.round(stand[0])
   const sy = Math.round(stand[1])
   const dx = sx - x

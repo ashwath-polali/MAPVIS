@@ -1,7 +1,4 @@
-/* The api on its own, for when the built app is served instead of the dev
- * server: `node server/index.mjs` then open dist/ behind any static host.
- * In dev it is not used, vite mounts server/api.mjs directly.
- */
+/* the api on its own for a built app behind a static host, and unused in dev where vite mounts server/api.mjs directly */
 import http from 'node:http'
 import { api } from './api.mjs'
 
