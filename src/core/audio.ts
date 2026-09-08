@@ -1,52 +1,9 @@
-/* SOUND, BEFORE THERE IS ANY SOUND.
- *
- * Measured 2026-08-30, in both repos: there is no audio anywhere. No
- * `AudioContext`, no `new Audio`, no `<audio>` element, and no mp3, ogg or wav
- * under either `public/`. The game's own capability harvest says the same thing
- * twice, at 60-capabilities.md U1 and at 80-substrates.md 80.5, and U3 adds the
- * rule this file is built around: a control that reports a state it does not
- * deliver is worse than no control.
- *
- * So this is deliberately NOT an audio system. It is the two things a mute
- * switch needs to be honest instead of decorative:
- *
- *   1. the preference, stored and served, so the first thing that ever plays a
- *      sound reads it rather than inventing its own default, and
- *   2. the first-gesture unlock, because a browser holds sound until a person
- *      clicks or types and code that discovers that on the day it ships a sound
- *      discovers it as a silent bug.
- *
- * CONSUMER-CANONICAL. The running game already owns the shape: `Settings` at
- * AdventureGame/src/app/SettingsPanel.tsx:16 is `{ mute, textSize,
- * reducedMotion, skin }`, stored as JSON under `blhs_settings_v1`. The field is
- * `mute` and it is a boolean, so that is the field and the type here too, even
- * though a different origin means MAPVIS cannot write the game's key. Getting
- * this wrong costs a rename in two repos later; getting it right costs nothing
- * now. Anything added here goes in as a sibling of `mute`, so merging the two
- * stores one day is a spread and not a translation.
- *
- * THE SHAPE OF THIS FILE IS AdventureGame/src/game/ui/motion.ts, on purpose.
- * That file is the same problem already solved for reduced motion: a value the
- * renderer can read, published to an attribute the stylesheets can match, with
- * a subscription so something mid-work can change its mind. Sound gets the same
- * treatment rather than a second idiom, and like src/core/life.ts this file is
- * written to be copied verbatim into the game rather than reimplemented.
- */
+/* SOUND, BEFORE THERE IS ANY SOUND. Not an audio system: the stored preference and the first-gesture unlock, because a browser holds sound until a click and code that finds that out on ship day finds it as a silent bug. Field named `mute` to match the game's own settings blob. */
 
-/* WHETHER ANYTHING IN THIS PROJECT CAN MAKE A NOISE. It is false, it is checked
- * rather than assumed (the grep above), and it is the one line to change when
- * the first sound file lands. Every surface asking "should I tell the person
- * this switch does nothing" asks this, so the day sound exists no copy anywhere
- * is left claiming otherwise. Typed `boolean` and not the literal so a branch
- * on it is live code rather than something the compiler narrows away. */
+/* WHETHER ANYTHING HERE CAN MAKE A NOISE. False, checked rather than assumed, and the one line to change when the first sound file lands. Typed boolean so a branch on it stays live code. */
 export const SOUND_EXISTS: boolean = false
 
-/* mapvis:folder-order in src/site/Home.tsx is the existing idiom for a
- * preference of the person looking rather than a property of the thing looked
- * at, and there is no account-preferences table on the server to put this in:
- * server/db/001_schema.sql's users row carries an email, a password and two
- * provider modes, and nothing else. Browser-local is where it belongs and it is
- * also where the game keeps the same value. */
+/* Browser-local, like mapvis:folder-order: it is a preference of the person looking, there is no account-preferences table, and the game keeps the same value the same way. */
 const KEY = 'mapvis:sound'
 
 type Stored = { mute: boolean }
@@ -67,11 +24,7 @@ const read = (): boolean => {
   }
 }
 
-/* THE ATTRIBUTE IS THE SETTING MADE VISIBLE TO CSS, exactly as `data-rm` is for
- * reduced motion, so a stylesheet can hide or dim a sound affordance without
- * importing anything and there is one source rather than two that agree most of
- * the time. Nothing matches on it today; it is written now so that whatever
- * matches on it later is matching the same boolean the code reads. */
+/* THE ATTRIBUTE IS THE SETTING MADE VISIBLE TO CSS, as data-rm is for reduced motion, so a stylesheet can match it without importing anything and there is one source rather than two. */
 const publish = () => {
   if (typeof document === 'undefined') return
   const want = isMuted() ? '1' : ''
@@ -107,22 +60,7 @@ export function onMuted(fn: (muted: boolean) => void): () => void {
   }
 }
 
-/* ---- the first-gesture unlock ---------------------------------------------
- *
- * Chrome, Safari and Firefox all refuse to start audio until the document has
- * been clicked or typed into, and the failure is quiet: the context is created,
- * it sits in state 'suspended', the sound is scheduled, and nothing comes out.
- * Whoever adds the first sound should not have to find that out.
- *
- * NO CONTEXT IS CREATED UNTIL SOMETHING ACTUALLY WANTS ONE. An AudioContext is
- * a real audio graph and a live thread, and today it would be spent producing
- * silence on a 4 GB school Chromebook. So the listener below only records that
- * the gesture happened; `unlockAudio` is what builds the thing, and if nobody
- * ever calls it the cost of this file is one listener that removes itself.
- *
- * pointerdown and keydown only. touchstart is not in the list because
- * pointerdown covers touch on every browser this ships to, and adding it means
- * two events firing for one finger. */
+/* ---- the first-gesture unlock. Browsers refuse audio until a click and fail QUIETLY, so the context sits suspended and nothing comes out. No context is built until something wants one; the listener only records the gesture. pointerdown and keydown only, because pointerdown already covers touch. */
 type Ctor = new () => AudioContext
 const audioCtor = (): Ctor | null => {
   if (typeof window === 'undefined') return null
@@ -136,15 +74,7 @@ let armed = false
 const waiting: Array<(c: AudioContext | null) => void> = []
 const gestureWatchers = new Set<() => void>()
 
-/* Built inside the gesture handler when anybody is waiting, because Safari has
- * historically wanted the resume STARTED in the same task as the click and not
- * merely after one. Chrome is happy either way. So the construction and the
- * `resume()` call are synchronous here and only the answer is awaited.
- *
- * Null means the browser said no. That matters: `resume()` resolving is not the
- * same as the context running, and a context handed back still suspended is
- * exactly the silent failure this whole file exists to stop, so it is reported
- * as a refusal and the next gesture gets another go. */
+/* Built inside the gesture handler because Safari wants the resume started in the same task as the click. Null means the browser said no: resume() resolving is not the same as the context running. */
 const build = (): Promise<AudioContext | null> => {
   const C = audioCtor()
   if (!C) return Promise.resolve(null)
@@ -225,10 +155,7 @@ export function onFirstGesture(fn: () => void): () => void {
   }
 }
 
-/* THE ONE CALL A SOUND MAKES. Resolves with a context that is allowed to play,
- * or null on a browser with no audio at all, and waits for the first gesture if
- * it has not happened yet rather than returning something suspended. Callers
- * still check `isMuted()`: this answers "may I", not "should I". */
+/* THE ONE CALL A SOUND MAKES: a context that is allowed to play, or null. Waits for the first gesture rather than returning something suspended. This answers "may I", not "should I". */
 export function unlockAudio(): Promise<AudioContext | null> {
   if (!audioCtor()) return Promise.resolve(null)
   return new Promise((resolve) => {

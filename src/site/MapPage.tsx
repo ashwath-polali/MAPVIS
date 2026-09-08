@@ -1,12 +1,4 @@
-/* Walking a published map.
- *
- * This was a long page with a code sample, a version filmstrip, an anchor list
- * and a share button, dressed in a design that got rejected. Almost all of it
- * was explaining rather than doing.
- *
- * What is left is the thing: the map, standing up, playable, filling the
- * screen. Everything else is one bar of small type that gets out of the way.
- */
+/* Walking a published map. What is left after the code sample, the filmstrip and the anchor list came out is the map itself, playable, filling the screen. */
 import { useEffect, useState } from 'react'
 import { go } from './router'
 import { displayName } from '../core/naming'

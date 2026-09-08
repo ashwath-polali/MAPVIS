@@ -1,11 +1,4 @@
-/* Who is signed in, asked once for the whole app.
- *
- * Every page needs it and none of them should each fetch it, so it is a tiny
- * store with subscribers rather than a hook that refetches per mount. React
- * context would do the same job and would mean wrapping the editor, which is
- * 5,700 lines that currently know nothing about accounts and should keep not
- * knowing.
- */
+/* Who is signed in, asked once for the whole app: a tiny store with subscribers rather than a hook that refetches per mount. Context would mean wrapping the editor, which knows nothing about accounts and should keep not knowing. */
 import { useEffect, useState } from 'react'
 
 export type User = {
@@ -94,10 +87,7 @@ export const setProvider = async (service: 'claude' | 'pixellab', mode: 'key' | 
 
 export const makeRelayToken = (name: string) => post('/api/auth/relay-token', { name })
 
-/* What this account can and cannot do right now, in one place, so a button
- * never has to work it out for itself. This is what the key walls read: the
- * point is that somebody learns a feature needs a key BEFORE they press it and
- * hit a wall, which is the whole difference between degraded and broken. */
+/* What this account can and cannot do, in one place, so somebody learns a feature needs a key BEFORE they press it. That is the difference between degraded and broken. */
 export function can(user: User | null) {
   const claude = !user ? 'local' : user.claude_provider === 'none' ? 'no' : user.claude_provider
   const pixellab = !user ? 'local' : user.pixellab_provider === 'none' ? 'no' : user.pixellab_provider

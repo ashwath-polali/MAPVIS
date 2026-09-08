@@ -1,19 +1,4 @@
-/* Cut the pedestal off a generated sprite.
- *
- * The generator keeps standing objects on a little disc of ground: a slab, a
- * rock patch, a circle of dirt. Wording cannot be trusted to stop it, because
- * every way of saying "no ground" hands the generator the word ground. So this
- * removes it afterwards, with arithmetic and no model.
- *
- * A pedestal has one signature that holds across trees, statues, posts and
- * barrels: it sits ON the bottom edge, and it is much WIDER than the thing
- * standing on it. Read the row widths from the bottom up and the base shows as
- * a wide block that suddenly narrows into the trunk. Cut at that narrowing.
- *
- * It refuses when it is not sure. An object that legitimately widens all the
- * way down (a house, a boulder, a crate) has no narrowing to find, so nothing
- * is cut and the caller is told so.
- */
+/* Cut the pedestal off a generated sprite with arithmetic and no model, because every way of saying "no ground" hands the generator the word ground. Refuses when there is no narrowing to find. */
 
 export interface DebaseResult {
   /* the trimmed image, or the original when nothing was cut */
@@ -58,23 +43,7 @@ export function findBase(data: Uint8ClampedArray, w: number, h: number): { cut: 
 
   const widthAt = (y: number) => (right[y] >= left[y] ? right[y] - left[y] + 1 : 0)
 
-  // Two things were wrong with reading this from the bottom row up.
-  //
-  // First, a slab is drawn as an ELLIPSE, and an ellipse tapers to a point at
-  // its bottom edge: the last row of a 52px sand island is 6px wide. A scan
-  // that starts there reads "narrow" on its very first row, ends where it
-  // began, and cuts nothing. Measured on his three palms, 2026-08-19: every
-  // one came back "no base found".
-  //
-  // Second, "narrow" was a guessed fraction of the widest row. Three trunks
-  // together are half the width of the slab they stand on, so any fraction
-  // tight enough to catch a single trunk misses a cluster.
-  //
-  // The signature that actually holds is a WAIST: the slab bulges, the thing
-  // standing on it pinches in, and the crown spreads out again above. So find
-  // the bulge, find the narrowest row above it, and cut at the lowest row that
-  // is already down to waist width. No fraction is guessed; the object's own
-  // trunk sets the threshold.
+  // Read from the WAIST, not the bottom row: a slab is an ellipse and tapers to a point, so a bottom-up scan reads narrow on its first row and cuts nothing. The trunk's own width sets the threshold, no fraction is guessed.
   const look = Math.min(bottom + 1, Math.max(8, Math.round(h * 0.3)))
   const floor = bottom - look + 1
   let widest = 0

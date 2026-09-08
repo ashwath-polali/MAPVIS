@@ -1,13 +1,4 @@
-/* Sign in and sign up, at the desk.
- *
- * This is the one place the site leaves the water and sits on paper, because
- * making an account is the moment you stop looking at charts and start being
- * the person who draws them. The switch is total: vellum, iron gall ink, a
- * lamp, and a real pen line under the field you are typing in.
- *
- * One page for both, because two nearly identical pages with a link between
- * them is how a form ends up with two slightly different validation rules.
- */
+/* Sign in and sign up. One page for both, because two nearly identical pages with a link between them is how a form ends up with two validation rules. */
 import { useEffect, useRef, useState } from 'react'
 import { Link, go, useRoute } from './router'
 import { useSession, signIn, signUp } from './session'

@@ -1,14 +1,4 @@
-/* The walk test: the character, the step law, and the reach check.
- *
- * Ported from tools/maskdraw/app.js, which transcribed it from
- * src/game/painted/PaintedScene.tsx in the game repo (the step test at lines
- * 96-117 and the ticker at 262-295). Feet plus two hip probes, a level
- * tolerance, axis slide, and the escape clause for a character who is already
- * standing on a blocked pixel. Refused moves paint the hits layer.
- *
- * Constants that are measured in painting pixels stay configurable, because
- * they have to scale with the map's resolution.
- */
+/* The walk test: feet plus two hip probes, a level tolerance, axis slide, and an escape clause for a character already standing on a blocked pixel. Pixel-measured constants stay configurable so they scale with the map. */
 import type { MaskDoc } from './mask'
 
 export interface WalkCfg {
@@ -52,10 +42,7 @@ export class Walker {
   facing = 'south'
   animT = 0
   blocked = false
-  /* the hop. Same arc as the beach: 520ms, 44px of rise on a sine, with a
-   * slight stretch at the top so he does not read as a rigid cut-out sliding
-   * upward. It changes nothing about where he stands: the feet keep testing
-   * the same pixel, so a jump cannot carry him over a wall. */
+  /* the hop: 520ms, 44px of rise on a sine. The feet keep testing the same pixel, so a jump cannot carry him over a wall. */
   jumpT = -1
 
   jump() {

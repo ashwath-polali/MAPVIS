@@ -1,9 +1,4 @@
-/* Reactivity without a library.
- *
- * Everything here writes a custom property or toggles a class and nothing
- * animates from javascript, so the browser keeps the work on the compositor and
- * a Chromebook does not drop frames rendering a landing page.
- */
+/* Reactivity without a library: everything writes a custom property or toggles a class and nothing animates from javascript, so the work stays on the compositor and a Chromebook keeps its frames. */
 import { useEffect, useRef, useState } from 'react'
 
 /* Reveal on arrival. One shared observer for the whole page rather than one per
@@ -45,12 +40,7 @@ export function useReveal<T extends HTMLElement = HTMLDivElement>() {
   return ref
 }
 
-/* Pointer parallax. Writes --px and --py in the range -1..1 onto one element,
- * and every layer inside reads them at its own depth via --par. One listener,
- * one write per frame, and the transform itself is pure CSS.
- *
- * The damping is what makes it feel like a heavy sheet of paper rather than a
- * mouse-follower: the target moves instantly, the value chases it. */
+/* Pointer parallax: --px and --py in -1..1 on one element, read by every layer at its own depth. The damping is what makes it a heavy sheet of paper rather than a mouse-follower. */
 export function usePointer<T extends HTMLElement = HTMLDivElement>(strength = 1) {
   const ref = useRef<T | null>(null)
   useEffect(() => {

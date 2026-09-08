@@ -1,13 +1,4 @@
-/* Settings, as a panel over whatever you were doing.
- *
- * It was a page, and a page was wrong: nothing here is a destination. You come
- * to paste a key or check what a machine is doing, and then you go straight
- * back to the map you were looking at. A route means a navigation, a scroll
- * reset and a lost place in a list, for four fields.
- *
- * Deliberately not mentioning which company writes the prompts or which draws
- * the art. An account holder cares what works and what does not.
- */
+/* Settings as a panel over whatever you were doing, because nothing here is a destination and a route means a navigation and a lost place in a list, for four fields. */
 import { useEffect, useState } from 'react'
 import { useSession, setProvider, makeRelayToken, signOut, can, type User } from './session'
 import { go } from './router'
@@ -141,19 +132,7 @@ export function Settings({ onClose }: { onClose: () => void }) {
   )
 }
 
-/* THE MUTE SWITCH, WHICH MUTES NOTHING, AND SAYS SO.
- *
- * Ash ruled it in on 2026-08-30: "mute yes, in settings, first-gesture unlock."
- * The game's own capability harvest had already ruled on the other half. U3 at
- * 60-capabilities.md:3400 says a control that reports a state it does not
- * deliver is worse than no control, and Q80.5.c leaves open whether the switch
- * should be hidden until audio exists. This is the third answer: the switch
- * ships, it does the only real thing there is to do, which is remember, and the
- * row states plainly that nothing plays yet instead of implying something does.
- *
- * The dotted line above the switch is the same `.works` list the top of this
- * sheet uses for what is and is not available, because "no sound exists" is the
- * same kind of fact as "no art key", and it should not get a second grammar. */
+/* THE MUTE SWITCH, WHICH MUTES NOTHING, AND SAYS SO. A control that reports a state it does not deliver is worse than no control, so the row states plainly that nothing plays yet and the switch does the one real thing there is, which is remember. */
 function Sound() {
   const [muted, setMine] = useState(isMuted)
   const [, bump] = useState(0)

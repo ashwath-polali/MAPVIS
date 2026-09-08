@@ -1,10 +1,4 @@
-/* The furniture every page carries: the compass that is also the nav, and the
- * foot of the page.
- *
- * The compass needle points to how far down the page you are. It is the only
- * scroll indicator, it replaces a progress bar, and it is the kind of detail
- * that decides whether a site reads as made or assembled.
- */
+/* The furniture every page carries. The compass needle points to how far down the page you are and is the only scroll indicator. */
 import { Link, go } from './router'
 import { useSession, signOut } from './session'
 

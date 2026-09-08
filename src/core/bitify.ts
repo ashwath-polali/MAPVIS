@@ -1,20 +1,4 @@
-/* Drop a sprite to the map's own pixel size.
- *
- * A generated sprite is 96 or 128 pixels across and gets drawn onto the map at
- * a quarter of that, so four of its pixels land inside one map pixel. The
- * browser resamples them on the way down, and the result carries detail finer
- * than anything the painting has: soft gradients and half-tone edges sitting on
- * top of chunky hand-painted pixel art. It reads as a sticker.
- *
- * The fix is not a "pixelate amount" to fiddle with. The placement already
- * knows the answer: a sprite drawn at scale 0.25 should BE four times smaller,
- * and then sit at scale 1, so one of its pixels is one of the map's.
- *
- * The resample matters as much as the size. Averaging a block invents colours
- * that were never in the sprite, which is how you get mud. Pixel art wants the
- * DOMINANT colour of each block instead: the palette comes out unchanged, edges
- * stay hard, and what you get looks drawn rather than blurred.
- */
+/* Drop a sprite to the map's own pixel size, so one of its pixels is one of the map's. Resampled by DOMINANT colour per block, not by averaging: averaging invents colours that were never in the sprite and reads as mud. */
 
 export interface BitResult {
   data: Uint8ClampedArray
@@ -29,26 +13,13 @@ const KEY = (r: number, g: number, b: number) => ((r >> 3) << 10) | ((g >> 3) <<
 
 const A_MIN = 20
 
-/* How much finer than the map this sprite currently is. Only used to decide
- * whether there is anything to do and what to tell the person; the resample
- * itself works from the target size, not from this. 1 means it is already at or
- * below the map's fidelity. */
+/* How much finer than the map this sprite is. Only decides whether there is anything to do; the resample works from the target size. */
 export function bitFactor(natW: number, natH: number, drawnW: number, drawnH: number): number {
   if (drawnW < 1 || drawnH < 1) return 1
   return Math.max(1, Math.min(natW / drawnW, natH / drawnH))
 }
 
-/* Resample to an exact TARGET SIZE, not by a whole-number factor.
- *
- * The first version divided by a rounded factor, which meant a palm drawn at
- * 0.3 got a factor of 3 and came out 32px wide where it had been drawing 28.8 —
- * eleven percent bigger the moment you pressed the key. Sizes must not move.
- *
- * So the output is exactly the size the placement was already drawing, and the
- * source block for each output pixel is worked out per pixel. The blocks are
- * not all the same size when the ratio is not whole, which is fine: what has to
- * be true is that ONE OUTPUT PIXEL IS ONE MAP PIXEL, and that is now exact.
- */
+/* Resampled to an exact TARGET SIZE, not by a whole-number factor: a rounded factor made a palm 11 percent bigger the moment the key was pressed. Sizes must not move. */
 export function bitify(data: Uint8ClampedArray, w: number, h: number, tw: number, th: number): BitResult {
   const ow = Math.max(1, Math.round(tw))
   const oh = Math.max(1, Math.round(th))

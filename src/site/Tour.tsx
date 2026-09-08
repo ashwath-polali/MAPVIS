@@ -1,15 +1,4 @@
-/* One painted map, and a camera that walks you through it.
- *
- * No scrolling anywhere. The view starts wide on the whole place, then travels
- * to a handful of spots on it, holding at each one while a line of text sits
- * beside what it is describing. The map does not move past you; you move across
- * the map, which is what the tool does to a painting and is the only honest way
- * to advertise it.
- *
- * The camera is the same idea as the walk test: a position and a zoom over a
- * painting, eased. Everything alive on the scene keeps running underneath it on
- * the life data, so the place is not paused while you read.
- */
+/* One painted map and a camera that walks you through it, no scrolling anywhere: you move across the map, which is what the tool does to a painting. Everything alive keeps running underneath while you read. */
 import { useEffect, useRef, useState } from 'react'
 import { cleanLife, lifeAt, separate, type Life } from '../core/life'
 

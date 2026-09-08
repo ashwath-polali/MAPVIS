@@ -1,21 +1,4 @@
-/* The landing page. Signed out only.
- *
- * Six paintings, six lines. It advances on its own so somebody who never
- * touches the wheel still sees the whole thing, and scrolling takes it over the
- * instant they do. Both drive the same number, so there is never a moment where
- * the timer and the reader disagree about which stop we are on.
- *
- * THE PAIRING IS NOT DECORATION. The water map is the one where you cut water
- * off. The six-terrace map is the one about marking ground. The crowded market
- * is the one about things that move. The canyon has a real door carved into the
- * cliff. Nobody will read it as a diagram, and nobody will feel it was shuffled
- * either.
- *
- * ON THE WORDS: steps, not slogans. Lower case, imperative, one clause. The
- * previous attempt read as AI because of its SHAPE, not its vocabulary: pairs
- * of balanced fragments and "X is not Y, it is Z". No rewriting saves copy whose
- * structure is the tell.
- */
+/* The landing page, signed out only. Six paintings, six lines, advancing on their own until somebody scrolls; both drive one number so the timer and the reader never disagree. The pairing is not decoration: each painting is the one its line is about. Steps, not slogans. */
 import { useEffect, useRef, useState } from 'react'
 import { go } from './router'
 
@@ -39,29 +22,13 @@ export default function Landing() {
   const paused = useRef(0)
   const wheel = useRef(0)
 
-  /* Every painting is fetched once, up front, and held as an object url. Six
-   * images is a quarter of a megabyte and the alternative is a blank frame
-   * every time the scroll moves, which is the one thing that would make this
-   * feel cheap. */
+  /* Every painting is fetched up front and held as an object url. Six images is a quarter of a megabyte; the alternative is a blank frame every time the scroll moves. */
   useEffect(() => {
     let dead = false
     ;(async () => {
       for (const b of BEATS) {
         try {
-          /* THE SHIPPED COPY FIRST. THIS IS A PICTURE ON A HOMEPAGE.
-           *
-           * It used to read the published bundle, then fall back to /work/.
-           * Both of those go through the map system, and the map system is the
-           * wrong place for marketing art to live. It broke twice for two
-           * unrelated reasons: publishes do not migrate between buckets, so the
-           * move to R2 left these behind, and /work/ then started requiring
-           * ownership, which a stranger reading the front page does not have.
-           * Neither failure had anything to do with the landing page.
-           *
-           * public/site-art/<slug>.png ships inside the build, so it is served
-           * by the cdn, costs no object storage at all, needs no session, and
-           * cannot be taken down by a bucket, a cap or an auth rule. The map
-           * system remains the fallback for a beat whose art was never staged. */
+          /* THE SHIPPED COPY FIRST: this is a picture on a homepage. Reading the published bundle broke twice, once when publishes did not migrate buckets and once when /work/ started requiring ownership a stranger does not have. */
           let res: Response | null = await fetch(`/site-art/${b.slug}.png`).catch(() => null)
           if (!res || !res.ok || !/image/.test(res.headers.get('content-type') || '')) {
             let url: string | null = null

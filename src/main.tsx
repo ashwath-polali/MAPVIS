@@ -1,20 +1,4 @@
-/* The whole thing starts here.
- *
- * StrictMode is off on purpose. It double-invokes effects in development, and
- * the editor's effects attach canvases, pointer capture and animation loops to
- * real DOM; running those twice was never what the tool was written against.
- * The site pages are pure enough not to care either way, so the tool decides.
- *
- * app.css comes LAST so the editor's own surface wins inside the editor. The
- * two stylesheets share almost no selectors, and the ones they do share are
- * scoped: the site lives under .site, the tool does not.
- *
- * tokens.css comes FIRST and is the only file allowed to decide what a size, a
- * grey or an edge is. Everything after it aliases those names. First rather
- * than last on purpose: a later :root wins, so a sheet below that redeclares
- * --ink with its own hex silently turns the layer off, and the fix is to notice
- * it in this list.
- */
+/* StrictMode is off: it double-invokes effects and the editor attaches canvases, pointer capture and loops to real DOM. tokens.css first because a later :root wins; app.css last so the editor's surface wins inside the editor. */
 import { createRoot } from 'react-dom/client'
 import Shell from './site/Shell'
 import './site/tokens.css'

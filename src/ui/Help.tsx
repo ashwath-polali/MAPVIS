@@ -1,20 +1,4 @@
-/* THE HELP PANEL.
- *
- * Every session so far has been one person who built the tool using it, so
- * nothing has ever had to be written down. The ATC club is the opposite: a room
- * of beginners who have never seen it, and the first thing a beginner needs is
- * not a tour, it is an answer to "what can this actually do".
- *
- * So it is a LIST. Six sections matching the six steps in the header, every entry
- * naming one thing you can do, and clicking one opens what it is for and the
- * presses in order. You can read one line and close it again.
- *
- * Two rules held throughout the text. Everything in here is a feature that
- * really exists, checked against the code rather than remembered, because a
- * help panel describing a button nobody can find is worse than no help panel.
- * And it is written the way a person talks: no "simply", no "seamlessly", no
- * three-item lists for the rhythm of it.
- */
+/* THE HELP PANEL, as a LIST rather than a tour: six sections matching the six steps, every entry one thing you can do. Everything in it was checked against the code, because help describing a button nobody can find is worse than none. */
 import { useState } from 'react'
 
 export interface HelpEntry {

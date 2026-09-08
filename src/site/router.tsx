@@ -1,11 +1,4 @@
-/* A router in sixty lines, because this codebase has exactly two dependencies
- * and neither of them is react-router.
- *
- * Seven routes do not justify twenty kilobytes, and hand-rolling buys the one
- * thing a library would fight me on: the page transition is mine. A chart does
- * not cross-fade, it gets pulled aside, so navigation runs an exit before the
- * next route mounts rather than swapping instantly.
- */
+/* A router in sixty lines. Seven routes do not justify twenty kilobytes, and hand-rolling keeps the page transition: navigation runs an exit before the next route mounts. */
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 export type Route = { path: string; params: Record<string, string>; query: URLSearchParams }

@@ -1,19 +1,4 @@
-/* The region pass, off the main thread.
- *
- * Segments the painting into flat-ish contiguous colour regions so the levels
- * step can propose by acceptance: hover a region, see exactly what it covers,
- * click to take it. Nothing here guesses what is walkable; the human does.
- *
- * The law is the same one the cut flood uses: a flood grows 4-way from a seed
- * pixel and admits a neighbour when its Manhattan RGB distance to the SEED
- * colour is inside the tolerance. Never chained neighbour to neighbour, which
- * is how sea-navy once walked into volcano rock. After labelling, regions
- * smaller than a few dozen pixels are absorbed into their most common
- * neighbour so hover does not flicker over anti-aliasing residue.
- *
- * Cost: one flood visit per pixel plus two absorb passes, all O(w*h). A
- * 688x384 painting (264k px) labels in a few tens of milliseconds.
- */
+/* The region pass, off the main thread: flat-ish colour regions so the levels step can propose by acceptance. A flood admits a neighbour on its distance to the SEED colour, never chained neighbour to neighbour, which is how sea-navy once walked into volcano rock. */
 
 interface RegionJob {
   w: number

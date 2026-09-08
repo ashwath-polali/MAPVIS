@@ -1,23 +1,4 @@
-/* Palette lock: a returned sprite pushed onto the map's own colours.
- *
- * Why this exists. Words never carry a painting's look. A request for tropical
- * palm trees on a warm golden-hour island came back a generic bright green,
- * because the generator has no idea what the island looks like and no amount
- * of description told it. The style card fixes the ask. This fixes the answer,
- * afterwards, without generating anything: every pixel walks toward the
- * nearest colour the painting actually uses.
- *
- * Two rules hold. Alpha is copied through byte for byte, so a cutout keeps
- * exactly the shape it came back as and no edge softens. And shading survives:
- * the match runs in Oklab with lightness weighted heavier than hue, so a dark
- * pixel can only land on a dark palette entry and a highlight can only land on
- * a light one. Snapping on hue alone flattens a sprite into a sticker, which is
- * the failure this is built to avoid.
- *
- * Pure. No canvas, no network, no react, no document. The same image, palette
- * and strength always give the same bytes, so nothing here can surprise anyone
- * twice.
- */
+/* Palette lock: every pixel walks toward the nearest colour the painting uses. Matched in Oklab with lightness weighted heavy, so a dark pixel can only land dark; snapping on hue alone flattens a sprite into a sticker. Alpha is copied byte for byte. Pure. */
 
 // what both functions read and matchToPalette hands back. A browser ImageData
 // already has this shape, so a caller can pass one straight in; the answer is a
@@ -43,11 +24,7 @@ export function toRGB(s: string): RGB {
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
 }
 
-// ---- Oklab ----------------------------------------------------------------
-// Ottosson's transform, straight. It is the cheapest space where a distance
-// actually means what an eye means: equal steps look equal, and L is a real
-// lightness rather than a green-heavy average. That matters here because the
-// whole point is to move hue while leaving value alone.
+// Ottosson's Oklab, straight. Equal steps look equal and L is a real lightness, which is what lets hue move while value stays.
 
 const toLinear = (c: number) => {
   const u = c / 255
@@ -89,20 +66,7 @@ function unlab(c: Lab): RGB {
 
 // ---- the map's own colours ------------------------------------------------
 
-/* Ten to sixteen colours off the WHOLE opaque painting.
- *
- * A spot sample was tried and dropped: one spot only ever knows one thing's
- * colours, and asking for a spot before every generation is the step the owner
- * threw out. So the count runs over every opaque pixel. Coarse buckets first,
- * then the biggest buckets that sit far enough apart in rgb to be worth their
- * own entry.
- *
- * Both ends are forced in afterwards. The darkest and the lightest colour a
- * painting uses are almost never its most common ones, and they are exactly
- * what shading is made of: drop them and every matched sprite comes out at the
- * same middle value. The apart-threshold walks down until at least ten entries
- * come out, so a flat painting still yields a usable ramp.
- */
+/* Ten to sixteen colours off the WHOLE opaque painting, not a spot sample: one spot only knows one thing's colours. The darkest and lightest are forced in, because they are what shading is made of and are never the most common. */
 export function sampleMapPalette(img: RGBAImage, want = 14): string[] {
   const d = img.data
   const counts = new Map<number, { n: number; r: number; g: number; b: number }>()
@@ -170,17 +134,7 @@ const WEIGHT_L = 2.5
 // under this, a pixel is the transparent surround and is left exactly alone
 const ALPHA_FLOOR = 8
 
-/* Every opaque pixel moved toward the nearest colour the map uses.
- *
- * strength is how far it goes: 1 snaps onto the palette entry, 0 hands back
- * the original untouched, and the default the panel opens at sits high enough
- * to change the family without erasing the drawing underneath. Alpha is copied
- * straight through at every pixel, opaque or not.
- *
- * The match is cached per distinct colour. Pixel art holds a few dozen colours
- * in a sprite, so a 96x96 take does a few dozen searches rather than nine
- * thousand, and the panel's slider redraws inside a frame.
- */
+/* Every opaque pixel moved toward the nearest map colour. strength 1 snaps, 0 hands back the original. Cached per distinct colour, so a 96x96 take does a few dozen searches rather than nine thousand. */
 export function matchToPalette(img: RGBAImage, palette: string[], strength: number): RGBAImage {
   const out: RGBAImage = {
     data: new Uint8ClampedArray(img.data),

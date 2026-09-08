@@ -1,19 +1,4 @@
-/* A published map, alive, filling the screen.
- *
- * Not a picture of an island. The island: the painting, plus all 94 placements
- * moving on the same life data the game runs, on the same evaluator, so the
- * people walk their real routes and the waterfalls fall at their real rate.
- *
- * This is the whole answer to "what should the site look like". The product
- * already knows how to make a place breathe, so the site is a place breathing
- * rather than a page describing one. No layout tropes, nothing to mistake for a
- * template, and no art to commission because the art already exists.
- *
- * It arrives in the right order on purpose: the painting lands first and looks
- * finished, then over the next second or two the placements load and the island
- * starts moving. That is not a loading state to apologise for, it is the thing
- * waking up.
- */
+/* A published map, alive and filling the screen: the painting plus every placement moving on the same life data the game runs. The painting lands first and the placements load over the next second, which is the thing waking up rather than a loading state. */
 import { useEffect, useRef, useState } from 'react'
 import { cleanLife, lifeAt, separate, type Life } from '../core/life'
 
@@ -99,14 +84,7 @@ export function LivingMap({
       mount.current.replaceChildren(cv)
       const g = cv.getContext('2d')!
 
-      /* FRAME THE ISLAND, NOT THE CANVAS.
-       *
-       * A painting is grown with transparent margin so the map can spread, so
-       * the hub is 688x640 with land only in the middle of it. Fitting the
-       * canvas puts the island in a box of empty black and reads as a picture
-       * pasted on a page, which is the exact thing this screen exists to avoid.
-       * So the opaque pixels are measured once and everything is framed on
-       * those. */
+      /* FRAME THE ISLAND, NOT THE CANVAS. A painting is grown with transparent margin, so fitting the canvas puts the island in a box of empty black. The opaque pixels are measured once and everything is framed on those. */
       const land = (() => {
         const c = document.createElement('canvas')
         c.width = meta.w
