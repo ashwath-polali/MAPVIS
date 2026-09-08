@@ -39,6 +39,8 @@ import {
   MAP_CLASSES,
   type Occluder,
   type MapProps,
+  clampStand,
+  standReach,
   type Pt,
   type PlacedAsset,
   type MapEvent,
@@ -1307,8 +1309,7 @@ export class Editor {
       const [x, y] = this.toNative(e)
       const ev = this.doc.events.find((v) => v.id === this.dragEvent!.id)
       if (ev) {
-        ev.x = Math.round(x + this.dragEvent.dx)
-        ev.y = Math.round(y + this.dragEvent.dy)
+        this.moveAnchor(ev, Math.round(x + this.dragEvent.dx), Math.round(y + this.dragEvent.dy))
         this.touched()
       }
       return
@@ -4196,9 +4197,16 @@ export class Editor {
   ) {
     const e = this.doc.events.find((q) => q.id === id)
     if (!e) return
+    /* HELD TO TWO BODIES OF ITS OWN ANCHOR, and pulled in rather than refused:
+     * the author clicked a pixel, so the nearest legal one is the answer they
+     * meant, and a press that appears to do nothing is worse. */
     if (patch.stand !== undefined) {
-      if (patch.stand) e.stand = [Math.round(patch.stand[0]), Math.round(patch.stand[1])]
-      else delete e.stand
+      if (patch.stand) {
+        const at = clampStand(e.x, e.y, patch.stand, this.doc.walk.charH)
+        if (at[0] !== Math.round(patch.stand[0]) || at[1] !== Math.round(patch.stand[1]))
+          this.say(`${e.name} · a stand point is at most ${standReach(this.doc.walk.charH)}px from its anchor · pulled in`)
+        e.stand = at
+      } else delete e.stand
     }
     /* THE THREE SHAPES A REGION CAN BE ARE EXCLUSIVE, AND THAT IS THE MODE'S
      * JOB RATHER THAN DELETION'S.
@@ -4366,6 +4374,19 @@ export class Editor {
    * back, so a binding held by id goes stale silently. Renaming is the other
    * direction and is handled where renaming happens: namePlacement carries
    * every binding over with it. */
+  /* THE ONE PLACE AN ANCHOR MOVES, so the stand point can only be left behind
+   * in one place and it is not left behind here. Three callers move an anchor:
+   * a drag, a binding, and a bound anchor following the thing it is on. All
+   * three used to write x and y straight and none of them carried the floor
+   * pixel the author marked beside it. */
+  private moveAnchor(e: MapAnchor, x: number, y: number) {
+    if (e.x === x && e.y === y) return false
+    if (e.stand) e.stand = [e.stand[0] + x - e.x, e.stand[1] + y - e.y]
+    e.x = x
+    e.y = y
+    return true
+  }
+
   bindAnchor(id: number, ref: string | null) {
     const e = this.doc.events.find((q) => q.id === id)
     if (!e) return
@@ -4376,8 +4397,7 @@ export class Editor {
       if (e.placement === key) return
       this.doc.snap()
       e.placement = key
-      e.x = Math.round(a.x)
-      e.y = Math.round(a.y)
+      this.moveAnchor(e, Math.round(a.x), Math.round(a.y))
       this.say(`${e.name} follows ${key} now`)
     } else {
       if (!e.placement) return
@@ -4406,13 +4426,7 @@ export class Editor {
       if (!e.placement) continue
       const a = this.placementRef(e.placement)
       if (!a) continue
-      const x = Math.round(a.x)
-      const y = Math.round(a.y)
-      if (e.x !== x || e.y !== y) {
-        e.x = x
-        e.y = y
-        moved++
-      }
+      if (this.moveAnchor(e, Math.round(a.x), Math.round(a.y))) moved++
     }
     return moved
   }

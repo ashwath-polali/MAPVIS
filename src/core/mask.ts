@@ -606,11 +606,40 @@ export function migrateFraming(f: MapFraming): MapFraming | null {
   }
 }
 
+/* HOW FAR FROM ITS OWN ANCHOR A STAND POINT MAY BE, in bodies.
+ *
+ * The stand point is the floor beside a thing, so it is a step away by
+ * definition. Nothing stopped it being a step away across the whole map, and
+ * two on the hub ended up 60 and 214 pixels from the anchor they belong to
+ * because dragging the anchor left them where they were. Two bodies is far
+ * enough to stand beside a wide table and near enough that a body aiming at it
+ * has plainly gone to the thing rather than to somewhere else. */
+export const STAND_REACH_BODIES = 2
+export const standReach = (charH: number) => Math.max(1, Math.round(charH)) * STAND_REACH_BODIES
+
+/* The nearest legal stand point to the one asked for. Truncated toward the
+ * anchor rather than rounded, because rounding a point that sits exactly on the
+ * limit can put it back outside and this has to be able to promise it did not. */
+export function clampStand(
+  x: number,
+  y: number,
+  stand: [number, number],
+  charH: number,
+): [number, number] {
+  const reach = standReach(charH)
+  const dx = stand[0] - x
+  const dy = stand[1] - y
+  const d = Math.hypot(dx, dy)
+  if (d <= reach) return [Math.round(stand[0]), Math.round(stand[1])]
+  const k = reach / d
+  return [x + Math.trunc(dx * k), y + Math.trunc(dy * k)]
+}
+
 /* An anchor from an older save: absent numbers fill in sane, absent strings
  * empty. Anything saved before anchors existed is a door with no name, so one
  * is derived from its label and marked derived — code written against a
  * derived name is code written against a guess, and the editor says so. */
-export function migrateEvent(e: MapAnchor & { type?: string }): MapAnchor {
+export function migrateEvent(e: MapAnchor & { type?: string }, charH = defaultCfg().charH): MapAnchor {
   e.id = Number(e.id) > 0 ? Math.round(Number(e.id)) : 1
   const legacy = typeof e.type === 'string' ? e.type : ''
   e.kind = (ANCHOR_KINDS as string[]).includes(e.kind)
@@ -626,9 +655,11 @@ export function migrateEvent(e: MapAnchor & { type?: string }): MapAnchor {
   if (typeof e.toAnchor !== 'string' || !e.toAnchor) delete e.toAnchor
   if (typeof e.placement !== 'string' || !e.placement) delete e.placement
   if (typeof e.facing !== 'string' || !e.facing) delete e.facing
-  // two numbers or nothing: half a point is not a place to stand
+  /* two numbers or nothing: half a point is not a place to stand. Held to
+   * STAND_REACH_BODIES here as well as at the setter, because a document
+   * written before the rule existed carries points that break it. */
   if (Array.isArray(e.stand) && e.stand.length === 2 && e.stand.every((n) => isFinite(Number(n))))
-    e.stand = [Math.round(Number(e.stand[0])), Math.round(Number(e.stand[1]))]
+    e.stand = clampStand(e.x, e.y, [Number(e.stand[0]), Number(e.stand[1])], charH)
   else delete e.stand
   // four numbers or nothing, and they are two corners
   if (Array.isArray(e.rect) && e.rect.length === 4 && e.rect.every((n) => isFinite(Number(n))))
@@ -1449,7 +1480,7 @@ export class MaskDoc {
     this.occ.set(h.o)
     this.cut.set(h.c)
     this.assets = (JSON.parse(h.a) as PlacedAsset[]).map(migrateAsset)
-    this.events = (JSON.parse(h.e) as MapEvent[]).map(migrateEvent)
+    this.events = (JSON.parse(h.e) as MapEvent[]).map((e) => migrateEvent(e, this.walk.charH))
     return true
   }
 
@@ -2037,7 +2068,7 @@ export class MaskDoc {
         this.assets = Array.isArray(d.assets) ? d.assets.map(migrateAsset) : []
         this.assetNext = typeof d.assetNext === 'number' ? d.assetNext : this.assets.length + 1
         // an older payload has no events and loads with none
-        this.events = Array.isArray(d.events) ? d.events.map(migrateEvent) : []
+        this.events = Array.isArray(d.events) ? d.events.map((e) => migrateEvent(e, this.walk.charH)) : []
         this.eventNext =
           typeof d.eventNext === 'number'
             ? d.eventNext
