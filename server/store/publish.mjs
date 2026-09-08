@@ -18,6 +18,10 @@ import { packAtlas, atlasify } from './atlas.mjs'
 import { gateMap } from './gate.mjs'
 import { decodePNG } from '../sheet.mjs'
 
+// the same three words as MAP_CLASSES in src/core/mask.ts and the check on
+// maps.class in 008. Kept here because the browser's copy is typescript.
+export const MAP_CLASSES = ['island', 'room', 'hall']
+
 const sha = (b) => crypto.createHash('sha256').update(b).digest('hex')
 
 /* WHERE THE PAINT IS, MEASURED OFF THE BYTES THAT ACTUALLY SHIP.
@@ -562,7 +566,11 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
     slug,
     version,
     ...(props?.title ? { title: props.title } : {}),
-    ...(props?.class ? { class: props.class } : {}),
+    /* CLASS IS NEVER OPTIONAL, and it is the only one of these that must not be.
+     * The rest are absent when nobody typed them and the reader has a sane
+     * blank; class absent makes the engine guess island from the border of the
+     * painting, which is a guess about a fact this side already knows. */
+    class: MAP_CLASSES.includes(props?.class) ? props.class : 'island',
     ...(props?.island_id ? { islandId: props.island_id } : {}),
     ...(props?.meta && Object.keys(props.meta).length ? { meta: props.meta } : {}),
     /* THE WALK CONTRACT FROM THE ROW, not from whatever the browser sent.

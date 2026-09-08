@@ -20,6 +20,25 @@ import { store, keys } from './blobs.mjs'
 import { encodePNG, decodePNG } from '../sheet.mjs'
 import { hashPassword } from './crypto.mjs'
 import { env } from '../db/env.mjs'
+import { MAP_CLASSES } from './publish.mjs'
+
+/* HOW FAR FROM ITS ANCHOR A STAND POINT MAY BE, the same two bodies mask.ts
+ * holds the browser to. Repeated here for the reason every other shape guard in
+ * this file is repeated: putDoc is reachable by a hand-written POST. Truncated
+ * toward the anchor so rounding cannot put it back outside. */
+function clampStand(x, y, stand, charH) {
+  if (!Array.isArray(stand) || stand.length !== 2) return null
+  const sx = Number(stand[0])
+  const sy = Number(stand[1])
+  if (!Number.isFinite(sx) || !Number.isFinite(sy)) return null
+  const reach = Math.max(1, Math.round(Number(charH) || 18)) * 2
+  const dx = sx - x
+  const dy = sy - y
+  const d = Math.hypot(dx, dy)
+  if (d <= reach) return [Math.round(sx), Math.round(sy)]
+  const k = reach / d
+  return [x + Math.trunc(dx * k), y + Math.trunc(dy * k)]
+}
 
 const WORK_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'work')
 
@@ -200,7 +219,7 @@ export async function putDoc(mapId, docString) {
   }
   const props = {
     title: typeof pr.title === 'string' ? pr.title : '',
-    class: ['island', 'room', 'hall'].includes(pr.class) ? pr.class : 'island',
+    class: MAP_CLASSES.includes(pr.class) ? pr.class : 'island',
     islandId: typeof pr.islandId === 'string' ? pr.islandId : '',
     meta: pr.meta && typeof pr.meta === 'object' ? pr.meta : {},
   }
@@ -364,7 +383,7 @@ export async function putDoc(mapId, docString) {
   // mirrored into the anchors table rather than living there twice, so the
   // editor keeps working while the naming UI is built.
   if (Array.isArray(d.events)) {
-    const n = await syncEventsToAnchors(mapId, d.events)
+    const n = await syncEventsToAnchors(mapId, d.events, walk.charH)
     if (n) wrote.push(`${n} anchor(s)`)
   }
 
@@ -504,7 +523,7 @@ export async function getDoc(mapId) {
  * Mirror means mirror: everything in the document is upserted by name, and any
  * row the document no longer has is deleted. Anything else and a renamed or
  * removed anchor lingers in the api forever. */
-export async function syncEventsToAnchors(mapId, anchors) {
+export async function syncEventsToAnchors(mapId, anchors, charH = 18) {
   const { anchorName } = await import('./crypto.mjs')
   return tx(async (c) => {
     const seen = new Set()
@@ -566,6 +585,7 @@ export async function syncEventsToAnchors(mapId, anchors) {
        * intact and its mode deleted, and eventsFromAnchors handed back an anchor
        * the editor then read as a plain circle. A door's zone is the doormat you
        * can stand on and a post's is the side of the table you can reach. */
+      const stand = clampStand(Math.round(a.x), Math.round(a.y), a.stand, charH)
       const wanted = ['circle', 'rect', 'poly'].includes(a.shape)
         ? a.shape
         : ['circle', 'rect', 'poly'].includes(meta.shape)
@@ -603,7 +623,7 @@ export async function syncEventsToAnchors(mapId, anchors) {
            * that one, and neither is destroyed by choosing the other. */
           rectOk ? JSON.stringify(a.rect.map((n) => Math.round(Number(n)))) : null,
           polyJson,
-          a.stand ? JSON.stringify(a.stand) : null,
+          stand ? JSON.stringify(stand) : null,
           a.to || null,
           a.toAnchor || null,
           a.placement || null,
