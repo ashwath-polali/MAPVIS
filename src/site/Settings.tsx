@@ -163,12 +163,7 @@ function Sound() {
           </button>
         </div>
       </div>
-      {/* TWO SHORT LINES AND THEY WERE FIVE. The row above already says no sound
-          exists, and the paragraph under it said so again and then explained
-          itself twice: "changes nothing you can hear today" and "arrives already
-          silent if you left this muted" are one fact. What is worth keeping is
-          the reason the switch is here at all before there is anything to
-          silence, which is that the answer outlives the first sound. */}
+      {/* the switch is here before there is anything to silence, because the answer outlives the first sound. */}
       {!SOUND_EXISTS && (
         <p className="sheet-note">Nothing plays a sound yet. The answer is kept, so the first one ever added arrives already silent.</p>
       )}
