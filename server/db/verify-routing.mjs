@@ -1,19 +1,5 @@
-// Degraded routing, which is the rule that keeps MAPVIS a bridge rather than a
-// paywall.
-//
-//   node server/db/verify-routing.mjs
-//
-// The rule: if the model cannot be reached, anything that ROUTES
-// through claude sends the author's own words straight to pixellab instead.
-// Anything that IS claude denies until there is a key. No pixellab means every
-// generation feature is off and nothing else changes.
-//
-// This proves the fall-through returns a real prompt rather than an error, and
-// that it says so rather than degrading in silence.
-/* Both of these are local conveniences that would quietly make this pass for
- * the wrong reason. Solo mode treats an unauthenticated request as one account;
- * local-relay answers a relay-mode account straight from the cli on this
- * machine. On a host neither exists, and the host is what this file is about. */
+// no claude means a routed ask goes straight to pixellab and says so, while an ask that is claude denies
+/* solo mode and local-relay are local conveniences a host does not have, and the host is what this tests */
 process.env.MAPVIS_NO_SOLO = '1'
 process.env.MAPVIS_LOCAL_RELAY = '0'
 const { ensureUser } = await import('../store/maps.mjs')

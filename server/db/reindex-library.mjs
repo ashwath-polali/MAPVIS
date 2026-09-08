@@ -1,25 +1,4 @@
-// Re-derive every map's library rows from the files on disk.
-//
-//   node server/db/reindex-library.mjs            say what would change
-//   node server/db/reindex-library.mjs --write    do it
-//   node server/db/reindex-library.mjs hub --write  one map
-//
-// WHY THIS EXISTS. pushItem writes down what shape an item is, so the listing
-// is one select instead of seventy filesystem probes. That is only as good as
-// the row: an item indexed under the wrong shape points src at a key nobody
-// ever wrote, and the tile renders blank forever, because nothing re-examines
-// an item that already has a row.
-//
-// That is what happened to every direction set. The character writer lays a
-// sprite down as flat <name>/<heading>-<i>.png files beside dirs.json, and
-// pushItem only looked for <name>/<i>.png and <name>/<heading>/<i>.png, so 23
-// of the hub's 71 items were stored as kind 'static' with dirs null. Fixing the
-// detection does nothing on its own, because the bad rows are already there.
-// This is the pass that rewrites them.
-//
-// It is also the second half of a bucket move: pushItem uploads as it indexes,
-// so running this after switching S3_* puts the bytes in the new bucket AND
-// makes the rows agree with them, in one pass.
+// nothing re-examines an item that has a row, so 23 of the hub's 71 were stuck as static with dirs null
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'

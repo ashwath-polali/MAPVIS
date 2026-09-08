@@ -1,10 +1,4 @@
-// Publish a bundle that already sits in work/<slug>/ as an immutable version.
-//
-//   node server/db/publish-work.mjs hub
-//
-// The editor's export button does this at the end of an export. This is the
-// same call for a bundle that was exported before any of it existed, and for
-// re-publishing without opening a browser.
+// the same call the export button makes, for a bundle exported earlier or a republish with no browser
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'

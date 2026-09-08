@@ -1,22 +1,4 @@
-/* PUT A MAP'S LOST BEHAVIOURS BACK.
- *
- * On 2026-09-05 the hub's row came back with `life` gone from all 22 placements
- * that carried a behaviour and the one placement name gone with it, while every
- * geometry and art field on all 94 survived. The people stood on the spot
- * playing their walk cycles instead of wandering. Nothing on the server drops
- * those fields, so a browser sent a document that had already lost them and the
- * row took it; putDoc now keeps a copy and says so when that happens again.
- *
- * This is the repair for the one that already happened. It reads the last
- * export in work/<slug>/assets.json, which is the bundle that was published and
- * is known good, and grafts `life` and `name` back onto the row's placements BY
- * ID. It changes nothing else, so every edit made since is kept.
- *
- *   node server/db/restore-life.mjs hub           what it would do
- *   node server/db/restore-life.mjs hub --write   do it
- *
- * It touches one map row. It never touches the world row.
- */
+/* grafts life and name back from the last export by id, after a browser sent a doc that had lost them */
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -82,11 +64,7 @@ if (drift) {
 } else if (!WRITE) {
   console.log('\nnothing written. add --write to do it.')
 } else {
-  /* doc_sha is cleared, not recomputed. maps.mjs warns that a column edited out
-   * of band with the sha left alone leaves a row that can never correct itself:
-   * the next save would compare against a hash that still describes the broken
-   * document, decide nothing changed, and write nothing. An empty sha matches
-   * no document, so the next save writes and the row heals. */
+  /* doc_sha is cleared not recomputed, or the next save sees no change and the row can never heal */
   await q('update maps set assets = $2::jsonb, doc_sha = $3, updated_at = now() where id = $1', [m.id, JSON.stringify(next), ''])
   const back = await one('select assets from maps where id = $1', [m.id])
   console.log(`\nwritten. the row now holds ${back.assets.length} placements, ${back.assets.filter((a) => a.life).length} with a behaviour and ${back.assets.filter((a) => a.name).length} named.`)

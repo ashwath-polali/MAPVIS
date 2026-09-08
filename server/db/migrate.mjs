@@ -1,12 +1,4 @@
-// Applies server/db/*.sql in name order and records what ran, so re-running is
-// a no-op and a half-applied migration cannot happen: each file is one
-// transaction that either lands whole or not at all.
-//
-//   node server/db/migrate.mjs          apply anything not yet applied
-//   node server/db/migrate.mjs --status show what has run
-//
-// Uses DATABASE_URL, the direct connection, not the pooled one. Schema changes
-// want a real session rather than a transaction-pooled one.
+// one transaction per file, and the direct DATABASE_URL not the pooled one, since schema wants a real session
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'

@@ -1,22 +1,4 @@
-// Remove publish rows that point at bytes which are not there.
-//
-//   node server/db/reconcile-publishes.mjs           say what would happen
-//   node server/db/reconcile-publishes.mjs --write   delete those rows
-//
-// Measured on 2026-08-27: ten of thirteen rows in publishes named a prefix
-// holding zero objects. hub v1 to v3 and every site-* row were written against a
-// bucket that has since been left behind, and the row is what /api/v1/maps
-// reads, so the api advertised seven maps as published and every one of them
-// answered 503 when the game asked for the bytes. publishBundle now refuses to
-// write a row it cannot list back, which stops new ones appearing. This is for
-// the ones already in the table.
-//
-// WHAT THIS IS NOT ALLOWED TO DO, and does not:
-//   - it never deletes an object. Not one, not a prefix, not ever. It reads the
-//     bucket with list and nothing else.
-//   - it never touches the maps table. A map is the author's work and outlives
-//     every version of it; a publish row is only a receipt for one export.
-//   - it never deletes anything on a dry run, which is the default.
+// removes publish rows whose bytes are gone: it never deletes an object and never touches the maps table
 import { many, q, closeDb } from './pool.mjs'
 import { store } from '../store/blobs.mjs'
 
@@ -40,12 +22,7 @@ const rows = await many(
     order by m.slug, p.version`,
 )
 
-/* THE COUNT COMES OFF THE MANIFEST, KEY BY KEY.
- *
- * Counting objects under the prefix and comparing totals would call a bundle
- * healthy when it holds the right number of the wrong files. The manifest names
- * every object the row promises, so asking whether each one is present is both
- * the cheaper check and the true one. */
+/* counted off the manifest key by key, since a prefix count passes the right number of the wrong files */
 const manifests = new Map(
   (await many('select id, manifest from publishes')).map((r) => [r.id, Object.keys(r.manifest || {})]),
 )
@@ -67,12 +44,7 @@ for (const r of rows) {
   }
 }
 
-/* A PARTIAL ROW IS NOT THIS SCRIPT'S CALL.
- *
- * "Whose objects do not exist" means none of them. A bundle missing four frames
- * out of 801 still loads and still walks, so deleting its row would take a
- * working version away from a class mid-session to fix a cosmetic hole. It is
- * printed loudly and left for a human, who can simply export again. */
+/* gone means none of them: a bundle missing four frames of 801 still walks, so a partial row is left alone */
 if (partial.length)
   console.log(
     `\n${partial.length} row(s) are missing some but not all of their objects. Those are left alone on purpose: ` +
@@ -85,14 +57,7 @@ if (!dead.length) {
   process.exit(0)
 }
 
-/* THE TRIPWIRE, BECAUSE THE FAILURE MODE IS INDISTINGUISHABLE FROM THE BUG.
- *
- * An empty publish/ listing is what a stale bucket looks like, and it is also
- * exactly what pointing at the wrong bucket looks like: wrong S3_ENDPOINT, wrong
- * S3_BUCKET, a missing key falling back to the local work/ folder. In that state
- * every row reads as dead and one run would empty the table on a set of
- * perfectly good bundles. So when the bucket has nothing under publish/ at all,
- * it has to be said out loud a second time. */
+/* an empty publish/ listing is also what a wrong bucket looks like, and one run would empty the table */
 if (!have.size && !FORCE_EMPTY) {
   console.log(
     `\nREFUSING: publish/ holds no objects at all in this bucket, which is what a wrong S3_ENDPOINT or S3_BUCKET ` +

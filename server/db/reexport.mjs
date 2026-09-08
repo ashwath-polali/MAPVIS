@@ -1,15 +1,4 @@
-// Re-pack a map's placements from doc.json and publish a new version.
-//
-//   node server/db/reexport.mjs hub
-//
-// The export writer had a bug: it set every view-set placement's resting
-// picture to the SOUTH heading, throwing away the facing the author chose. The
-// fix is in api.mjs, but a fix in the writer does nothing to a bundle that has
-// already been written, and the wrong data is baked into work/<id>/assets.json.
-//
-// doc.json is the source of truth and was never damaged, so this reads the
-// placements back out of it, packs them the corrected way, and publishes. Export
-// is a save, not a finish line, which is exactly what makes this recoverable.
+// the writer set every view set to its south picture, and a fix does nothing to a bundle already written
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -21,11 +10,7 @@ import { isPlacementName, isAnchorName } from '../store/crypto.mjs'
 // look 0, which is the same cap the export route packs to
 const STATES_MAX = 6
 
-/* WHOSE CONDITION A PLACEMENT SHIPS UNDER. editor.ts bundle() resolves this
- * against the map's group rows because that is the side holding them, and
- * nothing downstream recomputes it, so a re-export that read only the placement
- * turned every conditional placement unconditional. Restated here rather than
- * imported, because that resolver is browser TypeScript and this is node. */
+/* nothing recomputes the group condition later, so reading only the placement makes them unconditional */
 const whenOf = (a, groups) => {
   const own = typeof a.when === 'string' ? a.when.trim() : ''
   if (own) return own
@@ -68,10 +53,7 @@ const pack = (s) => {
   if (s.dirs && Object.keys(s.dirs).length) {
     const outDirs = {}
     let metaFile = ''
-    /* THE COMPOUND HEADINGS FIRST, the same order and the same one list the
-     * export route packs in. Two publishers disagreeing about key order are two
-     * bundles that face different ways, which is what this file exists to
-     * repair, so the order is not restated here. */
+    /* compound headings first, the export route's order: two publishers disagreeing face different ways */
     for (const k of orderedHeadings(Object.keys(s.dirs))) {
       const arr = s.dirs[k]
       if (!Array.isArray(arr) || !arr[0]) continue
@@ -133,18 +115,7 @@ for (const a of doc.assets || []) {
   const look0 = pack(a)
   if (!look0) continue
   const looks = (a.looks || []).map(pack).map((l, i) => l || (i === 0 ? look0 : null))
-  /* THREE FIELDS THIS PUBLISHER USED TO DROP, and the export route writes all
-   * three, so a re-export silently produced a poorer bundle than the button did.
-   *
-   * `name` is the only address anything outside the map holds: PmapScene keys
-   * every placement by both its MAPVIS id and its author name, and an anchor's
-   * `placement` resolves through that map, so losing it kills every
-   * anchor-to-placement binding made by name. `when` is the resolved group
-   * condition and nothing downstream recomputes it, so losing it turns every
-   * conditional placement unconditional. `lookNames` is the vocabulary
-   * show(placement, state) selects from. All three fail invisibly until a grape
-   * misses. This file exists because a writer bug baked wrong data into a
-   * bundle, and it was baking in three missing fields the same way. */
+  /* name, when and lookNames were all dropped here, and all three fail invisibly until a grape misses */
   const when = whenOf(a, doc.groups)
   const names = [
     isAnchorName(a.lookName) ? String(a.lookName) : '',

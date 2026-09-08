@@ -1,14 +1,4 @@
-// The half of a drawn piece that is not the png: four edge numbers per ground
-// and a named rectangle per region.
-//
-//   node server/db/measure-ui.mjs            measures and prints, writes nothing
-//   node server/db/measure-ui.mjs --write    saves them through the store
-//   node server/db/measure-ui.mjs --write --publish   and marks each one finished
-//
-// Every number below is MEASURED OFF THE PIXELS. Nothing is a fraction of the
-// canvas and nothing was read off a picture by eye, because a slice got by eye
-// is the same hand measurement the game already carries in six stylesheets,
-// moved one repo sideways. The method is written out at THE SCAN below.
+// every number is measured off the pixels, never a fraction of the canvas and never read off a picture by eye
 import { many, one, closeDb } from './pool.mjs'
 import { store } from '../store/blobs.mjs'
 import { decodePNG } from '../sheet.mjs'
@@ -20,72 +10,13 @@ const only = process.argv.find((a) => !a.startsWith('-') && !a.endsWith('.mjs') 
 
 // ---- THE SCAN ---------------------------------------------------------------
 
-/* HOW THE FOUR NUMBERS ARE GOT, in two passes, because a nine-slice can fail in
- * two different places and only one of them is about the middle.
- *
- * PASS ONE, THE MIDDLE. The centre of every ground in this kit is one plain
- * material: cream parchment on eleven of them and nothing at all on the
- * highlight edge, which is drawn as a hole. What the middle never has is INK.
- * Every line in this kit, the frame's edge, the rope, the beading, the ragged
- * bite along the paper's own edge, is drawn dark, so the question "where does
- * the frame end" is asked as "where does the drawn line stop".
- *
- * Dark is not a number somebody picked. The luminance of every opaque pixel goes
- * into a histogram and Otsu's threshold splits it, which is the cut that leaves
- * the two sides tightest about their own means: wood at about 85 on one side,
- * paper at about 215 and a tan blotch on it at about 170 on the other. A fully
- * transparent pixel is not dark, because a hole is a middle and the highlight
- * edge is drawn as one.
- *
- * THE SIDES ARE READ ONE LINE AT A TIME AND THE CORNERS ARE GROWN. A side is
- * where that line stops being ink, taken as the median down the middle sixty
- * percent of the edge, because where the paper starts is a fact about one line
- * and a bite out of its edge is one line's problem. Then each corner of the
- * middle is probed with a small square and pushed in until no drawn line crosses
- * it, because the parchment inside these frames is a ROUNDED rectangle: an inset
- * measured halfway down the left edge is right about the frame and still leaves
- * the paper's own curved corner inside the middle, and the middle is the part
- * that tiles. Measured on the dialogue box: mid-edge readings alone gave
- * 35/39/31/39, and at two and a half times the width that drew the paper's
- * rounded corner six times over, once per tile.
- *
- * TWO OTHER READINGS WERE TRIED AND BOTH LOSE ON REAL ART. Walking in until row
- * y and row y+1 stop differing finds the boundary on a flat interior and loses
- * it on a mottled one: the dialogue box's blotched parchment moved its own left
- * inset between 44 and 157 depending on where the tolerance went, because a
- * blotch reads as structure. Distance from the middle's own colour is no better,
- * because the light mat outside the paper's edge is CLOSER to the paper's median
- * than the paper's own tan blotches are, so no colour tolerance separates them.
- * The dark line between them does.
- *
- * PASS TWO, THE CORNERS. Pass one only says where the paper starts. It says
- * nothing about the thing that actually smears, which is an ornament sitting on
- * an edge: the edge cells are the part CSS repeats along their length, so a rope
- * curl or a brass corner block inside one of them is repeated across the whole
- * width of a widened box. Two pieces in this repo's own record died exactly
- * there.
- *
- * So each edge band is walked in from both ends. For a band, the plain run is
- * the part where every column (or row) looks like the band's own typical
- * cross-section, and the ornament is where it does not. Walking in from the
- * outside, the first place where a stretch of columns all sit close to that
- * cross-section is where the repeatable run begins, and everything outside it
- * has to be inside the corner. Stopping at the FIRST such stretch is what makes
- * a plank seam or a knot further along the rail harmless: the scan has already
- * stopped by then.
- *
- * The two passes are then maxed, per side, and the bands are re-cut and rescanned
- * until nothing moves, because a deeper top band can reveal a taller corner.
- */
+/* row-differencing and colour distance both lose on real art, so the dark line between them is read */
 
 const at = (im, x, y) => (y * im.w + x) * 4
 
 const median = (xs) => xs.slice().sort((a, b) => a - b)[xs.length >> 1]
 
-/* THE SPLIT BETWEEN TWO CLUSTERS, WITHOUT ANYBODY CHOOSING IT. Otsu walks every
- * possible threshold over a histogram and keeps the one where the two sides are
- * tightest about their own means. It is the standard answer to "these are two
- * materials, where does one stop" and it is four lines. */
+/* otsu keeps the threshold where the two sides sit tightest about their own means, in four lines */
 function otsu(hist) {
   const total = hist.reduce((a, b) => a + b, 0)
   if (!total) return 0
@@ -130,23 +61,10 @@ function inkMap(im) {
   }
 }
 
-/* A SPECK IS NOT A LINE, and this is the number that says so.
- *
- * Refusing every ink pixel was tried and it stops on the flecks in the paper:
- * a rectangle grown until nothing at all crosses it read the cover band's left
- * inset as 211, on a frame 27 deep, because there is one dark chip in the
- * parchment there. What a rim, a rope or a rounded corner puts across a line is
- * a RUN of ink, and what a fleck puts there is a pixel or three. */
+/* refusing every ink pixel read a 27 deep frame as 211 off one fleck, so what counts is a run of ink */
 const SPECK = 3
 
-/* WHERE THE FRAME ENDS ON EACH SIDE, read one line at a time.
- *
- * A line has arrived at the middle when eight pixels in a row carry no ink, so
- * a lit pixel on the frame's own bevel is not mistaken for the paper, and the
- * side is the median of what every line says. Median rather than the deepest,
- * because the dialogue box's parchment is bitten along its edge and one bite
- * would otherwise decide the whole inset: reading the deepest gave 147 on a
- * frame 39 deep. */
+/* eight clear pixels means the middle, and the median not the deepest, which gave 147 on a frame 39 deep */
 function sideBox(im, ink) {
   const hold = 8
   const enters = (n, isInk) => {
@@ -163,10 +81,7 @@ function sideBox(im, ink) {
       const e = enters(n, (i) => isAt(l, i))
       if (e > 0) got.push(e)
     }
-    /* HALF THE LINES HAVE TO FIND A FRAME AT ALL. Under that the picture is not
-     * a frame round a plain middle, which is the one shape a nine-slice can
-     * describe, and answering anyway would be four numbers about a picture that
-     * cannot take them. */
+    /* under half the lines finding a frame, it is not the one shape a nine-slice can describe */
     return got.length < lines.length / 2 ? -1 : median(got)
   }
   // read off the middle sixty percent of each axis, because a line near a corner
@@ -183,15 +98,7 @@ function sideBox(im, ink) {
   return { top, right, bottom, left }
 }
 
-/* THE PAPER INSIDE THESE FRAMES IS A ROUNDED RECTANGLE, and its curve is the
- * thing that tiles. The four insets above are right about the frame and still
- * leave the paper's own corner arc inside the middle, and the middle is what a
- * widened box repeats: measured on the dialogue box at two and a half times its
- * width, that arc was drawn six times over, once per tile.
- *
- * So each corner of the middle is probed with a small square and both insets
- * meeting there are pushed in until no drawn line crosses that square.
- */
+/* the paper's corner arc tiles: at two and a half times the width it drew six times, once per tile */
 function clearCorners(im, ink, box) {
   const s = { ...box }
   const probe = Math.max(8, Math.round(Math.min(im.w, im.h) * 0.06))
@@ -237,29 +144,10 @@ function interiorBox(im) {
   return box ? clearCorners(im, ink, box) : null
 }
 
-/* WHERE A BAND STOPS BEING ORNAMENT AND STARTS BEING A RAIL.
- *
- * `sample(i, d)` hands back one pixel of the band, `i` along its length from the
- * near end and `d` down into it from the outside. `n` is the band's length.
- * Answers how many lines at the near end are ornament, and whether the band has
- * a plain run at all.
- *
- * A CORNER IS A CORNER. If the first quiet stretch does not turn up within a
- * quarter of the band's length then what is on that rail is not a corner
- * ornament, it is the rail's own pattern, and no inset anywhere can put a
- * pattern into a corner cell. Two of these pieces are in that case: the dialogue
- * box's top rail is carved scrollwork end to end, and the plank's side rails are
- * mostly one long metal bracket. Both answer 0 here and repeat, which is what
- * `round` is for, rather than growing an inset that eats the middle.
- */
+/* no quiet stretch within a quarter of the band means the rail's own pattern, so it answers 0 and repeats */
 function ornament(n, depth, sample) {
   if (depth <= 0) return { orn: 0, plain: true }
-  /* THE BAND'S TYPICAL CROSS-SECTION, TAKEN OVER ITS WHOLE LENGTH. It was the
-   * middle third, which is right for a rail with ornament only at its ends and
-   * wrong for the plank, whose left rail is a bracket down the middle: the
-   * typical line was then the bracket, and every plain stretch of wood read as
-   * the ornament. The median over the whole length is the best single guess at
-   * what the rail is made of without assuming where the ornament sits. */
+  /* the median runs the whole length: the middle third made the plank's centre bracket the typical line */
   const typical = []
   for (let d = 0; d < depth; d++) {
     const vals = [[], [], [], []]
@@ -284,19 +172,7 @@ function ornament(n, depth, sample) {
    * one has no ornament at all and the scan says so instead of inventing one. */
   const worst = Math.max(...off)
   if (worst < 20) return { orn: 0, plain: true }
-  /* THE RAIL'S OWN SCATTER IS THE TOLERANCE, NOT OTSU'S SPLIT.
-   *
-   * Otsu is right for the middle, where two materials are being told apart and
-   * both are most of a picture. It is wrong here, because a band is nearly all
-   * rail with an ornament at one end, so the split it finds sits far above the
-   * rail's own grain and lets a fading ornament through. Measured on the cover
-   * band: the corner rope curl runs out to x=44 and Otsu called the run plain at
-   * x=13, which put the tail of the curl inside the repeating edge cell and drew
-   * a half curl at every tile seam, which is the exact failure the nine-slice
-   * law is written about.
-   *
-   * The median deviation IS the rail's grain, because most of the band is rail.
-   * Three times it is the line between grain and something drawn on top. */
+  /* otsu is wrong on a band: the rope ran to x=44 and otsu called plain at x=13, so use the rail's scatter */
   const tol = Math.max(8, 3 * median(off))
   // the first stretch of quiet lines is the start of the repeatable run. Long
   // enough that a single quiet line inside a carving does not end the ornament.
@@ -373,24 +249,9 @@ const R = (name, kind, x, y, w, h, extra = {}) => ({
   ...extra,
 })
 
-/* WHERE EACH NAMED WELL GOES.
- *
- * The vocabulary is not invented here: every name below is on the type in
- * server/store/ui.mjs, which took it from the record. What this adds is the
- * rectangle, and the geometry it is built from is the MEASURED middle rather
- * than a fraction of the canvas, so a well sits on the paper the piece actually
- * has rather than a percentage somebody liked.
- *
- * `in` is that middle. A well inside it survives a stretch, because the middle
- * is the part that stretches; a well on the frame is in a corner cell on
- * purpose, which is the only part of a nine-slice that never moves relative to
- * its own corner.
- */
+/* wells sit on the measured middle, which stretches; one on the frame is in a corner that does not */
 const LAYOUT = {
-  /* A HEADER STRIP, A BODY, AND THE CLOSE OUT OF THE HEADER'S WAY. The close is
-   * cut out of the header rather than laid over it, because a title that runs
-   * under the close control is the one layout bug every panel in every game has
-   * had at least once. */
+  /* the close is cut out of the header rather than laid over it, so a title never runs under it */
   panel: (m) => {
     const i = m.in
     const head = Math.max(16, Math.round(i.h * 0.22))
@@ -402,15 +263,7 @@ const LAYOUT = {
     ]
   },
 
-  /* THE SPEAKER'S FURNITURE HANGS OFF THE EDGES AND THE TEXT KEEPS THE PAPER.
-   *
-   * The plaque is a sibling of the text column and not a child of it, so it sits
-   * ON the top edge at the left rather than inside the paper, which is what
-   * ui-kit.css:104 already does in the game. The portrait takes the left of the
-   * paper and is bottom-anchored, because a person stands on the bottom of their
-   * box. The advance cue is on the bottom-right corner, which is the one cell a
-   * nine-slice never stretches, so it stays the same size at every box width.
-   */
+  /* the portrait is bottom-anchored and the cue takes the corner cell a nine-slice never stretches */
   dialogue_box: (m) => {
     const i = m.in
     const plaqueW = Math.round(m.w * 0.34)
@@ -437,10 +290,7 @@ const LAYOUT = {
     return [R('title', 'text', i.x, i.y, i.w, title), R('subtitle', 'text', i.x, i.y + title, i.w, i.h - title)]
   },
 
-  /* THE TYPED LINE, THE UNIT BESIDE IT, AND THE ERROR UNDER IT. The error line
-   * lives inside the well rather than under the picture, because a region has to
-   * be inside the picture it is measured against and there is nothing under this
-   * one but the frame. */
+  /* the error line is inside the well, because a region has to be inside the picture it is measured on */
   field: (m) => {
     const i = m.in
     const err = Math.max(12, Math.round(i.h * 0.26))
@@ -472,10 +322,7 @@ const LAYOUT = {
     ]
   },
 
-  /* ONE ENTRY'S WORTH OF RAIL, AND THE RUN IT REPEATS DOWN. The pitch is square
-   * on the rail's short side, because an entry on this rail is a token and a
-   * spine rather than a row of text, and the run is the whole middle because
-   * that is the part that grows as entries arrive. */
+  /* the pitch is square on the rail's short side and the run is the whole middle, the part that grows */
   rail: (m) => {
     const i = m.in
     const pitch = Math.min(i.w, Math.round(i.h / 3))
@@ -505,10 +352,7 @@ const LAYOUT = {
     ]
   },
 
-  /* THE APERTURE IS THE WHOLE MIDDLE AND THE CAPTION IS ON THE MOUNT. Bottom
-   * anchored, because the shipped portrait in the game is object-position:
-   * bottom center for a reason: a person stands on the bottom of their box and a
-   * frame that centres them leaves every character floating. */
+  /* bottom anchored to match the shipped portrait, because a person stands on the bottom of their box */
   portrait_frame: (m) => {
     const i = m.in
     const cap = Math.max(10, m.slice.bottom - 6)
@@ -522,16 +366,7 @@ const LAYOUT = {
   // place the engine draws over Ash's art.
   highlight_edge: () => [],
 
-  /* A COVER PLATE IS NOT MEASURED THE WAY THE GROUNDS ARE, because it has no
-   * frame and no plain middle: it is one full-bleed painting. A title band
-   * across the upper middle, the fact under it and the loading bar low is the
-   * composition 10.4 describes.
-   *
-   * AND THE PICTURE ON THE SHELF IS NOT ONE PAINTING. It came back as a kit of
-   * eleven loose plates, which the crop never caught because only a ground is
-   * cropped to its hero. So the wells are laid on the largest plate in that kit,
-   * measured, rather than stretched across the whole canvas over four unrelated
-   * plates, and the piece is reported as owing a redraw. */
+  /* a cover plate is full-bleed with no middle, and this came back eleven plates, so wells go on one */
   cover_plate: (m) => {
     const inner = m.in || { x: Math.round(m.w * 0.06), y: Math.round(m.h * 0.06), w: Math.round(m.w * 0.88), h: Math.round(m.h * 0.88) }
     const title = Math.round(inner.h * 0.24)
@@ -595,15 +430,9 @@ for (const r of rows) {
       continue
     }
   } else {
-    /* A SHEET AND A PAINTING TAKE NO EDGE NUMBERS, and saveUi refuses them:
-     * four insets on something that never stretches is a field nothing will
-     * ever read, which is the half-plumbed shape this project keeps
-     * rediscovering. */
+    /* a sheet and a painting take no edge numbers: insets on something that never stretches are never read */
     slices = {}
-    /* A PAINTING STILL NEEDS SOMEWHERE LEGIBLE TO PRINT A TITLE, and on a
-     * painting that is the largest thing drawn on it. Measured with the same
-     * scan the crop uses, so a cover that came back as a kit of loose plates has
-     * its wells laid on one plate rather than stretched across four of them. */
+    /* a painting still needs a title spot, so it goes on the largest plate rather than across loose ones */
     if (t.tier === 'painted') {
       const big = opaqueRegions(im.w, im.h, im.data)[0]
       if (big) {

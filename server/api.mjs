@@ -1,35 +1,4 @@
-/* The local api. It exists so the pixellab token stays in node, and so the SAM
- * pass can run against the GPU. It is mounted into the vite dev server, so
- * `npm run dev` is one command and one port.
- *
- *   GET  /api/balance          what is left on the pixellab account
- *   POST /api/generate         { prompt, n } -> job ids
- *   GET  /api/job/:id          running | done + images | failed
- *   POST /api/propose          { image } -> a rough levels png from SAM
- *   GET  /api/library/:id      this map's own generated assets, work/<id>/library
- *   POST /api/library-remove   { id, name } -> deletes work/<id>/library/<name>(.png | /)
- *   GET  /api/account-objects  ?page=&q= everything the pixellab account already owns. FREE
- *   POST /api/account-import   { id, sceneId } -> copies one of them into this map's library. FREE
- *   GET  /api/account-characters  every person and animal on the account. FREE
- *   POST /api/character-import { id, sceneId, name, animation } -> one of them, walk and all. FREE
- *   POST /api/character-gen    { id, description, confirm, skeleton, anim, ... } -> a NEW one. SPENDS 1 + one per direction
- *   POST /api/asset-plan       { id, ask, what, kind, map, box } -> { plan } the whole routing decision. FREE
- *   POST /api/style-card       { id, image, refresh } -> { card } this map's own look, read ONCE and cached. FREE
- *   POST /api/asset-gen        { id, prompt, w, h, name, seed } -> ONE object png into work/<id>/library
- *   POST /api/asset-gen-here   { id, prompt, thing, tw, th, cx, cy, crop } -> ONE map-object png, the crop as context
- *   POST /api/asset-anim       { id, prompt, name, seed } -> base sprite + animated frames into work/<id>/library/<name>/
- *   POST /api/asset-animate    { id, name, ask, confirm } -> makes an item that ALREADY EXISTS move, in place. Free without confirm
- *   POST /api/effect-plan      { ask, colors, sprite } -> { plan } which rule, what numbers, whose colours, or a WRITTEN renderer. FREE
- *   POST /api/effect-save      { id, name, frames, meta, overwrite } -> the rendered frames + effect.json into the library
- *   POST /api/effect-read      { id, name } -> the saved rule, params, colours, fps and recipe, so an effect reopens
- *   POST /api/fx-review        { id, frames, ask, code|type } -> a contact sheet on disk, LOOKED AT, and a verdict. FREE
- *   POST /api/obj-review       { id, frames, ask, prompt } -> the candidates side by side, LOOKED AT, and which one. FREE
- *   POST /api/keep-note        { id, ask, prompt, name, kind } -> one line onto work/<id>/keeps.json, last 20
- *   POST /api/asset-crop       { id, name, rect, kind, frames, suffix } -> client pixels as a new <name>-<suffix> item
- *   POST /api/export           writes the bundle into work/<id>/
- *   POST /api/savecut          writes scene-cut.png + cut.png into work/<id>/
- *   GET  /work/<path>          serves what is in work/
- */
+/* the local api: the pixellab token stays in node, sam runs on the gpu, and it mounts into the vite dev server so dev is one command and one port */
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -122,18 +91,7 @@ import { verifyPassword } from './store/crypto.mjs'
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(HERE, '..')
 
-/* WHERE SCRATCH GOES.
- *
- * work/ is the staging area where the collision loops, the .stage swap and
- * .prev still run, all of it already tested and none of it worth rewriting.
- * The store is what survives; this is where bytes sit for the length of a
- * request.
- *
- * On a serverless host the whole filesystem is read-only except /tmp, so a
- * generation writing to ROOT/work would throw before it ever reached the push
- * that makes it durable. Pointing scratch at the writable place is the entire
- * accommodation hosting needs, and it works because nothing is expected to
- * still be there next time. */
+/* scratch for the length of a request; on serverless everything but /tmp is read-only, so writing to ROOT/work would throw */
 const WORK =
   process.env.MAPVIS_WORK ||
   (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME ? path.join(os.tmpdir(), 'mapvis-work') : path.join(ROOT, 'work'))
@@ -146,21 +104,12 @@ const SAM_CKPT =
 
 const MIME = { '.png': 'image/png', '.jpg': 'image/jpeg', '.json': 'application/json' }
 
-/* A MAP'S OWN PAINTING, AS A STYLE REFERENCE FOR THE NEXT ONE.
- *
- * The working scene first, then the published one, so a map being worked on
- * right now can be referenced before it has ever been exported. Dimensions come
- * off the PNG header rather than being trusted from the document, because the
- * generator rejects a size that does not match the bytes.
- */
+/* style ref for the next map: working scene before published, and the size comes off the png header because the generator rejects a mismatch */
 async function styleRef(slug) {
   const id = safeId(slug)
   let buf = null
   const local = path.join(WORK, id, 'scene.png')
-  /* /api/save already puts the working painting in the store, so a map that
-   * has been saved and never published is a perfectly good reference. On the
-   * host the local copy is never there, so without this the only answer was
-   * the published row and a 400 for everything else. */
+  /* the local copy is never there on the host, so hydrate: a map saved and never published is still a good reference */
   if (!fs.existsSync(local)) {
     try {
       await hydrateMap(id, path.join(WORK, id))
@@ -183,23 +132,10 @@ async function styleRef(slug) {
   return { base64: buf.toString('base64'), w, h }
 }
 
-/* POSTs that carry an `id` that is not a map anybody owns, so the ownership
- * gate must not stand in front of them. Auth has its own handler and never
- * reaches the gate; these are the ones whose `id` means something else or
- * nothing at all. */
-/* The import routes were here because their id means something else. It does
- * not: both carry the target map in sceneId, which the gate now reads, and
- * both end in pushLibrary writing rows into that map. Leaving them exempt let
- * a signed-in stranger overwrite another account's library items by name. */
-/* /api/world carries no map id at all, and the gate resolves a missing one to
- * `untitled`, which is a real map somebody may own. So it is exempt from the
- * MAP ownership gate and guards itself instead: it resolves which ocean the
- * signed-in account authors rather than checking one against a map. */
-/* The ui routes are the same case as /api/world. A surface belongs to an
- * ACCOUNT and not to a map, so its body carries no map id at all, and the gate
- * resolves a missing one through safeId to 'untitled', which is a real map
- * somebody may own. Exempt from the MAP gate and guarded by a signed-in check
- * of their own, exactly the way the world write is. */
+/* posts whose id is not a map anybody owns, so the ownership gate must not stand in front of them */
+/* the import routes are not exempt: sceneId is the target map, and exempting them let a stranger overwrite another account's library */
+/* /api/world carries no map id and the gate resolves a missing one to untitled, a real map somebody may own, so it guards itself instead */
+/* the ui routes are the same case: a surface belongs to an account, not a map, so they guard themselves with a signed-in check */
 const OPEN_POSTS = new Set([
   '/api/stop',
   '/api/propose',
@@ -211,25 +147,7 @@ const OPEN_POSTS = new Set([
   '/api/ui/remove',
 ])
 
-/* WHOSE OCEAN IS THE GAME'S ONE, which is a narrower question than it was.
- *
- * This used to decide who was allowed to open the world page at all, because
- * there was one row for the whole platform: a stranger dragging an island was
- * moving where the real crossing goes for everybody, so they got a 403 and an
- * apology. 022 gave every account a world of its own, so the page is open and
- * this answers something else now: whether the ocean you are authoring is ROW 1,
- * the one /api/v1/world serves and the game reads.
- *
- * It still gates the two things that really are one-of-a-kind: minting core
- * chrome, and removing it. A dialogue box belongs to the whole game the way the
- * game's ocean does, and neither is a thing a visitor should be able to touch.
- *
- * The address is configuration and never source: OCEAN_OWNER in .env, falling
- * back to BOOTSTRAP_EMAIL, which is already the account every import and every
- * map on this install belongs to. With neither set there is nobody to be, so
- * the gate opens and the tool works the way it always has on one laptop with no
- * login screen in front of it.
- */
+/* who authors row 1, the ocean /api/v1/world serves, and who may mint or remove core chrome: OCEAN_OWNER then BOOTSTRAP_EMAIL, and with neither set the gate opens */
 const oceanOwner = () => {
   const E = env()
   return String(E.OCEAN_OWNER || E.BOOTSTRAP_EMAIL || '')
@@ -243,14 +161,7 @@ const ownedBy = (user) => {
 }
 const ownsOcean = async (req) => ownedBy(await currentUser(req))
 
-/* WHICH ROW THIS REQUEST AUTHORS. Row 1 for the account the game's ocean belongs
- * to, and for a laptop with no owner configured at all, which is where this tool
- * has always run. Anybody else gets their own, made on first use.
- *
- * NOT_YOUR_OCEAN went with it. A refusal that reads "the world is a single
- * shared row, so one account composes it and everybody else reads it" is now a
- * false sentence, and a wall you were invited to walk into is worse than a door
- * that was never drawn. There is nothing to refuse: they get an ocean. */
+/* which world row this request authors: row 1 for the ocean owner and for an unconfigured laptop, anybody else gets their own on first use */
 const worldOf = async (user) => worldIdFor(user?.id || '', { game: ownedBy(user) })
 
 export function api(req, res, next) {
@@ -271,20 +182,9 @@ export function api(req, res, next) {
   })
 }
 
-/* Everything below runs inside this request's own context, which is what makes
- * a generation spend the signed-in account's pixellab subscription instead of
- * whatever token the machine happens to hold. Resolved once, here, because a
- * dozen calls deep in pixellab.mjs need it and threading it through every
- * signature is how one of them ends up billing the wrong person. */
+/* resolved once here: a dozen calls deep in pixellab.mjs need the key, and threading it through every signature is how one bills the wrong person */
 async function serve(req, res, p, url) {
-  /* THE MONTH'S BUCKET BUDGET, CHECKED BEFORE ANYTHING CAN SPEND IT.
-   *
-   * R2 bills overage and has no spend cap to set, so this is the only thing
-   * standing between a mistake and a card. Checked once per request against a
-   * total cached for a minute, and only in front of the routes that actually
-   * read bytes, so an ordinary api call pays nothing for it. Refusing is the
-   * correct behaviour: a tool that stops working is recoverable and a bill is
-   * not. */
+  /* r2 bills overage and has no spend cap to set, so refusing is correct: a tool that stops working is recoverable and a bill is not */
   if (p.startsWith('/work/') || p.startsWith('/api/v1/')) {
     const bud = await bucketBudget()
     if (bud && (bud.overA || bud.overB)) {
@@ -309,13 +209,7 @@ async function serve(req, res, p, url) {
       noteBucketUsage()
     }
   }
-  /* http:true marks "there is a browser on the other end of this".
-   *
-   * mapIdFor needs to tell an anonymous HTTP request apart from a maintenance
-   * script, because they want opposite answers: the script legitimately creates
-   * maps as the bootstrap account, the anonymous request must not be able to
-   * create anything at all. An empty context cannot express that difference,
-   * so the flag is set here whether or not anybody is signed in. */
+  /* http:true lets mapIdFor tell an anonymous browser from a maintenance script: the script may create maps as bootstrap, the browser must not */
   let ctx = { http: true }
   try {
     const user = await currentUser(req)
@@ -335,24 +229,7 @@ async function serve(req, res, p, url) {
   }
 }
 
-/* NOBODY GETS TO SPEND THE BUCKET IN A LOOP.
- *
- * There was no rate limit anywhere in this server, and /work/ is dispatched
- * before any authentication, so a stranger with a slug could ask for pngs as
- * fast as their connection allowed and every single one was an R2 read plus a
- * Vercel invocation. That is the only realistic way this project sees a bill,
- * and it is not the owner reopening maps.
- *
- * A token bucket per address, held in the instance. Per-instance state is a
- * weaker limit than a shared one, but it is a real one: each instance a caller
- * lands on independently refuses them, and the cost of a shared counter is a
- * Postgres round trip on the hot path, which is worse than the thing it stops.
- * SIZED AGAINST A REAL MAP OPEN, which is the thing that must never trip it.
- * Opening the hub asks for about 250 pngs as fast as the browser will fire
- * them, so a limit tuned like an api rate limit refuses an author halfway
- * through their own island. The burst carries two of those back to back and the
- * refill sustains one every couple of seconds, which no person does and which
- * still leaves the monthly ceiling as the thing that actually bounds spend. */
+/* a token bucket per address, sized so a real map open never trips it: the hub asks for about 250 pngs at once and /work/ is served before any auth */
 const RATE = { perSec: Number(process.env.RATE_PER_SEC || 120), burst: Number(process.env.RATE_BURST || 600) }
 const buckets = new Map()
 function overRate(req) {
@@ -374,22 +251,7 @@ function overRate(req) {
 }
 
 async function route(req, res, p, url) {
-  /* A MAP NAMED IN A PATH IS STILL A MAP SOMEBODY OWNS.
-   *
-   * The gate below is POST-only, which left every GET that names a map wide
-   * open: /work/<slug>/** served any account's working library to anyone who
-   * could guess a slug, and /api/doc/<slug> handed over the entire document
-   * including the hand-drawn masks. Slugs are enumerable, because
-   * /api/v1/maps lists them all. On a host each of those requests is also a
-   * paid bucket read, so this was simultaneously the privacy hole and the way
-   * somebody else could spend the storage bill.
-   *
-   * The user was already resolved by serve(), so this costs one cached owner
-   * lookup rather than a session round trip per png.
-   *
-   * An ownerless map stays open on purpose. MAPVIS has always worked signed
-   * out, and a map nobody has claimed is not a map anybody is being kept out
-   * of; that is the same rule the POST gate states at its own comment. */
+  /* the post gate below is post-only and slugs are enumerable, so gets that name a map are checked here too; an ownerless map stays open on purpose */
   const named = p.startsWith('/work/')
     ? p.slice('/work/'.length).split('/')[0]
     : /^\/api\/(doc|library|scene|asks|keeps|style)\//.test(p)
@@ -415,30 +277,10 @@ async function route(req, res, p, url) {
   // rather than a write to anybody's map.
   if (p.startsWith('/api/folders') && (await foldersApi(req, res, p))) return
 
-  /* OWNERSHIP IS CHECKED HERE, once, rather than in forty routes.
-   *
-   * "the dashboard only lists your maps" is a convenience, not a rule: every
-   * write below takes a map id out of its own body, so without this an account
-   * could name somebody else's map and edit it. The check is at the door
-   * because a rule enforced in forty places is a rule enforced in thirty-nine.
-   *
-   * Signing in is not required to use MAPVIS. Anonymous still works exactly as
-   * it always has, and only stops at a map that already has an owner, which is
-   * what makes a map yours instead of merely listed under you. */
+  /* ownership is checked once at the door: every write below takes a map id out of its own body, and anonymous still works until a map has an owner */
   if (req.method === 'POST' && !OPEN_POSTS.has(p)) {
     const b = await body(req)
-    /* THE GATE HAS TO NAME THE MAP THE HANDLER WILL NAME.
-     *
-     * It read b.id alone, and two things followed. The import routes carry
-     * their target in b.sceneId, so they named a map the gate never looked at,
-     * and pushItem's upsert overwrites a row by (map_id, name), which is
-     * somebody else's library rewritten rather than merely read. And a POST
-     * with no id at all produced '' here and short-circuited, while every
-     * handler resolves it through safeId, whose default is 'untitled', so a map
-     * actually called untitled was writable by anyone.
-     *
-     * Resolved exactly the way the handlers resolve it, so the gate and the
-     * code it guards can no longer disagree about which map is in play. */
+    /* resolved the way the handlers resolve it: b.id alone missed sceneId, and a post with no id let anyone write the map actually called untitled */
     const slug = safeId(b?.sceneId || b?.slug || b?.id)
     if (slug && platformOn()) {
       const owner = await one('select u.id, u.email from maps m join users u on u.id = m.owner_id where m.slug = $1', [slug])
@@ -459,19 +301,7 @@ async function route(req, res, p, url) {
     const n = Math.max(1, Math.min(6, b.n || 4))
     const w = b.w || 688
     const h = b.h || 384
-    /* A STYLE REFERENCE, WHICH THIS HAS NEVER SENT.
-     *
-     * generateImage has taken one since it was written and nothing has ever
-     * passed it, so every map ever generated here went out with no reference at
-     * all. That is why a new map comes back reading like a generated picture
-     * while the hub reads like a map: the hub is a thousand-candidate pick, and
-     * a new one is candidate number one with nothing to imitate.
-     *
-     * `style` is a slug whose published painting is the reference. `styleOptions`
-     * picks which of the four aspects to take, and the useful case is craft
-     * without colour: outline, detail and shading on, color_palette OFF, so a
-     * black-stone interior can borrow the hub's hand without its tropical
-     * palette. */
+    /* nothing ever passed generateImage a style ref, so every map went out with none; style is a slug, and styleOptions takes craft with color_palette off */
     let styleImage
     if (b.style) {
       try {
@@ -530,13 +360,7 @@ async function route(req, res, p, url) {
     })
   }
 
-  // The ask interpreter alone, free: the ui calls this at ARM time and shows
-  // the translation on the confirm button, so a bad rewrite dies at a glance
-  // instead of costing generations. The confirmed translation is passed back
-  // into asset-gen/asset-anim verbatim — what was shown is what runs.
-  // styleClause, when the client holds a style card, is appended to the thing
-  // that comes back, so the map's own look sits INSIDE the string the button
-  // shows and the contract still holds: what was shown is what runs.
+  // free: the confirmed translation is passed into asset-gen verbatim, styleClause and all, so what was shown on the button is what runs
   if (p === '/api/translate' && req.method === 'POST') {
     const b = await body(req)
     const ask = String(b.ask || '').trim()
@@ -553,13 +377,7 @@ async function route(req, res, p, url) {
     return send(res, 200, { t })
   }
 
-  // The map is LOOKED AT once, not once per ask. Words alone never carry a
-  // painting's look: a request for tropical palm trees on a warm golden-hour
-  // island came back generic bright green, because no description told the
-  // generator what the island looks like. So the painting itself is read once,
-  // boiled down to a small card, and the card's clause rides on every later
-  // ask. Cached at work/<id>/style.json and only read again when refresh is
-  // passed. FREE: nothing on this route touches pixellab.
+  // the painting is read once into a card at work/<id>/style.json, because words alone never carry a look: palms came back bright green. free
   if (p === '/api/style-card' && req.method === 'POST') {
     const b = await body(req)
     const id = safeId(b.id)
@@ -603,22 +421,11 @@ async function route(req, res, p, url) {
     return send(res, 200, { items: libraryItems(id) })
   }
 
-  // What the account already owns, listed. Browsing beats generating here:
-  // there are 700 objects on this account and the 47 that were written in the
-  // house style are the good ones, so picking one costs nothing and lands
-  // something already judged. GET /v2/objects is a read; so is the png fetch
-  // the import does. NOTHING on either of these two routes generates.
-  //
-  // The list endpoint has no search of its own, so the whole thing is walked
-  // once, held for a few minutes and filtered here. A page is 24, which is
-  // eight rows of the three-wide grid the panel draws.
+  // free, nothing here generates. the list endpoint has no search, so all 700 are walked once, held a few minutes and filtered here; a page is 24
   if (p === '/api/account-objects') {
     const all = await accountObjects(url.searchParams.get('refresh') === '1')
     const q = String(url.searchParams.get('q') || '').trim().toLowerCase()
-    // pixellab cuts a name at 30 characters, so a word can sit in the prompt
-    // and not in the name. Both are searched, but the ones whose visible name
-    // holds the word come first, or a search reads as broken when the top row
-    // does not say what was typed.
+    // pixellab cuts a name at 30 characters, so the prompt is searched too, but name hits come first or the search reads as broken
     const hits = q
       ? [
           ...all.filter((o) => o.name.toLowerCase().includes(q)),
@@ -631,10 +438,7 @@ async function route(req, res, p, url) {
     return send(res, 200, { items: hits.slice(page * per, page * per + per), total: hits.length, page, pages })
   }
 
-  // One object he already owns, copied into this map's library as a normal
-  // static item. A 1-direction object keeps its png under the storage key
-  // "unknown" with every rotation url null, so the url is looked for in that
-  // order. Free: this only moves bytes that already exist.
+  // free: a 1-direction object keeps its png under the storage key "unknown" with every rotation url null, so the url is looked for in that order
   if (p === '/api/account-import' && req.method === 'POST') {
     const b = await body(req)
     const oid = String(b.id || '').trim()
@@ -650,23 +454,12 @@ async function route(req, res, p, url) {
     fs.mkdirSync(dir, { recursive: true })
     const base = cleanName(b.name || d.name || d.prompt || 'object')
 
-    /* An object with ROTATIONS comes over as all of them.
-     *
-     * A thing that walks needs to face where it is going, or it moon-walks
-     * across a plaza. A crab gets away with a left-right flip because a crab is
-     * two apparent directions; a person is not. Pixellab already draws these
-     * eight ways and the account already holds them, so this pulls the set
-     * rather than one view. Same writer the eight-direction generate uses.
-     */
+    /* rotations come over as the whole set: a crab survives a left-right flip and a person moon-walks, and the account already holds all eight */
     const rotPlan = await saveRotations(id, d, base)
     if (rotPlan) {
       const item = await writeRotations(id, rotPlan)
       if (item) {
-        // an import is a library write like any other, and both of this route's
-        // returns used to end at disk. On a host that disk is a tmp dir that
-        // dies with the request, so the item vanished and the library carried on
-        // as if the import never happened. Same awaited push character-import
-        // makes one route over.
+        // on a host the disk is a tmp dir that dies with the request, so an import that ended at disk vanished; push it like any other library write
         await pushLibrary(id, item.name)
         return send(res, 200, { item })
       }
@@ -677,11 +470,7 @@ async function route(req, res, p, url) {
     const buf = await pixellab.fetchPNG(src)
     const size = pngSizeBuf(buf)
     if (!(size.w > 0 && size.h > 0)) return send(res, 502, { error: 'what came back was not a png' })
-    /* THE DATABASE ANSWERS TOO, not the disk alone. The walk here only looked at
-     * libDirOf(id), which on a host starts empty every request, so every import
-     * would pick the base name and the push below would then overwrite the store
-     * row already sitting under it. Same reason saveRotations and saveFrames
-     * went through this helper. */
+    /* the database answers too: libDirOf starts empty every request on a host, so a disk-only walk picks the base name and overwrites the row under it */
     const file = (await freeLibraryName(id, base)) + '.png'
     fs.writeFileSync(path.join(dir, file), buf)
     const name = file.replace(/\.png$/i, '')
@@ -691,37 +480,8 @@ async function route(req, res, p, url) {
     })
   }
 
-  // ONE pixellab spend, gated in the ui behind an explicit confirm: a small
-  // transparent object, saved into this map's own library. The batch mode
-  // passes name (<slug>-1/-2/-3) and a distinct seed per run.
-  //
-  // It goes through the OBJECT endpoint, not pixflux. pixflux draws freeform
-  // illustrations, so it stands things on invented plinths: a palm came back
-  // on a stone slab, twice. The 47 objects on this account that were judged
-  // good were all made through /v2/map-objects, in its basic mode with no
-  // background image, which is what this sends. Same price class as any other
-  // single generation.
-  //
-  // The user's ask goes through the INTERPRETER first: the generator draws
-  // every noun it hears ("smoke for the volcano" painted a volcano), so a
-  // language model rewrites intent into the proven house prompt — one object,
-  // stated projection, stated light, stated shading, and a refusal of ground.
-  // Falls back to a bare-bones version of the same house prompt if the
-  // interpreter is unavailable; generation never blocks on it.
-  /* The ask, read with the map open. FREE: this route never touches pixellab,
-   * it only looks and writes words. The client sends the painting it is already
-   * holding (and the boxed area, if one was drawn) as data urls; both land in
-   * work/<id>/.ask so the planner can read them off disk.
-   *
-   * It is also THE ROUTER. what says which of the two spending modes is open,
-   * and for a sprite the answer carries the whole routing decision as well as
-   * the prompt: which of the six skeletons, which camera angle, what size, and
-   * whether the motion is a named template or written out for v3. Those four
-   * used to be dropdowns, and a dropdown is a list of what can exist, which is
-   * always shorter than what someone can imagine. See planMake.
-   *
-   * Nothing is generated here. What comes back is shown, and only a second,
-   * deliberate press spends anything. */
+  // one spend, through the object endpoint not pixflux, which put a palm on a plinth; the ask is interpreted first because "smoke for the volcano" painted a volcano
+  /* free and never touches pixellab; it is also the router: for a sprite the plan picks skeleton, camera, size and motion. nothing generates here */
   if (p === '/api/asset-plan' && req.method === 'POST') {
     const b = await body(req)
     const id = safeId(b.id)
@@ -734,10 +494,7 @@ async function route(req, res, p, url) {
     const mapFile = path.join(dir, 'map.png')
     fs.writeFileSync(mapFile, Buffer.from(mapB64, 'base64'))
     let boxFile = ''
-    // x and y ride along now. The box used to be only a size the model read
-    // scale off; it is also the patch of painting the cohesion crop is taken
-    // from. A client sending w and h alone still works, it just does not pin
-    // the spot and the router picks one.
+    // x and y pin the patch the cohesion crop is taken from; w and h alone still work, the router just picks the spot
     const box =
       b.box && Number(b.box.w) > 0
         ? {
@@ -778,10 +535,7 @@ async function route(req, res, p, url) {
     }
   }
 
-  /* A whole area planned at once: what goes in it and where each thing stands.
-   * FREE, like the single-asset read. Needs a boxed area, because "fill this"
-   * has no meaning without a this. Nothing generates here; the list comes back,
-   * the person looks at it, and only then does anything spend. */
+  /* a whole area planned at once, free: it needs a boxed area, because "fill this" has no meaning without a this */
   if (p === '/api/scene-plan' && req.method === 'POST') {
     const b = await body(req)
     const id = safeId(b.id)
@@ -818,21 +572,7 @@ async function route(req, res, p, url) {
   }
 
 
-  /* GIVE A PLACEMENT LIFE. Free: no image is generated, nothing is drawn.
-   *
-   * The answer is a handful of numbers describing how the thing MOVES, which
-   * the game works out each frame. It is not animation frames, and it cannot
-   * be: every effect in this tool has to loop, and a wander that returns to its
-   * exact start every cycle is a dance rather than a wander. See
-   * src/core/life.ts.
-   *
-   * The map rides along so the movement can suit the ground it happens on, and
-   * the boxed area, if one was drawn, is the fence it stays inside.
-   *
-   * The answer carries "looks" beside the life: the names of the pictures the
-   * states point at, in the order their indices count. looks[0] is always the
-   * placement's own picture, so an answer with no states is looks of one and a
-   * state that names nothing keeps what it had. */
+  /* free: numbers, never frames, because a wander that returns to its exact start each cycle is a dance. looks[0] is the placement's own picture */
   if (p === '/api/life-plan' && req.method === 'POST') {
     const b = await body(req)
     const id = safeId(b.id)
@@ -853,51 +593,18 @@ async function route(req, res, p, url) {
     const thing = String(b.name || 'it').slice(0, 80)
     const at = b.at && isFinite(Number(b.at.x)) ? { x: Math.round(b.at.x), y: Math.round(b.at.y) } : null
     const size = b.size && Number(b.size.w) > 0 ? { w: Math.round(b.size.w), h: Math.round(b.size.h) } : null
-    /* the pictures this map already holds, by name.
-     *
-     * A thing that CHANGES over time wears a different picture for part of its
-     * round, and it has to name which one. Only a name that really exists is
-     * any use: the name leaves here as an INDEX and the editor turns each
-     * index back into a png, so a name nobody has drawn has nothing to become.
-     *
-     * Two sides have to agree on the list. The library on disk is what exists;
-     * the names the client sends are what the editor can hand back to a
-     * placement right now, and its copy can be a generate or a discard behind.
-     * A name on one side and not the other cannot survive the round trip, so
-     * the list is what both can see. Sent nothing, which is what an older
-     * client does, and disk stands alone: the indices are still valid, the
-     * client simply ignores them and every state draws the picture it had. */
+    /* the pictures this map holds by name: a name leaves as an index, so one nobody drew has nothing to become; a client sending none still works */
     const fold = (s) => String(s == null ? '' : s).replace(/\s+/g, ' ').trim().toLowerCase()
     const sent = new Set((Array.isArray(b.names) ? b.names : []).map(fold).filter(Boolean))
-    /* THE FACES THIS THING HAS, and not the whole library.
-     *
-     * Two objections to the old shape, and they were the same objection twice: a boulder drawn separately does not match the troll, and
-     * a library with three boulders in it gives the planner a choice nobody can
-     * make for it. Both are gone if the pictures a thing can wear belong TO the
-     * thing. A face is generated as an edit of the row that owns it and stored
-     * under it, so "which boulder" is not a question that can be asked: there
-     * is only this troll's second face.
-     *
-     * The library stays reachable for a row with no faces of its own, which is
-     * every row made before today and every one imported off the account. That
-     * is the old behaviour, kept because it is the only thing those rows have,
-     * and it is what the fallback below is for. */
+    /* a thing's own faces, not the whole library, so "which boulder" cannot be asked; the library is the fallback for a row with no faces of its own */
     const owner = cleanName(b.owner || '')
-    /* THE LISTING, FROM WHERE IT LIVES. libraryItems walks the tmp folder, which
-     * on the host is empty every request, so a round of states was planned with
-     * no faces to name and never changed picture. asset-state already takes the
-     * store's listing when the platform is on; this does the same. libraryOf
-     * hangs `states` off a row in the shape libraryItems does, so nothing below
-     * changes. */
+    /* the store's listing: libraryItems walks a tmp folder empty every request on the host, so a round was planned with no faces and never changed picture */
     const lib = platformOn() ? await libraryOf(id) : libraryItems(id)
     const mine = owner ? (lib.find((x) => x.name === owner) || {}).states || [] : []
     const onDisk = mine.length
       ? mine.map((f) => String(f.name || '').trim()).filter(Boolean)
       : lib.map((it) => String(it.name || '').trim()).filter(Boolean)
-    /* Bounded by characters, because the prompt is made of characters. See
-     * NAMES_CHARS. What is left over is counted here and named in the note
-     * below, so a library too big to offer whole says so instead of dropping
-     * whatever happened to be last in the directory. */
+    /* bounded by characters because the prompt is characters; what is cut is counted and named, instead of dropping whatever was last in the directory */
     // a face is not in the client's library list and never will be, so the
     // client's list only ever narrows the LIBRARY fallback
     const pool = mine.length ? onDisk : sent.size ? onDisk.filter((n) => sent.has(fold(n))) : onDisk
@@ -931,13 +638,7 @@ async function route(req, res, p, url) {
               `${Math.round(box.x + box.w)}, y ${Math.round(box.y)} to ${Math.round(box.y + box.h)}.`
             : `The person did not fence it in, so choose somewhere sensible from the map itself: ` +
               `look at what is under and around where it stands and keep it on ground that suits it.`,
-          /* What the ground says about the thing.
-           *
-           * A box drawn mostly over walkable floor is not a neutral fact: it
-           * means the person fenced somewhere a person could WALK, a path, a
-           * quay, a stretch of sand. Whatever lives there is doing what things
-           * do on a floor, and floors call for unhurried movement. A crab can
-           * dart because a crab darts; a person crossing a plaza cannot. */
+          /* a box mostly over walkable floor means a floor, and floors call for unhurried movement: a crab darts, a person crossing a plaza cannot */
           box && walkOnly
             ? `About that area: ${Math.round(walkPct * 100)}% of it is ground a person could ` +
               `stand on, so it is somewhere walkable, a path or a yard or open sand rather than ` +
@@ -974,10 +675,7 @@ async function route(req, res, p, url) {
           `orbit   a circuit: period, radiusX, radiusY.`,
           `drift   barely moving, for something moored or idling: driftX, driftY, period.`,
           ``,
-          /* rock is not a fifth kind and must not read as one. It was added to
-           * Life and then never mentioned here, so the planner could not choose
-           * a thing it did not know existed and a boat asked to rock came back
-           * drifting sideways instead. */
+          /* rock is not a fifth kind: it was in Life and never named here, so a boat asked to rock came back drifting sideways */
           `AND SEPARATELY, on any of the four: rock and rockRate. A tilt, in degrees either side ` +
             `of upright and leans per second. This is how something LEANS rather than travels: a ` +
             `boat at its mooring, a hanging sign, a lantern on a bracket. It rides on top of the ` +
@@ -986,12 +684,7 @@ async function route(req, res, p, url) {
             `right: 2 to 5 degrees and about a third of a lean a second reads as water. Ten ` +
             `degrees reads as a storm.`,
           ``,
-          /* A SEQUENCE is not a fifth kind either, and it sits here with rock
-           * for the same reason: it rides on top of whatever kind was chosen
-           * rather than replacing it. The flat fields above ARE the first
-           * state, so everything written above stays true and the answer is
-           * still one object with an array on the end. See LifeState in
-           * src/core/life.ts. */
+          /* a sequence is not a fifth kind either: it rides on whatever kind was chosen, and the flat fields above are the first state */
           `AND SEPARATELY AGAIN: if what they asked for is not one behaviour but a THING THAT ` +
             `CHANGES, add a "states" list to the same answer. A troll that rolls around, turns to ` +
             `stone, then comes back is three facts, not one: it rolls for a while, it is a boulder ` +
@@ -1010,31 +703,13 @@ async function route(req, res, p, url) {
             `when it should travel while it is in that state, and write that move as a whole ` +
             `behaviour of its own with its own kind and numbers. A move inside a state may not ` +
             `have states of its own.`,
-          /* The guard in cleanLife REFUSES a cross inside a state, so the prompt
-           * has to stop inviting one or the answer comes back and that state
-           * silently loses its movement with nobody told.
-           *
-           * The reason is structural rather than taste. Every other kind answers
-           * with an OFFSET from where the thing lives, which is what lets a round
-           * add its states up. A cross is an absolute scripted line across the
-           * whole painting, and for most of its cycle it is not on the map at
-           * all, where it answers nothing to mean ABSENT rather than to mean
-           * here. A round cannot add absent to anything: measured, a cross state
-           * put the placement 430px away on a 688px painting and jumped it 200px
-           * in a frame, every round. */
+          /* cleanLife refuses a cross inside a state: it is absolute rather than an offset, and measured it put the placement 430px away on a 688px painting */
           `A move inside a state may NOT be a cross. A cross is a one-off pass across the whole ` +
             `painting, which is a thing that appears and leaves rather than a thing that is doing ` +
             `something for a while, so it cannot be one stage of a round. If the ask really is a ` +
             `bird that crosses now and then, that is a cross placement on its own with NO states, ` +
             `not a state inside one.`,
-          /* The list of pictures is a fence, not a preference.
-           *
-           * "art" leaves this route as an INDEX into the pictures this map
-           * holds, so a name nobody has drawn has no index to become and that
-           * state falls back to the picture it already had. The old wording
-           * invited it to name one anyway and said somebody would be told what
-           * was missing. Nobody was: it read on screen as a sequence that
-           * changed timing and never once changed the picture. */
+          /* the list is a fence: art leaves as an index, so an invented name has none and that state keeps its picture, which read as a round that never changed */
           names.length
             ? `"art" is the NAME of a picture and it must be copied exactly off that list of ` +
               `pictures this map already has. Leave it out for every state where the thing looks ` +
@@ -1066,11 +741,7 @@ async function route(req, res, p, url) {
             `"range":40,"speedMin":14,"speedMax":26,"pauseMin":1.2,"pauseMax":4.7,"bob":1.5,` +
             `"bobRate":3.5,"faceMotion":true}`,
           `Or, when it changes, the same object with a states list on the end:`,
-          /* the middle state is the only one that names a picture, and the last
-           * one names none on purpose: leaving it out is how the thing goes
-           * back to looking the way it does the rest of the time. An example
-           * that named "mossy boulder" taught it to invent, whatever the words
-           * above said, so with no library to draw from it names nothing. */
+          /* an example that named "mossy boulder" taught it to invent whatever the words said, so with no library to draw from it names nothing */
           `{"kind":"wander","note":"rolls the rocks, goes still as a boulder, then rolls off",` +
             `"seed":1,"range":70,"speedMin":10,"speedMax":22,"pauseMin":0.8,"pauseMax":3,"bob":1,` +
             `"bobRate":3,"faceMotion":true,` +
@@ -1088,25 +759,8 @@ async function route(req, res, p, url) {
       )
       const o = planJSON(raw, 'kind')
       if (!o || !o.kind) throw new Error('no answer')
-      /* A NAME on the wire, an INDEX in the data.
-       *
-       * The planner answers with a name because a name is the only handle it
-       * has. src/core/life.ts is numeric and stays numeric: lifeAt runs for
-       * every placement on every frame, so an index is a lookup and a name
-       * would be a search. This is the one place that holds both the answer
-       * and the map's library, so the swap happens here, before it is sent.
-       *
-       * looks[0] is always the placement's own picture. That is what makes a
-       * state with no art keep what it had, what makes the placement's own
-       * name resolve to itself instead of a second copy, and what makes an
-       * unresolvable name safe: 0 is the one index that always draws. */
-      /* A round is cut to STATES_MAX HERE, where there is somebody to tell.
-       *
-       * cleanLife cuts it anyway, silently, on both sides of the wire, so a
-       * seventh state used to reach the editor, be thrown away, and leave a
-       * round that reads as one that just stops early. Cutting it before the
-       * pictures are resolved also stops a dropped state spending a look slot
-       * that nothing will ever draw. */
+      /* a name on the wire, an index in the data: lifeAt runs every frame, so an index is a lookup and a name a search, and looks[0] always draws */
+      /* cut to STATES_MAX here where there is somebody to tell: cleanLife cuts it silently, so a seventh state reached the editor and vanished */
       const overStates = Array.isArray(o.states) ? Math.max(0, o.states.length - STATES_MAX) : 0
       if (overStates) o.states = o.states.slice(0, STATES_MAX)
       const looks = [thing]
@@ -1129,12 +783,7 @@ async function route(req, res, p, url) {
         }
         let i = slot.get(fold(hit))
         if (i === undefined) {
-          // one extra picture per state is the ceiling, because a round is at
-          // most STATES_MAX states and each of them can name one. looks[0] is
-          // the placement itself, so the list is full at STATES_MAX + 1. The
-          // export and a reopen hold the same number, worked out the same way.
-          // Past it the honest answer is the picture it already has rather
-          // than an index nothing will resolve.
+          // one extra picture per state is the ceiling: looks[0] is the placement itself, so the list is full at STATES_MAX + 1 and past it 0 is the honest answer
           if (looks.length > STATES_MAX) {
             st.art = 0
             continue
@@ -1168,12 +817,7 @@ async function route(req, res, p, url) {
     }
   }
 
-  /* THE CHARACTERS ON THE ACCOUNT. A read, so it costs nothing.
-   *
-   * A character is pixellab's own word for a person or an animal: it has a
-   * skeleton, comes in 4 or 8 directions, and can carry walk cycles. That is a
-   * different thing from an object, which is a prop, and it is the right thing
-   * for someone wandering a harbour. */
+  /* the characters on the account, free: a character has a skeleton, 4 or 8 directions and walk cycles, where an object is only a prop */
   if (p === '/api/account-characters') {
     try {
       const list = await accountCharacters(url.searchParams.get('refresh') === '1')
@@ -1185,10 +829,7 @@ async function route(req, res, p, url) {
           directions: Number(c.directions) || 0,
           animations: Number(c.animation_count) || 0,
           size: c.size && c.size.width ? `${c.size.width}x${c.size.height}` : '',
-          // the camera it was drawn for. A pro-mode style reference drags the
-          // new sprite to ITS angle, so a caller matching one has to send the
-          // same view or spend twenty generations on a figure at the wrong
-          // pitch. Thor is high top-down while this map's props are low.
+          // a pro-mode style reference drags the new sprite to its angle, so a caller has to send the same view or pay for a figure at the wrong pitch
           view: String(c.view || ''),
           thumb: (c.rotation_urls && (c.rotation_urls.south || Object.values(c.rotation_urls)[0])) || '',
         }))
@@ -1198,13 +839,7 @@ async function route(req, res, p, url) {
     }
   }
 
-  /* One character copied into this map's library, WITH a walk cycle if it has
-   * one. Free: every png already exists.
-   *
-   * What lands is the shape the renderers already understand — one entry per
-   * heading, frames inside it — so a walking figure needs nothing new
-   * downstream. When the character has no animation the rotations are used, and
-   * it faces where it walks without its legs moving. */
+  /* one character copied in with its walk if it has one, free: one entry per heading, and with no animation it faces where it walks without moving its legs */
   if (p === '/api/character-import' && req.method === 'POST') {
     const b = await body(req)
     const cid = String(b.id || '').trim()
@@ -1234,36 +869,7 @@ async function route(req, res, p, url) {
     return send(res, 200, { item })
   }
 
-  /* ONE SPRITE, DRAWN TO ORDER. One variant per call: the client runs this once
-   * for each variant it wants, so it can show the first one and ask before
-   * buying the rest. name and seed are what make two calls two different takes
-   * of the same ask rather than one row overwritten twice.
-   *
-   * WHAT IT NO LONGER TAKES. This route used to be handed bodyType, template,
-   * walk and nDirections straight off four dropdowns, and a dropdown is a list
-   * of what can exist, which is always shorter than what someone can imagine.
-   * Now it takes skeleton and anim, which the ROUTER decided by reading the ask
-   * against the map (see planMake). The old fields are still accepted so an
-   * older client keeps working, but nothing sends them by choice.
-   *
-   * The price is one generation for the body in standard mode plus one per
-   * direction for the motion, so a moving sprite is nine and a still one is
-   * one. Pro is 20-40 on its own and is never the default.
-   *
-   * Motion has two paths and the second one is the point. A named template is
-   * the cheap, proven walk cycle for a two-legged thing. Written motion is
-   * mode v3, which takes any words at all, and it is the only way a dragon
-   * hovers, a ghoul lurches or a robot idles its servos. Neither could be
-   * expressed by a list.
-   *
-   * What lands is what /api/character-import lands, through the same writer:
-   * work/<id>/library/<name>/<heading>-<frame>.png beside a dirs.json carrying
-   * dirs and fps. Nothing downstream has to know which route made it.
-   *
-   * The whole set is trimmed to one shared box on the way in, because pixellab
-   * draws into a canvas about 40% bigger than the character to leave animation
-   * headroom, and that empty margin is why an imported figure stands in the air.
-   */
+  /* one for the body plus one per direction, so moving is nine and still is one; the set is trimmed because pixellab's 40% headroom leaves a figure in the air */
   if (p === '/api/character-gen' && req.method === 'POST') {
     const b = await body(req)
     const id = safeId(b.id)
@@ -1278,35 +884,14 @@ async function route(req, res, p, url) {
     // priced per direction, so the count has to be the real one
     const nDirections = mode === 'standard' && Number(b.nDirections) === 4 ? 4 : 8
     const view = CHAR_VIEWS.includes(String(b.view)) ? String(b.view) : OBJECT_VIEW
-    /* The rig, from the router, or worked back out of the old two fields.
-     *
-     * mannequin and the five four-legged bodies are the whole of what exists.
-     * The router picks the nearest by body plan and the description carries
-     * what the thing actually is, so a robot is a mannequin that reads as a
-     * machine and a dragon is a lion that hovers. */
+    /* mannequin and five four-legged bodies are all that exist; the router picks the nearest by body plan, so a robot is a mannequin that reads as a machine */
     const skeleton = SKELETONS.includes(String(b.skeleton)) ? String(b.skeleton) : legacySkeleton(b)
     if (!skeleton) return send(res, 400, { error: 'an animal needs a body: ' + QUADRUPEDS.join(', ') })
     const bodyType = skeleton === 'mannequin' ? 'humanoid' : 'quadruped'
     // written motion is priced by pixel budget per direction, and at or under
     // this it is one generation per direction, which is what the button said
     const size = Math.max(SPRITE_MIN, Math.min(SPRITE_MAX, Math.round(Number(b.size) || 48)))
-    /* How it moves, held to what the endpoint will take.
-     *
-     * The router's clamps are applied again here, because this route is
-     * reachable without going through it and an invented template id is a 422
-     * that arrives after the body has been paid for.
-     *
-     * Only a named how counts as moving. spriteAnim's job inside the router is
-     * to rescue a garbled answer to a MOVING ask, so it falls through to
-     * written motion; here there is no ask to read, so an anim with no how is
-     * simply a malformed request and lands standing. A garbled request costs
-     * one generation, not nine.
-     *
-     * The description is what the walk gate reads. It is the only account of
-     * the thing this route ever gets, and a route reachable without the router
-     * is exactly where a walk nobody asked for would otherwise get through.
-     * An action with no words in it is refused here, before the body: a 400 is
-     * cheaper than a sprite that came back doing the wrong thing. */
+    /* clamped again because this route is reachable without the router: an invented template id is a 422 after the body is paid for, and a garbled anim lands standing */
     const want = b.anim && typeof b.anim === 'object' ? b.anim : legacyAnim(b)
     const moving = want.how === 'template' || want.how === 'action'
     let anim
@@ -1344,26 +929,9 @@ async function route(req, res, p, url) {
       halt()
       let note = ''
       if (anim.how !== 'none') {
-        /* The body is paid for by the time the motion is asked for, so nothing
-         * about the motion is allowed to take it down with it. The case that
-         * bites is a four-legged rig: quadruped templates are named per body,
-         * so a humanoid template id comes straight back 422 and a run that let
-         * that through would bin a body that was already bought. It lands
-         * standing instead and the reason travels with it.
-         *
-         * The still rotations are kept rather than whatever the motion half
-         * landed, so every heading has the same number of frames. */
+        /* the body is already paid for, so a motion failure lands standing rather than binning it: a humanoid template id on a quadruped rig is a straight 422 */
         try {
-          /* The one place the two paths part.
-           *
-           * A template names its own directions by default, every heading the
-           * character has, which is what the button priced. Written motion
-           * does NOT: the schema defaults custom mode to south only, so the
-           * headings are named out loud or seven of the eight never happen.
-           *
-           * They are read off the body that just landed rather than assumed,
-           * because a four-direction character has four and naming a heading
-           * it does not have is a generation asked for and thrown away. */
+          /* custom mode defaults to south only, so the headings are named out loud or seven of the eight never happen, and they are read off the body that landed */
           const h =
             anim.how === 'template'
               ? await pixellab.animateCharacter({ characterId: cid, templateAnimationId: anim.template, seed })
@@ -1380,11 +948,7 @@ async function route(req, res, p, url) {
           note = m === 'stopped' ? 'stopped mid motion, so it stands still' : 'no motion · ' + m.slice(0, 140)
         }
       }
-      // Two readings, both deliberate. Every animation on it is the one just
-      // paid for, because this route bought the only one it has, and its name is
-      // a template id or the word motion rather than anything with walk in it.
-      // Unnamed, the library row is the first few words of the ask, the way a
-      // generated object is named; a variant run passes its own name in.
+      // every animation on it is the one just paid for, and unnamed the row is the first few words of the ask the way a generated object is named
       const plan = await saveFrames(id, characterDirs(d, '*'), b.name ? cleanName(b.name) : slugName(description), 8, cid)
       if (!plan) throw new Error('it came back with fewer than four directions')
       folder = plan.dir
@@ -1438,65 +1002,16 @@ async function route(req, res, p, url) {
       const t = b.thing
         ? { thing: String(b.thing).slice(0, PROMPT_MAX), motion: '', w: clampPx(b.tw), h: clampPx(b.th) }
         : await translateAsk(prompt, 'static', '', id, job)
-      /* THE CANVAS, SETTLED HERE AND NOWHERE ELSE, because the crop below has
-       * to be the same two numbers to the pixel and the endpoint refuses the
-       * pair when they disagree. Both sides even: 150x95 came back
-       * "must both be divisible by 2" after the router had spent thirteen
-       * seconds choosing it. Rounding down keeps it inside every cap it just
-       * passed, and pixellab.mjs evens again on the way out, which is a
-       * no-op from here and a fence for any other caller. */
+      /* the canvas is settled here alone and both sides even: 150x95 came back "must both be divisible by 2" after the router had spent thirteen seconds choosing it */
       const even = (n) => Math.max(32, Math.floor(clampPx(n) / 2) * 2)
       const w = even(b.w || t.w)
       const h = even(b.h || t.h)
-      /* THE COHESION CROP IS DEAD, and it cost twenty-two generations to be
-       * sure, so the finding is written where the next person will look.
-       *
-       * The idea was sound and the endpoint really does take a picture of the
-       * map: background_image for style matching, color_image for a forced
-       * palette. Both were tried, twice, in the two modes the schema allows.
-       *
-       *   With an oval inpainting mask: ten generations came back as CIRCLES of
-       *   blurred map material with no object in them at all.
-       *   Without one, at the exact canvas the endpoint demands: three came
-       *   back as the crop's own content restyled. A puddle returned jetty
-       *   planks, a bookshelf returned roof tiles, a tree returned foliage and
-       *   a roof corner.
-       *
-       * The pattern is the same both times and it is not a wiring bug the
-       * second time: handed a picture of somewhere, this endpoint continues
-       * that picture instead of drawing the subject into it. It is a tool for
-       * editing a map in place, and MAPVIS does not edit maps in place, it
-       * makes library sprites. So the map goes to the ROUTER, which can see and
-       * reason, and never to the generator, which can only copy.
-       *
-       * Do not rebuild this. If it is ever revisited the thing to prove first
-       * is that a subject survives at all, on one generation, before anything
-       * is wired to it. */
+      /* the cohesion crop is dead over 22 generations: handed a picture of somewhere, this endpoint continues it instead of drawing the subject. do not rebuild */
       // the last free moment. Past this line the png is bought whatever happens
       // next, so everything below still writes it to disk.
       halt()
 
-      /* THE ILLUSTRATOR, and it is the primary because it is the only one with
-       * a CAMERA. Read off the live schema: /v2/map-objects takes view with an
-       * enum of low top-down, high top-down and side. /v2/generate-image-v2,
-       * which paints, has no view, no camera, no projection parameter at all.
-       *
-       * A style image was tried as the fix and it is not one. style_options
-       * carries colour_palette, outline, detail and shading, so a painted ship
-       * came back in the map's exact palette and outline and pointing the wrong
-       * way, because none of those four is the angle.
-       *
-       * The view is read back out of the prompt that is about to be sent, so
-       * the parameter and the words are the same decision by construction and
-       * not by anybody remembering to pass a field. See viewFor.
-       *
-       * THE CANVAS IS THE OBJECT'S OWN, always. It used to become the crop's
-       * size whenever a background rode along, which was a consequence of the
-       * inpainting mode: that mode paints a hole in a picture, so the picture's
-       * size was the answer's size. Style matching does not work that way. The
-       * crop is reference and the object is drawn at the size the router chose
-       * against the things already on the map, which is the only size that was
-       * ever measured against anything. */
+      /* only /v2/map-objects has a view; generate-image-v2 has no camera at all, and a style image carries palette, outline, detail and shading, none of them the angle */
       const drawn = await raceStop(
         gate,
         pixellab.mapObject({
@@ -1524,14 +1039,7 @@ async function route(req, res, p, url) {
     }
   }
 
-  // ONE pixellab spend behind the same armed confirm, WITH context: a crop of
-  // the cut painting around the user's chosen spot rides along, and
-  // /v2/map-objects paints the thing into that crop's palette and light,
-  // answering with a transparent cutout. Bare-canvas pixflux turns small
-  // props into mush; this is pixellab's own cohesion tool for exactly that.
-  // The api's usage field bills it in the same units as a static generation.
-  // cx/cy (the clicked painting pixel) ride along for the record; the client
-  // owns placement. The cutout saves into work/<id>/library like asset-gen.
+  // one spend behind the armed confirm, with a crop for context: bare-canvas pixflux turns small props into mush, and it bills as a static generation
   if (p === '/api/asset-gen-here' && req.method === 'POST') {
     const b = await body(req)
     const id = safeId(b.id)
@@ -1569,11 +1077,7 @@ async function route(req, res, p, url) {
         }),
       )
       const b64 = drawn.b64
-      // animated-with-context: the style-matched cutout becomes the FIRST FRAME
-      // and the animation endpoint drives it with the motion words. The frames
-      // land as a folder, the library's animated shape. The animate endpoint
-      // caps first_frame at 256 and the frame budget at w*h*8 <= 524288, and a
-      // 192-cap crop fits both.
+      // the cutout becomes the first frame; animate caps first_frame at 256 and the budget at w*h*8 <= 524288, and a 192-cap crop fits both
       if (b.kind === 'animated') {
         // the second spend, and the one a stop is worth a whole generation at.
         // The cutout above is already bought either way, so a stop before or
@@ -1585,10 +1089,7 @@ async function route(req, res, p, url) {
         if (!frames)
           return send(res, 200, { item: await saveStatic(id, b64, wantName, prompt, t.thing, drawn.objectId), note: STOPPED_STILL })
         const adir = libDirOf(id)
-        /* THE NAME IS CHOSEN AGAINST THE STORE, not the tmp folder. On the host
-         * the folder is empty, so a second take of the same ask slugged to the
-         * same name and silently replaced the first row and its frames.
-         * asset-anim already asks freeLibraryName; this does the same. */
+        /* the name is chosen against the store: on the host the folder is empty, so a second take took the same name and replaced the first row */
         const aname = await freeLibraryName(id, wantName)
         const fdir = path.join(adir, aname)
         fs.mkdirSync(fdir, { recursive: true })
@@ -1616,36 +1117,8 @@ async function route(req, res, p, url) {
     }
   }
 
-  // TWO pixellab spends behind the same armed confirm: a transparent base
-  // object, then one 8-frame animation of it via /v2/animate-with-text-v3 with
-  // the motion words as the action. The base comes off the same object
-  // endpoint the static path uses, for the same reason: pixflux put the thing
-  // on a plinth and the plinth then animated along with it. At 128 or less the
-  // 8 frames stay inside pixellab's one-generation pixel budget, so the pair is
-  // two generations. The frames land as work/<id>/library/<name>/0..n.png, the
-  // folder shape the library lists as one animated item.
-  /* ---- ANOTHER FACE FOR SOMETHING THAT ALREADY EXISTS -------------------
-   *
-   * A troll that turns into a boulder does not need a boulder. It needs
-   * ITSELF, curled up. Those are not the same picture and the difference is
-   * the whole feature: a boulder drawn from scratch is its own palette, its own
-   * canvas and its own silhouette, so the swap mid-round reads as one sprite
-   * being replaced by another rather than one thing changing. There are two
-   * halves to it: whether the boulder and the troll match, and what happens
-   * when the library holds more than one boulder.
-   *
-   * Both go away here, and neither needs a rule to keep them away. The state is
-   * an EDIT of the art that is already on the account, so it cannot drift off
-   * the thing it is a state of; and it is stored under the row that owns it, so
-   * there is no flat namespace to be ambiguous in. There is no "which boulder".
-   * There is only this troll's second face.
-   *
-   * The character route edits all 4 or 8 rotations in one job, which is what
-   * keeps a walker from snapping round to face south the moment it transforms,
-   * and it snaps the result to the source's own palette because pixellab has a
-   * flag for exactly that.
-   *
-   * ONE generation, and the cost line says so before it is pressed. */
+  // two spends: the base is an object because pixflux put the thing on a plinth that then animated with it, and at 128 or less the 8 frames stay one generation
+  /* a face is an edit of the row that owns it, so it cannot drift in palette or size and there is no "which boulder"; a character's headings go in one job */
   if (p === '/api/asset-state' && req.method === 'POST') {
     const b = await body(req)
     const id = safeId(b.id)
@@ -1653,14 +1126,7 @@ async function route(req, res, p, url) {
     const ask = String(b.ask || '').trim()
     if (!owner) return send(res, 400, { error: 'no item' })
     if (!ask) return send(res, 400, { error: 'say what it turns into' })
-    /* THE ITEM MAY EXIST ONLY IN THE STORE. readLibItem is a filesystem read,
-     * and on the host work/ is an empty tmp directory, so a sprite the listing
-     * plainly showed came back "not in the library" the moment somebody pressed
-     * animate on it (Ash, 2026-09-01, on a character drawn minutes earlier).
-     * The listing reads library_items; this read the disk; they disagreed the
-     * way export's did before hydrateMap. Same fault, same cure. A laptop pays
-     * nothing, because work/ IS the library there, and a pull that fails falls
-     * through to the same 404 rather than a fresh way to be wrong. */
+    /* the item may exist only in the store: readLibItem reads the disk, and on the host work/ is empty, so a listed sprite came back "not in the library" */
     try {
       await hydrateMap(id, path.join(WORK, id))
     } catch (e) {
@@ -1669,12 +1135,7 @@ async function route(req, res, p, url) {
     await ensureSidecars(id, owner)
     const it = readLibItem(id, owner)
     if (!it) return send(res, 404, { error: 'that is not in this library' })
-    /* Two places have ever recorded where art came from and both are read, in
-     * the order of how sure they are. origin.json is written at generation time
-     * and names the row exactly. dirs.json's characterId was pinned by the
-     * motion lane and is just as good when it is there. Neither present means
-     * this row was imported or hand-made, and the honest answer is that it
-     * cannot be edited rather than a guess at which of 769 rows it might be. */
+    /* origin.json first, then dirs.json's characterId; neither present means imported or hand-made, and the honest answer is no rather than a guess at one of 769 rows */
     const o = readOrigin(id)[owner] || {}
     const characterId = o.characterId || (it.meta && it.meta.characterId) || ''
     const objectId = o.objectId || ''
@@ -1746,10 +1207,7 @@ async function route(req, res, p, url) {
     const { gate, halt, done } = gateFor(job)
     const wantName = b.name ? cleanName(b.name) : 'gen-' + slugName(prompt)
     try {
-      // the motion rides separately from the thing: one merged prompt let scene
-      // words bleed into the sprite (a smoke prompt that mentioned its volcano
-      // generated a volcano, twice, 2026-08-16). The interpreter splits the ask
-      // when the user leaves the motion empty; an explicit motion wins.
+      // the motion rides separately: one merged prompt let a smoke ask that mentioned its volcano generate a volcano, twice
       const t = b.thing
         ? { thing: String(b.thing).slice(0, PROMPT_MAX), motion: String(b.tmotion || ''), w: clampPx(b.tw), h: clampPx(b.th) }
         : await translateAsk(prompt, 'animated', '', id, job)
@@ -1788,10 +1246,7 @@ async function route(req, res, p, url) {
       }
       const size = pngSize(path.join(fdir, '0.png'))
       noteAsk(id, name, prompt, t.thing)
-      // the base object and the 8 frames are both bought, and only disk was
-      // told. On a host WORK is a fresh tmp dir per request, so both spends went
-      // with the instance and the library row never learned the item existed.
-      // Same awaited push asset-gen-here's animated branch and saveStatic make.
+      // both spends are bought and WORK is a fresh tmp dir per request on a host, so telling disk alone lost the item with the instance
       await pushLibrary(id, name)
       return send(res, 200, {
         item: { name, kind: 'animated', frames: rel, fps: 6, w: size.w, h: size.h },
@@ -1804,39 +1259,7 @@ async function route(req, res, p, url) {
     }
   }
 
-  /* MAKE A THING THAT ALREADY EXISTS MOVE, or replace the motion it has.
-   *
-   * The person types what they want and never picks a path. There are three,
-   * and the router chooses by reading the item off disk and asking what the
-   * words need. A list of animations to choose from is the one thing this must
-   * never grow into: whatever they can describe is what it has to try.
-   *
-   *   character  a person or animal with headings. Every heading goes in ONE
-   *              coordinated job through /v2/animate-character, priced per
-   *              direction. Eight separate calls to the single-image animator
-   *              would come back as eight loops with eight rhythms, so a figure
-   *              would breathe faster facing north than facing south. That is a
-   *              defect, not a saving, and this route refuses rather than ship
-   *              it: no character id, no animation.
-   *   sprite     one png, or a folder of frames. /v2/animate-with-text-v3
-   *              drives it off its own first frame.
-   *   written    the ask needs the thing to TRAVEL, or to trace a path, which
-   *              neither generator can do at all: both only ever redraw a
-   *              sprite where it stands. A written recipe stamps the item's own
-   *              sprite at a position it works out per frame, and costs
-   *              nothing. This route does not run that, it NAMES it, so the
-   *              client can offer the free path rather than quietly charge for
-   *              the wrong one.
-   *
-   * Two presses, like every other spend. Without confirm this is a free read
-   * that answers the plan and the true price. With confirm it runs the plan it
-   * was handed back, so the number on the button is the number that gets spent.
-   *
-   * Replacing is in place and safe. Every byte is fetched, trimmed and settled
-   * under work/<id>/.stage before the library folder is touched, and the old
-   * bytes go to work/<id>/.prev the way /api/asset-crop puts them there. One
-   * library row per thing, and a failure or a stop leaves the item as it was.
-   */
+  /* a character's headings go in one job because eight calls come back as eight rhythms; the written path is the only one that travels, and it is free */
   if (p === '/api/asset-animate' && req.method === 'POST') {
     const b = await body(req)
     const id = safeId(b.id)
@@ -1844,14 +1267,7 @@ async function route(req, res, p, url) {
     const ask = String(b.ask || '').replace(/\s+/g, ' ').trim().slice(0, PROMPT_MAX)
     if (!b.name) return send(res, 400, { error: 'no item' })
     if (!ask) return send(res, 400, { error: 'say what it should do' })
-    /* THE ITEM MAY EXIST ONLY IN THE STORE. readLibItem is a filesystem read,
-     * and on the host work/ is an empty tmp directory, so a sprite the listing
-     * plainly showed came back "not in the library" the moment somebody pressed
-     * animate on it (Ash, 2026-09-01, on a character drawn minutes earlier).
-     * The listing reads library_items; this read the disk; they disagreed the
-     * way export's did before hydrateMap. Same fault, same cure. A laptop pays
-     * nothing, because work/ IS the library there, and a pull that fails falls
-     * through to the same 404 rather than a fresh way to be wrong. */
+    /* the item may exist only in the store: readLibItem reads the disk, and on the host work/ is empty, so a listed sprite came back "not in the library" */
     try {
       await hydrateMap(id, path.join(WORK, id))
     } catch (e) {
@@ -1883,10 +1299,7 @@ async function route(req, res, p, url) {
     const { gate, halt, done } = gateFor(job)
     try {
       if (plan.path === 'character') {
-        /* Frames bought by an earlier attempt that could not read them back.
-         * Charging a second time for art already sitting on the account is the
-         * worst thing this route could do, so recovery is offered before the
-         * spend rather than as a repair afterwards. */
+        /* frames an earlier attempt bought but could not read back: recovery is offered before the spend rather than as a repair after it */
         let byDir = null
         if (b.recover) {
           // a named group is one this client started and is waiting on; a bare
@@ -1912,10 +1325,7 @@ async function route(req, res, p, url) {
         // undoing.
         const st = await stageViews(id, name, byDir, it.fps || 8)
         if (!st) throw new Error('the headings did not save')
-        /* The id is the only way back to the rig that drew this, and a rewrite
-         * that forgets it strands the art for good: nothing on disk says which
-         * character it came from and the motion can never be replaced or
-         * recovered again. Never write undefined over one that was there. */
+        /* the character id is the only way back to the rig, so never write undefined over one that was there or the motion can never be replaced */
         const keepId = plan.characterId || (it.meta && it.meta.characterId) || ''
         await swapFolder(id, name, st.stage, { dirs: st.dirs, fps: st.fps, characterId: keepId })
         noteAsk(id, name, ask, plan.motion, 'motion')
@@ -1947,11 +1357,7 @@ async function route(req, res, p, url) {
       )
       if (!frames || !frames.length) throw new Error('the animation came back with no frames')
       const st = stageFrames(id, name, frames)
-      /* A still becomes a frame folder under the SAME name, so the library keeps
-       * one row rather than growing a second one beside it. The png is backed up
-       * like any other replaced bytes and only removed once the folder is whole:
-       * a crash in between leaves the original standing, which is the safe way
-       * round. */
+      /* a still becomes a frame folder under the same name, and the png goes only once the folder is whole, so a crash leaves the original standing */
       if (it.shape === 'still') await keepPrevFile(id, it.file, name + '.png')
       await swapFolder(id, name, st.stage, null)
       if (it.shape === 'still') fs.rmSync(it.file, { force: true })
@@ -1985,12 +1391,7 @@ async function route(req, res, p, url) {
     return send(res, 200, { asks: readAsks(decodeURIComponent(p.slice('/api/asks/'.length))) })
   }
 
-  // Which motion rule fits the ask, and what numbers to start it at. When none
-  // of the seven fits, the answer is a renderer WRITTEN for the words instead,
-  // which the client runs in a sandbox. FREE either way: this route never
-  // touches pixellab, it only reads the ask and the colours the client sampled
-  // off the painting. On any failure a keyword match answers instead, so the
-  // effect box can never dead-end.
+  // free either way: when none of the seven rules fits, the answer is a renderer written for the words, and a failure falls back to a keyword match
   if (p === '/api/effect-plan' && req.method === 'POST') {
     const b = await body(req)
     const ask = String(b.ask || '').trim()
@@ -2007,14 +1408,7 @@ async function route(req, res, p, url) {
     })
   }
 
-  // The rendered frames, written exactly like an animated library item:
-  // work/<id>/library/<name>/0..n.png, plus effect.json beside them holding the
-  // rule, its numbers and the sampled colours, so the effect can be reopened
-  // and retuned later. Nothing is generated and nothing is spent here either.
-  // overwrite rewrites an item that already exists IN PLACE: the frame urls do
-  // not change, so every placement of it picks the new pixels up. Frames left
-  // over from a longer previous take are deleted, or the folder would play a
-  // mix of two renders.
+  // frames plus effect.json so it reopens, and overwrite rewrites in place: the urls do not change, and leftover frames are deleted or the folder plays two renders
   if (p === '/api/effect-save' && req.method === 'POST') {
     const b = await body(req)
     const id = safeId(b.id)
@@ -2031,10 +1425,7 @@ async function route(req, res, p, url) {
     // when a recipe is written to MOVE a sprite that has never moved before
     let wasStill = ''
     if (b.overwrite) {
-    /* THE HOST'S work/ IS EMPTY, so pull what the store holds before reading the
-     * disk. The same fault animate and state had this afternoon and export had
-     * before that: the listing comes from the database, this read came from a
-     * tmp directory, and they disagreed. Costs nothing on a laptop. */
+    /* the host's work/ is empty, so pull what the store holds before reading the disk; costs nothing on a laptop */
     try {
       await hydrateMap(id, path.join(WORK, id))
     } catch (e) {
@@ -2047,10 +1438,7 @@ async function route(req, res, p, url) {
       if (!asDir && fs.existsSync(target + '.png')) wasStill = target + '.png'
       else if (!asDir) return send(res, 404, { error: 'not in the library' })
     } else {
-      /* disk for what is mid-request, the database for what exists at all. The
-       * walk this replaced only looked at libDirOf(id), which on a host starts
-       * empty every request, so every keep would pick the base name and the push
-       * at the end would overwrite the store row already under it. */
+      /* disk for what is mid-request, the database for what exists at all: libDirOf starts empty on a host, so every keep would pick the base name */
       name = await freeLibraryName(id, base)
     }
     const fdir = path.join(dir, name)
@@ -2091,10 +1479,7 @@ async function route(req, res, p, url) {
     // effects record on KEEP, not on every attempt, or one tuning session would
     // bury a week of asset asks under thirty near-identical lines
     if (b.ask && !b.overwrite) noteAsk(id, name, b.ask, rec.type === 'custom' ? 'written' : rec.type, 'effect')
-    // nothing was generated here, but frames and effect.json are still a library
-    // write, and this return used to end at disk. On a host that disk is a tmp
-    // dir that dies with the request, so a kept effect was gone the moment the
-    // response was sent. pushItem carries effect.json across with the frames.
+    // a kept effect ending at disk was gone with the request on a host; pushItem carries effect.json across with the frames
     await pushLibrary(id, name)
     return send(res, 200, { item: { name, kind: 'animated', effect: true, frames: rel, fps, w: size.w, h: size.h } })
   }
@@ -2105,10 +1490,7 @@ async function route(req, res, p, url) {
     const b = await body(req)
     const id = safeId(b.id)
     const name = cleanName(b.name || '')
-    /* THE HOST'S work/ IS EMPTY, so pull what the store holds before reading the
-     * disk. The same fault animate and state had this afternoon and export had
-     * before that: the listing comes from the database, this read came from a
-     * tmp directory, and they disagreed. Costs nothing on a laptop. */
+    /* the host's work/ is empty, so pull what the store holds before reading the disk; costs nothing on a laptop */
     try {
       await hydrateMap(id, path.join(WORK, id))
     } catch (e) {
@@ -2141,13 +1523,7 @@ async function route(req, res, p, url) {
     return send(res, 200, out)
   }
 
-  // THE REVIEW LOOP, the free half of it. The frames the client just rendered
-  // are laid out as one strip on disk and the planner is handed its absolute
-  // path and asked to LOOK, the same way the style card reads a painting. It
-  // answers good, or it answers revise and rewrites the renderer (or, for one
-  // of the seven rules, hands back better numbers instead). Rendering is free
-  // and instant, so this can run three times before a person is asked to judge
-  // anything. Nothing on this route touches pixellab.
+  // free: the frames go to disk as one strip and the planner is asked to look, which can run three times before a person judges anything
   if (p === '/api/fx-review' && req.method === 'POST') {
     const b = await body(req)
     const id = safeId(b.id)
@@ -2173,23 +1549,7 @@ async function route(req, res, p, url) {
     return send(res, 200, { strip: file, ...v })
   }
 
-  /* THE SAME LOOK, over anything a generator just made: the candidates side by
-   * side with an index number over each, an answer of which one, whether it is
-   * good enough, and why.
-   *
-   * It is FREE. Nothing on this path touches pixellab; only regenerating
-   * spends, and that stays behind the ui's own armed confirm.
-   *
-   * It CANNOT block a save. The item is already in the library before this is
-   * called and stays there whatever comes back, so a planner that times out or
-   * answers nonsense costs a spinner and nothing else. Do not move this in
-   * front of the write.
-   *
-   * One route for every kind of thing. A prop, an animated prop, a character
-   * sheet and a fill's candidates all land here, because what is being asked is
-   * the same question in every case and a second route asking it again is the
-   * segregation this tool keeps having to undo. `what` only changes one honest
-   * sentence about what the strip shows. */
+  /* free, and it cannot block a save: the item is in the library before this is called, so do not move it in front of the write */
   if (p === '/api/obj-review' && req.method === 'POST') {
     const b = await body(req)
     const id = safeId(b.id)
@@ -2203,12 +1563,7 @@ async function route(req, res, p, url) {
     } catch (e) {
       return send(res, 500, { error: 'the sheet did not write · ' + String(e.message || e).slice(0, 160) })
     }
-    /* THE PAINTING ITSELF, free and already on disk. asset-plan, scene-plan and
-     * life-plan each rewrite work/<id>/.ask/map.png, and a generation always
-     * follows a plan, so the copy sitting there is the map this thing was made
-     * for. Not box.png: that one is only written when a box was drawn, so it
-     * goes stale and would have the reviewer judging against another session's
-     * crop. Missing is fine and the look falls back to the sprites alone. */
+    /* the painting the plan already wrote, never box.png: that one is only written when a box was drawn, so it goes stale. missing is fine */
     const mapFile = path.join(WORK, id, '.ask', 'map.png')
     const hasMap = fs.existsSync(mapFile)
     const v = await reviewObjects({
@@ -2249,25 +1604,8 @@ async function route(req, res, p, url) {
     return send(res, 200, { n })
   }
 
-  // A crop of a library item, written as a NEW item called <name>-crop: the
-  // original is never touched, so a bad crop costs nothing. The client does the
-  // pixel trim on canvas (it already holds every frame decoded) and posts the
-  // trimmed pngs; rect rides along for the record. An animated item arrives
-  // with every frame trimmed to the same rect, so the loop stays in register.
-  // suffix names what the client did to those pixels and defaults to crop, so
-  // the palette lock lands as <name>-matched down this same path. Nothing here
-  // generates either way: it only writes bytes the client already holds.
-  /* PUT THE OLD PIXELS BACK, from the copy every in-place edit already keeps.
-   *
-   * Crop, ctrl+P, trim and palette-match all rewrite the art under its own name
-   * and copy the previous bytes to work/<id>/.prev first. Nothing could read
-   * that folder, so the copies were a comfort and not a way back, and z only
-   * ever undid the PLACEMENT half of a crop. That is worse than no undo:
-   * placements moved back to where they belonged around art that was still
-   * cropped, so nineteen trees looked like they had slid down the map.
-   *
-   * Newest first, because .prev numbers copies upward as they pile up and the
-   * one worth wanting is the one written a moment ago. */
+  // a crop lands as a new <name>-<suffix> item, so the original is never touched, and every frame arrives at the same rect so the loop stays in register
+  /* put the old pixels back from .prev, newest first: undoing only the placement half left nineteen trees looking like they had slid down the map */
   if (p === '/api/asset-revert' && req.method === 'POST') {
     const b = await body(req)
     const id = safeId(b.id)
@@ -2343,10 +1681,7 @@ async function route(req, res, p, url) {
     if (!src) return send(res, 400, { error: 'no name' })
     const dir = libDirOf(id)
     fs.mkdirSync(dir, { recursive: true })
-    /* THE HOST'S work/ IS EMPTY, so pull what the store holds before reading the
-     * disk. The same fault animate and state had this afternoon and export had
-     * before that: the listing comes from the database, this read came from a
-     * tmp directory, and they disagreed. Costs nothing on a laptop. */
+    /* the host's work/ is empty, so pull what the store holds before reading the disk; costs nothing on a laptop */
     try {
       await hydrateMap(id, path.join(WORK, id))
     } catch (e) {
@@ -2354,15 +1689,7 @@ async function route(req, res, p, url) {
     }
     await ensureSidecars(id, cleanName(src))
     const taken = (n) => fs.existsSync(path.join(dir, n)) || fs.existsSync(path.join(dir, n + '.png'))
-    /* IN PLACE is the default now. Every edit used to leave a second item
-     * behind — palm, palm-trimmed, palm-trimmed-bit2 — and a library of
-     * near-identical rows is worse than the problem each edit solved. The
-     * pixels are simply replaced under the same name.
-     *
-     * The previous bytes are copied to work/<id>/.prev first, which is NOT the
-     * library and is never listed. Nothing in the app reads it; it is there
-     * because these files cost generations and an edit is not worth losing them
-     * over. */
+    /* in place by default: an edit that leaves palm, palm-trimmed, palm-trimmed-bit2 is worse than the problem it solved, and the old bytes go to .prev, never listed */
     const keep = !!b.keepCopy
     let name = cleanName(src)
     if (keep) {
@@ -2379,23 +1706,7 @@ async function route(req, res, p, url) {
     /* a set of VIEWS goes back under its own names, not as 0.png, 1.png.
      * Without this an edit on eight-sided art wrote frame files beside the
      * views it was supposed to replace and the item ended up as neither. */
-    /* A SET OF VIEWS GOES BACK IN THE SHAPE IT ARRIVED IN, frame counts and all.
-     *
-     * dirKeys runs parallel to frames, one entry per picture, so a heading that
-     * owns eight of them appears eight times. This used to assume one picture
-     * per heading and wrote `<heading>.png`, which on a walking sprite replaced
-     * a whole walk cycle with its first frame. Measured on the hub 2026-08-25:
-     * dock-porter went from east-0..east-7 to a single east.png and stopped
-     * walking, and fps and characterId went with it, because this rebuilt the
-     * metadata from nothing instead of carrying it.
-     *
-     * Naming follows what the readers already expect: one frame keeps
-     * `<heading>.png` and several become `<heading>-0.png` upward, which is what
-     * writeRotations and saveFrames produce and what libraryItems reads.
-     *
-     * The old files are removed first. A set going from eight frames to one
-     * would otherwise leave seven orphans behind that the next reader might
-     * pick up. */
+    /* dirKeys runs parallel to frames, so assuming one picture per heading turned dock-porter's east-0..east-7 into one east.png and stopped it walking */
     const dirKeys = Array.isArray(b.dirKeys) ? b.dirKeys.map((k) => cleanName(String(k))) : null
     if (dirKeys && dirKeys.length === frames.length) {
       const fdir = path.join(dir, name)
@@ -2429,14 +1740,7 @@ async function route(req, res, p, url) {
       fs.writeFileSync(path.join(fdir, 'dirs.json'), JSON.stringify(meta, null, 2))
       const first = dirs[dirKeys[0]][0]
       const size = pngSize(path.join(fdir, String(first).split('/').pop()))
-      /* AN EDIT IS A LIBRARY WRITE, so it goes to the store like every other one.
-       *
-       * All three returns in this route used to end at disk. On a host the disk
-       * is a tmp dir that dies with the request, so a crop, a base-trim, a
-       * pixelate or a palette-match was lost the moment the response was sent
-       * and the library carried on serving the art from before the edit.
-       * Awaited, so the response never says the edit landed before the bytes are
-       * durable, which is the same rule saveStatic and /api/asset-revert keep. */
+      /* an edit is a library write: on a host the disk dies with the request, so awaited, and the response never says it landed before the bytes are durable */
       await pushLibrary(id, name)
       return send(res, 200, {
         item: {
@@ -2478,10 +1782,7 @@ async function route(req, res, p, url) {
     })
   }
 
-  // takes one item out of this map's library: the png for a static item, the
-  // whole frame folder for an animated one. The name is sanitized exactly the
-  // way it was written, and the target must stay inside work/<id>/library.
-  // Deleting the file is final; the ui clears its placements separately.
+  // one item out of the library, held inside work/<id>/library; the delete is final and the ui clears its placements separately
   if (p === '/api/library-remove' && req.method === 'POST') {
     const b = await body(req)
     if (!String(b.name || '').trim()) return send(res, 400, { error: 'no name' })
@@ -2503,10 +1804,7 @@ async function route(req, res, p, url) {
       await dropItem(id, name)
       return send(res, 200, { removed: 'animated' })
     }
-    /* NOT ON THIS DISK IS NOT THE SAME AS NOT IN THE LIBRARY. On the host the
-     * tmp folder never has the item, so every delete of a listed row printed
-     * "not in the library" while the row was in fact dropped. Ask the store
-     * whether it knew the name, and answer for what actually happened. */
+    /* not on this disk is not not in the library: on the host every delete of a listed row said "not in the library" while the row was dropped */
     let known = false
     if (platformOn()) {
       try {
@@ -2553,24 +1851,7 @@ async function route(req, res, p, url) {
     return send(res, 200, out)
   }
 
-  /* THE COMPOSITION: where every map sits on this account's ocean.
-   *
-   * Both halves are the AUTHORING view and both used to be refused to anybody
-   * but one account, because there was one world row for the whole platform.
-   * That made the tool's own sign-up an invitation to a page that opens and
-   * then apologises. 022 gave every account a world, so these two now resolve
-   * whose row it is instead of deciding whether to let you in.
-   *
-   * `mine` KEPT ITS NAME AND CHANGED ITS QUESTION, from "are you the one account
-   * that may compose" to "is this ocean yours to edit", which is true for anyone
-   * signed in. `game` is the fact it used to be carrying, and the two are not
-   * the same fact: a member's ocean is theirs and is not the one the ship in the
-   * game sails. `readUrl` is where their own engine fetches it, because an ocean
-   * nothing can read is a drawing.
-   *
-   * The published read at /api/v1/world stays open to everybody, pinned to row
-   * 1, and is not touched by any of this. That is what the game fetches with no
-   * account at all. */
+  /* the authoring view of this account's ocean: mine means yours to edit, game means it is the one the ship sails, and /api/v1/world stays open on row 1 */
   if (p === '/api/world' && req.method === 'GET') {
     const me = await currentUser(req)
     if (platformOn() && !me) return send(res, 401, { error: 'sign in to open an ocean' })
@@ -2586,10 +1867,7 @@ async function route(req, res, p, url) {
       readUrl: game || !w.pubId ? '/api/v1/world' : `/api/v1/worlds/${w.pubId}`,
     })
   }
-  /* One boolean, so the home page can decide whether to offer the ocean at all.
-   * It was the answer to "are you us"; it is the answer to "have you got one",
-   * and everybody signed in has. Kept rather than removed because the page asks
-   * this before it asks anything else and a 404 there is a blank card. */
+  /* one boolean the home page asks before anything else, kept because a 404 here is a blank card; everybody signed in has an ocean */
   if (p === '/api/world/mine' && req.method === 'GET') {
     const me = await currentUser(req)
     return send(res, 200, { mine: !platformOn() || !!me, game: ownedBy(me) })
@@ -2601,45 +1879,16 @@ async function route(req, res, p, url) {
     try {
       return send(res, 200, await saveWorld(b, null, await worldOf(me)))
     } catch (e) {
-      /* a composition that cannot work is refused where it is written, naming
-       * what is wrong, rather than found by a student sailing into nothing.
-       *
-       * ONLY WHEN IT REALLY IS A REFUSAL. This caught everything, so a pool
-       * timeout, a dropped Neon connection or a failed maps query came back as
-       * 400 with an empty problems list and the page printed it into the refusal
-       * panel. The author was told their composition was rejected when the
-       * database was unreachable, which is the one case where retrying is the
-       * right move and 400 is the status that says do not. Anything carrying no
-       * `problems` is a server fault and goes up to the handler as a 500. */
+      /* only a real refusal is a 400: catching everything turned a dropped neon connection into "your composition was rejected", so no problems means 500 */
       if (!e.problems) throw e
       return send(res, 400, { error: String(e.message || e), problems: e.problems })
     }
   }
 
-  /* THE UI LIBRARY: the shelf of drawn pieces the game's interface is made of.
-   *
-   * A picture of a page is not a page. Without the marks saying where the text
-   * goes, where the bar fills, where the button is and how deep the frame edge
-   * runs, every drawn surface arrives with a second half typed by hand into
-   * game source, which is the same defect as a hand-typed camera number: a fact
-   * about a picture kept somewhere the picture cannot correct it.
-   *
-   * docs/UI-KIT.md is the authority and server/store/ui.mjs holds the rules.
-   * These routes are the only way in, and all of them want an ACCOUNT rather
-   * than a map, because a dialogue box belongs to the game and not to the hub.
-   *
-   * The word on the wire is `region` and never `slot`. A WorldSlot is an
-   * island's berth on the sea and PmapScene reads it about thirty times, so a
-   * UI rectangle called a slot costs a session the first time somebody greps.
-   */
+  /* the ui shelf, keyed to an account and not a map. the word on the wire is region and never slot: a WorldSlot is an island's berth. docs/UI-KIT.md is the authority */
   if (p === '/api/ui' && req.method === 'GET') {
     const me = await currentUser(req)
-    /* THE TYPE LIST GOES OUT WITH THE SHELF, because a library that opens with
-     * a text box assumes the author already knows what a dialogue box is made
-     * of, and the game's own record has that written down in twenty-one places.
-     * A type carries its preset and its region vocabulary, so the page fills
-     * the marks in rather than making somebody rediscover them by dragging six
-     * unlabelled rectangles. */
+    /* the type list rides with the shelf, so the page fills the marks in rather than making somebody rediscover them by dragging unlabelled rectangles */
     return send(res, 200, {
       ui: me ? await listUi(me.id) : [],
       types: PIECE_TYPES,
@@ -2667,61 +1916,27 @@ async function route(req, res, p, url) {
     const description = String(b.description || '').trim()
     if (!description) return send(res, 400, { error: 'say what the piece is before drawing it' })
 
-    /* A DRY RUN COSTS NOTHING AND ANSWERS THE ONLY QUESTION WORTH ASKING FIRST.
-     *
-     * About 280 generations went on 2026-08-30 rediscovering one recipe, and the
-     * instrument the whole time was the returned picture. work/.kit/panel.png is
-     * a paid roll whose single defect is that the call dropped `elements`, which
-     * is a fact visible in the request body a second before the money leaves.
-     *
-     * So this runs the router and hands back the EXACT body uiAsset would post,
-     * built by the same function that builds the real one, and posts nothing. It
-     * takes no pending lock and writes no row, because a dry run that made the
-     * account busy would be a spend in every way except the picture. */
+    /* a dry run posts nothing and takes no lock: 280 generations went on rediscovering one recipe whose defect was a dropped elements field in the body */
     const dry = b.dry === true || b.dry === 'true'
 
-    /* ONE PRESS DRAWS ONE PIECE (Ash, 2026-08-30). He judges each one before
-     * the next is asked for, so a batch is not a convenience here, it is the
-     * shape that turns one bad prompt into five bad pictures with nobody having
-     * looked at the first. Two ways to ask for more than one and both refused:
-     * a list in the body, and a second press while one is still drawing. */
+    /* one press draws one piece: a batch turns one bad prompt into five bad pictures with nobody having looked at the first */
     const asked = [b.pieces, b.names, b.batch].find(Array.isArray)
     if (asked && asked.length > 1)
       return send(res, 400, {
         error: `one press draws one piece, and this asked for ${asked.length} · they get judged one at a time, so the next one starts after this one is looked at`,
       })
-    /* ANY PENDING ROW REFUSES, and the exemption for the same name was a hole
-     * with a real path through it. `Drawing` is keyed by `armed`, so pressing
-     * "pick another" and re-arming the same type remounts it with a fresh local
-     * busy flag and the name field defaulting to the type name both times, while
-     * the page's own `v.pending` is still null because load() has not run. Two
-     * concurrent pixellab spends on one row, and whichever answered last won.
-     * The stuck-process case the exemption was reaching for is already covered:
-     * pendingUi only sees a row younger than ten minutes. */
+    /* any pending row refuses: the same-name exemption let re-arming run two concurrent spends on one row, and pendingUi only sees rows younger than ten minutes */
     const busy = dry ? null : await pendingUi(me.id)
     if (busy)
       return send(res, 409, { error: `"${busy.name}" is still drawing · one at a time, so wait for it and then look at it`, pending: busy })
 
-    /* THE TYPE SUPPLIES THE PLUMBING. An author picks one of the twenty-one and
-     * describes the piece; the canvas, the generator's element list and the
-     * region vocabulary come from the preset rather than from a form somebody
-     * fills in twice. An unknown type, and the two named so nobody generates
-     * them, are refused inside createUi before anything is spent. */
+    /* the type supplies the canvas, the element list and the region vocabulary, and an unknown one is refused inside createUi before anything is spent */
     const t = pieceType(b.type)
     if (b.type && !t) return send(res, 400, { error: `there is no piece type called "${b.type}"` })
     const width = Number(b.width) || t?.w || 0
     const height = Number(b.height) || t?.h || 0
 
-    /* THE GATE IS CHECKED BEFORE THE PRESS AND NOT AFTER IT. The maxima do not
-     * combine, so 688x512 reads as 4:3 and comes back refused with the money
-     * already committed.
-     *
-     * WHICH GATE depends on which generator, because the two have different
-     * limits and the difference is not cosmetic. The panel route starts at 192
-     * on both sides. The image route starts at 16, and running a sheet through
-     * the panel route's floor would refuse a 384x160 chip strip and push it onto
-     * a canvas taller than its family needs, which is measured to make the
-     * generator repeat a row to fill the space. */
+    /* checked before the press: 688x512 reads as 4:3 and is refused with the money committed, and the panel route floors at 192 where the image route floors at 16 */
     const gate = canvasFor(t, width, height)
     if (!gate.ok)
       return send(res, 400, {
@@ -2729,31 +1944,10 @@ async function route(req, res, p, url) {
         canvas: gate,
       })
 
-    /* WHO MAY MINT CORE CHROME. The kit is one set for the whole game and a
-     * member piece may only add, so `core` is not a flag anybody can set on
-     * their own shelf: it belongs to the one account the game reads chrome
-     * from, which is the same account the ocean belongs to and is configured in
-     * the same place. Everyone else gets an additive piece, which is the whole
-     * of what they are meant to be making. */
+    /* core is not a flag anybody can set on their own shelf: it belongs to the one account the game reads chrome from, and everyone else adds */
     const core = !!b.core && (await ownsOcean(req))
 
-    /* THE STYLE REFERENCE IS CHOSEN BY THE SERVER, FROM THE TYPE.
-     *
-     * It used to be a map slug an author typed, which is the strongest lever
-     * this endpoint has and was reachable by exactly nobody: the page has no
-     * field for it, so every piece ever drawn here went out with no reference
-     * at all. A map's painting is also the wrong picture for chrome anyway. The
-     * right one is the chrome the game ALREADY SHIPS and Ash already accepted,
-     * and public/chrome holds it, picked by piece type in ui.mjs.
-     *
-     * A named map still wins if one is passed, because that is a deliberate
-     * answer from somebody who had a reason, and the page has a select for it
-     * with a tooltip saying what a painting can and cannot hand over. It is the
-     * ONE way this call can end up carrying material that is not the type's, so
-     * whichever file went out is named in the answer either way.
-     *
-     * Resolved before the row exists, so the dry run reaches it without writing
-     * anything and a bad slug is a 400 rather than a failed row. */
+    /* the reference comes from the type out of public/chrome: it was a slug with no field on the page, so every piece ever drawn here went out with none */
     let style = chromeStyle(t ? t.name : '')
     if (b.style) {
       try {
@@ -2764,30 +1958,9 @@ async function route(req, res, p, url) {
       }
     }
 
-    /* THE TWO LEVERS COME OFF THE TYPE AND A CALLER CANNOT DROP EITHER.
-     *
-     * `elements` used to read `Array.isArray(b.elements) ? b.elements : t?.elements`
-     * and the style used to be omittable the same way, which is exactly how
-     * work/.kit/panel.png was paid for: a call with no element list and the
-     * wrong reference art, from a prompt that was otherwise good. Measured over
-     * five rolls, `elements` is the lever that decides SHAPE and `style_image`
-     * is the lever that decides MATERIAL, and words decide neither, so neither
-     * is a thing a body may turn off.
-     *
-     * A type that deliberately sends no list, which is every sheet, is reported
-     * rather than left to look like a dropped field. Same for a missing
-     * reference: said out loud, because "no reference" is why the colours
-     * drifted and an author who is not told reads it as a bad prompt. */
+    /* elements decides shape and style_image decides material, words decide neither, so a body may turn neither off; a type that sends none says so */
     const elements = t?.elements || null
-    /* AND WHICH GENERATOR IS ABOUT TO BE PAID, because it is no longer one.
-     *
-     * /v2/create-ui-asset is a panel kit generator and nothing else: measured
-     * 2026-08-31, an icon set came back as panels and round chip tokens came
-     * back as panels, and the six sheet types could not be made on it at all.
-     * They go to /v2/generate-image-v2, which paints an arbitrary subject with
-     * transparency and has no element list, no shape template and no camera.
-     * `elements` on a sheet is therefore not a dropped lever, it is a field that
-     * route does not have, and the answer says which of the two it is. */
+    /* create-ui-asset is a panel kit generator only: icon sets and chip tokens came back as panels, so sheets go to generate-image-v2, which has no element list */
     const viaImage = usesImageEndpoint(t)
     const levers = {
       route: viaImage ? '/v2/generate-image-v2' : '/v2/create-ui-asset',
@@ -2798,16 +1971,7 @@ async function route(req, res, p, url) {
       ...(style ? {} : { noStyleRef: 'no reference art for this type, so nothing carries the material and only the words do' }),
     }
 
-    /* CLAUDE WRITES THE PROMPT, WITH EVERYTHING THIS PROCESS KNOWS IN FRONT OF
-     * IT, and this line is the whole point of the route. What goes over is the
-     * author's sentence, the type's tier and stretch and canvas and region
-     * vocabulary and caution, the nine-slice law, this account's existing shelf
-     * so a second piece matches the first, and the picture of the chrome the
-     * game already ships. All of it already existed here and none of it left
-     * the process.
-     *
-     * It is not a gate. With no claude the author's own words still go to
-     * pixellab, and the answer says out loud that nobody wrote the prompt. */
+    /* claude writes the prompt with the type, the shelf and the shipped chrome in front of it; it is not a gate, and a bare ask says so on the answer */
     const shelf = await listUi(me.id)
 
     /* THE ONE PLACE THE ASK IS ASSEMBLED, so a dry run and a real one cannot
@@ -2825,13 +1989,7 @@ async function route(req, res, p, url) {
       // is gone: it is one of the two levers that decide whether a picture is
       // usable, and work/.kit/panel.png is what a dropped one costs.
       elements,
-      /* ONLY `pieces` IS A SHAPE TEMPLATE, and this took whichever of the
-       * three arrays happened to be present. `names` and `batch` are lists of
-       * NAMES, so a caller sending one had its strings forwarded as the
-       * generator's shape list, where every entry is refused three times over
-       * as "not a valid dictionary" and the author is told nothing they can
-       * act on. Those two are counted for the one-press refusal above and are
-       * not content. */
+      /* only pieces is a shape template: forwarding names or batch got every entry refused as "not a valid dictionary" with nothing the author could act on */
       pieces: Array.isArray(b.pieces) && b.pieces.length === 1 ? b.pieces : null,
       // the same picture the router looked at. Two levers and they do
       // different jobs: this one carries material and no layout, the words
@@ -2840,14 +1998,7 @@ async function route(req, res, p, url) {
       name: pieceName,
     })
 
-    /* THE SHEET'S OWN ASK, and it is a different set of fields rather than the
-     * same one with two dropped. The image route takes no element list, no
-     * shape template and no name, and its style reference is a ReferenceImage
-     * carrying the picture's size rather than the bare Base64Image the panel
-     * route takes, so sending one route's body to the other is a 422 either
-     * way. Both are assembled here, once, for the reason askFor is: a dry run
-     * built from a second copy of the fields proves nothing about the copy that
-     * spends. */
+    /* a different set of fields: the image route takes a ReferenceImage with its size where the panel route takes a bare Base64Image, and crossing them is a 422 */
     const sheetAsk = (plan) => ({
       description: plan.description,
       width,
@@ -2858,17 +2009,7 @@ async function route(req, res, p, url) {
     if (dry) {
       const plan = await chromePlan({ ask: description, t, width, height, shelf, style, job: `ui:dry:${name || t?.name || 'piece'}` })
       const wire = viaImage ? pixellab.sheetBody(sheetAsk(plan)) : pixellab.uiAssetBody(askFor(plan, name || t?.name || 'piece'))
-      /* THE PICTURE IS REPLACED BY ITS LENGTH. A base64 png is 60 to 200 KB of
-       * one unreadable line, and printing it buries the six fields somebody is
-       * dry-running to check. What matters about style_image is that it is
-       * there, that it is the shape ITS OWN route takes, and which file it came
-       * off, and all three survive this.
-       *
-       * The two routes wrap it differently and that is the point of showing it:
-       * the panel route takes a bare Base64Image and the image route takes a
-       * ReferenceImage with the picture's own size beside it, so a body built
-       * for one and posted to the other is a 422 with the money uncommitted but
-       * the author none the wiser. */
+      /* the picture is shown as its length: 60 to 200 KB of one line buries the fields, and what matters is that it is there and in its own route's shape */
       const shown = (b64) => `<${b64.length} chars of ${style.file}>`
       const body = !wire.style_image
         ? wire
@@ -2886,10 +2027,7 @@ async function route(req, res, p, url) {
       })
     }
 
-    /* THE ROW EXISTS BEFORE THE PICTURE DOES, because this call takes a minute
-     * and a half and something has to be poll-able for that minute and a half.
-     * It is also what makes a spend that produced nothing visible afterwards
-     * rather than silently absent. */
+    /* the row exists before the picture: the call takes a minute and a half and a spend that produced nothing has to be visible afterwards */
     let row
     try {
       // title guarded at the route the way description already is: createUi's
@@ -2914,41 +2052,19 @@ async function route(req, res, p, url) {
       const out = viaImage ? await pixellab.sheetImage(sheetAsk(plan)) : await pixellab.uiAsset(askFor(plan, row.name))
       const buf = Buffer.from(out.b64, 'base64')
       const size = pngSizeBuf(buf.subarray(0, 24))
-      /* THE PIXELLAB ID IS KEPT, and it never was. The column exists, createUi
-       * accepts it and has an on-conflict rule written to preserve it, and the
-       * generator returns it, and this route used only b64, width and height, so
-       * `pixellab_id` was the empty string on every row ever produced and
-       * `pixellabId` never appeared on the wire. Every other generated thing in
-       * this repo can be traced back to the spend it was paid for; chrome
-       * silently could not. */
-      /* THE ID IS WHICHEVER ONE THE ROUTE THAT DREW IT HANDS BACK. The panel
-       * route answers a ui_asset_id and the image route answers a background job
-       * id, and a row that cannot be traced to the spend it was paid for is the
-       * defect this line already exists to fix. */
+      /* the pixellab id is kept: this used only b64, width and height, so pixellab_id was empty on every row ever produced and no chrome traced to its spend */
+      /* whichever id the route that drew it hands back: a ui_asset_id from the panel route, a job id from the image route */
       const saved = await setUiImage(me.id, row.name, buf, size.w || out.width, size.h || out.height, out.uiAssetId || out.jobId || '')
-      /* WHAT COMES BACK, AND NOT WHAT IT COST. The old page put the price under
-       * the button as the last thing an author read, which is why it read as a
-       * bill. What belongs there is this many faces, at this size, ready to be
-       * cut. */
+      /* what came back, not what it cost: the price under the button read as a bill, where faces and size are what an author needs */
       const cutFaces = (saved.regions || []).filter((r) => r && r.kind === 'face')
       return send(res, 200, {
         ui: { name: saved.name, type: saved.type, w: saved.w, h: saved.h, status: saved.status },
         cut: t ? { tier: t.tier, faces: t.faces, regions: t.regions } : null,
-        /* AND WHAT THE SCAN ACTUALLY FOUND ON A SHEET, which is the half an
-         * author cannot see in the picture. The rectangles are already stored,
-         * so this is a report and not an offer: either the marks were counted
-         * and named, or the cut refused and `cutNote` says which check failed
-         * and the piece is owed a hand cut. */
+        /* the rectangles are already stored, so this is a report and not an offer: cutNote says which check failed and the piece is owed a hand cut */
         ...(viaImage
           ? { faces: cutFaces.map((r) => ({ name: r.name, x: r.x, y: r.y, w: r.w, h: r.h })), cutNote: saved.crop_note || '' }
           : {}),
-        /* WHO WROTE THE PROMPT, said out loud on every answer.
-         *
-         * An author whose piece came back wrong needs to know which of the two
-         * things happened: the router wrote a prompt and it was a bad one, or
-         * there was no router and their four words went to the generator bare.
-         * Those want opposite next moves, and a silent degrade looks exactly
-         * like the first one. */
+        /* who wrote the prompt, on every answer: a silent degrade looks exactly like the router writing a bad one, and they want opposite next moves */
         routed: plan.routed,
         prompt: plan.description,
         note: plan.note,
@@ -2971,16 +2087,7 @@ async function route(req, res, p, url) {
     }
   }
 
-  /* THE MARKS AND THE MEASUREMENT, SAVED TOGETHER.
-   *
-   * One call because they are checked against each other: an edge number is
-   * only legal against the picture the regions sit on, and two requests would
-   * let the pair go inconsistent between them.
-   *
-   * There was a `/api/ui/slots` alias here holding the door open for the page
-   * that spoke that word. That page is gone, and so is the alias: `region` is
-   * the word on the wire, because a WorldSlot is an island's berth on the sea
-   * and PmapScene reads it about thirty times. */
+  /* marks and measurement save together: an edge number is only legal against the picture its regions sit on, and two requests would let the pair drift apart */
   if (p === '/api/ui/regions' && req.method === 'POST') {
     const me = await currentUser(req)
     if (!me) return send(res, 401, { error: 'sign in to mark a piece' })
@@ -2994,11 +2101,7 @@ async function route(req, res, p, url) {
     }
   }
 
-  /* SAYING A PIECE IS FINISHED, which is a different fact from its picture
-   * having arrived. A ground piece with no edge numbers is refused here,
-   * because those four numbers are the entire thing the game can consume:
-   * without them the consumer falls back to squashing the whole painting into
-   * whatever box the element happens to be. */
+  /* finished is not the same fact as the picture arriving: with no edge numbers the consumer squashes the whole painting into whatever box it gets */
   if (p === '/api/ui/publish' && req.method === 'POST') {
     const me = await currentUser(req)
     if (!me) return send(res, 401, { error: 'sign in to publish a piece' })
@@ -3010,19 +2113,7 @@ async function route(req, res, p, url) {
     }
   }
 
-  /* PUTTING A BAD CROP BACK.
-   *
-   * The generator answers a ground piece with a family: the hero at the top and
-   * a tray of matching buttons under it. The four edge numbers are insets from
-   * the edge of the WHOLE image with no source rect anywhere in the shape, so a
-   * family cannot be sliced at all, and the hero is cut out at import by an
-   * alpha scan that refuses rather than guesses.
-   *
-   * This is the other half of that promise. Ash's concern about a crop was that
-   * something guessing will sometimes be wrong, and the scan answers half of it
-   * by refusing when it cannot prove which shape is the piece. The rest is that
-   * a crop which passed all three checks and is still wrong must be one press
-   * to undo, rather than a spend to draw again. */
+  /* the shape has no source rect, so a family cannot be sliced and the hero is alpha-scanned out; a crop that passed and is still wrong undoes in one press */
   if (p === '/api/ui/uncrop' && req.method === 'POST') {
     const me = await currentUser(req)
     if (!me) return send(res, 401, { error: 'sign in to put a piece back' })
@@ -3048,14 +2139,7 @@ async function route(req, res, p, url) {
     }
   }
 
-  /* THE AUTHOR'S OWN PICTURE, SCOPED TO THE ACCOUNT THAT DREW IT.
-   *
-   * The page fetched every piece through /api/v1/ui/<name>/image, which has no
-   * account in its path and resolves core-then-oldest across the whole platform.
-   * Names are unique per account only, so two people with a piece called
-   * `binder` were both shown one picture, stretched to the other row's size, and
-   * every rectangle they dragged was measured against art they never saw. This
-   * is the same route for the row this account actually owns. */
+  /* names are unique per account only, and the v1 image route resolves core-then-oldest platform-wide, so two people with a piece called binder saw one picture */
   if (p.startsWith('/api/ui/') && p.endsWith('/image') && req.method === 'GET') {
     const me = await currentUser(req)
     if (!me) return send(res, 401, { error: 'sign in to see a piece' })
@@ -3068,16 +2152,7 @@ async function route(req, res, p, url) {
     return res.end(buf)
   }
 
-  /* THE FAMILY THE HERO WAS CUT OUT OF.
-   *
-   * Kept rather than thrown away for two reasons and only one of them is the
-   * undo. The other is that the tray under the hero is the rest of the kit,
-   * drawn in the same job and paid for in the same spend: the buttons, the
-   * chips and the rules that match this frame. Discarding it to keep a tidy
-   * blob store would mean paying for them again.
-   *
-   * Owner-scoped and offered nowhere else. The game consumes the piece, not the
-   * sheet it arrived on. */
+  /* the family is kept because the tray under the hero is the rest of the kit, paid for in the same spend; discarding it means paying again */
   if (p.startsWith('/api/ui/') && p.endsWith('/full') && req.method === 'GET') {
     const me = await currentUser(req)
     if (!me) return send(res, 401, { error: 'sign in to see a piece' })
@@ -3088,16 +2163,7 @@ async function route(req, res, p, url) {
     return res.end(buf)
   }
 
-  /* ---- the shared library, which is a COPY and says so --------------------
-   *
-   * One dock kit usable by twenty maps instead of twenty spends. The bytes are
-   * duplicated: that costs object storage and costs no pixellab generation at
-   * all, and 013_library_kit.sql has the whole of why a genuinely shared row
-   * was not worth its blast radius.
-   *
-   * library-share and library-copy both carry the map in `id`, so the POST
-   * ownership gate at the door already covers the map being written to. The
-   * SOURCE map is checked here, because the gate only ever looks at one. */
+  /* the shared kit is a copy: duplicated bytes cost storage and no generation, and 013_library_kit.sql says why a genuinely shared row was not worth it */
   if (p === '/api/library-share' && req.method === 'POST') {
     const b = await body(req)
     const id = safeId(b.id)
@@ -3144,10 +2210,7 @@ async function route(req, res, p, url) {
     const name = cleanName(b.name)
     if (!name) return send(res, 400, { error: 'no name' })
     if (from === to) return send(res, 400, { error: 'that item is already in this map' })
-    /* THE GATE ONLY EVER LOOKS AT ONE MAP, so the other one is checked here.
-     * Without this an account could name somebody else's map as the source and
-     * pull their whole library into a map they do own, which is the same hole
-     * the import routes had when their target lived in sceneId. */
+    /* the gate only looks at one map, so the source is checked here: otherwise a stranger's library could be pulled into a map you do own */
     if (platformOn()) {
       const me = await currentUser(req)
       const owners = await many('select slug, owner_id from maps where slug = any($1)', [[from, to]])
@@ -3162,13 +2225,7 @@ async function route(req, res, p, url) {
   }
 
   if (p === '/api/export' && req.method === 'POST') {
-    /* AN EXPORT THAT TAKES MINUTES HAS TO SAY WHERE IT IS.
-     *
-     * This route reads a body, pulls missing art out of object storage, copies
-     * eight hundred pngs and publishes a version, and until these lines existed
-     * it said nothing at all until the whole thing finished. When it stopped
-     * finishing there was no way to tell which of the four it was stuck in, and
-     * three hours went into narrowing it down by hand. */
+    /* an export that takes minutes has to say where it is: it said nothing until it finished, and three hours went on narrowing down a stall by hand */
     const t0 = Date.now()
     const step = (what) => console.log(`[export] ${what} · ${((Date.now() - t0) / 1000).toFixed(1)}s`)
     const b = await body(req)
@@ -3185,19 +2242,7 @@ async function route(req, res, p, url) {
     try {
       const h = await hydrateMap(id, dir)
       if (h.pulled) console.log(`[export] ${id}: pulled ${h.pulled} file(s), ${(h.bytes / 1024).toFixed(0)}kb, from object storage`)
-      /* A FILE THAT DID NOT ARRIVE STOPS THE EXPORT, before a single byte is
-       * written.
-       *
-       * hydrateMap already counts these and already logs them, and the count was
-       * then dropped on the floor: only h.pulled was read. What follows a missing
-       * file is quiet, every step of the way. resolveAssetFile returns null,
-       * packLook returns null, `if (!look0) continue` drops the placement, and
-       * the short bundle publishes as a new immutable version reporting success.
-       * Nobody finds out until a class walks an island with holes in it.
-       *
-       * A version is immutable, so there is no repairing it afterwards. Refusing
-       * costs a retry; publishing costs a version number that can never be
-       * corrected. */
+      /* a file that did not arrive stops the export: a missing one is quiet all the way down and would publish a holed island as an immutable version */
       if (h.failed > 0)
         return send(res, 502, {
           error: `${h.failed} file(s) could not be read from object storage, so nothing was written. Try the export again.`,
@@ -3222,21 +2267,11 @@ async function route(req, res, p, url) {
     fs.writeFileSync(path.join(dir, 'map.json'), JSON.stringify(b.map, null, 2))
     files.push('map.json')
     step('planes and map.json written')
-    // the placed assets: assets.json per the loader contract, and every used
-    // png copied into assets/ so the bundle stands on its own. Sources can be
-    // the per-map library, the old shared library, or a reopened bundle's own
-    // assets/ folder, so every source byte is read into memory BEFORE the
-    // folder is rebuilt; otherwise a re-export would delete its own sources.
+    // every source byte is read into memory before assets/ is rebuilt, or a re-export would delete its own sources
     const assetsDir = path.join(dir, 'assets')
     const outAssets = []
     const writes = new Map() // rel path inside assets/ -> png buffer
-    /* ONE NAME PER DISTINCT SOURCE, because assets/ is one flat folder and two
-     * libraries can both hold a tree.png. The key used to be the filename
-     * alone, so the second one silently overwrote the first and both
-     * placements drew the same picture. Looks make that likelier, since a troll
-     * and the boulder it turns into come out of the same run. The same source
-     * used by two placements still writes once, which is the point of keying by
-     * the absolute path rather than counting. */
+    /* one name per distinct source: assets/ is flat, so keying by filename let a second tree.png silently overwrite the first and both placements drew it */
     const named = new Map() // absolute source file or folder -> name inside assets/
     const uniq = (abs, want, ext) => {
       const had = named.get(abs)
@@ -3247,12 +2282,7 @@ async function route(req, res, p, url) {
       named.set(abs, n)
       return n
     }
-    /* ONE APPEARANCE, packed: views, frames or a bare src, in that order, with
-     * its pngs read into the shared buffer map. It runs for the placement
-     * itself and again for each extra look a sequence switches to, so a look is
-     * written exactly the way the placement is and no reader learns a second
-     * shape. Returns null when nothing resolved, which drops the entry the same
-     * way the branches always did. */
+    /* one appearance packed: views, frames or a bare src, and it runs for each extra look too, so no reader learns a second shape. null drops the entry */
     const packLook = (s) => {
       if (!s || typeof s !== 'object') return null
       /* a placement with VIEWS: every rotation goes into the bundle under one
@@ -3264,20 +2294,11 @@ async function route(req, res, p, url) {
         // be deleted by its own export
         const outDirs = {}
         let metaFile = ''
-        /* THE COMPOUND HEADINGS GO IN FIRST, AND THAT ORDER IS THE WHOLE FIX.
-         * See orderedHeadings in store/publish.mjs for what goes wrong when they
-         * do not: the game re-derives a resting heading with an endsWith scan,
-         * 'south-west-0.png' ends with 'west-0.png', and 17 of the hub's 38
-         * direction sets came out facing the wrong way. Written once there,
-         * because two publishers pack these sets. */
+        /* compound headings first: the game's endsWith scan matches 'south-west-0.png' against 'west-0.png' and 17 of the hub's 38 sets faced the wrong way */
         for (const k of orderedHeadings(Object.keys(s.dirs))) {
           const arr = s.dirs[k]
           if (!Array.isArray(arr) || !arr[0]) continue
-          /* EVERY frame of the heading, not the first one alone. A character is
-           * a walk cycle, six frames to a heading, so keeping frame 0 handed the
-           * game a statue that slid across the ground: the exact moon-walk the
-           * views were added to stop. A stop at the first missing file, the way
-           * the animated branch below stops, keeps the run contiguous. */
+          /* every frame of the heading: keeping frame 0 handed the game a statue that slid across the ground, and a stop at the first gap keeps the run contiguous */
           const out = []
           for (const u of arr) {
             const abs = resolveAssetFile(u, dir)
@@ -3301,18 +2322,7 @@ async function route(req, res, p, url) {
           } catch {
             /* no dirs.json beside the views, or unreadable: the default stands */
           }
-          /* THE HEADING THE AUTHOR PICKED, not south.
-           *
-           * A standing figure has no movement to derive a facing from, so its
-           * resting view is whatever the facing picker set, and that choice is
-           * carried on the placement's own src. This line used to hand back
-           * outDirs.south unconditionally, which silently turned 17 of the
-           * hub's hand-turned figures back to front: 21 south, 8 south-west and
-           * 9 south-east went in, 38 south came out.
-           *
-           * Nothing about the pixels or the JSON was wrong, which is what made
-           * it invisible. editor.ts documents this exact contract one file over
-           * and the exporter broke it. */
+          /* the heading the author picked, not south: handing back outDirs.south turned 21 south, 8 south-west and 9 south-east into 38 south on the hub */
           const wanted = String(s.src || '')
           let rest = ''
           for (const [k, arr] of Object.entries(s.dirs)) {
@@ -3358,13 +2368,7 @@ async function route(req, res, p, url) {
       return null
     }
     const placements = (Array.isArray(b.assets) ? b.assets : []).filter((a) => a && typeof a === 'object')
-    /* WHICH of the two drops happened, and to whom.
-     *
-     * The guard at the end of this loop fires on a count, and a count cannot say
-     * why. Both `continue`s below reach it, so a placement carrying a bad x, y
-     * or scale was reported as missing art and sent the person hunting for a png
-     * that was sitting right there. Counted apart, with the ids, so the refusal
-     * names the cause it actually hit. */
+    /* counted apart, with ids: both continues reach one guard, so a bad x, y or scale was reported as missing art and sent a person hunting for a png that was there */
     const badNumber = []
     const noArt = []
     for (const a of placements) {
@@ -3384,53 +2388,21 @@ async function route(req, res, p, url) {
       const rot = isFinite(Number(a.rot)) ? Number(a.rot) : 0
       const flipX = !!a.fx
       const flipY = !!a.fy
-      // how it MOVES, if it does, straight through as the numbers the editor
-      // holds. The game works out where it is each frame from these; there are
-      // no extra pixels and nothing to load. A sequence is more of the same:
-      // life.states is numbers too, so it rides this spread untouched and the
-      // exporter needs no idea that it exists.
+      // how it moves, as the numbers the editor holds: no extra pixels and nothing to load, and life.states rides the same spread untouched
       const life = a.life && typeof a.life === 'object' ? a.life : null
       const tf = { scale: scaleX, scaleX, scaleY, rot, flipX, flipY, ...(life ? { life } : {}) }
-      /* look 0 is the entry itself, in exactly the shape every existing reader
-       * knows, so a placement that never changes moves not an inch. The extra
-       * appearances a sequence switches to ride alongside under one optional
-       * key, and a reader that has never heard of looks ignores it and draws
-       * the thing the way it starts. */
+      /* look 0 is the entry itself in the shape every reader knows, and the extras ride under one optional key an older reader ignores */
       const look0 = packLook(a)
       if (!look0) {
         noArt.push(pid)
         continue
       }
-      /* a look whose png has gone KEEPS ITS SLOT, holding look 0.
-       *
-       * art is an index, so dropping one here shifts every later look down and
-       * the bundle then draws the wrong picture rather than a missing one.
-       * Measured on a placement whose looks were [gone, boulder] with states at
-       * art 1 and 2: the boulder came out at index 1 and art 2 fell off the end
-       * back to the boat, so both states drew something that was never asked
-       * for. The game reader already holds the slot the same way, and so does
-       * a reopen, so all three sides agree that a look that did not arrive
-       * shows the thing the way it started. */
+      /* a look whose png has gone keeps its slot: art is an index, so dropping one shifted every later look down and both states drew something never asked for */
       const looks = []
       // STATES_MAX extras, because a round is at most that many states and each
       // of them can name one picture that is not look 0. See STATES_MAX.
       for (const L of Array.isArray(a.looks) ? a.looks.slice(0, STATES_MAX) : []) looks.push(packLook(L) || look0)
-      /* WHAT EACH FACE IS CALLED, in one array indexed exactly the way `art`
-       * indexes the pictures: slot 0 is the placement's own and slot 1 is
-       * looks[0]. life.ts is emphatic that art is "an INDEX and never a name",
-       * and it stays that way; this rides beside it so `show(placement, state)`
-       * finally has a vocabulary to select from, and nothing that reads by index
-       * can tell the difference.
-       *
-       * NOT PACKED INSIDE look0. look0 is spread into this entry, so a `name` on
-       * it would land on top of the placement's own name three lines above and
-       * the map's whole addressing system would come out holding the name of a
-       * picture. One array, one indexing law, no collision.
-       *
-       * An empty string is a face nobody named and HOLDS ITS SLOT, for the same
-       * reason a look that would not load holds its: dropping one shifts every
-       * later name onto the wrong index. Absent entirely when nothing here is
-       * named, so a bundle from a map with no vocabulary grows no field. */
+      /* face names in one array indexed the way art is, never inside look0, whose spread would overwrite the placement's own name; an unnamed face holds its slot */
       const names = [
         isAnchorName(a.lookName) ? String(a.lookName) : '',
         ...(Array.isArray(a.looks) ? a.looks.slice(0, STATES_MAX) : []).map((L) =>
@@ -3439,18 +2411,10 @@ async function route(req, res, p, url) {
       ]
       outAssets.push({
         id: String(a.id),
-        /* the author's own name for this thing, when they gave it one. It is
-         * what an anchor binds to and what python addresses, and the id beside
-         * it is a counter nobody chose, so a bundle that dropped this would
-         * hand the game back the machine string it was written to replace.
-         * Absent on scenery, which is nearly everything. */
+        /* the author's own name, which is what an anchor binds to and what python addresses; the id beside it is a counter nobody chose */
         ...(isPlacementName(a.name) ? { name: String(a.name) } : {}),
         group: String(a.group || 'props'),
-        /* WHEN THIS THING IS THERE AT ALL. Already resolved by editor.ts
-         * bundle() against the map's group rows, because that is the side that
-         * holds them, so what arrives here is the one string that ships. MAPVIS
-         * never reads inside it: it declares the condition and python decides
-         * what it means. */
+        /* already resolved by editor.ts bundle(), and mapvis never reads inside it: it declares the condition and python decides what it means */
         ...(typeof a.when === 'string' && a.when.trim() ? { when: a.when.trim().slice(0, 240) } : {}),
         ...look0,
         x,
@@ -3460,25 +2424,7 @@ async function route(req, res, p, url) {
         ...(names.some((n) => n) ? { lookNames: names } : {}),
       })
     }
-    /* THE SAME COUNT OUT AS IN, or no bundle at all.
-     *
-     * The two `continue`s above are each correct on their own and together they
-     * are how an island loses people quietly: a placement whose png did not
-     * resolve is simply not in outAssets, and every count the response reports
-     * is counted after the drop, so a bundle missing 19 of 75 placements reads
-     * exactly like one missing none.
-     *
-     * Naming both numbers is the point. "62 of 75" tells a person to look; a
-     * silent 62 does not. It sits here because the count is not knowable any
-     * earlier, and here is still ahead of the two things that cannot be taken
-     * back: the rm and rebuild of assets/, and the publish of a version. The
-     * plane pngs above have already been rewritten with the same pixels the
-     * editor holds, which is what a save does anyway.
-     *
-     * The two causes are named separately. This message used to say only that
-     * the art was missing, which is a lie half the time it fires: a bad number
-     * blocks the whole export and the person is then told to go looking for a
-     * png that is on disk. */
+    /* the same count out as in, or no bundle: counts taken after the drop meant a bundle missing 19 of 75 placements read exactly like one missing none */
     if (outAssets.length < placements.length) {
       // enough ids to go and look at, not a wall of them: a big map could drop
       // hundreds and the message has to stay readable
@@ -3503,12 +2449,7 @@ async function route(req, res, p, url) {
     fs.writeFileSync(path.join(dir, 'assets.json'), JSON.stringify({ assets: outAssets }, null, 2))
     files.push(copied ? `assets.json (+${copied} png${copied > 1 ? 's' : ''})` : 'assets.json')
 
-    // The same bytes, written once more as an immutable version in object
-    // storage. That is the publish: the game reads a version rather than a
-    // folder somebody copied by hand, re-exporting cannot break a class that is
-    // mid-session, and map.json picks up anchors[] from the database on the way
-    // through. work/<id>/ stays exactly as it was, because it is still what a
-    // reopened scene reads.
+    // the publish is an immutable version, so re-exporting cannot break a class mid-session, and map.json picks up anchors[] from the database on the way
     step('assets folder rebuilt')
     let published = null
     if (platformOn()) {
@@ -3585,30 +2526,18 @@ async function route(req, res, p, url) {
     return send(res, 200, { dir, files })
   }
 
-  /* The doc exactly as the editor holds it, written on the same beat as the
-   * browser autosave. A map used to live in one localStorage key on one machine
-   * behind a quota failure that says nothing, so hours of masking had no second
-   * copy anywhere. The body is the string Doc.serialize() already produces,
-   * stored verbatim, so there is no second format to keep in step with it. */
+  /* the doc as the editor holds it, stored verbatim so there is no second format: one localStorage key behind a silent quota failure was the only copy */
   if (p === '/api/doc' && req.method === 'POST') {
     const b = await body(req)
     if (typeof b.doc !== 'string' || !b.doc) return send(res, 400, { error: 'no doc' })
     const id = safeId(b.id)
-    // The platform splits it: the three mask planes become a png in object
-    // storage, the placements become a row, and each half is skipped when its
-    // own content did not change. At one autosave every four seconds that
-    // skipping is the difference between a free database living and dying.
+    // masks become a png and placements a row, each skipped when unchanged: at an autosave every four seconds that is a free database living or dying
     if (platformOn()) {
       try {
         const r = await saveDocument(id, b.doc)
         return send(res, 200, { bytes: b.doc.length, wrote: r.wrote, savedAt: r.savedAt })
       } catch (e) {
-        /* "you are not signed in" is an answer, not an outage.
-         *
-         * The disk fallback below exists so an unreachable database never costs
-         * an author their work. A refusal is the opposite case: falling through
-         * would write a stranger's map into scratch, report success, and lose it
-         * when the instance ends. Say so instead. */
+        /* not signed in is an answer, not an outage: falling through would write a stranger's map into scratch, report success and lose it */
         if (e.name === 'NoOwner') return send(res, 401, { error: String(e.message) })
         // never lose an author's work to a database being unreachable: fall
         // through and put it on disk, and say so
@@ -3628,19 +2557,7 @@ async function route(req, res, p, url) {
     return send(res, 200, { bytes: b.doc.length, wrote: ['disk'] })
   }
 
-  /* RENAMING A MAP, which is the one key everything else addresses.
-   *
-   * A map's id comes from the name of the file somebody dropped, or from ?id=,
-   * and there has never been a way to change it. It is simultaneously the
-   * publish slug, every door's target, the objective's map field, the world
-   * roster key and the save key, so the one string the whole game addresses is
-   * a side effect of what a png was called.
-   *
-   * The doors move with it. A rename that leaves twelve doors pointing at a map
-   * that no longer answers is a rename that breaks the archipelago silently,
-   * and the count is said out loud so an author knows what just happened.
-   * Published versions keep their old prefix on purpose: they are immutable and
-   * keyed by map id, so a class mid-session is untouched. */
+  /* the slug is the publish key, every door's target and the save key, so the doors move with a rename; published versions keep their old prefix and are untouched */
   if (p === '/api/map-rename' && req.method === 'POST') {
     if (!platformOn()) return send(res, 503, { error: 'renaming needs the platform' })
     const b = await body(req)
@@ -3663,20 +2580,12 @@ async function route(req, res, p, url) {
 
   if (p.startsWith('/api/doc/') && req.method === 'GET') {
     const id = safeId(decodeURIComponent(p.slice('/api/doc/'.length)))
-    // savedAt travels with the document because the browser also holds a copy,
-    // and something has to decide which of the two is the real one. Without it
-    // the editor prefers localStorage forever and the map still lives in one
-    // browser, which is the whole thing this was meant to fix.
+    // savedAt travels because the browser holds a copy too: without it the editor prefers localStorage forever and the map lives in one browser
     if (platformOn()) {
       try {
         const r = await loadDocument(id)
         if (r?.doc) {
-          /* OPENING A MAP IS WORKING ON IT.
-           *
-           * The dashboard orders by updated_at, which only a save used to
-           * touch, so the banner kept leading with whichever map was written
-           * last rather than the one just opened. Opening one now counts, which
-           * is what "recent" reads as to the person looking at it. */
+          /* opening a map counts as working on it: the dashboard orders by updated_at, which only a save used to touch */
           q('update maps set updated_at = now() where slug = $1', [id]).catch(() => {})
           return send(res, 200, { doc: r.doc, savedAt: r.savedAt, from: 'platform' })
         }
@@ -3698,15 +2607,7 @@ async function route(req, res, p, url) {
   return notFound(res)
 }
 
-/* ---- the linked machine ---------------------------------------------------
- *
- * A relay authenticates with its own token, not a session, because it is a
- * process on a laptop rather than a person in a browser. The token is stored
- * hashed the same way a session is, so a stolen database cannot be replayed.
- *
- * It can only ever claim jobs belonging to the account it is linked to, and it
- * never sees a map, a key or anything else. All it does is answer questions.
- */
+/* a relay authenticates with its own hashed token, claims only its account's jobs, and never sees a map or a key */
 async function relayApi(req, res, p) {
   if (req.method !== 'POST') return send(res, 405, { error: 'post only' })
   const auth = String(req.headers.authorization || '')
@@ -3727,10 +2628,7 @@ async function relayApi(req, res, p) {
        where id = $1`,
       [link.id, String(b.name || '').slice(0, 80), caps],
     )
-    /* THE MACHINE LENDS ITS PIXELLAB KEY when it says it can do pixellab. The
-     * host has no key of its own and cannot proxy minutes-long generations
-     * through this queue, so the linked laptop hands over the one it already
-     * uses and the host calls pixellab directly with it. */
+    /* the machine lends its pixellab key: the host has none and cannot proxy minutes-long generations through this queue */
     if (caps.includes('pixellab') && typeof b.pixellab === 'string' && b.pixellab.trim()) {
       try {
         await lendKey(link.user_id, 'pixellab', b.pixellab)
@@ -3773,15 +2671,7 @@ async function relayApi(req, res, p) {
   return send(res, 404, { error: 'no such endpoint' })
 }
 
-/* ---- accounts -------------------------------------------------------------
- *
- * Anyone can make one. The club shares a single login on purpose, so there is
- * no team model here and adding one would be machinery serving nobody.
- *
- * Signed out is not signed out of MAPVIS: the cut tool, levels, the walk test,
- * placing and export all work with no account at all, and always will. An
- * account is what makes a map yours across machines and what holds the keys.
- */
+/* the club shares one login on purpose, so no team model; signed out still cuts, levels, walks, places and exports, and always will */
 async function authApi(req, res, p, url) {
   const body_ = async () => (req.method === 'POST' ? await body(req) : {})
 
@@ -3814,21 +2704,7 @@ async function authApi(req, res, p, url) {
     }
   }
 
-  /* DELETING A MAP, WHICH IS THE ONE THING HERE THAT CANNOT BE UNDONE.
-   *
-   * A cut and its levels are hours of hand work and there is no version of them
-   * anywhere else once the rows and the blobs are gone, so this asks for the
-   * account password again even though the caller is already signed in. A
-   * session proves the browser was left open. It does not prove the person
-   * asking meant this.
-   *
-   * The order matters and is the whole safeguard:
-   *   1. signed in at all
-   *   2. this map exists
-   *   3. this account owns it, checked against the row and not the UI
-   *   4. the password is right
-   * Only then does anything get destroyed. Every failure returns before a
-   * single byte is touched. */
+  /* the password is asked again because a session proves the browser was left open, not that the person meant this; every failure returns before a byte is touched */
   if (p === '/api/maps/delete' && req.method === 'POST') {
     // sessionUser and NOT currentUser: solo mode must never authorise a delete
     const me = await sessionUser(req)
@@ -3937,39 +2813,9 @@ async function authApi(req, res, p, url) {
   return send(res, 404, { error: 'no such endpoint' })
 }
 
-/* ---- /api/v1, the read side ---------------------------------------------
- *
- * The only part of MAPVIS anything outside MAPVIS is allowed to call: the game
- * fetching a published map, and eventually a member's python asking what a map
- * is called and what is in it.
- *
- * Versioned in the path from the first line, because the whole point of the
- * anchors contract is that code written against it keeps working. Read-only,
- * so nothing here can damage a map. Everything is served by slug, never by the
- * internal uuid, since a slug is what an author typed and what a door's `to`
- * field already carries.
- *
- * Deliberately NOT here: anything that mutates. Publishing happens in the
- * editor, and a grape that could rewrite a map is a grape that can break every
- * other island.
- */
+/* /api/v1, read only and served by slug: versioned in the path so code written against it keeps working, and nothing that mutates is ever added here */
 async function readApi(req, res, p, url) {
-  /* CROSS-ORIGIN, WHICH THIS NEEDED FROM THE DAY IT WAS WRITTEN.
-   *
-   * The whole point of /api/v1 is that something which is NOT MAPVIS calls it,
-   * and something which is not MAPVIS is on another origin. The file route set
-   * this header and the manifest route did not, and the manifest is the FIRST
-   * call the game makes, so the browser refused it before a byte moved and the
-   * game fell back to the hand-copied folder every single time. Found from the
-   * game side on 2026-08-27: fetching /api/v1/maps/hub from localhost was
-   * blocked by CORS, so "the game asks the platform for a map" has never once
-   * actually happened, on any origin but this one.
-   *
-   * `*` is right here and only here. Everything under /api/v1 is read-only,
-   * published, immutable and already public to anyone with the slug; nothing
-   * authenticated is reachable through this function. The editor's own routes
-   * are a different handler and stay same-origin.
-   */
+  /* cors: the manifest is the first call the game makes and had no header, so it fell back to the copied folder every time. all of /api/v1 is public and read-only */
   res.setHeader('Access-Control-Allow-Origin', '*')
   res.setHeader('Vary', 'Origin')
   if (req.method === 'OPTIONS') {
@@ -3997,21 +2843,9 @@ async function readApi(req, res, p, url) {
        from maps m order by m.updated_at desc`,
     )
     const maps = rows.filter((r) => r.version)
-    /* THE WHOLE DOOR GRAPH IN ONE REQUEST, which is what ?with=anchors is for.
-     *
-     * The listing carried an anchor COUNT and the per-map listing deliberately
-     * carried no x,y, so building a door graph over twelve islands cost
-     * thirteen requests, and the world scene had to fetch a whole published
-     * map.json just to learn where one dock is. That is a whole class arriving
-     * inside one advisory block, on a 4 GB Chromebook, paying it. Opt-in, so
-     * the cheap listing stays cheap for the dashboard that only wants names. */
+    /* ?with=anchors: a door graph over twelve islands cost thirteen requests, paid by a whole class at once on a 4 GB chromebook. opt-in, so the listing stays cheap */
     if (url.searchParams.get('with') === 'anchors' && maps.length) {
-      /* THE AREA COMES WITH IT, AND IT DID NOT, so every region on the ocean
-       * chart was drawn as a circle of its radius: an author who walked the
-       * edge of a pier saw a ring over the water beside it. The three fields
-       * below are what anchorShape needs to answer which of the three an author
-       * meant, and the mode rides in the meta bag, so it is lifted onto the
-       * field here exactly as readEvents lifts it for the editor. */
+      /* the area comes with it: without it every region drew as a circle of its radius, and the shape mode is lifted off the meta bag the way readEvents does */
       const all = await many(
         `select m.slug, a.name, a.kind, a.x, a.y, a.r, a.to_slug, a.to_anchor, a.label, a.rect, a.poly, a.meta
          from anchors a join maps m on m.id = a.map_id
@@ -4040,65 +2874,10 @@ async function readApi(req, res, p, url) {
     return send(res, 200, { maps })
   }
 
-  /* THE OCEAN, which is the one surface the whole crossing happens on and the
-   * one the game had to hold as a constant because nothing could author it.
-   * Served live from the row rather than from a published version: the maps
-   * registry above is live for the same reason, and a composition that lags a
-   * republish would place an island that has already moved.
-   *
-   * PUBLIC, AND IT HAS TO STAY PUBLIC. The authoring pair at /api/world is now
-   * gated on the account the ocean belongs to, and the temptation is to gate
-   * this the same way. It would break the game outright: a freshman on a
-   * chromebook has no MAPVIS account, has never heard of one, and this is the
-   * request that tells the ship where the islands are. Read-only, published,
-   * already reachable by anyone with the URL.
-   *
-   * AND IN THE GAME'S OWN WORDS, not in this tool's. The row is the authoring
-   * document and its shape belongs to the chart page; what leaves here is the
-   * composition the game asks for, which it gates on Array.isArray(slots).
-   * Answering with `places` meant a real composition was discarded and a
-   * hand-written fallback used in its place, silently, on both sides.
-   * composition() in store/world.mjs is where every one of those renames is.
-   *
-   * PINNED TO ROW 1, EXPLICITLY, and that is the whole of what 022 owes the
-   * game. Every account has an ocean now and this path has no account in it and
-   * never will: the request comes from a chromebook with no cookie. So the id is
-   * a constant here rather than something resolved, and the answer is byte for
-   * byte what it was before worlds were per-account. */
+/* the ocean, live from row 1 and public because a freshman on a chromebook has no account; the game gates on Array.isArray(slots), so places discarded a real one */
   if (kind === 'world' && !slugRaw) return send(res, 200, await composition(GAME_WORLD))
 
-  /* THE BERTHS, FLAT, WHICH IS THE SHAPE A GRAPE ACTUALLY WANTS.
-   *
-   * A member writing sail_to("north_passage") holds a name and nothing else.
-   * Handing them the whole composition means walking a list and matching a
-   * field before they can move a ship, in a language running on MicroPython in
-   * a worker, which is a loop written slightly differently in every island.
-   * So the lookup is done here, once, and what comes back is a dictionary keyed
-   * by the name the author typed in MAPVIS.
-   *
-   * This is the project's dividing line in one route: MAPVIS authors WHERE, and
-   * python authors WHAT HAPPENS and WHEN. The berth says the corner of the
-   * crossing is at (2100, 880) facing north; whether the ship pauses there,
-   * whether somebody speaks, and what it costs are the grape's business and
-   * this endpoint has no opinion about any of it.
-   *
-   * A ROUTE BETWEEN BERTHS IS A LATER THING. Ash asked for a ship that hops from
-   * one island to another, steering through whatever berths sit in the middle,
-   * and nothing here builds it. It does not need to: every point is addressable
-   * by name and says which island it belongs to, so a route is a list of names
-   * that some future thing writes down. Do not add a `routes` key until there is
-   * something on the other side of the wire reading it.
-   *
-   * A BERTH BOUND TO AN ISLAND IS ALSO ANSWERED UNDER THAT ISLAND'S OWN NAME,
-   * because a grape asking to sail to `panther_isle` should not have to know
-   * what the author called its dock. The alias goes down FIRST so a real point
-   * named `panther_isle` wins the key; checkWorld refuses that collision at the
-   * save, so this only decides what a row written before the check does.
-   *
-   * WRITTEN ONCE AND SERVED FROM TWO PATHS, because 022 gave every account an
-   * ocean and a member's engine wants this shape for the same reason ours does.
-   * A second copy of the mapping is a second set of fields that drift, which is
-   * how `label` and `r` came to be missing here in the first place. */
+/* berths flat, keyed by the name the author typed: mapvis authors where and python authors what happens, so do not add a routes key until something reads it */
   const flatMarks = async (id) => {
     const w = await getWorld(undefined, id)
     const out = {}
@@ -4107,26 +2886,14 @@ async function readApi(req, res, p, url) {
       x: m.x,
       y: m.y,
       facing: m.facing || '',
-      /* THE LABEL RIDES ALONG, and it was the one field this route dropped. The
-       * column, cleanMark and the chart's inspector all carry it, so a grape
-       * sailing to a point could hold the address and had no way at all to get
-       * the words a player should be shown for it, which leaves an island
-       * printing `north_passage` at somebody. */
+      /* the label rides along: without it a grape had the address and no words, so an island printed north_passage at somebody */
       label: m.label || '',
-      /* WHICH ISLAND IT BELONGS TO, and this is what makes the flat lookup
-       * enough on its own. Without it a grape holding `the_hub_berth` can sail
-       * there and cannot tell what it has arrived at, so it would have to fetch
-       * the whole composition to answer a question this row already knows. */
+      /* which island it belongs to, or a grape can sail there and has to fetch the whole composition to say what it arrived at */
       island: m.island || '',
       // and where the hull puts somebody down once they are ashore, which is an
       // anchor name inside that island rather than a point on the ocean
       at: m.at || '',
-      /* HOW CLOSE COUNTS AS ARRIVED, and this route dropped it. BerthPanel makes
-       * the author type it and cleanMark stores it, and then the one lookup
-       * built for a grape holding nothing but a name did not say it, so every
-       * island had to invent its own arrival tolerance and the number somebody
-       * typed did nothing. A hull moves in floats, so an exact-pixel test never
-       * fires and this is not optional. Zero means the caller decides. */
+      /* how close counts as arrived: a hull moves in floats, so an exact-pixel test never fires and dropping r made every island invent its own tolerance */
       r: m.r ?? 0,
     })
     for (const p of w.places) {
@@ -4138,26 +2905,7 @@ async function readApi(req, res, p, url) {
   }
   if (kind === 'world' && slugRaw === 'marks') return send(res, 200, { marks: await flatMarks(GAME_WORLD) })
 
-  /* AND THE SAME TWO READS FOR ANY OTHER ACCOUNT'S OCEAN.
-   *
-   * 022 gave every account a world, and a world nothing can fetch is a drawing.
-   * A member composing their own sea needs their own engine to consume it the
-   * way ours does, so it is the same two shapes off the same two functions, at
-   * an address of their own.
-   *
-   * PLURAL, AND THAT IS THE WHOLE REASON THE WORD IS DIFFERENT. /api/v1/world
-   * already spends its second segment on `marks`, so a singular
-   * /api/v1/world/<something> could never tell an ocean's address from that
-   * literal, and the game's two paths must not change by one byte. `worlds` has
-   * no such history and cannot collide with either.
-   *
-   * THE ADDRESS IS THE ROW'S pub_id AND NOT ITS OWNER'S. An account uuid appears
-   * in session and ownership code all over this file; an ocean's public address
-   * is a separate opaque value so handing somebody the url to read your world
-   * hands them nothing else, and so it can be rotated without touching identity.
-   *
-   * Public and unauthenticated, like everything else under /api/v1: what it
-   * serves is where somebody's islands sit, which is already published art. */
+  /* worlds is plural because /api/v1/world already spends its second segment on marks; the address is the row's pub_id, never the owner's uuid, so it can be rotated */
   if (kind === 'worlds') {
     const id = slugRaw ? await worldByPubId(slugRaw) : 0
     if (!id) return send(res, 404, { error: 'no ocean at that address' })
@@ -4166,29 +2914,7 @@ async function readApi(req, res, p, url) {
     return send(res, 404, { error: 'an ocean answers with itself or with its marks' })
   }
 
-  /* THE CHROME, WITH ITS SLICES, ITS REGIONS AND ITS FACES.
-   *
-   * The half of a drawn piece that is not the png, and the shape is
-   * docs/UI-KIT.md section 3 verbatim: `{ src, w, h, slice, scale, fill,
-   * repeat }` beside the named rectangles. Written to match what the game can
-   * consume rather than what is convenient to publish, and the unit is source
-   * pixels because that is the only thing CSS border-image and Pixi
-   * NineSliceSprite agree on.
-   *
-   * A grape asking where the speaker's name goes gets an answer from the piece
-   * itself rather than from a number somebody typed into game source, which is
-   * the whole reason regions exist. Served live rather than from a published
-   * version, the same way the maps registry and the ocean are.
-   *
-   * `published` rides along rather than filtering, because a piece whose
-   * picture has arrived is worth serving to an editor while its measurement is
-   * still being made, and a consumer that will only depend on a finished piece
-   * has the flag to check.
-   *
-   * A name is unique per ACCOUNT and there is no account in this path, so two
-   * people naming a piece `dialogue_box` collide here. CORE WINS, then the
-   * oldest, which is the only ordering consistent with core chrome never being
-   * overridable. Survivable because the game reads chrome from one account. */
+  /* docs/UI-KIT.md section 3, in source pixels because that is all border-image and NineSliceSprite agree on; names collide here, so core wins then oldest */
   if (kind === 'ui') {
     if (!slugRaw) return send(res, 200, { ui: await readyUi() })
     const surface = await readyUiByName(slugRaw)
@@ -4198,12 +2924,7 @@ async function readApi(req, res, p, url) {
       const buf = await uiImage(slugRaw)
       if (!buf) return notFound(res)
       res.setHeader('Content-Type', 'image/png')
-      /* IMMUTABLE, WHICH IS A TRADE AND NOT A FREE WIN. There is no version in
-       * this key, so redrawing a surface under the same name will not reach a
-       * browser that already holds the old picture until its year is up. The
-       * thing bought with that is a class of thirty chromebooks fetching the
-       * game's chrome exactly once between them, which is the cost that
-       * actually shows up. Rename the surface to force a redraw through. */
+      /* immutable and no version in the key, so a redraw needs a rename; what it buys is thirty chromebooks fetching the chrome once between them */
       res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
       res.setHeader('Access-Control-Allow-Origin', '*')
       return res.end(buf)
@@ -4239,23 +2960,7 @@ async function readApi(req, res, p, url) {
     })
   }
 
-  /* THE NAMED COLLECTIONS, FLAT, WHICH IS THE SHAPE A GRAPE ACTUALLY WANTS.
-   *
-   * The same call /api/v1/world/marks makes and for the same reason: a member
-   * holds a name and nothing else. `for stele in self.anchors_in("steles")` beats
-   * five hard-coded strings, and it is the only way the map can ever say there
-   * are six of them now. Keyed by the name the author typed, so the lookup is
-   * done here once rather than as a slightly different loop in every island,
-   * written in MicroPython in a worker.
-   *
-   * SETS AND RACKS COME BACK TOGETHER because they share one namespace: a name is
-   * either a set or a rack and never both, which is what lets a grape ask for one
-   * by name without also having to say which list to look in.
-   *
-   * Live from the row rather than from a published version, exactly as the
-   * registry and the ocean above are: an author fixing a set and re-running their
-   * python should see the fix, and a member's island is edited far more often
-   * than it is published. */
+  /* named collections flat, keyed by the author's name: sets and racks share one namespace, so a grape asks by name without saying which list */
   if (sub === 'sets' || sub === 'racks') {
     const m = await one('select id, sets, racks from maps where slug = $1', [slug])
     if (!m) return send(res, 404, { error: `no map ${slug}` })
@@ -4283,11 +2988,7 @@ async function readApi(req, res, p, url) {
     const v = url.searchParams.get('v')
     const pub = await publishedMap(slug, v)
     if (!pub) return send(res, 404, { error: `${slug} has never been published` })
-    /* A MAP THAT EXISTS AND A STORE THAT WILL NOT ANSWER ARE DIFFERENT THINGS.
-     *
-     * Both used to come back as "never published", so a rate-limited bucket
-     * read as lost work and sent somebody off to re-export something that was
-     * already there. 503 says come back, 404 says it is not here. */
+    /* a map that exists and a store that will not answer are different: 503 says come back, 404 says it is not here */
     let map
     try {
       // a published file never changes, so the second read is a transaction
@@ -4343,24 +3044,8 @@ async function readApi(req, res, p, url) {
   return send(res, 404, { error: 'no such endpoint' })
 }
 
-// /work/<slug>/... is still the url space the editor asks for and still the url
-// space saved inside every placement. Where the bytes come from moved; the
-// address did not, which is the whole reason 17,000 lines of client did not
-// have to change.
-/* THE COPY ON THIS MACHINE IS THE FREE ONE, SO ASK FOR IT FIRST.
- *
- * This used to go to the bucket first and fall back to disk, which meant that
- * on the laptop the map was drawn on, where all fourteen hundred of its library
- * files already sit, every open of the editor fetched them out of object
- * storage anyway. A day of ordinary building spent 3,244 download transactions
- * against a free allowance of 2,500 to read files that were on the hard drive
- * the whole time.
- *
- * Disk first inverts that. On a laptop nearly every read is now free and the
- * bucket is touched only for what was made somewhere else. On a host there is
- * no work directory, so it falls straight through and behaves exactly as it did
- * before. Correctness is unchanged either way, because the local file and the
- * stored object are written together by the same save. */
+// where the bytes come from moved and the address did not, which is why 17,000 lines of client did not have to change
+/* disk first: bucket first spent 3,244 downloads in a day against a free allowance of 2,500 to read files already on the drive, and a host has no work dir anyway */
 async function serveWork(res, rel, req) {
   const f = path.join(WORK, rel.split('/').map(decodeURIComponent).join(path.sep))
   const onDisk = diskAllowed() && f.startsWith(WORK) && fs.existsSync(f) && !fs.statSync(f).isDirectory()
@@ -4423,13 +3108,7 @@ function pngSizeBuf(b) {
 
 // this map's own assets: every png in work/<id>/library is a static item,
 // every folder of 0.png..n.png is an animated one
-/* THE FACES A ROW HAS BEEN GIVEN, read back off disk.
- *
- * A state is stored the same three ways a library row is (a png, a folder of
- * frames, a folder of headings) because a state of a walking character is
- * itself eight headings and has to stay that way, or the troll faces south the
- * moment it becomes a boulder. The shape is read off what is actually there
- * rather than off a flag, which is the same rule libraryItems follows below. */
+/* a face is stored the three ways a row is, because a walking character's state is eight headings or the troll faces south the moment it becomes a boulder */
 function statesOf(id, owner) {
   const dir = stateDirOf(id, owner)
   if (!fs.existsSync(dir)) return []
@@ -4444,14 +3123,7 @@ function statesOf(id, owner) {
           const dirs = meta && meta.dirs && typeof meta.dirs === 'object' ? meta.dirs : null
           const first = dirs ? dirs.south || Object.values(dirs)[0] : null
           if (first && first[0]) {
-            /* A face keeps its frames one folder deeper than the library does
-             * (face/heading/0.png against the library's flat face/heading-0.png)
-             * because a character state comes back as whole headings and nesting
-             * them is what keeps a heading's frames in order without encoding
-             * the order into the filename. So the size is read off the url's own
-             * tail rather than off its last segment: taking only the last
-             * segment looked for 0.png beside the folder that holds it, and the
-             * row came back 0x0, which the editor draws as nothing. */
+            /* a face nests one folder deeper than the library, so the size is read off the url's whole tail: the last segment alone came back 0x0 */
             const tail = String(first[0]).split('/states/')[1] || ''
             // drop the owner segment: `dir` already points at that folder
             const rel = tail.split('/').slice(1).map((x) => decodeURIComponent(x))
@@ -4523,10 +3195,7 @@ function libraryItems(id) {
         frames.push(`${base}/${ent.name}/${i}.png`)
       if (!frames.length) continue
       const { w, h } = pngSize(path.join(dir, ent.name, '0.png'))
-      // an effect folder carries its own playback rate beside the frames, so
-      // the speed a human tuned survives a reload; anything else plays at 6.
-      // The same file is what makes an item reopenable in the tuning panel, so
-      // its presence rides along as a flag.
+      // an effect folder carries its own rate so a tuned speed survives a reload, and its presence is the reopenable flag; anything else plays at 6
       let fps = 6
       let effect = false
       try {
@@ -4542,10 +3211,7 @@ function libraryItems(id) {
       items.push({ name: ent.name.replace(/\.png$/i, ''), kind: 'static', src: `${base}/${ent.name}`, w, h })
     }
   }
-  /* Faces and origin hang off the row they belong to, so the client never has
-   * to ask a second time and a state never appears as a row of its own. `from`
-   * is what the second-face button turns on: without an id there is nothing to
-   * edit, and the button says so instead of failing at spend time. */
+  /* faces and origin hang off the row, so a state never lists as a row of its own and the second-face button knows before spend time */
   const origin = readOrigin(id)
   for (const it of items) {
     const o = origin[it.name]
@@ -4558,10 +3224,7 @@ function libraryItems(id) {
 
 // ---- what the account already owns --------------------------------------
 
-// the whole listing, walked once and held. Seven calls for 700 objects is too
-// many to repeat on every keystroke of a search box, and the list only changes
-// when something is generated, so five minutes is plenty. The refresh flag
-// drops it for anyone who just made one.
+// seven calls for 700 objects is too many per keystroke, and the list only changes on a generation, so five minutes and a refresh flag
 const ACCT_TTL = 5 * 60 * 1000
 let acct = { at: 0, list: [] }
 
@@ -4584,15 +3247,7 @@ async function accountObjects(refresh) {
   return list
 }
 
-/* The character listing, held the same way and for the same reason: free but
- * paged, and it only changes when something is generated.
- *
- * This one is kept RAW rather than mapped down, because two callers want
- * different things off it. The picker wants a name and a thumbnail; the
- * re-animate router wants the untouched name to match against asks.json, and
- * the canvas size, because the animation is priced per direction by pixel
- * budget and a 68px character at sixteen frames is not the same bill as a 48px
- * one at eight. */
+/* kept raw because the re-animate router needs the untouched name and the size: motion is priced by pixel budget, so 68px at sixteen frames is not 48px at eight */
 let chars = { at: 0, list: [] }
 
 async function accountCharacters(refresh) {
@@ -4638,17 +3293,8 @@ function resolveAssetFile(u, sceneDir) {
   return fs.existsSync(abs) && fs.statSync(abs).isFile() ? abs : null
 }
 
-/* What the PERSON actually typed, kept beside the map it was typed for.
- *
- * The raw ask used to be used for the filename and then thrown away, so the
- * only trace of "Palm island beach tree. dark green" was the four-word slug in
- * the library. Every asset now leaves a line here: the words, the prompt they
- * became, and when. It is a record first, and the raw material for matching a
- * person's taste on later asks second. Newest first, last 40 kept. */
-/* An object's rotations, written into a map's library as one folder keyed by
- * heading. Shared by the account import and by an eight-direction generation,
- * because both end up holding the same thing: a set of views that has to land
- * on disk the way the library reads it. */
+/* what the person actually typed, kept beside the map: the raw ask used to become a four-word slug and be thrown away. newest first, last 40 */
+/* rotations as one folder keyed by heading, shared by the import and the eight-direction generation because both land the same set of views */
 async function saveRotations(id, detail, wantName) {
   const rot = detail && detail.rotation_urls && typeof detail.rotation_urls === 'object' ? detail.rotation_urls : null
   const DIRS = ['south', 'north', 'east', 'west', 'south-east', 'north-east', 'north-west', 'south-west']
@@ -4657,13 +3303,7 @@ async function saveRotations(id, detail, wantName) {
   const dir = libDirOf(id)
   fs.mkdirSync(dir, { recursive: true })
   const base = cleanName(wantName || detail.name || detail.prompt || 'object')
-  /* THE DATABASE ANSWERS TOO, not the disk alone.
-   *
-   * The suffix walk this replaced only ever looked at libDirOf(id). On a host
-   * that folder is a tmp dir that starts empty on every request, so every import
-   * picked the base name and wrote over the library row already sitting under
-   * it, taking that row's objects with it. saveStatic has been going through
-   * freeLibraryName for exactly this reason and these two were left behind. */
+  /* the database answers too: a disk-only suffix walk starts empty on a host, so every import took the base name and wrote over the row under it */
   const name = await freeLibraryName(id, base)
   const folder = path.join(dir, name)
   // the folder is claimed the moment the name is picked, the way saveFrames has
@@ -4673,12 +3313,7 @@ async function saveRotations(id, detail, wantName) {
   return { name, dir: folder, urls: got.map((k) => [k, rot[k]]) }
 }
 
-/* The same plan for a set that has FRAMES INSIDE each heading, which is what a
- * walk cycle is. byDir is heading -> urls in play order.
- *
- * The folder is made here rather than in the writer, so the name is reserved the
- * moment it is picked: two of these running at once could otherwise both look,
- * both see nothing, and both choose it. */
+/* the same plan for headings with frames inside; the folder is made here so the name is reserved the moment it is picked and two runs cannot both take it */
 async function saveFrames(id, byDir, wantName, fps, characterId) {
   const keys = Object.keys(byDir || {}).filter((k) => k && Array.isArray(byDir[k]) && byDir[k].length)
   if (keys.length < 4) return null
@@ -4722,13 +3357,7 @@ async function writeRotations(id, plan) {
   if (Object.keys(dirs).length < 4) return null
   // a still object has no rate to keep, and writing one would say it plays
   const meta = plan.fps > 0 ? { dirs, fps: plan.fps } : { dirs }
-  /* WHICH CHARACTER ON THE ACCOUNT DREW THIS, written down beside the art.
-   *
-   * Without it the only way back to the rig is matching the four-word folder
-   * name against a description asks.json may already have forgotten, and only
-   * that rig can be given a motion that stays in register across every heading.
-   * dirs.json has always been read for dirs and fps and nothing else, so an
-   * extra key costs nothing anywhere. */
+  /* which character drew this, or the only way back to the rig is matching a four-word folder name, and only that rig keeps motion in register across headings */
   if (plan.characterId) meta.characterId = String(plan.characterId)
   fs.writeFileSync(path.join(plan.dir, 'dirs.json'), JSON.stringify(meta, null, 2))
   return {
@@ -4742,26 +3371,10 @@ async function writeRotations(id, plan) {
   }
 }
 
-/* ---- making something that already exists move --------------------------
- *
- * Everything below serves /api/asset-animate. It is written apart from the
- * generate routes because it never makes a new library row: it replaces the
- * pixels of one that is already there, and staying one row per thing is half
- * the point.
- */
+/* everything below serves /api/asset-animate: it never makes a new row, it replaces the pixels of one already there */
 
-/* One library row, read off disk. libraryItems answers the same three shapes
- * for the whole folder at once; this answers for one, and keeps the things only
- * a re-animate cares about: where the files are, and what dirs.json says beyond
- * dirs and fps. */
-/* REBUILD THE SIDECARS THE STORE NEVER HELD.
- *
- * Everything pushed before today went up as frames only, so hydrateMap brings
- * back a folder with no dirs.json and no effect.json, and readLibItem reads
- * that folder as nothing. The database row still knows the headings, the
- * rate, the character that drew it and the effect recipe, so they are written
- * back from there. New pushes carry both files, so this is for what is already
- * in the bucket, and it costs one listing only when a file is missing. */
+/* one library row off disk, keeping what only a re-animate wants: where the files are and what dirs.json says beyond dirs and fps */
+/* older pushes went up as frames only, so a hydrated folder has no dirs.json and reads as nothing; the row still knows the headings, rate and recipe */
 async function ensureSidecars(id, name) {
   if (!platformOn()) return
   const folder = path.join(libDirOf(id), name)
@@ -4824,27 +3437,12 @@ const evenFrames = (v) => {
   return n % 2 ? n + 1 : n
 }
 
-// what the two animators bill. /v2/animate-with-text-v3 gets 524288 pixels to a
-// generation across the whole take; /v2/animate-character gets 65536 per
-// direction, which is why one direction of a 48px character is one generation
-// and a 96px one at sixteen frames is three.
+// what the two animators bill: 524288 pixels a generation across the whole take, against 65536 per direction for the character animator
 const IMG_BUDGET = 524288
 const CHAR_BUDGET = 65536
 const priceOf = (w, h, frames, budget) => Math.max(1, Math.ceil((w * h * frames) / budget))
 
-/* Room for the motion to swing through.
- *
- * Everything in this library has been trimmed to its own pixels, by trimSet on
- * the way in or by ctrl+T afterwards, so a sprite handed straight to the
- * animator has no margin at all. A fisherman told to cast a rod has nowhere to
- * put the rod and it comes back clipped at the edge of the frame. So the first
- * frame goes into a bigger canvas before it is sent, and the whole loop is
- * trimmed back to one shared box afterwards, which leaves the item exactly as
- * tight as its own motion needs.
- *
- * 40 percent is pixellab's own headroom, the ratio their character pipeline
- * pads by: a 48px character lands on a 68px canvas. It is reasoned from that
- * number, not measured here. */
+/* trimmed art has no margin, so a rod being cast comes back clipped at the frame edge; 40 percent is pixellab's own headroom, a 48px character on a 68px canvas */
 const ANIM_PAD = 0.4
 
 // the size the animator is actually handed, and whether it is worth padding.
@@ -4875,19 +3473,7 @@ function padPNG(buf) {
   return encodePNG(w, h, out)
 }
 
-/* The one question the router asks, and it is not "which animation".
- *
- * Both pixellab animators redraw a sprite where it stands. Neither can carry it
- * anywhere: travel is life's job in the editor, or a written recipe that stamps
- * the sprite at a position it computes. So the whole decision is whether these
- * words need the DRAWING to change or the THING to move, and the same pass
- * rewrites the ask into the motion words the animator is actually given, the
- * way translateAsk rewrites an ask for the image generator.
- *
- * Nothing here is a list. The planner is told what the two mediums can do and
- * answers in the person's own terms. On any failure the words go through
- * unchanged as a redraw, so the box can never dead-end and the confirm press
- * still shows the price before anything is spent. */
+/* both animators redraw a sprite where it stands, so the only question is whether the words need the drawing to change or the thing to move; a failure redraws */
 async function animateAsk(it, ask, id, job) {
   const shape =
     it.shape === 'views'
@@ -4941,12 +3527,7 @@ async function animateAsk(it, ask, id, job) {
   }
 }
 
-/* Which path, and what it costs, worked out before anything is spent.
- *
- * The motion words are asked for once. On the confirm press the client hands
- * back the plan it was shown and only the price is re-derived, from the item on
- * disk and the account, so a client cannot talk the price down and the router
- * cannot talk it up. */
+/* the motion words are asked once and only the price is re-derived on confirm, so neither the client nor the router can talk it up or down */
 async function animatePlan(it, ask, id, job, b) {
   const had = b.plan && typeof b.plan === 'object' ? b.plan : null
   const said = had
@@ -4977,27 +3558,12 @@ async function animatePlan(it, ask, id, job, b) {
     return { ...base, path: 'sprite', price: priceOf(fit.w, fit.h, said.frames, IMG_BUDGET), pad: fit.pad }
   }
 
-  /* REGISTRATION IS NOT NEGOTIABLE.
-   *
-   * The single-image animator would happily take each heading in turn, and the
-   * eight loops that came back would drift against each other: the figure would
-   * breathe on a different rhythm facing north than facing south. So a figure
-   * with headings goes through the coordinated endpoint or it does not go, and
-   * that endpoint needs the character id. */
+  /* registration is not negotiable: eight separate loops drift, so a figure would breathe on a different rhythm facing north, and the coordinated endpoint needs an id */
   const who = await characterFor(it, b.characterId)
   if (!who.id) return { ...base, path: 'blocked', price: 0, why: who.why }
   noteCharacterId(it, who.id)
   const per = priceOf(who.w, who.h, said.frames, CHAR_BUDGET)
-  /* WHICH HEADINGS TO PAY FOR.
-   *
-   * Every heading is drawn for free when the character is created; animation is
-   * the thing priced per direction. A walker turns as it goes and needs all of
-   * them. Someone standing at a stall is placed facing one way and never turns,
-   * so paying for eight breathing loops buys seven nobody will ever see.
-   *
-   * A heading left out keeps its single still frame, and both renderers index a
-   * heading's own list, so a set that is animated on three headings and still on
-   * five is a legal thing rather than a broken one. */
+  /* animation is priced per direction, so a figure that never turns would buy seven loops nobody sees; a heading left out keeps its still frame */
   const want = Array.isArray(b.headings)
     ? it.heads.filter((k) => b.headings.map((h) => String(h).toLowerCase().trim()).includes(k))
     : it.heads
@@ -5012,37 +3578,12 @@ async function animatePlan(it, ask, id, job, b) {
   }
 }
 
-/* WHICH CHARACTER ON THE ACCOUNT THIS FOLDER WAS DRAWN FROM.
- *
- * MAPVIS never wrote it down. dirs.json held dirs and fps and nothing else, so
- * every person in the hub library is art with no way back to the rig that drew
- * it, and the one endpoint that keeps eight headings in register takes an id.
- *
- * The account listing is free, so the id is recovered rather than regenerated.
- * What it CANNOT be recovered by is the folder name: the folder is a four-word
- * slug of the ask and the account row is named with the whole description,
- * because createCharacter sends no name at all. Measured 2026-08-23 against all
- * nine people in the hub library: not one folder name is a substring of any
- * account name, so name-to-name matching returns nothing every single time.
- *
- * The bridge is asks.json, which noteAsk writes at generation time and which
- * holds the folder name beside the exact description that was sent. That string
- * is byte-identical to the account row's name. Verified against all nine.
- *
- * It is a RESCUE, not a mechanism. asks.json keeps forty entries, so an old
- * item falls off the record and can never be matched again, and an imported
- * character was never in it. The id is written into dirs.json the moment it is
- * found, and every route that makes or imports a character writes it there now,
- * so this runs once per item and then never. */
+/* the folder name never matches the account row: measured on all nine hub people, none is a substring, so asks.json is the bridge and it is a rescue, not a mechanism */
 async function characterFor(it, given) {
   const looksId = (s) => /^[a-f0-9-]{16,64}$/i.test(String(s || ''))
   // an id the client pinned, or one already written down beside the art
   const pinned = looksId(given) ? String(given) : it.meta && looksId(it.meta.characterId) ? String(it.meta.characterId) : ''
-  /* THE PINNED ID FIRST. This used to list the whole account before it read
-   * the id sitting in dirs.json, so a sprite that knew exactly which character
-   * drew it still paid for a 700-row listing and failed when that listing
-   * failed. One detail read answers for a pinned sprite; the listing is the
-   * rescue for one with nothing written down. */
+  /* the pinned id first: reading dirs.json after the listing made a sprite that knew its character pay for 700 rows and fail when that listing failed */
   if (pinned) {
     try {
       const d = await pixellab.characterDetail(pinned)
@@ -5105,15 +3646,7 @@ function noteCharacterId(it, cid) {
   }
 }
 
-/* EVERY FRAME URL THE CHARACTER ALREADY CARRIES.
- *
- * This is how the motion just paid for is told from the one that was already
- * there, and it is urls rather than group names or ids because of what a live
- * read actually answers: measured 2026-08-23, an animation group comes back
- * with g.id undefined, display_name null and only animation_type carrying the
- * template's name. There is no id to compare and the position in the list moves
- * when a group is added. The frame urls are path-based, unsigned and identical
- * across two reads, so they are the one thing that means the same both times. */
+/* urls, not ids: a group comes back with g.id undefined and display_name null, and the frame urls are the one thing identical across two reads */
 const frameSet = (d) => {
   const out = new Set()
   for (const g of Array.isArray(d && d.animations) ? d.animations : [])
@@ -5122,13 +3655,7 @@ const frameSet = (d) => {
   return out
 }
 
-/* EVERY HEADING IN ONE JOB.
- *
- * The two free reads around the spend are what make replacing an existing
- * motion safe. Before: every frame the character already carries. After: the
- * frames that were not there. Without the first read a walker re-animated a
- * second time reads back whichever group the api lists first, which is the old
- * walk, and the item gets overwritten with the motion it already had. */
+/* the read before the spend is what makes a replacement safe: without it a second re-animate reads back the old walk and overwrites the item with it */
 async function runCharacterMotion(plan, seed, gate, halt) {
   halt()
   let d = await raceStop(gate, pixellab.characterDetail(plan.characterId))
@@ -5136,13 +3663,7 @@ async function runCharacterMotion(plan, seed, gate, halt) {
   const rot = d.rotation_urls && typeof d.rotation_urls === 'object' ? d.rotation_urls : {}
   // only headings the character actually has: naming one it does not is a
   // generation asked for and thrown away
-  /* Two different questions, and conflating them broke every stander.
-   *
-   * Whether the CHARACTER is usable is about how many rotations it has, and
-   * under four it is not a view set at all. How many to ANIMATE is a separate
-   * choice: someone standing at a stall is placed facing one way, so paying for
-   * eight breathing loops buys seven nobody sees. Asking for three used to trip
-   * the usability guard and fail the whole job. */
+  /* usable and how many to animate are different questions: asking for three headings used to trip the four-rotation guard and fail the whole job */
   const has = Object.keys(rot).filter((k) => typeof rot[k] === 'string' && rot[k])
   if (has.length < 4) throw new Error('the character on the account has fewer than four headings, so nothing was asked for')
   // only headings it actually has: naming one it does not is a generation asked
@@ -5176,27 +3697,14 @@ async function runCharacterMotion(plan, seed, gate, halt) {
     throw e
   }
   let byDir = newGroupDirs(d, group, before, heads, rot)
-  /* The job can report finished a moment before the detail lists the group it
-   * made. That happened on the hub's two knights: the frames were on their side,
-   * named and complete, and the reading taken at the same instant still showed
-   * no groups at all, so a paid motion was thrown away as unrecognisable. Read
-   * again a few times before believing it. The frames are already bought, so
-   * the only thing patience costs here is seconds. */
+  /* the job reports finished before the detail lists the group, which threw away a paid motion on the hub's knights; the frames are bought, so read again */
   for (let tries = 0; !byDir && tries < 5; tries++) {
     await new Promise((r) => setTimeout(r, 4000))
     halt()
     d = await raceStop(gate, pixellab.characterDetail(plan.characterId))
     byDir = newGroupDirs(d, group, before, heads, rot)
   }
-  /* And when the name-and-freshness reading still cannot see it, fall to the
-   * one that can. Measured over eleven animations: the reading above failed
-   * every single time and this lookup succeeded every single time, so leaving
-   * the strict test in front as the error a person meets was making them press
-   * twice for something already bought and sitting on the account.
-   *
-   * It is not a guess. It takes the newest group whose frames are not the
-   * rotation stills, which is the motion just paid for, and refuses outright
-   * when nothing on the character is moving. */
+  /* measured over eleven animations the strict reading failed every time and this fallback succeeded every time, so it takes the newest non-rotation group */
   if (!byDir) {
     const found = await recoverCharacterMotion(plan)
     if (found) return found.byDir
@@ -5207,14 +3715,7 @@ async function runCharacterMotion(plan, seed, gate, halt) {
   return withStills(byDir, rot)
 }
 
-/* A partial motion, put back into a whole set.
- *
- * stageViews rebuilds the folder from what it is handed, so handing it the three
- * headings that were animated would delete the five that were not. Every heading
- * the character has comes back, the animated ones as their new frames and the
- * rest as the single rotation still they already were. Both renderers index a
- * heading's own list, so eight frames on three of them and one on five is a
- * legal set rather than a broken one. */
+/* stageViews rebuilds from what it is handed, so three animated headings alone would delete the other five; the rest come back as their rotation still */
 function withStills(byDir, rot) {
   const out = { ...byDir }
   for (const [k, u] of Object.entries(rot || {})) {
@@ -5224,23 +3725,14 @@ function withStills(byDir, rot) {
   return out
 }
 
-/* Frames already paid for, pulled without buying them again.
- *
- * A motion that landed on their side but could not be read back here is bought
- * and sitting there. Re-running the ask would charge for it twice, so this finds
- * the newest group that is not a rotation and hands back its frames. Free, and
- * the reason it exists is that the reading above was once wrong. */
+/* frames already paid for, pulled without buying them again: it takes the newest group that is not a rotation, and it is free */
 async function recoverCharacterMotion(plan, group = '') {
   const d = await pixellab.characterDetail(plan.characterId)
   const rot = (d && d.rotation_urls) || {}
   const rotSet = new Set(Object.values(rot).filter((u) => typeof u === 'string'))
   const groups = Array.isArray(d && d.animations) ? d.animations : []
   const wanted = new Set(plan.headings || [])
-  /* THE GROUP THAT WAS ASKED FOR, when one was. A character that already moves
-   * has a complete group on the account, and "best" would hand that back the
-   * moment a pending press asked, leaving the motion it just paid for unread.
-   * Named, this waits for that group and only that group, and answers null
-   * until every heading of it is there. */
+  /* the group that was asked for, when one was: best would hand back a motion the character already had and leave the one just paid for unread */
   const named = (g) =>
     [g.display_name, g.animation_type, g.animation_name].some((n) => String(n || '').toLowerCase() === group.toLowerCase())
   const pool = group ? groups.filter(named) : groups
@@ -5257,22 +3749,12 @@ async function recoverCharacterMotion(plan, group = '') {
     if (Object.keys(byDir).length && (!best || hit > best.hit))
       best = { byDir: withStills(byDir, rot), hit, moves: Object.keys(byDir).length, name: g.display_name || g.animation_type }
   }
-  /* withStills fills every heading that did not move with its own still, so a
-   * group that turned out to hold nothing but rotations comes back looking like
-   * a complete set of eight. Recovering that writes stills over the art and
-   * reports success, which is how the fishmonger lost his motion AND the id that
-   * could have got it back. Nothing moving is a failure, not a result. */
+  /* withStills makes a rotations-only group look like a complete eight, and recovering that wrote stills over the fishmonger's art and called it success */
   if (group && best && best.hit < wanted.size) return null
   return best && best.moves ? best : null
 }
 
-/* The frames of the group just paid for, by heading.
- *
- * Two readings and both have to agree that the frames are new. The name is the
- * first try, for when the api echoes it back. Frames that were not on the
- * character before is the second, and it is the one that always works. A
- * heading whose every frame was already there is dropped whichever way it was
- * found, so an old motion can never be written back over a new one. */
+/* the name is the first try and frames that were not there before is the one that always works, so an old motion can never be written back over a new one */
 function newGroupDirs(detail, group, before, heads, rot) {
   const groups = Array.isArray(detail && detail.animations) ? detail.animations : []
   const named = (s) => String(s || '').toLowerCase() === group.toLowerCase()
@@ -5286,10 +3768,7 @@ function newGroupDirs(detail, group, before, heads, rot) {
       const frames = Array.isArray(dd.frames) ? dd.frames.filter(Boolean) : []
       if (k && frames.length && fresh(dd) && !byDir[k]) byDir[k] = frames
     }
-  /* Nothing new anywhere means the motion never landed, and this is the one
-   * place that must not be forgiving. Falling through to the rotations below
-   * would fill all eight headings with stills and write statues over a walk
-   * cycle, and the reply would call it a success. */
+  /* nothing new anywhere means the motion never landed: falling through to the rotations would write statues over a walk cycle and call it a success */
   if (!Object.keys(byDir).length) return null
   // a heading the motion missed keeps its still rotation rather than vanishing.
   // It stands there facing the right way while the others move, which is what
@@ -5298,16 +3777,7 @@ function newGroupDirs(detail, group, before, heads, rot) {
   return Object.keys(byDir).length >= 4 ? byDir : null
 }
 
-/* THE NEW BYTES LAND SOMEWHERE ELSE FIRST.
- *
- * Eight headings of eight frames is sixty-four downloads and any one of them
- * can fail. Writing them straight into the library would leave a figure that is
- * half its old motion and half its new one, which is worse than either. So
- * everything is fetched, written and trimmed under work/<id>/.stage, and the
- * library folder is only touched once there is nothing left that can fail.
- *
- * .stage sits beside .prev, outside the library, so neither is ever listed as
- * an item. */
+/* sixty-four downloads and any one can fail, so everything lands in .stage first and the library folder is touched only when nothing can fail; .stage is never listed */
 const stageDirOf = (id) => path.join(WORK, safeId(id), '.stage')
 
 async function stageViews(id, name, byDir, fps) {
@@ -5363,29 +3833,7 @@ function stageFrames(id, name, frames) {
   return { stage, frames: rel, w: sz.w, h: sz.h }
 }
 
-/* .PREV KEEPS THE ORIGINAL, NOT THE LAST THING THAT HAPPENED TO BE THERE.
- *
- * It used to be one slot per name, copied over on every edit. Two in-place
- * edits therefore rolled the backup forward: the first saved the original, the
- * second overwrote it with the first one's output, and the bytes a generation
- * was actually paid for were gone with nothing left pointing at them.
- *
- * That is not a hypothetical. work/hub/library/skiff-rowboat.png came back
- * 7x7 and 231 bytes after a base-trim ran on an already-cropped file, and the
- * .prev beside it held a 1291-byte middle step rather than the 13073-byte
- * original. Only git still had the real one, and the library is the one place
- * in this tool where "only git has it" is luck rather than design: a map that
- * is not a repo would simply have lost it.
- *
- * So the first slot is written once and never again, and every later edit
- * lands in a numbered one beside it. work/<id>/.prev/<name>.png is always the
- * thing as it was generated, the highest number is always the step just taken,
- * and no edit can reach back past the first. Slots stop at PREV_MAX so a
- * hundred trims cannot fill a disk; when they run out it is the most recent
- * step that rolls, never the original.
- *
- * .prev is not the library and is never listed, so none of this shows up as a
- * row. These bytes cost generations and an edit is not worth losing them over. */
+/* the first slot is written once and never again: rolling one slot forward left .prev holding a 1291-byte middle step instead of the 13073-byte original */
 const PREV_MAX = 8
 
 // the path to write this backup to: the plain name while it is free, then
@@ -5415,19 +3863,10 @@ async function keepPrevFile(id, from, as) {
   await keepVersion(id, as.replace(/\.png$/i, ''))
 }
 
-/* The same keep, in the store, so an undo works on a machine that never saw the
- * edit. Not awaited: the disk copy above is what this request depends on, and
- * blocking a generation on a bucket copy would make every edit slower for a
- * safety net that is allowed to be a moment behind. */
+/* the same keep in the store, so an undo works on a machine that never saw the edit */
 async function keepVersion(id, name) {
   if (!platformOn()) return
-  /* AWAITED, because this used to be fire-and-forget. On a laptop the copy
-   * finished in the background; on the host the instance freezes the moment the
-   * response goes out, the promise is dropped, and no version ever lands. So
-   * every in-place edit on the deployed app was destructive with nothing behind
-   * it, and revert answered "no earlier copy" to a person who had just watched
-   * a pixelate wreck their fire (hearth-2, 2026-09-02). It copies the live
-   * store blobs, so it has to finish BEFORE the rewrite pushes over them. */
+  /* awaited: the host freezes the instance when the response goes out, so fire-and-forget landed no version and every deployed edit was destructive */
   try {
     await snapshotVersion(id, name)
   } catch (e) {
@@ -5451,19 +3890,10 @@ async function keepPrevDir(id, from, as) {
   await keepVersion(id, as)
 }
 
-/* The old bytes out, the new bytes in, ONE library row either way.
- *
- * The item keeps its own name, so every placement of it picks the new pixels up
- * instead of pointing at art nothing links to any more. Files the new take does
- * not use are deleted: a shorter motion would otherwise leave the tail of a
- * longer one behind, and a set trimmed through asset-crop's heading branch
- * would leave flat <heading>.png files beside the indexed ones. */
+/* one row either way: the item keeps its name so placements pick the new pixels up, and unused files go or a shorter motion leaves a longer one's tail */
 async function swapFolder(id, name, stage, meta) {
   const folder = path.join(libDirOf(id), name)
-  /* This used to rmSync the .prev folder before refilling it, which is the
-   * rollover in its most direct form: re-animating a figure twice deleted the
-   * original eight headings outright. It goes through the shared helper now,
-   * so take one is kept and take two lands beside it. */
+  /* this used to rmSync .prev before refilling it, so re-animating a figure twice deleted the original eight headings outright */
   await keepPrevDir(id, folder, name)
   fs.mkdirSync(folder, { recursive: true })
   const keep = new Set()
@@ -5490,18 +3920,7 @@ function readAsks(id) {
   }
 }
 
-/* Every heading a character can face, walking if it can walk.
- *
- * The walk is gathered across however many animation groups it is split over: a
- * character animated in two passes has its eight headings in two entries. want
- * is an animation_type to insist on, '' for any group with walk in its name, or
- * '*' for whatever it has, which is the right reading straight after a
- * generation, where the only animation on it is the one just paid for and its
- * name is the template's.
- *
- * Any heading the walk does not cover falls back to the still rotation, so a
- * character with no animation still faces where it is going without its legs
- * moving. */
+/* the walk is gathered across every group it is split over, and a heading the walk misses falls back to its still rotation. '*' means whatever it has */
 function characterDirs(detail, want) {
   const d = detail && typeof detail === 'object' ? detail : {}
   const w = String(want || '').toLowerCase()
@@ -5520,16 +3939,7 @@ function characterDirs(detail, want) {
   return byDir
 }
 
-/* ---- what a stop leaves behind ------------------------------------------
- *
- * Stopping is not undoing. Every generation already asked for is already paid
- * for, so the rule everywhere is that whatever landed gets written and the run
- * ends there. What a stop buys is the NEXT generation, not the last one back.
- *
- * The animated routes are two spends: a base object, then the frames driven
- * off it. A stop between them, or during the second, saves one generation and
- * leaves a base nobody would otherwise see. It files as a still object instead
- * of being thrown away. */
+/* stopping is not undoing: what is asked for is paid for, so whatever landed is written and a stop buys the next generation, never the last one back */
 const STOPPED_STILL = 'stopped before the motion, so it lands still'
 
 // the second half of a two-spend route, or null if a stop landed. Anything
@@ -5548,15 +3958,7 @@ async function stillOnStop(gate, start) {
  * once because three paths land here: the still answer of both object routes,
  * and the base of an animated one whose motion half never happened. */
 
-/* A NAME NOTHING ELSE IN THIS MAP IS USING, asked of both places.
- *
- * The suffix walk used to probe the folder alone, which is right when the
- * folder is the library. It is not any more: on a host, scratch is /tmp and
- * starts empty on every request, so every generation would pick the base name
- * and quietly overwrite the item already in the store under it.
- *
- * So disk answers for what is mid-request and the database answers for what
- * exists at all, and a name has to be free in both. */
+/* a name free in both places: on a host scratch starts empty every request, so a folder-only walk picked the base name and overwrote the stored item */
 async function freeLibraryName(id, base) {
   const dir = libDirOf(id)
   const onDisk = (n) => fs.existsSync(path.join(dir, n + '.png')) || fs.existsSync(path.join(dir, n))
@@ -5606,26 +4008,7 @@ async function pushLibrary(id, name) {
   }
 }
 
-/* ---- ORIGIN: what a library row was drawn from --------------------------
- *
- * One file per map, work/<id>/origin.json, mapping a library name to the
- * pixellab id that drew it and to the extra faces it has since been given.
- *
- * A separate file rather than a field on the art, because the library holds
- * three shapes — a flat png, a folder of frames, a folder of headings — and
- * only the last has anywhere to put metadata today (dirs.json). One file all
- * three can use beats three conventions.
- *
- * Why it has to exist: every state endpoint keys off the id of the thing being
- * edited, and until today that id was dropped the moment the bytes hit disk.
- * Recovering it afterwards is the guesswork characterFor already does — match
- * on the prompt, then rank by age, across 769 rows — and it is wrong often
- * enough that three of this hub's people were reported deleted while their art
- * sat on disk beside the id that drew it.
- *
- * A row with no entry keeps working exactly as it does now: an imported
- * account object, a hand-edited png, everything made before today. No origin,
- * no second face offered, nothing broken. */
+/* origin.json maps a library name to the id that drew it: the library has three shapes and only one can hold metadata, and guessing across 769 rows was wrong often */
 const originPath = (id) => path.join(WORK, id, 'origin.json')
 
 function readOrigin(id) {
@@ -5650,21 +4033,10 @@ function noteOrigin(id, name, patch) {
   }
 }
 
-/* Where a state's art lives: work/<id>/states/<owner>/, OUTSIDE the library
- * folder on purpose. A face is not a thing, it belongs to the thing, and one
- * stray listing would undo the whole reason for the change — a library that
- * fills with boulder, boulder-2, sleeping-dragon, rows that mean nothing on
- * their own and that the sparkle's planner would then have to choose between. */
+/* a face lives outside the library folder on purpose: one stray listing fills it with boulder, boulder-2, rows that mean nothing on their own */
 const stateDirOf = (id, owner) => path.join(WORK, id, 'states', cleanName(owner))
 
-/* ---- the two fields that used to be four dropdowns ----------------------
- *
- * A client that has not been updated still posts bodyType, template and walk.
- * These turn that into the skeleton and the motion the route now works in, so
- * nothing that used to work stops working. Nothing sends these by choice.
- *
- * legacySkeleton answers '' for the one case the old route refused: bodyType
- * quadruped with no body named. */
+/* an older client still posts bodyType, template and walk; legacySkeleton answers '' for the one case the old route refused, quadruped with no body */
 function legacySkeleton(b) {
   if (String(b.bodyType) !== 'quadruped') return 'mannequin'
   return QUADRUPEDS.includes(String(b.template)) ? String(b.template) : ''
@@ -5678,17 +4050,7 @@ function legacyAnim(b) {
   return walk ? { how: 'template', template: walk } : { how: 'none' }
 }
 
-/* Which headings written motion has to name, and how many of them.
- *
- * Naming a heading the character does not have is a generation asked for and
- * thrown away, so rotation_urls gets read rather than assumed. But the read is
- * only trusted when it is COMPLETE: awaitCharacter answers the moment four
- * rotations are real, because that is a whole four-way character, so an
- * eight-way body is often read back half drawn. Believing a short read there
- * would buy motion for half the sprite after the button had said nine.
- *
- * n is the count that was ordered, and it is also the ceiling: what gets
- * animated can never be more than what was priced. */
+/* rotation_urls is read, not assumed, but only trusted when complete: awaitCharacter answers at four, so an eight-way body reads back half drawn. n is the ceiling */
 function headingsOf(detail, n) {
   const rot = detail && typeof detail.rotation_urls === 'object' && detail.rotation_urls ? detail.rotation_urls : {}
   const got = Object.entries(rot)
@@ -5701,21 +4063,7 @@ function headingsOf(detail, n) {
 // trim uses, src/core/debase.ts:29, so the two agree about where a sprite ends
 const ALPHA_MIN = 20
 
-/* THE PADDING COMES OFF, once, against ONE box.
- *
- * pixellab draws a character into a canvas about 40% bigger than the character
- * to leave animation headroom (a 48px character lands on a ~68px canvas), and
- * that empty margin is why an imported figure floats above the ground in the
- * game. So the set is cropped to the tightest box that holds every frame of
- * every heading. ONE box for all of them: a box per frame would move the feet a
- * pixel or two each frame and the walk would bob.
- *
- * The client's trim cannot be reached from here. It runs on a canvas and
- * /api/asset-crop only writes back the pixels it is handed. The png pair in
- * sheet.mjs is this project's decoder and encoder and this is what it is for.
- *
- * Answers the new size, or null when there was nothing to take off, in which
- * case the files on disk are exactly as they arrived. */
+/* one box for the whole set, because a box per frame moves the feet and the walk bobs; the 40 percent pixellab margin is why an imported figure floats */
 function trimSet(dir, dirs) {
   const files = []
   for (const list of Object.values(dirs || {}))
@@ -5811,16 +4159,7 @@ const seedOf = (b) => {
   return isFinite(n) && n > 0 ? n : undefined
 }
 
-// ---- the ask interpreter ------------------------------------------------
-// The image generator draws every noun it hears: "smoke for the volcano"
-// paints a volcano, "a bird that isn't flying" paints flight. A language
-// model understands the ask and rewrites it into generator-language: ONE
-// drawable thing, destinations stripped, negations resolved into the state
-// that remains, movement words separated for animation, a sane canvas size.
-// It never places anything and never judges the map — that wider job was
-// tried and killed; this is a sentence-level rewrite with a fixed rulebook.
-// On any failure the raw ask passes through unchanged: generation never
-// blocks on the interpreter.
+// the generator draws every noun it hears, so the ask becomes one drawable thing; the wider judging job was tried and killed, and a failure passes the ask through
 
 // at or above this the map's style clause is appended and the palette lock
 // opens strong; below it the ask goes out bare and the lock opens at zero
@@ -5830,122 +4169,26 @@ const BELONGS_MIN = 0.5
 // the cap is the endpoint's own (2000 chars) with room to spare
 const PROMPT_MAX = 1200
 
-/* How much of the person's OWN words reaches a planner.
- *
- * This was 600 and it silently ate the end of longer asks. Measured 2026-08-21:
- * a guiding prompt of 817 characters that said "i want one of the assets
- * generated for the beach to be a crab" at character 735 reached the model with
- * the word crab appearing ZERO times, and planned a crab 0 times out of 3. At
- * 1200 the same ask plans a crab 3 out of 3. Nothing else about the prompt
- * needed changing; an ablation of the surrounding wording scored the same, so
- * the cap WAS the bug.
- *
- * Nothing upstream bounds the box, so this is the only place a person's words
- * can go missing. If it ever needs raising again, raise it: a request that is
- * read in full and refused beats one that is quietly cut in half. */
+/* at 600 an 817-character ask naming a crab at character 735 reached the model with the word missing and planned one 0 times of 3; at 1200 it is 3 of 3 */
 const ASK_MAX = 1200
 
 // how much of an object plan's one printed line survives. See planMake, where
 // the measurement that moved it off 240 is written down.
 const NOTE_MAX = 400
 
-/* HOW LONG A ROUND CAN BE, and the one number every other cap is worked out
- * from.
- *
- * Four numbers used to say this and they said different things: cleanLife kept
- * six states, the art field clamped to 0..7, the export sliced looks to seven,
- * and the prompt below asked for two to six. A seven-state answer therefore
- * lost its last state on the way into the editor with nothing said to anybody,
- * which reads on screen as a round that just stops early.
- *
- * cleanLife owns the real ceiling (src/core/life.ts, the slice inside
- * cleanLife), so this side matches it rather than inventing a second one, and
- * everything else here is arithmetic on it:
- *   states in a round            STATES_MAX
- *   extra pictures a round needs STATES_MAX, since every state can name a
- *                                picture and none of them need be look 0
- *   highest art index            STATES_MAX, which sits inside life.ts's 0..7
- *                                clamp with one slot spare
- * If cleanLife's ceiling ever moves, move this and nothing else. */
+/* cleanLife owns the ceiling and this matches it: four numbers used to disagree, so a seventh state vanished on the way into the editor with nobody told */
 const STATES_MAX = 6
 
-/* HOW MUCH OF THE PICTURE LIST FITS IN A PROMPT, in characters rather than in
- * names.
- *
- * This was a count of 60 and the hub library is 63 items, so three pictures
- * were unnameable and which three was directory order. A count cannot bound a
- * prompt anyway: measured on the hub, names run 1 to 41 characters and average
- * 17.2, so sixty of them is anywhere between one line and a paragraph. The
- * clause is the thing that has to stay small, so the budget sits on the clause.
- *
- * 4000 characters is roughly a thousand tokens beside a prompt whose fixed body
- * is already several thousand. It holds the whole hub library three times over
- * (63 names, 1205 characters joined, measured), and about 230 names of average
- * length, so a 300-item library loses a tail instead of blowing the prompt. The
- * tail is counted and said out loud, which is the part that was actually wrong:
- * silence, not the number. */
+/* characters, not names: a count of 60 against a 63-item library left three unnameable in directory order, and names run 1 to 41 characters. the tail is said out loud */
 const NAMES_CHARS = 4000
 
-/* THE CAMERA, WHICH IS A DECISION ABOUT THE THING AND NOT A HOUSE CONSTANT.
- *
- * This used to read "the camera angle every object on this tool is drawn at ...
- * one constant, so the projection can never disagree with the words in the
- * prompt", and both halves were wrong. It did not stop the disagreement, it WAS
- * one half of it: the constant went out as the view parameter while the router
- * was separately ordered to open every style sentence with "Isometric pixel
- * art". Measured over 24 free reads on that text, 24 of 24 opened exactly
- * "Isometric pixel art": a boat, a well and a stall, which want it, and a
- * puddle, a rope coil, a lamp post and a big shady tree, which do not. The router already knew: asked for a puddle it wrote "it is
- * flat so the height is spent low" and then had to spend that knowledge on the
- * aspect ratio, because projection was the one thing it was forbidden to say.
- *
- * The map settles it. Open work/hub/.ask/map.png: the palm belt has dead
- * vertical trunks and symmetric fronds with no foreshortening anywhere, and the
- * houses forty pixels away have two roof faces and a wall receding at two to
- * one. One painting, one hand, projection chosen per object. A prompt that says
- * isometric for everything contradicts the map it claims to match.
- *
- * So the router answers view, once, and both channels are written from that one
- * value. See planMake's THE CAMERA and objectPrompt.
- *
- * OBJECT_VIEW stays exactly where it is and keeps its value. It is the
- * CHARACTER default at /api/character-gen and spriteRoute, and characters are
- * the one path on this tool that is reliable; an earlier session degraded them
- * by leaking object rules across. On the object side it is now the fallback for
- * an answer that is missing or unreadable, which lands silence on the value
- * that has evidence behind it rather than on the endpoint's own documented
- * default of high top-down. */
+/* the camera is per object, not a house constant: 24 of 24 reads opened "Isometric pixel art", puddles included, so the router answers view once */
 const OBJECT_VIEW = 'low top-down'
 
-/* What /v2/map-objects will actually take, read off its own schema.
- *
- * Deliberately NOT CHAR_VIEWS. That list carries perspective, which the object
- * endpoint does not know, and a word the schema rejects is a 422 charged after
- * the draw. Three values, and they are not three tastes: high top-down is the
- * ground plane, side is the picture plane, low top-down is the raked corner
- * between them that shows a top and a side at once. The endpoint has had the
- * whole range all along and this tool fenced two thirds of it off as a bug. */
+/* not CHAR_VIEWS: it carries perspective the object endpoint does not know, and a word the schema rejects is a 422 charged after the draw */
 const OBJECT_VIEWS = ['low top-down', 'high top-down', 'side']
 
-/* The one place a projection is written in English, keyed by the value that
- * goes on the wire. Nothing else in this file is allowed to name a camera.
- *
- * low top-down is byte for byte what the 47 objects he kept say, and that is
- * the point of it: every ask that routes to the common camera produces exactly
- * the prompt it produces today, so the path with evidence behind it is not
- * gambled on this change. The other two get the minimum, because there is no
- * measurement behind any wording for them yet.
- *
- * Two channels DO speak here, and that is not the old bug. The account settles
- * it: read 2026-08-25 over all 739 objects on it, 315 carry the word isometric
- * in their prompt while their view parameter says high top-down, and they were
- * made anyway. A parameter and a word are not what fights. What fights is a
- * word and a parameter that neither of them can change, so they drift apart.
- * Here they are the same variable read twice and cannot express two cameras.
- *
- * The same read says the other two values are not theoretical either: that
- * account holds 527 objects at high top-down and 30 at side. It is this tool
- * that has only ever sent one of the three. */
+/* one variable read twice, so it cannot express two cameras: 315 of 739 account objects say isometric while their view says high top-down and were made anyway */
 const CAMERA_WORDS = {
   'low top-down': 'Isometric pixel art',
   'high top-down': 'Pixel art seen from straight above',
@@ -5954,72 +4197,22 @@ const CAMERA_WORDS = {
 
 const objectView = (v) => (OBJECT_VIEWS.includes(String(v)) ? String(v) : OBJECT_VIEW)
 
-/* READING THE CAMERA BACK OFF THE FINISHED PROMPT, which is what makes this
- * survive the round trip through files this change does not own.
- *
- * The plan goes to the browser, the browser holds it, and the browser sends the
- * finished prompt back as `thing` when the person presses spend. If the view
- * had to travel as its own field it would have to be carried by MakePlan, two
- * option types, runGen and the fill path, and any one of those dropping it puts
- * the constant back silently while the prompt still says "drawn straight on
- * with no foreshortening". That is the same two-cameras-disagree bug, pointed the
- * other way, on a sprite that looks like the tool merely not being smart. That
- * hole is not hypothetical: `count` is documented in the client and read in the
- * ui and has never once been set by this server.
- *
- * So the camera is recovered from the bytes that carry it. The three openers
- * are code-owned strings, so this is not pattern-matching model prose, it is
- * looking for a phrase this file wrote. An older client, a hand-edited prompt
- * and a prompt from before this change all land on OBJECT_VIEW, which is what
- * they got yesterday. Two openers in one string is a prompt nobody here wrote,
- * so it falls back rather than guessing which was meant. */
+/* the camera is read back off the finished prompt, because a field would be dropped by one of five carriers and put the constant back silently */
 function viewFor(prompt) {
   const t = String(prompt || '').toLowerCase()
   const hits = OBJECT_VIEWS.filter((v) => t.includes(CAMERA_WORDS[v].toLowerCase()))
   return hits.length === 1 ? hits[0] : OBJECT_VIEW
 }
 
-/* What /v2/characters will actually take, read off its own schema.
- *
- * standard is one generation and the only mode that honours a direction count.
- * pro is 20 to 40 for the character alone, so it is offered and never assumed.
- * v3 is 2 to 9 and the only one that takes a reference image.
- *
- * CHAR_VIEWS used to carry oblique. It is not in the live v2 openapi and never
- * was: read 2026-08-23, every create-character route describes its view as
- * "side, low top-down, high top-down, perspective". Sending oblique to the
- * standard route was sending a word the schema does not know. */
+/* standard is one generation, pro is 20 to 40, v3 is 2 to 9 and the only one taking a reference; oblique was never in the live schema */
 const CHAR_MODES = ['standard', 'pro', 'v3']
 const CHAR_VIEWS = ['low top-down', 'high top-down', 'side', 'perspective']
 const QUADRUPEDS = ['bear', 'cat', 'dog', 'horse', 'lion']
 
-/* THE SIX RIGS, AND WHY THE LIST IS ALLOWED TO EXIST HERE.
- *
- * Every other list in the make panel died, because a list of kinds of thing is
- * always shorter than what a person can imagine. This one is different: it is
- * not a list of what can EXIST, it is the complete set of skeletons pixellab
- * has. There is no dragon rig, no robot rig, no bird, no serpent, and asking
- * for one is a 422 that costs the body it was hung on.
- *
- * So the list stays and the NARROWING goes somewhere else: the router picks
- * the nearest rig by body plan and the prompt carries what the thing actually
- * is. A patrol robot is a mannequin that reads as a machine. A dragon is a lion
- * rig that hovers. Nothing in the ui ever offers these six to anybody. */
+/* the complete set of skeletons pixellab has, not a list of what can exist: asking for a dragon rig is a 422 that costs the body it hung on */
 const SKELETONS = ['mannequin', ...QUADRUPEDS]
 
-/* The humanoid template animations, for the cheap path.
- *
- * A named template is one generation per direction and is exactly right for the
- * ordinary case, a two-legged thing putting one foot in front of the other.
- * Everything else is written motion instead, because a template list cannot say
- * "hovers with its wings beating" and v3 can.
- *
- * The four-legged templates are deliberately absent. They are named per body,
- * so the right id for a lion is not the right id for a horse and neither can be
- * known before the body exists. A quadruped always takes the written path.
- *
- * A name that is not on this list is demoted to written motion rather than
- * sent: an unknown template id comes back 422 AFTER the body is paid for. */
+/* four-legged templates are absent because they are named per body, and a name not on this list is demoted: an unknown id is a 422 after the body is paid for */
 const WALK_TEMPLATES = [
   'walk', 'walk-1', 'walk-2', 'walking', 'walking-2', 'walking-3', 'walking-4', 'walking-5',
   'walking-6', 'walking-7', 'walking-8', 'walking-9', 'walking-10',
@@ -6030,25 +4223,7 @@ const WALK_TEMPLATES = [
   'jumping-1', 'jumping-2', 'two-footed-jump', 'getting-up', 'throw-object',
 ]
 
-/* WHAT CANNOT WALK, and why a list is allowed to exist here.
- *
- * The template gate used to be two facts, both of them true on their own and
- * neither of them about the thing being made: the router said template, and the
- * rig is the upright one. A hovering wisp routed onto the mannequin satisfies
- * both, and got a walk cycle. That is the exact failure the written path was
- * built to end, so trusting the prompt not to ask for it is not enough.
- *
- * These are the words that say plainly the thing does not put one foot in front
- * of the other: no legs, airborne, or incorporeal, and the verbs for moving
- * without feet. It is not a taxonomy and does not need to be complete. A word
- * it misses leaves things exactly where they were, and a word it catches only
- * DEMOTES to written motion, which at these sizes is the same one generation
- * per direction. Being wrong here costs nothing, so it leans toward catching.
- *
- * What is deliberately NOT on it: cart, wagon, boat, balloon, bird, bat. Those
- * do not walk either, but they turn up in the hands of somebody who does, and a
- * farmer pushing a cart losing his walk cycle to the word cart is the list
- * grading the props instead of the subject. */
+/* a hovering wisp on the mannequin rig got a walk cycle, and catching a word only demotes to written motion at the same price; cart and boat stay off, they are props */
 const NO_WALK = new RegExp(
   '\\b(' +
     [
@@ -6074,32 +4249,16 @@ const walksOnFeet = (ask) => {
   return !!s && !NO_WALK.test(s)
 }
 
-/* The words a demotion must not repeat back. A router that asked for a walk
- * template usually wrote walking beside it, so for something that does not walk
- * its own motion line is the one source that cannot be reused when the gate
- * turns the template down. Catching the template and then describing a walk in
- * words lands in the same place by a longer road. */
+/* a router that asked for a walk template wrote walking beside it, so its own motion line cannot be reused when the gate turns the template down */
 const WALK_WORDS = /\b(walk|walks|walking|stride|strides|striding|step|steps|stepping|march|marches|marching|jog|jogs|jogging|run|runs|running|foot|feet|legs?)\b/i
 
-/* Eight headings, named out loud, and this is not decoration.
- *
- * Template mode defaults to every direction the character has. WRITTEN motion
- * defaults to SOUTH ONLY, which is in the live schema in those words. A written
- * animation that forgets this comes back facing one way, unusable on a map
- * where life.ts works out an eight-way facing, with the budget for the other
- * seven still sitting unspent. */
+/* written motion defaults to south only in the live schema, so forgetting to name the headings comes back facing one way with seven budgets unspent */
 const DIRS8 = ['south', 'south-east', 'east', 'north-east', 'north', 'north-west', 'west', 'south-west']
 // the four a four-direction body has. Nothing in the ui asks for one, but the
 // route accepts nDirections 4 and a written motion still has to name them.
 const DIRS4 = ['south', 'east', 'north', 'west']
 
-/* The sprite canvas ceiling, and it is a price not a taste.
- *
- * Written motion is billed ceil(w * h * frames / 65536) per direction, which is
- * one per direction at 96 and two above it. The cost line on the button says
- * nine and it has to mean nine, so nothing here draws bigger than this. A thing
- * that should look bigger on the map is scaled at its placement, which is free:
- * placements already carry sx/sy. */
+/* a price, not a taste: written motion is one generation per direction at 96 and two above it, and a placement's sx/sy scales for free */
 const SPRITE_MIN = 32
 const SPRITE_MAX = 96
 
@@ -6108,16 +4267,7 @@ const SPRITE_MAX = 96
 // a clock.
 const CHAR_WAIT = 600000
 const WALK_WAIT = 900000
-/* THE HOST CANNOT WAIT THAT LONG. A Vercel function is cut off at 300 seconds
- * (vercel.json), and an eight-way written animation takes five to fifteen
- * minutes. Waiting for it inside the request meant the function died mid-poll,
- * the client's timer died with it, nothing was saved, and PixelLab kept both
- * the frames and the charge: measured 2026-09-02, two complete breathing
- * animations on one character and 55 generations gone for a press that
- * "did nothing". So on the host the wait has a budget, and running out of it
- * is not a failure: the route answers pending with the name of the group it
- * started, the frames are already bought, and the client collects that group
- * with recover once it is finished. */
+/* vercel cuts a function at 300s and an eight-way animation takes five to fifteen minutes: waiting inside the request lost 55 generations to a press that did nothing */
 const HOST_WAIT = 230000
 const onHost = () => !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME)
 class Pending extends Error {
@@ -6128,42 +4278,8 @@ class Pending extends Error {
   }
 }
 
-/* THE HOUSE PROMPT.
- *
- * The measured diagnosis: short asks like "a palm tree, clean hand-painted
- * pixel art, isometric" come back as illustrations standing on invented stone
- * slabs. The 47 objects on this account judged good are 60 to 100 words
- * and every single one of them STATES the projection, the light direction, the
- * value count, the palette, that it is one piece, and that there is no ground.
- * Verbatim from the lighthouse: "in strict 2:1 isometric pixel art ... warm
- * golden-hour sunlight from the upper left, soft blue-tinted shadow on the
- * right side, painterly 6-8 value shading, muted warm palette, transparent
- * background, NO water, NO ground beyond the small stone footing".
- *
- * So the interpreter no longer writes the prompt. It writes only the two parts
- * that change per ask (the subject and its palette) and the fixed DNA is
- * assembled around them here, in code. That is deliberate: a model asked to
- * remember seven clauses forgets one, and the one it forgets is the refusal of
- * ground, which is the exact failure being fixed. Assembled this way the
- * refusal is on every object prompt whether or not the interpreter answered at
- * all. */
-/* Ground words, out of an object's prompt.
- *
- * The style clause is read off the painting so a sprite looks like it came off
- * this island, and on THIS island the honest answer came back as "warm
- * sandy-tan and earthy-brown palette, cool grey stone". Which is true of the
- * map, and is also a shopping list of materials for building a plinth. It went
- * on every object prompt. His palms came back standing on discs of sand with
- * stone rims because the prompt asked for sand and stone (measured on
- * work/hub/style.json, 2026-08-19).
- *
- * The same goes for the subject. "island palm trees" reads to a generator as
- * island first, trees second, and it draws both.
- *
- * A colour word is not the problem: "sandy-tan" as a HUE is exactly what makes
- * a sprite belong. So this drops whole comma-clauses that name ground as a
- * MATERIAL and leaves everything else standing. Deterministic, because a model
- * told to remember a rule forgets it on the one ask that mattered. */
+/* the 47 kept objects all state projection, light, values, palette and no ground; code assembles it, because a model asked for seven clauses forgets one */
+/* whole comma-clauses that name ground as a material go: a style clause saying sandy-tan and grey stone put palms on discs of sand with stone rims */
 const GROUND = /\b(sand|sandy|stone|rock|rocky|earth|earthy|dirt|soil|gravel|grass|grassy|terrain|ground|paving|paved|cobble|cobblestone|beach|shore|shoreline|coast|coastal|seaside|island|terracotta|clay)\b/i
 
 function groundless(s) {
@@ -6174,29 +4290,9 @@ function groundless(s) {
     .join(', ')
 }
 
-/* The subject is left alone on purpose. A regex that strips place words out of
- * it was written and thrown away the same hour: it missed the case that caused
- * this ("a cluster of tall ISLAND palm trees", where the word is buried mid
- * phrase) and it turned "a beach umbrella" into "a umbrella". Editing English
- * by pattern breaks more than it fixes. The subject is the interpreter's job
- * and the instruction names this exact failure; what gets through is caught by
- * the base trim, which reads pixels and cannot be talked around. */
+/* the subject is left alone: a regex on it turned "a beach umbrella" into "a umbrella" and still missed the buried word, so it was thrown away the same hour */
 
-/* THE SAME FENCE, FOR THE CAMERA, and it works for the same reason groundless
- * does: it drops whole comma-clauses out of the STYLE half only, where every
- * clause is one fact and losing one is survivable.
- *
- * It is a fence and not the mechanism. The mechanism is that code owns the join
- * in objectPrompt, so the router is never handed a sentence it could put a
- * camera into. This catches the case where it names one anyway inside the style
- * clauses it does write. Measured over 24 free reads after the change it had
- * nothing to do: 0 of 24 prompts carried a projection word anywhere outside
- * the phrase code itself put in. That is the state it
- * is supposed to be in, and it stays because the day it does fire is the day a
- * second camera would otherwise have gone out at full price.
- *
- * The subject is left alone here too, for the reason written above: a regex on
- * the subject was tried and thrown away the same hour. */
+/* a fence on the style half only: the mechanism is that code owns the join, and measured over 24 reads this caught 0, which is the state it should be in */
 const PROJECTION =
   /\b(isometric|2:1|two[- ]to[- ]one|top[- ]?down|overhead|bird'?s[- ]?eye|three[- ]quarter|3\/4|side[- ]on|side view|side elevation|front elevation|orthographic|axonometric|oblique|perspective|foreshorten\w*|projection|vanishing point|(?:seen|viewed|drawn|looking)\s+(?:from|down|straight))/i
 
@@ -6208,19 +4304,7 @@ function projectionless(s) {
     .join(', ')
 }
 
-/* THE ONE PLACE AN OBJECT PROMPT IS ASSEMBLED, so the camera in the words and
- * the camera on the wire are the same variable read twice.
- *
- * The router answers a subject and a style as two separate fields and never a
- * finished sentence, which is the whole trick: there is no string it writes
- * that a projection could hide in, so nothing has to remember a rule. Code puts
- * the camera in, between them, in the position the kept objects put it.
- *
- * At low top-down the output is byte for byte the shape of the one he kept that
- * is quoted in planMake: subject sentence, full stop, "Isometric pixel art",
- * then the style clauses. The common ask is therefore unchanged by this whole
- * change, which is deliberate. 47 objects say that wording works and none of
- * them says anything at all about the other two. */
+/* subject and style come back as separate fields, so no string the router writes can hide a camera; code puts it between them where the kept objects put it */
 function objectPrompt({ subject, style, view }) {
   const one = (s) => String(s || '').replace(/\s+/g, ' ').trim()
   const sub = one(subject).replace(/[.,;:\s]+$/, '')
@@ -6230,39 +4314,14 @@ function objectPrompt({ subject, style, view }) {
   const sty = projectionless(one(style).replace(/^[.,;:\s]+/, '').replace(/[.\s]+$/, ''))
   const cam = CAMERA_WORDS[objectView(view)]
   const tail = sty ? `${cam}, ${sty.charAt(0).toLowerCase()}${sty.slice(1)}` : cam
-  /* THE REFUSAL OF GROUND, PUT BACK, AND PUT BACK IN CODE.
-   *
-   * housePrompt has carried these two clauses since the palms came back standing
-   * on discs of sand with stone rims. When the router started writing its own
-   * prompts they were left behind, and housePrompt stopped being reachable from
-   * the ui, so the live path has been asking for objects with nothing said about
-   * ground or transparency at all. The only thing refusing a plinth since then
-   * is the pixel base-trim, which reads bytes after the generation is paid for
-   * and cannot stop one being drawn.
-   *
-   * It matters more now that the camera varies. A side elevation is exactly
-   * where a generator volunteers a horizon line or a shadow disc, and side is
-   * the value this tool has never once sent.
-   *
-   * Code appends it rather than the model, for the reason the old comment gives:
-   * a model asked to hold seven clauses forgets one, and the one it forgets is
-   * the refusal of ground, which is the failure being fixed. Assembled here it
-   * rides every object prompt whether or not the interpreter answered well.
-   *
-   * And it says what IS there rather than what is not. The refusal used to read
-   * "no ground, no terrain, no base, no plinth", which handed four ground nouns
-   * to a generator that draws every noun it is given, and summoned the slab it
-   * meant to forbid. */
+  /* the refusal says what is there: "no ground, no terrain, no base, no plinth" handed four ground nouns to a generator that draws every noun and summoned the slab */
   const alone =
     'the object alone as a cut-out sprite on a fully transparent background, ' +
     'the base of the object is where its own material ends'
   return `${sub ? sub + '. ' : ''}${tail}, ${alone}.`.slice(0, PROMPT_MAX)
 }
 
-/* A box answered by the router, made safe to index a png with. Anything that
- * does not read as four finite numbers with real area comes back null, which
- * every caller treats as "no crop" and falls through to the bare canvas. A
- * missing patch has to cost the old behaviour and never a crash. */
+/* anything that is not four finite numbers with real area comes back null, which every caller treats as no crop rather than crashing */
 function cleanBox(v) {
   if (!v || typeof v !== 'object') return null
   const n = (k) => Math.round(Number(v[k]))
@@ -6273,10 +4332,7 @@ function cleanBox(v) {
 
 function housePrompt({ subject, detail, palette, clause, view }) {
   const bits = [
-    // the fallback path is not reachable from the ui: App.tsx always sends
-    // the finished prompt as `thing`, so translateAsk never runs there. It still
-    // reads its camera off the same table, because a constant left sitting in
-    // the interpreter-down path is exactly how this bug comes back.
+    // not reachable from the ui, but it reads the same table, because a constant left in the interpreter-down path is how this bug comes back
     subject + ' in ' + CAMERA_WORDS[objectView(view)].toLowerCase(),
     detail,
     'warm golden-hour sunlight from the upper left',
@@ -6285,11 +4341,7 @@ function housePrompt({ subject, detail, palette, clause, view }) {
     groundless(palette),
     'one unified structure',
     groundless(clause),
-    // The refusal used to read "no ground, no terrain, no base, no plinth",
-    // which put FOUR ground nouns in the prompt of a generator that draws every
-    // noun it is handed. It was summoning the slab it was meant to forbid, the
-    // same way "no volcano, just smoke" painted a volcano. Say what IS there
-    // instead: the object alone, cut out, ending where it ends.
+    // "no ground, no terrain, no base, no plinth" put four ground nouns in and summoned the slab it was meant to forbid, so say what is there
     'the object alone as a cut-out sprite on a fully transparent background',
     'the base of the object is where its own material ends',
   ]
@@ -6300,26 +4352,7 @@ function housePrompt({ subject, detail, palette, clause, view }) {
     .slice(0, PROMPT_MAX)
 }
 
-/* ---- reading the ask WITH the map in front of you ------------------------
- *
- * This replaces five stages, and the five stages are worth naming because the
- * shape of that mistake is easy to repeat. The map used to be looked at once,
- * boiled down to eighteen words of text, and those words stapled onto every
- * prompt by code. When the words turned out to name the ground the map is made
- * of ("warm sandy-tan and earthy-brown palette, cool grey stone") a filter was
- * added to strip them. When sand arrived anyway a pixel trimmer was added to
- * cut it off. Five stages, four of them compensating for the lossiness of the
- * first, none of them necessary: the model can SEE.
- *
- * So it gets the painting itself. Not a summary of it, the file. And if a box
- * was drawn, the crop of that box too, at 2x, plus how many map pixels across
- * it is, which is the only reliable way to get scale right — a sprite is the
- * right size when it is the right size NEXT TO WHAT IS ALREADY THERE.
- *
- * It writes the whole prompt. There is no house style assembled around it,
- * because a prompt assembled in code cannot respond to what the map looks
- * like, and every clause that used to be bolted on is something a model
- * looking at the picture can decide better. */
+/* the model gets the painting itself, not a summary: five stages of filters and trims were all compensating for boiling it down to eighteen words */
 async function planMake({ ask, what, kind, id, mapFile, boxFile, box, previous, job, images = [], paths = [] }) {
   const sprite = what === 'sprite'
   const lines = [
@@ -6361,19 +4394,7 @@ async function planMake({ ask, what, kind, id, mapFile, boxFile, box, previous, 
   if (sprite) lines.push(...spriteLines(kind))
   else {
     lines.push(
-      /* THE SHAPE, taken off the 690 objects on this account rather than invented.
-       *
-       * Left to its own devices this router wrote things like "clean pixel art,
-       * low top-down three quarter view, strong dark outline, saturated palette"
-       * and got back a side elevation, a straight overhead and a rectangular
-       * trough that was not a boat. The kept objects are all written one way, and
-       * writing a rowboat that way instead produced a correct one first try at
-       * the same price. MUTED saturation rather than saturated did much of it.
-       *
-       * The other half of that old fix was ordering every style sentence to open
-       * with "Isometric pixel art", and that half was wrong. It is asked for as
-       * a decision now and the two fields exist so that code can own the join.
-       * See THE CAMERA below and objectPrompt. */
+      /* the shape is taken off the kept objects: left to itself the router asked for a saturated palette and got a trough that was not a boat. muted did much of it */
       `SHAPE. Every object he has kept is written the same way and you must match it, but you ` +
         `answer it as TWO FIELDS rather than as one finished sentence. subject: the thing and ` +
         `its own materials in physical detail, what it is made of, how it is worn, which parts ` +
@@ -6386,37 +4407,13 @@ async function planMake({ ask, what, kind, id, mapFile, boxFile, box, previous, 
         `never going to be one, because the next person will ask for something neither of us ` +
         `has thought of.`,
       ``,
-      /* THE PAINTING DECIDES, AND THE OBJECT ONLY CHOOSES WITHIN IT.
-       *
-       * This used to be two measurements on the object and nothing else, and it
-       * produced a bookshelf drawn flat-on to stand in a town painted in strict
-       * 2:1 isometric. The measurements were not wrong: a bookshelf really does
-       * have no top worth seeing and really does stand taller than its footprint,
-       * which is the rule that says side. What was wrong is that the rule was
-       * asked in a vacuum. On THIS map a bookshelf is a solid box, and every
-       * solid box in that town is drawn raked. On a map painted flat the same
-       * bookshelf should be flat.
-       *
-       * Not every map is in the same view, and the
-       * area is where the angle is understood relative to the whole map. So the
-       * order is fixed here. Read what the painting does with things of this
-       * FAMILY in this area, then use the object's shape to pick which family it
-       * is in. A map is allowed to be drawn any way at all and this still holds;
-       * nothing below names a projection this island happens to use. */
+      /* the painting decides and the object only chooses within it: asking the object's shape in a vacuum drew a bookshelf flat-on in a town painted isometric */
       `Look at the area first and the object second, in that order, because the painting is what ` +
         `is being joined and the object only picks which part of it to agree with. Different ` +
         `maps are painted at different angles and some are painted at more than one. Nothing ` +
         `here assumes the angle this map happens to use.`,
       ``,
-      /* THE BOX TEST, and it exists because "no top worth seeing" is not the
-       * same question as "has no volume" and the router kept answering the
-       * second when it had been asked the first. A bookshelf has no top worth
-       * seeing. A bookshelf is also a box, and every box in that town is drawn
-       * raked, so it came back flat-on standing in an isometric street.
-       *
-       * Crating it separates the two and it can be run on anything anybody ever
-       * asks for. A bookshelf packs solid. A tree is mostly air between its
-       * branches. Nothing about this names a projection or a kind of map. */
+      /* the box test: no top worth seeing is not the same question as has no volume, and answering the second drew a bookshelf flat-on in a raked street */
       `Every painting draws things in three families and you can see them in the area this thing ` +
         `will stand in. Sort it by CRATING IT: imagine boxing the thing in cardboard, and ask ` +
         `how much of that box the thing actually fills.`,
@@ -6452,14 +4449,7 @@ async function planMake({ ask, what, kind, id, mapFile, boxFile, box, previous, 
         `report seeing something you did not see: a guess about the painting is worse here than ` +
         `no look at all.`,
       ``,
-      /* The endpoint also takes outline, shading and detail as enums, and this
-       * tool has never sent any of them. They were wired and then taken back
-       * out the same hour: every object in this library that he has called good
-       * was made on the endpoint's own defaults, and three unproven enums went
-       * out in the same batch as a change that failed, so nothing could be
-       * attributed to them. They are real channels and worth trying one at a
-       * time against the defaults. They are not worth changing three at once
-       * underneath a route that already works. */
+      /* outline, shading and detail are real enums this tool has never sent: worth trying one at a time against the defaults, never three at once */
       `THE STYLE FIELD. No projection and no camera in it, and none in the subject either. Not ` +
         `"isometric", not "top-down", not "seen from above", not "three quarter", not "side ` +
         `view". The projection is written in by code from the view you chose, in the one ` +
@@ -6483,34 +4473,12 @@ async function planMake({ ask, what, kind, id, mapFile, boxFile, box, previous, 
         `ceiling, and a bigger number is not honoured, it is quietly cut down to 128. If the thing ` +
         `wants to be taller than it is wide, spend the height and narrow the width.`,
       ``,
-      /* the kept ones are 32x32, 40x32, 56x34, 96x72. A bigger canvas does not
-       * buy detail, it buys a finer pixel than the painting has, and a thing
-       * drawn finer than its map is the exact look of something pasted on. The
-       * 128 boat was unusable; the 64 one was right. */
+      /* the kept ones are 32 to 96 a side: a bigger canvas buys a pixel finer than the map's, and the 128 boat was unusable where the 64 was right */
       `Stay SMALL. The ones he kept are 32 to 96 a side and mostly under 72. A bigger canvas ` +
         `does not buy detail, it buys a pixel finer than the map's own, which is what makes a ` +
         `thing read as pasted on top of the painting rather than painted into it.`,
       ``,
-      /* WHERE ON THE MAP THIS THING BELONGS, and why it is worth a field.
-       *
-       * The generator has a prior for every common noun and on the ones it holds
-       * hardest the words lose. Measured 2026-08-25: a prompt naming "dusty
-       * olive and deep moss green ... muted saturation" returned a cartoon
-       * acid-green tree four times out of four, and a puddle prompt returned a
-       * bleached sand ring nobody asked for. No wording tested has moved either.
-       *
-       * The endpoint has a second mode that does not argue with the prior, it
-       * overrules it: hand /v2/map-objects a crop of the actual painting as
-       * background_image and it paints the object INTO that crop's light,
-       * palette and value range. That mode has been wired since the box gesture
-       * existed and only ever fired when somebody drew a box, which is a gesture
-       * the tool tells them to skip. So the ordinary ask has always landed on a
-       * bare canvas with nothing but adjectives holding the line.
-       *
-       * This field is what turns it on for everything. The model is already
-       * looking at the whole painting to write the prompt, so naming the patch
-       * costs nothing and no new gesture appears in front of the user. A drawn
-       * box still wins when there is one: it is the same answer, given by hand. */
+      /* on a noun the generator holds hard the words lose: dusty olive and muted returned an acid-green tree 4 of 4 and a puddle returned a bleached sand ring */
       `WHERE IT BELONGS. Also point at the patch of the painting this thing will live in, as a ` +
         `box in map pixels with 0,0 at the top left. It is not where the user will place it and ` +
         `you are not choosing a spot for them. It is the piece of the painting whose LIGHT, ` +
@@ -6529,23 +4497,7 @@ async function planMake({ ask, what, kind, id, mapFile, boxFile, box, previous, 
           `animator is handed the finished sprite and those words.`,
       )
   }
-  /* ONE ASK FOR THE WHOLE CREATURE, and it is the difference between this being
-   * usable by a ninth grader and not.
-   *
-   * "a troll that curls into a boulder, rolls around, then gets up and walks"
-   * is one sentence describing three separate jobs: a body, a second face, and
-   * a round. Made the long way that is three boxes in three places, and the
-   * order between them matters and is not written anywhere, so the first two
-   * people to try it will describe the round before the boulder exists and be
-   * told, after the fact, that something was missing.
-   *
-   * The model is already reading the whole sentence to write the prompt. Asking
-   * it to split out the faces and the round costs nothing extra and moves the
-   * ordering problem to the side that knows the rule, and keeps the whole thing
-   * one sentence instead of a row of fields to click through.
-   *
-   * Both fields are allowed to be empty and usually are. A plain ask for a
-   * fisherman is a body and nothing else. */
+  /* one ask for the whole creature: the long way is three boxes whose order is written nowhere, so a round gets described before the face it names exists */
   if (sprite)
     lines.push(
       ``,
@@ -6572,23 +4524,10 @@ async function planMake({ ask, what, kind, id, mapFile, boxFile, box, previous, 
       `The last attempt used this prompt and the user rejected it: "${String(previous).slice(0, ASK_MAX)}"`,
       `Work out what about it produced the wrong result and change that. Do not repeat it.`,
     )
-  /* The one opinion the router is allowed to have about which mode is open.
-   *
-   * It never switches, because a switch changes the price and the price is
-   * shown on a button the user is about to press. It says so in one line and
-   * the plan card prints it. */
+  /* the router may say the mode is wrong and never switch it: a switch changes the price on a button somebody is about to press */
   lines.push(
     ``,
-    /* THE STILL/MOVING TOGGLE IS ALSO A PRICE, so it gets the same treatment as
-     * the mode: the router notices and says so, and never switches.
-     *
-     * Somebody typing "a troll that curls into a boulder and rolls around" has
-     * described walking twice and may still have the toggle on still, because
-     * the toggle was set before the sentence was. Left alone that returns a
-     * troll with no walk cycle and nothing said about it, and the round then
-     * slides a standing sprite around the map. It is exactly the kind of thing
-     * the person should not have to know, and exactly the kind of thing that
-     * cannot be silently corrected: still is one generation and moving is nine. */
+    /* the still/moving toggle is a price too, so it is noticed and never switched: still is one generation and moving is nine */
     sprite && kind !== 'animated'
       ? `crossing: EMPTY unless one of two things is true. (a) This ask would clearly be better as ` +
         `a flat prop: a thing with no body that never turns to face anything is a prop, and a prop ` +
@@ -6620,15 +4559,7 @@ async function planMake({ ask, what, kind, id, mapFile, boxFile, box, previous, 
     kind: sprite ? 'sprite' : 'object',
     prompt: sprite ? clean(o.prompt, PROMPT_MAX) : objectPrompt({ subject: o.subject, style: o.style, view }),
     motion: clean(o.motion, 160),
-    /* The note is the only line the plan card prints for an object, so it is
-     * the whole of what a person reads before spending. It was 240 and the
-     * camera reason pushed straight through it. Measured over 24 free reads
-     * after this change, object notes ran 193 to 373 characters and 17 of 24
-     * were over 240, and the part that fell off the end was the SIZING half,
-     * which is the half someone can act on. 400 holds all 24 with room. The
-     * same 24 reads on the old text ran 133 to 240 and never once needed more,
-     * so this is the camera reason's own cost and not a general creep. A
-     * sprite's note stays at 240: its routing reason has its own field. */
+    /* at 240 the sizing half fell off the end: measured over 24 reads object notes ran 193 to 373 and 17 were over 240, so 400 for an object and 240 for a sprite */
     note: clean(o.note, sprite ? 240 : NOTE_MAX),
     crossing: clean(o.crossing, 200),
     w: clampPx(o.w),
@@ -6643,10 +4574,7 @@ async function planMake({ ask, what, kind, id, mapFile, boxFile, box, previous, 
   // both halves go to the walk gate: the ask names the thing, the prompt is
   // where a hovering, winged or legless one gets described at length
   if (sprite) plan.sprite = spriteRoute(o.sprite, kind, plan.motion, `${ask} ${plan.prompt}`)
-  /* The extra pictures and the round, carried so ONE press can do all of it in
-   * the order that works. Held to three because each is a generation and the
-   * cost line has to be true. An edit with no words in it is dropped rather
-   * than sent: a blank edit_description is a 422 charged after the queue. */
+  /* held to three because each is a generation, and an edit with no words is dropped: a blank edit_description is a 422 charged after the queue */
   if (sprite) {
     const faces = []
     for (const f of Array.isArray(o.faces) ? o.faces.slice(0, 3) : []) {
@@ -6677,17 +4605,7 @@ const SPRITE_ANSWER =
   `"sprite":{"skeleton":"mannequin","view":"low top-down","size":48,` +
   `"anim":{"how":"action","action":"...","frames":8},"why":"one short lower-case line"}}`
 
-/* THE SPRITE HALF OF THE PROMPT, which is where the narrowing used to live.
- *
- * It used to be four dropdowns: person or animal, which of five animals, walks
- * or stands, and a view. Every one of them was a list of what can exist, and a
- * list of what can exist is always shorter than what someone can imagine. A
- * dragon is not on it. Nor is a robot, a ghoul or a hooded figure.
- *
- * So the dropdowns are gone and this text is what replaced them. The user types
- * what they want and the model reads the map and works out the rig, the motion,
- * the size and the angle. The only enumeration left is the six skeletons, which
- * is not a taste, it is the complete set pixellab has. */
+/* four dropdowns became this text: the only enumeration left is the six skeletons, which is the complete set pixellab has rather than a taste */
 function spriteLines(kind) {
   return [
     ``,
@@ -6735,16 +4653,7 @@ function spriteLines(kind) {
   ]
 }
 
-/* The routing decision, held to what the endpoint will actually take.
- *
- * Every clamp here is a generation. A skeleton that does not exist, a template
- * id that was invented, a quadruped handed a humanoid walk: each of those is a
- * 422 that arrives AFTER the body has been drawn and paid for. So a wrong
- * answer is corrected into the nearest honest one rather than sent.
- *
- * subject is the words this route is allowed to judge the motion against: what
- * the person asked for and what the router then wrote about it. The walk gate
- * reads it. */
+/* every clamp here is a generation: an invented skeleton or template id is a 422 after the body is paid for, so a wrong answer is corrected rather than sent */
 function spriteRoute(raw, kind, motion, subject) {
   const s = raw && typeof raw === 'object' ? raw : {}
   const skeleton = SKELETONS.includes(String(s.skeleton)) ? String(s.skeleton) : 'mannequin'
@@ -6760,26 +4669,7 @@ function spriteRoute(raw, kind, motion, subject) {
   }
 }
 
-/* how the thing moves, and the demotions that save a paid body.
- *
- * A template id off the list is the cheap, proven path and is left alone. A
- * name that is not on the list, or any template at all on a four-legged rig,
- * becomes written motion instead: v3 takes any words at all, so it is the
- * honest fallback rather than a refusal.
- *
- * A still ask that came back with motion anyway is left still, and a moving ask
- * that came back with none is left at none. Both are the router's call and the
- * price is recomputed from what it actually said, so the button never promises
- * nine and buys one.
- *
- * The last-resort words are deliberately not "walking". Nothing here knows what
- * the thing is, and a default that walks is the one assumption this whole path
- * exists to get rid of: it would put a dragon on its feet. Neutral words let v3
- * work it out from the body it was handed.
- *
- * ask is what the person typed plus what the router wrote about it, and it is
- * here so the walk can be checked against the thing rather than trusted to the
- * prompt. See NO_WALK. */
+/* the last-resort words are deliberately not walking, because a default that walks puts a dragon on its feet, and the price is recomputed from what was said */
 function spriteAnim(raw, kind, skeleton, motion, ask) {
   const a = raw && typeof raw === 'object' ? raw : {}
   const how = String(a.how || '')
@@ -6788,45 +4678,23 @@ function spriteAnim(raw, kind, skeleton, motion, ask) {
   const frames = isFinite(f) && f >= 4 ? Math.min(16, f % 2 ? f + 1 : f) : 8
   const written = (words) => ({ how: 'action', action: String(words).slice(0, 300), frames })
   const said = String(a.action || '').replace(/\s+/g, ' ').trim()
-  /* WRITTEN MOTION IS TERMINAL, and this branch exists to make that structural.
-   * The router said this thing does not walk, so a walk is the one thing it
-   * cannot be handed from here, whatever else is wrong with the answer. An
-   * action with no words in it is a broken answer and says so out loud: the
-   * only other move is a guess, and the guess this whole path exists to stop is
-   * a walk. The read is free, so what saying no costs is one more press. */
+  /* written motion is terminal: an action with no words refuses out loud, because the only other move is a guess and the guess to stop is a walk */
   if (how === 'action') {
     const words = said || motion
     if (!words) throw new Error('the router asked for written motion and wrote no motion words')
     return written(words)
   }
-  /* THE TEMPLATE GATE, four facts now and not two. The router has to have asked
-   * for a template out loud, the rig has to be the upright one, the id has to be
-   * real, and the THING has to be something that walks. The last one is the new
-   * one: without it a dragon on a mannequin rig walked, because every other
-   * check was about the request rather than about the dragon. */
+  /* four facts, not two: without checking the thing itself a dragon on a mannequin rig walked, because every other check was about the request */
   const tpl = String(a.template || '').toLowerCase().trim()
   const onFeet = walksOnFeet(ask)
   if (how === 'template' && skeleton === 'mannequin' && WALK_TEMPLATES.includes(tpl) && onFeet)
     return { how: 'template', template: tpl }
-  /* The demotion cannot hand the walk straight back in words. Refusing the
-   * template and then writing "walking steadily" is the same answer spelled
-   * differently, so for a thing that does not walk any candidate carrying walk
-   * words is dropped and the neutral line stands instead. */
+  /* refusing the template and then writing "walking steadily" is the same answer spelled differently, so walk words are dropped from the demotion */
   const clean = (w) => (w && !(onFeet ? false : WALK_WORDS.test(w)) ? w : '')
   return written(clean(said) || clean(motion) || 'moving in place, ending where it began')
 }
 
-/* Fill a boxed area: one look, a whole scene's worth of things planned at once.
- *
- * Same principle as one asset — the model gets the painting and the boxed crop
- * rather than a description of them — but here it also decides WHAT BELONGS and
- * WHERE each one stands, which is the part a person would otherwise do by
- * placing forty sprites by hand.
- *
- * Positions come back in the box's own pixels so nothing has to be told the
- * map's coordinate system. Every item carries its own finished prompt, because
- * a set of things wants variety: three palms that are the same png three times
- * is a worse answer than three palms drawn differently. */
+/* positions come back in the box's own pixels, and every item gets its own prompt because three palms that are one png three times is a worse answer */
 async function planScene({ ask, id, mapFile, boxFile, box, count, kind, job, images = [], paths = [] }) {
   const lines = [
     `You are filling one area of a hand-painted pixel-art game map with objects. Read the two ` +
@@ -6865,12 +4733,7 @@ async function planScene({ ask, id, mapFile, boxFile, box, count, kind, job, ima
       `so the result looks painted by the same hand as this map: its light direction, its value ` +
       `range, its outline treatment, its saturation, its pixel chunkiness.`,
     ``,
-    /* The fill path used to say nothing at all about projection while its items
-     * went out on the same hardcoded camera as everything else, so it was the
-     * worst of the three prompt writers: a free wording and a fixed parameter.
-     * It answers the same field the single ask does, PER ITEM, because a stall
-     * and the palm beside it do not want the same camera and the whole point of
-     * this is that the answer is per thing. */
+    /* the fill path had free wording and a fixed camera, the worst of the three writers, so it answers view per item: a stall and a palm differ */
     `THE CAMERA, per object, one of exactly three: ${OBJECT_VIEWS.join(', ')}. Decide it from ` +
       `each THING'S SHAPE and never from what it is called. If its top is a different surface ` +
       `from its sides, a roof or a deck or a lid or a face you would look down into, that is ` +
@@ -6906,10 +4769,7 @@ async function planScene({ ask, id, mapFile, boxFile, box, count, kind, job, ima
   }
   const items = o.items.slice(0, count).map((it) => ({
     what: clean(it.what, 60) || 'a thing',
-    // one assembler for every object prompt this file writes, so a filled area
-    // and a single ask cannot end up with two different ideas of the camera. An
-    // older answer that still writes one finished prompt is taken as it comes
-    // and lands on the fallback view, which is what it got before.
+    // one assembler for every object prompt, so a fill and a single ask cannot hold two ideas of the camera; an older finished prompt takes the fallback view
     prompt: it.subject
       ? objectPrompt({ subject: it.subject, style: it.style, view: it.view })
       : clean(it.prompt, PROMPT_MAX),
@@ -6924,15 +4784,7 @@ async function planScene({ ask, id, mapFile, boxFile, box, count, kind, job, ima
 }
 
 async function translateAsk(ask, kind, styleClause, id, job) {
-  // the style card's one line, riding INSIDE the assembled prompt rather than
-  // hanging off the end of it, so the refusal of ground stays last where the
-  // proven prompts put it.
-  //
-  // It does NOT go on everything. The clause says "look like you came off this
-  // island", which is right for a palm and wrong for a magic rune, so the
-  // interpreter also says how much the thing belongs here and the clause is
-  // used only at or above BELONGS_MIN. Below it the prompt goes without and the
-  // ui says so, so nobody spends a generation without knowing which happened.
+  // the clause rides inside the prompt so the refusal of ground stays last, and only at or above BELONGS_MIN: it is wrong for a magic rune
   const clause = String(styleClause || '')
     .replace(/\s+/g, ' ')
     .trim()
@@ -7016,16 +4868,7 @@ async function translateAsk(ask, kind, styleClause, id, job) {
       belongs,
     }
   } catch (e) {
-    /* THE FALL-THROUGH, and it is the whole degraded-routing rule in one place.
-     *
-     * With no claude there is nobody to rewrite the ask, so the author's own
-     * words go to pixellab instead of the request failing. The rule: anything that
-     * routes through the model routes straight to pixellab when the model
-     * cannot be reached.
-     *
-     * The difference from the old behaviour is only that it says so. A silent
-     * degrade spends a real generation on a worse prompt and leaves the author
-     * wondering why the picture got worse. */
+    /* with no model the author's words go straight to pixellab, and it says so: a silent degrade spends a real generation on a worse prompt */
     return {
       ...fallback,
       degraded: e instanceof NoPlanner ? e.mode : 'error',
@@ -7039,54 +4882,10 @@ async function translateAsk(ask, kind, styleClause, id, job) {
   }
 }
 
-/* ---- the chrome router: an author's sentence becomes a pixellab prompt ----
- *
- * /api/ui/generate posted the author's own words to pixellab unchanged. That is
- * the same mistake the asset stage made and undid: a four-word ask reaches a
- * generator that draws every noun it is given, knows nothing about the piece
- * being a nine-slice, has never seen the chrome the game already ships, and is
- * about to be paid for. 240 generations went on two pieces on 2026-08-30
- * because the prompts were being hand-written in a chat window with none of
- * that in front of whoever wrote them.
- *
- * So this is planMake for chrome, and it is deliberately the SAME architecture
- * rather than a second one:
- *
- *   the author writes a short description
- *   -> claude gets it plus everything the type knows plus the picture of the
- *      chrome the game already ships
- *   -> claude answers TWO FIELDS, subject and style, never a joined sentence
- *   -> code joins them, and code owns the clauses a model forgets
- *   -> pixellab draws it, with the same reference png as style_image
- *
- * WHY TWO FIELDS AGAIN. It is the trick that made the object prompts work: if
- * the model never writes the finished sentence, there is no string it can hide
- * a contradiction in, and the clause that matters most is added by code so it
- * rides every prompt whether the model wrote a good answer or a lazy one. On
- * objects the code-owned clause is the refusal of ground. Here it is the
- * nine-slice law, for exactly the same reason: a model asked to hold seven
- * rules forgets one, and the one it forgot both times was ornament on an edge.
- *
- * WHY THE REFERENCE GOES TO BOTH SIDES. style_image transfers material, the
- * palette, the outline weight, the wear, the motifs, and it transfers NO
- * layout. So it cannot be the thing that keeps ornament out of the middle of an
- * edge, and words cannot be the thing that matches a palette. Both levers, and
- * the model is shown the same picture pixellab will be shown so it is
- * describing a thing it has actually looked at.
- *
- * This is NOT the /v2/map-objects trap. There, background_image made the
- * endpoint continue a picture it was given and a bookshelf came back as roof
- * tiles. There is no subject in a style_image and nothing for it to continue,
- * which pixellab.mjs already says at the field.
- */
+/* planMake for chrome: two fields so code owns the nine-slice law, and the reference goes to both sides because style_image carries material and no layout */
 const CHROME_DIR = path.join(ROOT, 'public', 'chrome')
 
-/* The picture of the chrome the game already ships, read off disk by TYPE.
- *
- * Missing is survivable and has to be said out loud rather than swallowed: the
- * router still runs, the prompt is still written with the type's constraints in
- * it, and the one lever that would have matched the palette is simply absent.
- * An author reading "no reference" knows why the colours drifted. */
+/* the reference is read off disk by type: missing is survivable and said out loud, so an author knows why the colours drifted */
 export function chromeStyle(type) {
   const file = chromeRef(type)
   // the two types named so nobody generates them answer null rather than a
@@ -7106,12 +4905,7 @@ export function chromeStyle(type) {
  * anything. Every fact in it already existed in this process and none of it was
  * reaching the generator. */
 export function chromePrompt({ ask, t, width, height, shelf, style }) {
-  /* WHICH GENERATOR IS BEING WRITTEN FOR, said first, because the two behave
-   * differently enough that a prompt good for one is wasted on the other. The
-   * panel route scaffolds from a fixed list of interface element names and hands
-   * back furniture whatever the words say. The image route draws the words and
-   * nothing else, so on a sheet the composition is genuinely the model's to
-   * decide and there is no scaffold underneath to catch a vague answer. */
+  /* which generator is being written for, said first: the panel route scaffolds furniture whatever the words say, the image route draws only the words */
   const lines = [
     t && t.tier === 'sheet'
       ? `You are writing ONE prompt for a pixel-art image generator (PixelLab). It paints whatever it is ` +
@@ -7123,11 +4917,7 @@ export function chromePrompt({ ask, t, width, height, shelf, style }) {
         `is no world in front of it.`,
   ]
   if (style) {
-    /* THE PATH LINE IS ONLY THERE WHEN THERE IS A FILE. The reference is
-     * normally read off public/chrome and has one; a named map's painting comes
-     * out of object storage and has none, and printing an empty line where an
-     * absolute path belongs tells a model to go and read nothing. The picture
-     * still reaches an account on a key, because it rides in the message. */
+    /* the path line only when there is a file: an empty line where an absolute path belongs tells a model to go and read nothing */
     lines.push(
       ``,
       style.path
@@ -7180,11 +4970,7 @@ export function chromePrompt({ ask, t, width, height, shelf, style }) {
       `surface sit on the game like a sticker. Name the colours off the reference rather than off ` +
       `a general idea of fantasy chrome.`,
     ``,
-    /* THE ONE THING THE GENERATOR VOLUNTEERS UNASKED, and it is worse here than
-     * on a map object. Chrome is cut out and laid over a painting, so a
-     * background behind it is a rectangle of somebody's idea of a room painted
-     * over the island. no_background is sent as well; words are one fence and
-     * pixels have to be the other. */
+    /* a background behind chrome is a rectangle of somebody's room painted over the island; no_background is sent too, words are only one fence */
     `THE PIECE ALONE. It is cut out and laid over a game map, so there is no room around it, no ` +
       `desk under it, no wall behind it and no shadow on any surface. Everything outside the piece ` +
       `is transparent. Do not write any word naming a place or a ground: the generator draws every ` +
@@ -7208,83 +4994,37 @@ const CHROME_ANSWER =
   `"style":"chunky pixels, ... , muted saturation",` +
   `"palette":"muted ... ","note":"one short lower-case line: what you matched it against"}`
 
-/* A SHEET NEEDS MORE WORDS THAN A PANEL AND FOR ONE REASON: a panel is one thing
- * and a sheet is eight, and every one of the eight has to be named or the
- * generator picks. Thirty to seventy words spread over eight marks is four words
- * each, which is how a compass and a coin come back as the same disc. The
- * ceiling is the same 2000 characters and the subject is the part that gets cut
- * if it overruns, so asking for length here costs nothing that matters. */
+/* a sheet is eight things: 30 to 70 words over eight marks is four words each, which is how a compass and a coin come back as the same disc */
 const SHEET_ANSWER =
   `{"subject":"the layout in rows, then every mark named one by one with its silhouette, 80 to 160 words, no lettering and no ground",` +
   `"style":"chunky pixels, ... , muted saturation",` +
   `"palette":"muted ... ","note":"one short lower-case line: what you matched it against"}`
 
-/* THE JOIN, and the clause code owns.
- *
- * Kept separate from the ask so the whole assembly can be read and asserted
- * without a planner and without a generation. objectPrompt is the same idea and
- * the same reason. */
+/* kept apart from the ask so the whole assembly can be read and asserted without a planner and without a generation */
 export function chromeFinal({ subject, style, t }) {
   const one = (s) => String(s || '').replace(/\s+/g, ' ').trim()
   const sub = one(subject).replace(/[.,;:\s]+$/, '')
   const sty = one(style).replace(/^[.,;:\s]+/, '').replace(/[.\s]+$/, '')
-  /* THE LAW GOES IN FROM CODE, not from the model, and this is the whole of why
-   * the two fields exist. Both failed rolls had the law in front of the person
-   * writing the prompt and both dropped it, and a dropped nine-slice law is not
-   * a slightly worse picture, it is a picture the game cannot cut. */
-  /* THE MIDDLE SENTENCE IS DROPPED ON THE ONE PIECE THAT HAS NO MIDDLE. Reading
-   * the twelve grounds side by side made it visible: highlight_edge is drawn
-   * with its centre empty, fill:false, because the map shows through it, and the
-   * code-owned law was telling it to paint one plain surface in there. Two
-   * instructions that cannot both be obeyed is how a generator picks. */
+  /* the law goes in from code: both failed rolls had it in front of them and dropped it, and a dropped nine-slice law is a picture the game cannot cut */
+  /* the middle sentence is dropped on the one ground with no middle: two instructions that cannot both be obeyed is how a generator picks */
   const law = t && t.tier === 'ground' ? ' ' + (t.fill === false ? RING_CLAUSE : GROUND_CLAUSE) : ''
   const alone = 'the piece alone as a cut-out on a fully transparent background, no lettering of any kind'
-  /* THE CLAUSE THAT SEPARATED THE GOOD ROLL FROM THE UNUSABLE ONE, and it is
-   * here rather than in the model's answer for the same reason the law is.
-   *
-   * dialogue_box_v3 came back a kit with the hero panel running off the top of
-   * the canvas. v4 differed by an element list AND by a description saying one
-   * single complete piece, centred, margin on every side, nothing touching the
-   * edge. A model asked to hold seven rules drops one, and the one dropped twice
-   * already was about the frame, so this is not left to it.
-   *
-   * Split in two, because a sheet is not one piece and telling it to be one
-   * would refuse the grid that IS the deliverable. The half both tiers share is
-   * the crop, which is the half v3 actually died of. */
-  /* THE COUNT IS A CODE-OWNED CLAUSE ON A SHEET, and it is here for the reason
-   * the nine-slice law is on a ground: it is the rule the picture is unusable
-   * without, and the first roll proved a model will not carry it. Eight marks
-   * were asked for in a routed prompt that said "two rows of four" and twelve
-   * came back. The cut counts shapes and matches them against this same number,
-   * so a picture that ignores it cannot be named and is owed a hand cut. */
+  /* v3 came back with the hero panel running off the top of the canvas, so the crop clause is code's; split in two, a sheet is not one piece */
+  /* the count is code's on a sheet: a routed prompt saying two rows of four came back with twelve, and the cut counts shapes against this number */
   const whole =
     t && t.tier === 'sheet'
       ? ` Exactly ${t.faces.length} marks on the canvas, no more and no fewer, and no mark drawn twice.` +
         ' A grid of separate small marks with empty space between them, every mark drawn complete and entirely inside ' +
         'the image, evenly spaced with clear margin on every side, nothing touching the edge of the image and nothing ' +
-        /* THE "unless" IS NOT SOFTENING. A chip sheet's marks ARE plates, so the
-         * flat version of this clause and the family it was asked for cannot
-         * both be obeyed, and two instructions that contradict is how a
-         * generator picks. Same shape as the ring clause on highlight_edge. */
+        /* the unless is not softening: a chip sheet's marks are plates, and two instructions that contradict is how a generator picks */
         'cut off by it. No frame, border, card or panel around the group, and nothing sits on a plate or inside a box ' +
         'unless the mark itself is a plate.'
       : ' One single complete piece, centred, with margin on every side, nothing touching the edge of the image and ' +
         'nothing cut off by it.'
-  /* AND THE INTERIOR NAMED BY CODE. work/.kit/panel.png is the reason: its
-   * prompt said parchment out loud, in a sentence a model wrote, and the picture
-   * came back brown wood. On a noun pixellab holds a prior for, words lose, so
-   * one more adjective in the subject is not the answer. What this buys is that
-   * the phrase is in the same fixed place on every roll of the type, next to the
-   * clauses that already survive truncation, rather than wherever an answer put
-   * it. The reference png is the lever that actually carries material. */
+  /* the interior is named by code: a prompt saying parchment came back brown wood, so this buys a fixed position beside the clauses that survive truncation */
   const inside = t && t.material ? ` The surface inside the frame is ${t.material}.` : ''
   const tail = `${alone}.${whole}${inside}${law}`
-  /* THE SUBJECT IS WHAT GETS CUT, NEVER THE TAIL, and the ordinary slice at the
-   * end had it backwards. The clauses code owns sit last, so on a long answer a
-   * flat truncation takes off the nine-slice law and the transparency, which is
-   * precisely the material this function exists to guarantee. The budget is the
-   * endpoint's own 2000 rather than the 1200 the map objects use: chrome is
-   * carrying a rule as well as a subject. */
+  /* the subject is what gets cut, never the tail: a flat truncation took off the nine-slice law and the transparency it exists to guarantee */
   const room = Math.max(0, CHROME_PROMPT_MAX - tail.length - (sty ? sty.length + 2 : 0) - 2)
   const cut = sub.length > room ? sub.slice(0, room).replace(/[\s,;:]+\S*$/, '') : sub
   return `${cut ? cut + '. ' : ''}${sty ? sty + ', ' : ''}${tail}`
@@ -7295,51 +5035,24 @@ export function chromeFinal({ subject, style, t }) {
 // model is not trusted to repeat
 const CHROME_PROMPT_MAX = 2000
 
-/* The nine-slice law compressed to something that fits in a 2000 character
- * description beside a subject. The long form in ui.mjs is what the model
- * reads; this is what the generator reads, and the generator cannot follow
- * reasoning, only instructions. */
+/* the long form in ui.mjs is what the model reads; the generator cannot follow reasoning, only instructions, so it gets this */
 const GROUND_CLAUSE =
   'Ornament only in the four corners. The four edges are plain even runs of one material with ' +
   'nothing centred on them. The middle is one plain surface with nothing drawn in it.'
 
-/* The same law for the one ground drawn round a hole. Its two halves about the
- * corners and the edges are unchanged, because a ring is nine-sliced like every
- * other ground; only the sentence about the middle is replaced, since the
- * middle is the game and anything painted there is paint over Ash's art. */
+/* the same law round a hole: only the middle sentence changes, because anything painted there is paint over the map */
 const RING_CLAUSE =
   'Ornament only in the four corners. The four edges are plain even runs of one material with ' +
   'nothing centred on them. The middle is completely empty and fully transparent, a hole right ' +
   'through the picture, with nothing drawn inside the frame at all.'
 
-/* `think` is runPlanner, and it is a parameter for one reason: the fence in
- * verify-authoring.mjs has to prove this router writes the type's constraints
- * into the prompt, and it cannot prove that by reaching claude. With no account
- * resolved ask() spawns the local cli, which on a host does not exist and on a
- * laptop is a real model call sitting in the middle of a test suite. Same move
- * as localRelay() in planner.mjs: read through a function so a test can put
- * something else there. */
+/* think is a parameter so verify-authoring.mjs can prove the constraints reach the prompt without spawning a real model call in a test */
 export async function chromePlan({ ask, t, width, height, shelf, style, job, think = runPlanner }) {
-  /* WHAT HAPPENS IF THERE IS NO CLAUDE, and it is not a silent fall-through.
-   *
-   * The rule this repo already follows: anything that routes through the model
-   * routes straight to pixellab when the model cannot be reached. The
-   * difference from the old behaviour is only that it SAYS SO. A silent degrade
-   * spends a real generation on a worse prompt and leaves the author wondering
-   * why the piece came back looking like nothing else on the shelf. */
+  /* no claude is not a silent fall-through: the words go straight to pixellab and the answer says so */
   const raw = String(ask || '').replace(/\s+/g, ' ').trim()
   try {
-    /* THE REFERENCE GOES OVER TWICE, ONCE FOR EACH PROVIDER. The cli reads a
-     * path with its Read tool and cannot take an attachment; an account with an
-     * anthropic key takes the image in the message and has no filesystem to
-     * read from. Both are live at once across the platform, so both are sent
-     * and whichever one the account is on finds its own. */
-    /* 120 SECONDS AND NOT THE 240 THE MAP ROUTERS TAKE, because this whole
-     * request has to fit inside one serverless invocation and vercel.json caps
-     * that at 300. The generation itself polls for up to 300, so a 240 second
-     * think in front of it means the function is killed mid-draw and a paid
-     * picture is lost. One small reference png is a much smaller read than a
-     * whole map, and the map routers spend most of that budget looking. */
+    /* the reference goes over twice: the cli reads a path and an api account takes an attachment, and both are live across the platform */
+    /* 120 seconds, not 240: vercel caps the invocation at 300 and the draw polls for up to 300, so a longer think kills the function mid-draw */
     const answer = await think(chromePrompt({ ask: raw, t, width, height, shelf, style }), 120000, job, null, style ? [style.base64] : [])
     const o = planJSON(answer, 'subject')
     if (!o || !o.subject) throw new Error('the interpreter did not answer')
@@ -7353,18 +5066,7 @@ export async function chromePlan({ ask, t, width, height, shelf, style, job, thi
   } catch (e) {
     return {
       routed: false,
-      /* THE CODE-OWNED TAIL RIDES EVEN WITH NOBODY TO WRITE THE PROMPT, and it
-       * used to be the bare `raw` string here.
-       *
-       * The whole reason the router answers two fields is so a model cannot
-       * drop the clauses the picture is unusable without. A model being ABSENT
-       * dropped all of them: the four words an author typed went out with no
-       * nine-slice law, no transparency, no single-complete-piece and no
-       * interior, which is a strictly worse prompt than the same four words
-       * with a tail on them and costs exactly the same to send.
-       *
-       * The degrade is still honest and still says so. What it no longer does
-       * is throw away the part that never needed claude in the first place. */
+      /* the code-owned tail rides even with nobody to write the prompt: the bare four words went out with no law, no transparency and no interior, for the same price */
       description: chromeFinal({ subject: raw, style: '', t }),
       palette: '',
       note: '',
@@ -7390,12 +5092,7 @@ function denyNoPlanner(res, what) {
   })
 }
 
-// ---- the style card -----------------------------------------------------
-// One look at the painting, kept. Everything downstream of here is text, so
-// the whole job is turning a picture into one phrase short enough to hang off
-// the end of any sprite description. The planner is handed the file's absolute
-// path and asked to read it: no crop, no spot, no click, and no image ever
-// goes near the generator. Free, and cached, so a map is looked at once.
+// the style card: one look becomes one phrase short enough to hang off any sprite description, and no image ever goes near the generator. free and cached
 async function readStyleCard(file, job, images = []) {
   try {
     const raw = await runPlanner(
@@ -7439,14 +5136,7 @@ async function readStyleCard(file, job, images = []) {
   }
 }
 
-// ---- the effect planner -------------------------------------------------
-// The other half of the assets step, and the free half. Small animated effects
-// come out of the generator as garbage every time, because an effect is a
-// motion rule over colours, not a picture of a thing. So the renderer is a
-// fixed piece of code in the client, and the only judgement left is WHICH rule
-// and WHAT numbers. That judgement is one short language-model call with no
-// image behind it, and when it is unavailable a keyword match answers instead,
-// so the box never dead-ends. Zero pixellab calls live anywhere on this path.
+// the effect planner, free: a generator returns garbage every time because an effect is a motion rule over colours and not a picture of a thing
 
 const EFFECT_TYPES = ['flow', 'rise', 'spray', 'twinkle', 'sway', 'glow', 'swirl']
 
@@ -7478,10 +5168,7 @@ function guessEffectType(ask) {
   return 'rise'
 }
 
-// the same colour ramps the client carries. A plan used to leave the colours
-// out entirely, so the renderer only ever saw what the click sampled off the
-// painting and "swirling purple portal" came back brown. When the ask names a
-// colour, that colour wins, planner or no planner.
+// a plan that left colours out let "swirling purple portal" come back brown, so a colour named in the ask wins, planner or no planner
 const COLOR_RAMPS = {
   purple: ['#f3e6ff', '#c58cf5', '#8a3fd1', '#4a1b78'],
   violet: ['#f3e6ff', '#c58cf5', '#8a3fd1', '#4a1b78'],
@@ -7503,11 +5190,7 @@ function guessColors(ask) {
   return m ? COLOR_RAMPS[m[1].toLowerCase()].slice() : []
 }
 
-// ---- the eighth answer: a written renderer ------------------------------
-// The seven rules are a menu, and a menu has a ceiling: a portal was
-// impossible until swirl was added by hand, in code, first. So when an ask
-// fits none of them the planner writes the renderer, and it runs in a
-// sandboxed worker on the client. Nothing here spends anything either.
+// the seven rules are a menu with a ceiling: a portal was impossible until swirl was added by hand, so an unfitting ask gets a written renderer
 
 // where a written recipe starts when the plan leaves a field out
 const CUSTOM_START = { width: 64, height: 64, frames: 8, speed: 1, size: 1, count: 8, direction: 0, spread: 1, intensity: 1 }
@@ -7553,10 +5236,7 @@ function cleanControls(v) {
   return out
 }
 
-/* Words a drawing recipe never needs, and every way out of the sandbox is
- * spelled with one of them. The worker takes the same doors off at runtime;
- * this is the cheap check in front of it. A recipe that trips it is dropped and
- * the closest built-in answers instead, so the box still never dead-ends. */
+/* every way out of the sandbox is spelled with one of these; the worker takes the same doors off, this is the cheap check in front */
 const CODE_BAN = /\b(import|require|importScripts|fetch|XMLHttpRequest|WebSocket|EventSource|eval|constructor|postMessage|localStorage|indexedDB|document|window|process|globalThis)\b/
 
 function cleanCode(v) {
@@ -7580,10 +5260,7 @@ function cleanHexes(v) {
   return out
 }
 
-/* The whole drawing contract, written once. Two places hand it out: the plan
- * that writes a renderer, and the review that rewrites one. They have to agree
- * to the letter, because a revision is dropped into the same sandbox the first
- * draft ran in. */
+/* two places hand this out and they must agree to the letter: a revision drops into the same sandbox the first draft ran in */
 const CUSTOM_BASE_DOC =
   `code is the BODY of a function with this exact signature, called once per frame:\n` +
   `  (p, colors, api) => void\n` +
@@ -7612,16 +5289,7 @@ const CUSTOM_BASE_DOC =
   `every position with % 1, or use Math.sin(2 * Math.PI * api.t). Do not place anything from ` +
   `api.frame or api.frames, and keep no state between frames.`
 
-/* THE SPRITE HALF, handed over only when there is actually a sprite.
- *
- * Both pixellab animators redraw a sprite where it stands and neither can carry
- * it anywhere, so travel is not something that can be bought. A recipe that
- * stamps an existing sprite at a position it works out per frame does scatter,
- * circling and darting in one pass and costs nothing. That is the whole free
- * path, and this is the only place the planner is told it exists.
- *
- * It is conditional because a recipe that stamps a sprite that was never passed
- * in draws an empty frame, and most effects are not about a sprite at all. */
+/* the free travel path, and the only place the planner is told it exists; conditional, because stamping a sprite that was never passed in draws an empty frame */
 const CUSTOM_SPRITE_DOC =
   `\n\nAN EXISTING SPRITE HAS BEEN HANDED TO THE RECIPE, and for this request it is the point. ` +
   `Three more things on api:\n` +
@@ -7806,15 +5474,7 @@ async function effectPlan(ask, colors, id, job, sprite) {
 }
 
 // ---- the review loop ----------------------------------------------------
-/* The planner never used to see what it made. It wrote a renderer or a prompt,
- * the tool drew it, and the first pair of eyes on the result belonged to the
- * person being asked to judge it. That is the whole reason effects and objects
- * miss: not that the words were misread, but that nothing checked.
- *
- * Rendering an effect is free and instant, so the tool looks at its own frames
- * and fixes them before anybody is asked anything. Generating an object is not
- * free, so there the look is only a look: which of the ones already paid for is
- * best, and why. NOTHING on this path generates. */
+/* rendering is free, so the tool looks at its own frames before anybody is asked; on an object the look is only a look and nothing here generates */
 
 // where the sheets go. Inside work/<id> so they are served and reachable, out
 // of the library so they are never listed as assets.
@@ -7854,11 +5514,7 @@ function verdictOf(o) {
   return String(o && o.verdict) === 'revise' ? 'revise' : 'good'
 }
 
-/* A WRITTEN effect, looked at. The strip, the words that asked for it, and the
- * code that drew it all go in; a full replacement body comes back, or nothing
- * because it is already right. The knobs are NOT up for revision: a person may
- * already have turned them, and a body that reads a knob that no longer exists
- * draws an empty frame. */
+/* the knobs are not up for revision: a person may have turned them, and a body reading one that no longer exists draws an empty frame */
 async function reviewWritten(file, ask, frames, code, controls, params, job, sprite, images = []) {
   const knobs = (controls || []).map((c) => `p.${c.key} (${c.label}, ${c.min}..${c.max})`).join(', ')
   try {
@@ -7951,42 +5607,8 @@ async function reviewRule(file, ask, frames, type, params, job, images = []) {
   }
 }
 
-/* WHAT CAME BACK, LOOKED AT. Already paid for, so nothing here generates and
- * nothing here can stop it being saved.
- *
- * It used to answer which one and why, and that was all. Which one is a number
- * between 1 and n, so it could not fail a batch: handed a single rectangular
- * trough it said "1" and wrote a confident line about it. A batch of three
- * broadside ships came back with a favourite ship. So there are two answers
- * now. best is which is closest. verdict is whether any of them will do, and it
- * runs through the same verdictOf the effect reviews use, so an unclear answer
- * reads as good and the loop's default stays "stop" in one place.
- *
- * THE PAINTING RIDES ALONG, and that is the other half. Half of what is wrong
- * with a generated sprite cannot be seen on a grey field: a broadside ship
- * looks like a fine ship until it sits next to a painting that looks down at
- * two to one, and a sprite drawn at a finer pixel than the map's own looks
- * sharper right up to the moment it is pasted on. Twenty generations of
- * broadside ships is the measured cost of not asking. The file is already on
- * disk from the plan that preceded the spend, so asking costs nothing.
- *
- * fix is a corrected prompt and only means anything on a revise. Spending it
- * stays behind the ui's armed confirm. */
-/* THE FREE LOOK, and it has to move in the same commit as the camera or it
- * undoes the whole thing one press later.
- *
- * It used to be told the painting "is seen from a low top-down camera at two to
- * one", which is not true of a painting whose palm belt is dead flat; it was
- * told a side elevation is "the failure this question exists for"; and it was
- * then forbidden to write flatness back into the corrected prompt. Measured:
- * handed a legitimately flat fir standing on the hub painting it answered
- * revise 2 out of 2, named "a clean side-elevation fir" as the fault, and its
- * fix asked for the crown "seen mostly from above" with the trunk foreshortened
- * away. It did that even when the ask said to draw it flat like the palms.
- *
- * So the reviewer is handed the camera that was chosen and judges against THAT.
- * The ban on it writing a camera of its own stays, because its fix goes back
- * out as a prompt and the projection is code's to write. */
+/* two answers, because which one is a number 1..n and could not fail a batch; the painting rides along, and twenty broadside ships is the cost of not asking */
+/* the reviewer judges against the camera that was chosen: told the map was two to one it answered revise 2 of 2 on a legitimately flat fir */
 async function reviewObjects({ file, map, ask, prompt, view, n, what, size, job, images = [], paths = [] }) {
   const many = n !== 1
   const lines = [
@@ -8078,15 +5700,7 @@ async function reviewObjects({ file, map, ask, prompt, view, n, what, size, job,
       `one the keeper. On a revise, what is wrong with them and what should be done about it. ` +
       `Never a score, never a mark out of anything, never "consider" or "could be improved". Name ` +
       `the thing.`,
-    /* THE ONE THING THE REVIEWER MUST NOT DO, and the reason has changed.
-     *
-     * It is not that a camera in the prompt fights the parameter: 161 of the 739
-     * objects on this account say "isometric" while their view parameter says
-     * high top-down and they came back fine. It is that the projection is now
-     * ONE decision written into the prompt by code, so a camera the reviewer
-     * types is the one wording in the whole file that nothing else read. The
-     * projection sentence at the front of that prompt is not the reviewer's to
-     * edit; everything after it is. */
+    /* the projection is one decision written by code, so a camera the reviewer types is the one wording nothing else reads; 161 of 739 mismatched and came back fine */
     `fix: on a revise, a corrected prompt to try instead, in the SAME SHAPE as the one above, ` +
       `changing only what went wrong. Leave the projection wording it opens with exactly as it ` +
       `is, and never write a camera or a projection of your own anywhere in it: no "top-down", ` +
@@ -8109,13 +5723,7 @@ async function reviewObjects({ file, map, ask, prompt, view, n, what, size, job,
     const o = planJSON(raw, 'best')
     if (!o) return null
     const best = Math.max(1, Math.min(n, Math.round(Number(o.best)) || 1))
-    /* A spoken verdict wins, through the same verdictOf the effect reviews use,
-     * so "anything unclear means stop" stays one law in one place. An answer
-     * with no verdict at all is from before there was one, and back then fix
-     * was the only "none of these are usable" channel there was, so a real
-     * corrected prompt still has to be heard as a revise. A real corrected
-     * prompt is forty to ninety words; anything shorter is the model writing
-     * "none" in prose rather than a fix. */
+    /* a spoken verdict wins, and an older answer with none is read off fix: a real corrected prompt is forty to ninety words, shorter is prose */
     const fix = oneLine(o.fix, 1200)
     const spoke = typeof o.verdict === 'string' && o.verdict.trim() !== ''
     const verdict = spoke ? verdictOf(o) : fix.length > 40 ? 'revise' : 'good'
@@ -8126,10 +5734,7 @@ async function reviewObjects({ file, map, ask, prompt, view, n, what, size, job,
 }
 
 // ---- what he keeps ------------------------------------------------------
-/* Per map, and only ever on a keep. A discard is not taste, it is a miss, and
- * feeding misses back in would teach the tool to repeat them. The list rides
- * into the next ask so a map's asks get more accurate the longer he works on
- * it, and it is capped, so the twentieth keep pushes the first one out. */
+/* only on a keep: a discard is a miss, and feeding misses back would teach the tool to repeat them. capped, so the twentieth pushes the first out */
 
 const KEEPS_MAX = 20
 // how many ride into an ask. Five is enough to show a pattern and short enough
@@ -8176,18 +5781,8 @@ function keepsHint(id, kind) {
   )
 }
 
-// ---- reading the planner's reply ----------------------------------------
-// The cli's --output-format json wraps the reply in an envelope whose .result
-// holds the model's own text, often inside ``` fences. Unwrap that first, then
-// pull the first BALANCED { ... } out of whatever is left: an effect plan
-// carries a nested params object, and a lazy regex stops at the wrong brace.
-/* need names a key the answer must carry.
- *
- * Without it this took the FIRST balanced object in the reply, and a model
- * asked for a list will often warm up with a one-line object, say what it is
- * looking at, and then give the real answer. The first object parsed fine and
- * had none of the work in it, so a good reply read as a failure. With a key to
- * look for, the object that actually answers wins wherever it sits. */
+// unwrap the cli's json envelope, then pull the first BALANCED object: a nested params object stops a lazy regex at the wrong brace
+/* need names a key the answer must carry: without it the model's warm-up object parsed fine and a good reply read as a failure */
 function planJSON(raw, need) {
   const tries = []
   try {
@@ -8253,18 +5848,10 @@ function allObjects(text) {
 // Every route that thinks goes through here, so this constant is the whole
 // answer to "which model is MAPVIS using".
 const PLANNER_MODEL = 'opus' // resolves to claude-opus-5, checked 2026-08-19
-/* Every planner process now running, by the job it belongs to, so a person who
- * changed their mind can end it. The interpreter can sit for half a minute
- * looking at a map; without this the only way out was to wait for a thing you
- * no longer want. Killed jobs reject like a timeout does. */
+/* every planner process by job, so a change of mind can end one; a killed job rejects the way a timeout does */
 const LIVE = new Map()
 
-/* Jobs that are WAITING ON PIXELLAB rather than on a planner, by the same job
- * id. There is no process to kill here: a generation already asked for is
- * already paid for and finishes on their side whatever we do. What a stop does
- * is end our wait, and, when it lands between the character and its walk, keep
- * the eight animation generations from ever being asked for. That is the whole
- * reason this route carries a job id. */
+/* jobs waiting on pixellab: nothing to kill, but a stop between the character and its walk keeps the eight animation generations from being asked for */
 const WAITING = new Map()
 
 // a wait a stop can end. The second promise never resolves on its own, so the
@@ -8285,16 +5872,7 @@ function raceStop(gate, work) {
   ])
 }
 
-/* One gate, for every route that waits on pixellab.
- *
- * There is nothing to kill on this side: a generation already asked for is
- * already paid for and finishes on their side whatever we do. What a stop buys
- * is the generation NOT YET ASKED FOR. So halt() sits immediately before every
- * spend and never after one, and whatever has already landed still gets
- * written to disk. Stopping is not undoing.
- *
- * A job id that is reused across a run of variants is fine: the requests are
- * sequential, so each one registers on the way in and clears on the way out. */
+/* halt() sits immediately before every spend and never after one, because a stop buys the generation not yet asked for and never undoes a paid one */
 function gateFor(job) {
   const gate = job ? { off: false } : null
   if (gate) WAITING.set(job, gate)
@@ -8311,12 +5889,7 @@ function gateFor(job) {
   }
 }
 
-/* BOTH registries, not the first one that answers.
- *
- * One job id can hold a gate and a planner process at the same time: a spend
- * route registers its gate on the way in and then runs the interpreter inside
- * that same job when the client sent a bare ask. Ending only the gate left the
- * planner thinking for its whole timeout with nobody waiting on it. */
+/* both registries: one job can hold a gate and a planner process, and ending only the gate left the planner thinking out its whole timeout */
 export function stopJob(job) {
   let hit = false
   const gate = WAITING.get(job)
@@ -8340,34 +5913,10 @@ export function stopJob(job) {
   return hit
 }
 
-/* Ask the planner, whichever provider this account uses.
- *
- * Ten places call this and none of them should know or care whether the answer
- * came from a local cli, the account's own anthropic key, or a laptop that
- * claimed a job row. Keeping the signature is the point: the dispatch changed,
- * the callers did not.
- *
- * A NoPlanner thrown from here is not a fault. It means this account cannot
- * reach claude right now, and the caller decides between falling through to the
- * author's own words and denying a feature that is purely claude. */
+/* ten callers, one signature, whichever provider answers; a NoPlanner is not a fault, it means this account cannot reach claude right now */
 async function runPlanner(prompt, timeoutMs, job, user, images, paths) {
   return ask({
-    /* THE ACCOUNT COMES FROM THE REQUEST, NOT FROM THE CALLER.
-     *
-     * user and images were added to this signature when dispatch grew from "run
-     * the cli" to "key, relay or cli", and the comment above says keeping the
-     * signature was the point because the callers did not change. They did not:
-     * all ten pass exactly (prompt, timeoutMs, job). So user arrived undefined
-     * every time, ask() took its `if (!user) return viaCli(...)` branch, and
-     * every planner call spawned the local claude binary. On a laptop that is
-     * invisible, because the binary is there. On Vercel there is no binary, so
-     * translate, style-card, asset-plan, life-plan, effect-plan and the reviews
-     * were all dead on the host, a stored key was never read, and a relay
-     * polled an empty jobs table forever.
-     *
-     * serve() already resolved the account into the request context for exactly
-     * this reason. Reading it here fixes all ten call sites at once and leaves
-     * the explicit parameter working for anything that wants to override. */
+    /* the account comes from the request: all ten callers pass three arguments, so user was undefined and ask() spawned a local cli that does not exist on the host */
     user: user || request().user || null,
     prompt,
     timeoutMs,
@@ -8396,12 +5945,7 @@ function run(cmd, args) {
   })
 }
 
-/* Read once, hand back the same object after that.
- *
- * The ownership check at the door has to see the map id, which lives in the
- * body, and a request stream can only be drained once. Without this the check
- * would consume it and every route after it would wait forever for data that
- * had already arrived. */
+/* a request stream drains once, and the ownership check at the door reads the body, so without this every route after it waited forever */
 function body(req) {
   if (req._body) return req._body
   return (req._body = readBody(req))
@@ -8428,28 +5972,13 @@ function readBody(req) {
 }
 
 const stripDataURL = (s) => String(s).replace(/^data:[^,]+,/, '')
-/* A DOT-ONLY ID IS NOT AN ID, it is a step up the tree.
- *
- * The dot is in the keep-set because real slugs carry one (hub-a2.1), but the
- * filter alone let ".." through untouched: measured with node, safeId('..')
- * returned '..' and safeId('.') returned '.'. Every route here builds
- * path.join(WORK, id), and path.join('<repo>/work', '..') is the repo itself,
- * so posting {"id":".."} to /api/export wrote scene.png and map.json into the
- * repo root and then ran fs.rmSync('<repo>/assets', {recursive:true,force:true}).
- *
- * Anything that is only dots becomes 'untitled'. That is one fence; the
- * insideWork assertion below each path is the other, because a fence made of
- * string rules alone has been wrong before. */
+/* a dot-only id is a step up the tree: safeId('..') returned '..', so {"id":".."} wrote into the repo root and rmSync'd its assets folder */
 const safeId = (s) => {
   const cleaned = (String(s || 'untitled').replace(/[^a-z0-9._-]+/gi, '-') || 'untitled').slice(0, 60)
   return /^\.+$/.test(cleaned) ? 'untitled' : cleaned
 }
 
-/* The second fence: the built path really does sit under WORK.
- *
- * Same assertion serveWork makes before it reads a file, applied to the routes
- * that WRITE. WORK + path.sep rather than WORK alone, so a sibling directory
- * that merely starts with the same letters ('work-old') cannot pass. */
+/* the second fence, on the routes that write: WORK + path.sep, so a sibling like work-old cannot pass */
 const insideWork = (abs) => path.resolve(abs).startsWith(WORK + path.sep)
 
 function send(res, code, obj) {

@@ -1,7 +1,4 @@
-// Is everything wired? Run this whenever something is confusing.
-//   node server/db/doctor.mjs
-// Checks each piece independently and keeps going after a failure, so one
-// missing secret does not hide the state of everything else.
+// checks each piece independently and keeps going after a failure, so one missing secret hides nothing else
 import pg from 'pg'
 import { env } from './env.mjs'
 import { store } from '../store/blobs.mjs'

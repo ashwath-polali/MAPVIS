@@ -1,13 +1,4 @@
-// Change an account's email or password.
-//
-//   node server/db/set-login.mjs <current-email> [new-email] [new-password]
-//
-// Exists because the bootstrap account is created automatically by the import
-// scripts with a placeholder login, and that account owns every map. Leaving a
-// known default on the row that owns everything is not a thing to leave.
-//
-// Changing the password invalidates nothing else on purpose: sessions are rows,
-// so anyone already signed in stays signed in. Pass --out to end them all.
+// the bootstrap account owns every map with a placeholder login; sessions are rows, so --out ends them
 import { q, one, closeDb } from './pool.mjs'
 import { hashPassword } from '../store/crypto.mjs'
 

@@ -1,17 +1,4 @@
-// The Phase 1 gate, as a command rather than a promise.
-//
-//   node server/db/gate.mjs hub
-//
-// Sets MAPVIS_NO_DISK, which makes every route refuse to fall back to work/,
-// then boots the api and asks it for the document, the library and real png
-// bytes. If this passes, the map genuinely lives in the database and object
-// storage rather than on this laptop, which is the only claim Phase 1 is
-// allowed to make.
-//
-// This started out renaming work/<slug> aside, which is the more physical
-// proof. It turned out a dev server holds a handle on the folder on windows, so
-// EPERM rather than a real result. Refusing at the fallback is the same test
-// and it also runs in CI, where there is no folder to move.
+// MAPVIS_NO_DISK refuses the work/ fallback; renaming the folder aside is EPERM on windows and dead in CI
 import http from 'node:http'
 import { closeDb } from './pool.mjs'
 

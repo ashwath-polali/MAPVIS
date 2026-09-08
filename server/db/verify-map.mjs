@@ -1,11 +1,4 @@
-// Does what came back out equal what went in, and does an unchanged save
-// actually write nothing?
-//
-//   node server/db/verify-map.mjs hub
-//
-// The second question is the one that matters. The editor autosaves every 4
-// seconds, so if a no-op save still rewrites the row and the planes png, the
-// free tier dies quietly over a weekend rather than loudly on a Tuesday.
+// an unchanged save must write nothing: the editor autosaves every 4 seconds and the free tier is finite
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -25,18 +18,7 @@ const map = await getMapBySlug(slug)
 if (!map) throw new Error(`no map ${slug} in the database`)
 console.log(`${slug}  ${map.id}  ${map.w}x${map.h}`)
 
-/* THE FILE ON DISK IS A SNAPSHOT, NOT THE MAP, and that decides what each
- * check below is allowed to ask.
- *
- * work/<slug>/doc.json is written by the failure fallback and by import-work,
- * so on a machine where the platform is answering it is however old the last
- * one of those was. It is the right thing to compare the MASK against, because
- * the mask is the one thing that cannot be redrawn and a stale copy of it is
- * still a copy of the same hand-drawn pixels. It is the wrong thing to compare
- * the placements or the anchors against: name a placement or mark a standing
- * spot and a comparison against a two-day-old file calls perfectly correct work
- * a fault. Those are asked of the round trip instead, which is the property
- * this file is really about. */
+/* doc.json on disk is a stale snapshot: right for the mask, wrong for placements and anchors */
 const original = JSON.parse(fs.readFileSync(path.join(WORK, slug, 'doc.json'), 'utf8'))
 const roundTripped = JSON.parse(await getDoc(map.id))
 
@@ -51,21 +33,7 @@ else {
   diff ? no(`planes differ in ${diff} of ${a.length} bytes`) : ok(`planes lossless, ${a.length.toLocaleString()} bytes`)
 }
 
-/* GEOMETRY, and only the two numbers the disk file is entitled to be asked
- * about.
- *
- * w and h belong here because the planes above were just compared byte for
- * byte, and a mask of that length can only describe one size, so a disagreement
- * is a real fault rather than an old file.
- *
- * `spawn` and `assetNext` used to be in this loop and both are authored state
- * that legitimately changes. That is the hazard this file's own header warns
- * about for placements and anchors, applied to two fields that were left behind
- * when the rest moved. It cost a real morning: the hub reported `spawn 557,508
- * in, 557,507 out` as a FAILURE on every run, and the two numbers were simply a
- * two-day-old snapshot and today's map, both correct. Nothing was broken and
- * the suite said something was. They are asked of the round trip below
- * instead, which is the property this file is actually about. */
+/* spawn and assetNext left this loop: they legitimately change and the hub failed 557,508 against 557,507 */
 for (const k of ['w', 'h'])
   original[k] === roundTripped[k] ? ok(`${k} ${original[k]}`) : no(`${k}: ${original[k]} in, ${roundTripped[k]} out`)
 
@@ -112,10 +80,7 @@ doorsOut.every((d) => /^[a-z][a-z0-9_]*$/.test(d.name || ''))
   ? ok('every anchor came back with a name code can address')
   : no(`an anchor came back unnamed: ${JSON.stringify(doorsOut.map((d) => d.name))}`)
 
-/* THE WHOLE POINT: saving the same thing twice must write nothing the second
- * time. Saving what the database just handed back, which is what the editor
- * does on every four-second beat when nobody has touched anything. Against the
- * disk file this only tested whether that file happened to be current. */
+/* saving what the database just handed back must write nothing; the disk file only tested its freshness */
 const again = await putDoc(map.id, JSON.stringify(again1))
 again.skipped
   ? ok('an unchanged save wrote nothing')
@@ -134,10 +99,7 @@ await putDoc(map.id, JSON.stringify(again1))
 
 // ---- a generated asset has to survive the trip too -------------------------
 
-// The listing comes from the database now, so anything generation writes to
-// disk and does not push would simply vanish from the library. This walks the
-// same path a generation does: bytes land in work/<slug>/library, the choke
-// point pushes them, and the item has to come back out of the store.
+// the listing is from the database now, so anything written to disk and not pushed vanishes from the library
 {
   const { pushItem, libraryOf, dropItem } = await import('../store/platform.mjs')
   const { store, keys } = await import('../store/blobs.mjs')

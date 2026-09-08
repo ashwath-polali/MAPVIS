@@ -1,10 +1,4 @@
-// One postgres pool for the whole process.
-//
-// Uses the POOLED connection string, because a serverless function opens a
-// connection on every cold start and neon's pooler is what keeps a few hundred
-// of those from exhausting the database. max is deliberately small for the same
-// reason: many small pools beat a few large ones when the process count is not
-// ours to control.
+// the pooled string with a deliberately small max, because the process count is not ours on serverless
 import pg from 'pg'
 import { env } from './env.mjs'
 

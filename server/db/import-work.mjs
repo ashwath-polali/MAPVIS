@@ -1,12 +1,4 @@
-// Moves a map out of work/<id>/ and into the platform: the document into
-// postgres, every png into object storage, the library out of a directory walk
-// and into rows.
-//
-//   node server/db/import-work.mjs hub
-//   node server/db/import-work.mjs hub --dry
-//
-// Non-destructive. work/<id>/ is left exactly as it was, so this can be run
-// again and the folder stays the fallback until the gate passes.
+// moves work/<id>/ into postgres and object storage, non-destructively, so the folder stays the fallback
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -183,12 +175,7 @@ if (fs.existsSync(libDir)) {
       for (const [heading, list] of Object.entries(dirsMeta.dirs)) {
         dirs[heading] = []
         for (let i = 0; i < list.length; i++) {
-          /* The writer lays a direction set down as FLAT files beside
-           * dirs.json, <name>/<heading>-<i>.png, not as <name>/<heading>/<i>.png.
-           * Looking only under a subfolder found nothing, so every sprite
-           * imported as kind 'static' with dirs null and its library tile came
-           * back blank. dirs.json already names the files, so use it and keep
-           * the subfolder shape as the fallback. */
+          /* headings are flat files, <heading>-<i>.png, so reading only the subfolder made a sprite static */
           const named = String(list[i] || '').split('/').pop()
           const flat = named && path.join(sub, named)
           const nested = path.join(sub, heading, i + '.png')

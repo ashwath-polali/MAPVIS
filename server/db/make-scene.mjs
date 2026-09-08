@@ -1,15 +1,4 @@
-// Turn a painting into a published site scene, without opening the editor.
-//
-//   node server/db/make-scene.mjs site-tour path/to/painting.png
-//
-// A scene the website stands on does not need walkable ground, elevation or a
-// cut: nobody walks it, the camera just travels over it. So this writes the
-// smallest honest bundle, publishes it as a version, and the landing page picks
-// it up on the next load.
-//
-// Anything richer than this belongs in the editor. The moment a site scene
-// wants things moving on it, it gets opened in MAPVIS like any other map and
-// re-published, and this script never has to grow.
+// the smallest honest bundle for a scene nobody walks; anything richer belongs in the editor
 import fs from 'node:fs'
 import path from 'node:path'
 import zlib from 'node:zlib'

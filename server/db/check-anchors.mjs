@@ -1,13 +1,4 @@
-// Can a player actually REACH every named place on a map?
-//
-//   node server/db/check-anchors.mjs hub
-//
-// An anchor is dropped on any pixel with no ground test, so a door can sit on a
-// wall, a cliff or open water and look completely correct in the editor. The
-// game then never fires it, there is no prompt, and E does nothing. The hub's
-// only interactive thing was dead exactly this way and nothing anywhere said so.
-//
-// This is the test that should have existed before the first door was placed.
+// an anchor drops on any pixel with no ground test, so a door on a wall looks right and never fires in game
 import { one, closeDb } from './pool.mjs'
 import { store } from '../store/blobs.mjs'
 import { decodePNG } from '../sheet.mjs'

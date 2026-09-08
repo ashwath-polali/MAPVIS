@@ -1,11 +1,4 @@
-// The read api, exercised exactly the way the game and a member's python will.
-//
-//   node server/db/verify-api.mjs hub
-//
-// Boots the api in this process rather than talking to a dev server, so it
-// tests the code in the working tree and runs in CI without anything else being
-// up. Checks what should work AND what should be refused, because an endpoint
-// the whole vine-and-grape plan sits on has to fail closed.
+// boots the api in-process so it tests the working tree, and checks refusals because it has to fail closed
 import http from 'node:http'
 import { api } from '../api.mjs'
 import { closeDb, one } from './pool.mjs'
@@ -82,10 +75,7 @@ try {
     [`/api/v1/maps/${slug}/file/1/`, 'an empty file name'],
     ['/api/v1/maps/nope-not-a-map', 'a map that does not exist'],
   ]
-  /* A ROW THAT EXISTS AND HAS NEVER BEEN PUBLISHED, found rather than named.
-   * This was hardcoded to panther-maw, which was true when it was written and
-   * stopped being true the day Ash published it, so the suite failed on a map
-   * that had simply been finished. */
+  /* found rather than named: hardcoding panther-maw failed the suite the day that map was published */
   const unpublished = await one(
     `select slug from maps m where not exists (select 1 from publishes p where p.map_id = m.id) limit 1`,
   )

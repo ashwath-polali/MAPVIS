@@ -1,7 +1,4 @@
-// Throwaway measurement: what does the doc actually cost, and what would it
-// cost with the three mask planes moved out to a png. Run with
-//   node server/db/measure-planes.mjs hub
-// The claim being tested is that planes.png is ~40 KB against 1.7 MB of base64.
+// throwaway measurement of the claim that planes.png is about 40 KB against 1.7 MB of base64 in the doc
 import fs from 'node:fs'
 import path from 'node:path'
 import zlib from 'node:zlib'

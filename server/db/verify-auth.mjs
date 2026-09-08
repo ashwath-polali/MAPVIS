@@ -1,11 +1,4 @@
-// Accounts, exercised end to end against the real database.
-//
-//   node server/db/verify-auth.mjs
-//
-// Security code is the one place where "it seemed to work" is worthless, so
-// this checks the refusals as hard as the successes: a wrong password, a
-// forged token, an expired session, one account reaching another's map, and
-// whether a stored api key can ever come back out over http.
+// checks the refusals as hard as the successes, because it seemed to work is worthless in security code
 import http from 'node:http'
 // solo mode treats an unauthenticated request as one named account, which is
 // exactly what this file is here to prove cannot happen on a host. Cleared
@@ -32,20 +25,7 @@ const server = http.createServer((req, res) =>
 )
 await new Promise((r) => server.listen(PORT, '127.0.0.1', r))
 
-/* THE REQUEST LIMITER IS NOT THE THING UNDER TEST, and it was able to fail this
- * file for the wrong reason.
- *
- * Two different refusals here say "too many": the login backoff, which is what
- * these checks are about, and the api's own token bucket in front of every
- * route, which is not. They are told apart only by wording, so a 429 arriving
- * mid-run reads as "the fourth wrong guess was not slowed" and reports a
- * security regression that has not happened. This file fires roughly a hundred
- * requests from one address as fast as they will go, so it sits close enough to
- * the bucket to matter, and it gets closer every time a check is added.
- *
- * A 429 is the one answer that means "ask again", so it is the one answer this
- * helper does not hand back. Retry-After is honoured, and a run that cannot get
- * past it after a few tries says so plainly rather than blaming a check. */
+/* a 429 from the api's own bucket reads as a backoff regression, so it is retried rather than handed back */
 const call = async (path, opts = {}, tries = 4) => {
   const r = await fetch(`http://127.0.0.1:${PORT}${path}`, {
     ...opts,
@@ -98,31 +78,14 @@ try {
     ? ok('an unknown email and a wrong password answer identically, so accounts cannot be enumerated')
     : no(`the two answers differ: "${ghost.json?.error}" vs "${wrong.json?.error}"`)
 
-  /* FROM A KNOWN NUMBER OF STRIKES, because every check above this line spends
-   * one and this check is not about them.
-   *
-   * The two checks above are about REFUSAL, and each wrong password they send
-   * charges the account a strike. The backoff starts at the third. So whether a
-   * correct password signs in depended on how many refusal checks happened to
-   * sit above it, which is a coupling nobody wrote on purpose and which breaks
-   * the moment somebody adds a third refusal check. It had already broken: this
-   * line reported "sign in failed" on every run, and the real answer underneath
-   * was "too many attempts, try again in 1 seconds". A failing check that names
-   * the wrong thing is worse than no check.
-   *
-   * The backoff is not going untested by this: it has its own block below,
-   * which drives the counter deliberately rather than inheriting it. */
+  /* reset the strikes: the backoff starts at the third, so the checks above decided this one's result */
   await q('update users set failed_logins = 0, last_failed_at = null where email = $1', [alice.email])
   const inn = await call('/api/auth/login', { method: 'POST', body: alice })
   inn.status === 200 && inn.token
     ? ok('signed in and got a fresh session')
     : no(`sign in failed: ${inn.status} ${JSON.stringify(inn.json)}`)
 
-  // ---- guessing gets slower ------------------------------------------------
-  // three wrong tries cost nothing a human would notice; the fourth starts
-  // charging seconds, and it doubles, so a thousand guesses take a week
-  // from zero for the same reason, so this block drives the counter rather than
-  // inheriting whatever the checks above happened to leave on it
+  // ---- guessing gets slower: the fourth try charges seconds and doubles, so drive the counter from zero
   await q('update users set failed_logins = 0, last_failed_at = null where email = $1', [alice.email])
   for (let i = 0; i < 3; i++) await call('/api/auth/login', { method: 'POST', body: { email: alice.email, password: 'wrong' } })
   const slowed = await call('/api/auth/login', { method: 'POST', body: { email: alice.email, password: 'wrong' } })
