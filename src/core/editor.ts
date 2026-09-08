@@ -1,9 +1,4 @@
-/* The editor: one canvas, one painting, one mask on top of it.
- *
- * React owns the chrome (the prompt line, the tool strip, the bottom bar).
- * Everything that happens per frame or per pixel happens here, outside React,
- * so a brush stroke never runs a render pass.
- */
+/* The editor: one canvas, one painting, one mask on top of it. React owns the chrome; everything per frame or per pixel happens here, outside React, so a brush stroke never runs a render pass. */
 import { ANCHOR_INK, inkFor } from './ink'
 import { cleanLife, lifeAt, liveState, separate, type Life, type LifeAt, type LifeBounds } from './life'
 import {
@@ -84,42 +79,15 @@ export type Tool =
 
 export const isCutTool = (t: Tool) => t === 'cut' || t === 'cuterase' || t === 'cutfill' || t === 'cutpoly'
 
-/* How many EXTRA pictures a placement can switch to, which is one per state
- * because a round is at most six states and none of them need name look 0.
- *
- * Six is cleanLife's ceiling on states (src/core/life.ts, the slice inside
- * cleanLife) and the export and the planner route work the same number out the
- * same way (server/api.mjs, STATES_MAX). It is a separate line here only
- * because life.ts does not export it; if that ceiling moves, all three move
- * together or a reopen quietly drops the pictures the round still points at. */
+/* How many EXTRA pictures a placement can switch to, one per state, because a round is at most six states and none need to name look 0. life.ts and server/api.mjs work the same number out the same way; if that ceiling moves all three move together or a reopen drops the pictures the round points at. */
 const LOOKS_MAX = 6
 
-/* PERSONAL SPACE: the four numbers the push is made of.
- *
- * These are a verbatim copy of the same four in the game's
- * src/game/pmap/PmapScene.tsx, for the reason life.ts is copied there verbatim:
- * the preview has to work the answer out the way the game does or it is lying
- * about the map. If one changes, copy it again; do not edit one side only.
- * They want to live in life.ts with separate(), and they are here instead only
- * because that file is shared by a hand copy rather than by an import.
- */
+/* PERSONAL SPACE: the four numbers the push is made of, a verbatim copy of the same four in the game's PmapScene, because the preview has to work the answer out the way the game does or it is lying about the map. If one changes, copy it again; do not edit one side only. */
 
-/* the smallest body anything gets, in painting pixels. separate() is handed
- * circles, and a circle of no radius is nothing to push off, so every figure
- * carries at least this much of one. It is also the walker used by the reach
- * test below, so the floor is one number in both places. */
+/* the smallest body anything gets, in painting pixels: a circle of no radius is nothing to push off. It is also the walker used by the reach test below, so the floor is one number in both places. */
 const BODY_MIN = 2
 
-/* how much of a body's DRAWN width its keep-out circle is.
- *
- * Half the width is the body itself. A circle exactly that big leaves a pair
- * touching the moment a push cannot be delivered whole, and on this map that is
- * often, so the circle is a fifth wider than the body. Measured on the hub, 30000
- * frames at 1/60, the 17 walking figures against the 21 standing ones, judged by
- * their real half-widths: at 0.5 the bodies still overlapped in 34.36 percent of
- * frames, at 0.6 in 8.59 percent. 0.7 bought nothing more, the same 8.59 percent,
- * while the worst walker-on-walker depth went 4.83px to 6.05px and the worst
- * shift in a single frame 14.79px to 17.27px. */
+/* how much of a body's DRAWN width its keep-out circle is. Half the width leaves a pair touching whenever a push cannot be delivered whole, so the circle is a fifth wider. Measured on the hub over 30000 frames, 17 walkers against 21 standers: at 0.5 the bodies overlapped on 34.36% of frames, at 0.6 on 8.59%, and 0.7 bought nothing while the worst single-frame shift went 14.79px to 17.27px. */
 const BODY_R = 0.6
 
 // the keep-out circle of something whose drawn art is w pixels across
@@ -127,18 +95,7 @@ function bodyRadius(w: number) {
   return Math.max(BODY_MIN, (w || 8) * BODY_R)
 }
 
-/* HOW WIDE A BODY IS: the ink, not the canvas it was saved on.
- *
- * PixelLab hands back a character centred on a square sheet. The proof bundle's
- * harbour-walker south-0.png is 144x144 holding 52px of actual ink, so reading
- * the canvas gave a body 2.8 times its real width, and at scale 0.3 a figure
- * about 5px across wore a 15.12px keep-out circle. Every figure on the map was
- * several times its own size, the circles overlapped constantly, and the pushes
- * they asked for were larger than any gap on the map could deliver.
- *
- * The columns that hold any opaque pixel are the body. Reading pixels is far too
- * slow to do per frame, so both sides do it once per picture and keep the number
- * against the picture, which cannot change while the picture does not. */
+/* HOW WIDE A BODY IS: the ink, not the canvas it was saved on. PixelLab centres a character on a square sheet, and the proof bundle's harbour-walker is 144x144 holding 52px of ink, so reading the canvas gave a body 2.8 times its real width and a 5px figure wore a 15.12px keep-out circle. The columns holding any opaque pixel are the body, measured once per picture because reading pixels per frame is far too slow. */
 function inkWidth(data: Uint8ClampedArray, w: number, h: number) {
   let x0 = w
   let x1 = -1
@@ -153,35 +110,7 @@ function inkWidth(data: Uint8ClampedArray, w: number, h: number) {
   return x1 >= x0 ? x1 - x0 + 1 : w
 }
 
-/* CAN A WALKER GET CLOSE ENOUGH TO TOUCH IT.
- *
- * A thing that never moves is an obstacle when a walker can reach it, and the
- * old test asked something narrower: whether the thing's OWN FEET stand on
- * ground a walker could stand on. That dropped five standing figures on the hub
- * whose anchor sits a pixel or three off the mask, the gate guard 3.31px off and
- * an old fisherman 2.78px, and a walker with a body a few pixels wide walked
- * straight through them.
- *
- * So the question is the right one now: is there any pixel a walker could stand
- * on inside this thing's circle. The circle is its body plus the smallest body
- * there is, which is the walker, so this is one law with the floor the
- * behaviours are already fenced by and with the radius above. It is measured in
- * separate()'s own geometry, x straight and y unsquashed, because that is the
- * geometry the overlap it is deciding about will be measured in.
- *
- * It reads better than the feet test rather than differently: a thing standing
- * on ground is at distance zero from ground, so everything the old test kept is
- * still kept. On the hub it keeps 20 of the 72 standing placements, the old 16
- * plus the gate guard and the old fisherman the owner complained about, plus two
- * effects that cost nothing: a portal veil no behaviour goes near, and one
- * lighthouse sweep whose nearest standable pixel is 12.32px away against a
- * 12.80px reach, so the deepest shove it can ever ask for is half a pixel.
- *
- * A marginal keep is always a marginal push, by construction, which is what
- * makes this safe to derive from the data instead of from a list of names.
- *
- * It answers for the placements the FLOOR fences, which is the ones lifeAt
- * fences: walkOnly and nothing else. See freeReach below for the rest. */
+/* CAN A WALKER GET CLOSE ENOUGH TO TOUCH IT. The old test asked whether the thing's OWN FEET stand on walkable ground, which dropped five standing figures on the hub whose anchor sits a pixel or three off the mask (the gate guard 3.31px, an old fisherman 2.78px) and let walkers pass straight through them. The right question is whether any pixel a walker could stand on lies inside the thing's circle, measured in separate()'s own geometry because that is where the overlap will be measured. It keeps everything the feet test kept, and on the hub keeps 20 of 72 standing placements. A marginal keep is a marginal push by construction, which is what makes this safe to derive from the data. It answers for the placements the FLOOR fences; see freeReach below for the rest. */
 function walkerCanReach(x: number, y: number, r: number, yScale: number, stands: (x: number, y: number) => boolean) {
   const ys = yScale || 1
   const reach = r + BODY_MIN
@@ -197,22 +126,7 @@ function walkerCanReach(x: number, y: number, r: number, yScale: number, stands:
   return false
 }
 
-/* AND WHAT A PLACEMENT THE FLOOR DOES NOT FENCE CAN GET TO.
- *
- * The reach test above reads the floor because a walkOnly behaviour reads the
- * floor. A crab told to wander the tideline and a skiff told to drift are not
- * walkOnly, so lifeAt hands them no floor at all and their only fence is the box
- * they were drawn inside. Asking the floor about them answers about somebody
- * else, and the answer it gave was no: the two hub crabs walked clean through a
- * hand cart, two barrels, a wrecked rowboat and a water wash, none of which
- * stands near ground a person can reach, 8.90px into the wash at t=30.88s.
- *
- * So a free behaviour reaches anywhere its own box reaches, which is the same
- * shape of question as the one above and the same fence lifeAt already applies.
- * On the hub it adds exactly those five, taking the standing set from 20 to 25.
- * Measured over 30000 frames at the real half-width of the ink: walker on
- * stander went from 13972 pair-hits on 41.73% of frames to 3334 on 10.81%, and
- * the worst overlap on the map from 8.90px to 6.86px. */
+/* AND WHAT A PLACEMENT THE FLOOR DOES NOT FENCE CAN GET TO. A crab told to wander the tideline is not walkOnly, so lifeAt hands it no floor and its only fence is its box: asking the floor about it answered about somebody else, and the two hub crabs walked through a hand cart, two barrels, a wrecked rowboat and a water wash, 8.90px into the wash. A free behaviour reaches anywhere its own box reaches. On the hub that adds five, and walker-on-stander went from 13972 pair-hits on 41.73% of frames to 3334 on 10.81%. */
 function freeReach(x: number, y: number, r: number, yScale: number, b: LifeBounds | null | undefined) {
   // no box is no fence, so it can be anywhere and everything is reachable
   if (!b) return true
@@ -221,47 +135,7 @@ function freeReach(x: number, y: number, r: number, yScale: number, b: LifeBound
   return x >= b.x - reach && x <= b.x + b.w + reach && y >= b.y - reach * ys && y <= b.y + b.h + reach * ys
 }
 
-/* WHAT OF A PUSH CAN ACTUALLY BE DELIVERED.
- *
- * Shoving someone out of a neighbour and into a wall is not an improvement, so
- * a push that would land somewhere it could not stand has to be held back. It
- * used to be thrown away WHOLE, and the worst overlaps on this map are exactly
- * the ones on thin ground: on a narrow quay the shove out of a fishmonger lands
- * in the water, so the figure did not move a pixel and stayed fully inside.
- * Traced on the hub at t=276.97s.
- *
- * So it delivers what it can. The whole vector, then each axis on its own,
- * which is the rule the character himself already walks by, so the map has one
- * law about a move that only partly fits rather than two. A previous try at an
- * axis slide was measured inside the WANDER's leg search and correctly taken
- * back out there, because it moved 19298 of 20000 frames of ordinary walking.
- * This is not that place: a push happens only where two bodies already overlap.
- * Measured here on its own, 30000 frames of the hub: the number of figure-frames
- * shifted more than 4px in one frame fell from 142 to 73, and the worst
- * walker-on-stander depth from 7.20px to 6.86px.
- *
- * AND IT HOLDS BACK ONLY WHAT THE BEHAVIOUR ITSELF IS HELD BACK BY, which is
- * what `fenced` carries. lifeAt puts a placement behind the floor when walkOnly
- * says so and never otherwise (life.ts: `life.walkOnly && canStand`), so a skiff
- * drifting on water is free of the floor for every pixel it travels and was
- * being fenced by it the instant it was pushed. Water is not standable, so every
- * correction those three ever received was thrown away, and they sat inside each
- * other on 30000 of 30000 frames, 11.46px deep, through every version of this
- * guard including the axis slide. Reading each row's own fence instead, measured
- * over 30000 frames at the real half-width of the ink: the worst walker on
- * walker went 11.46px to 5.19px and its pair-hits 66891 to 33820. Nothing lands
- * where its behaviour could not have carried it, because the push is an offset
- * on top of a pure position and is never integrated: across that run no free
- * placement was pushed onto standable ground once, and the furthest any got
- * outside its own box was 8.70px.
- *
- * An immovable row is not fenced either, and does not need to be: its answer is
- * discarded, so no floor test on it could change a pixel.
- *
- * It lives in the caller and not inside separate() because separate() is shared
- * with the editor by a hand copy and both sides have to run the identical rule;
- * the `stands` argument separate() still takes is no longer passed by either.
- */
+/* WHAT OF A PUSH CAN ACTUALLY BE DELIVERED. A push that would land somewhere unstandable used to be thrown away WHOLE, and the worst overlaps are exactly on thin ground: on a narrow quay the shove out of a fishmonger lands in the water, so the figure did not move a pixel and stayed fully inside. So it delivers what it can, whole vector then each axis, which is the rule the character already walks by. Measured over 30000 frames of the hub: figure-frames shifted over 4px fell from 142 to 73. AND IT HOLDS BACK ONLY WHAT THE BEHAVIOUR ITSELF IS HELD BACK BY: a skiff drifting on water is free of the floor for every pixel it travels and was being fenced by it the instant it was pushed, so every correction those three received was discarded and they sat inside each other on 30000 of 30000 frames, 11.46px deep. Reading each row's own fence took the worst walker-on-walker from 11.46px to 5.19px. It lives in the caller rather than inside separate(), because separate() is shared with the editor by a hand copy and both sides have to run the identical rule. */
 function floorPush(
   pts: { x: number; y: number }[],
   push: { dx: number; dy: number }[],
@@ -333,60 +207,29 @@ export interface EditorStatus {
   hiddenGroups: string[]
   proposedGroups: string[]
   events: MapEvent[]
-  /* IS THE ANCHOR OVERLAY DRAWN, and which anchor is the loud one. Both ride the
-   * status because the overlay is on every step now and its switch is the
-   * author's, so a panel has to be able to show the state of a thing the step
-   * change no longer decides. */
+  /* IS THE ANCHOR OVERLAY DRAWN, and which anchor is the loud one. Both ride the status because the overlay is on every step now and its switch is the author's, so a panel has to show the state of a thing the step change no longer decides. */
   eventsVisible: boolean
   anchorSel: number
-  /* the area being drawn right now, as the count of points sampled so far, -1
-   * when no area is being drawn and 0 while the mode is armed and the author has
-   * not pressed yet. The gesture lives outside React so the line can follow the
-   * hand without a render pass per sample, and this is how the form knows what
-   * to say about it.
-   *
-   * The anchor it belongs to comes with it. Without it the form assumes any
-   * armed gesture is its own, so opening a second anchor while one is mid-draw
-   * lights the wrong mode on the wrong form. */
+  /* the area being drawn right now, as the count of points sampled, -1 when none is open and 0 while armed and unpressed. The gesture lives outside React so the line follows the hand without a render per sample. The anchor it belongs to comes with it, or opening a second anchor mid-draw lights the wrong mode on the wrong form. */
   polyDraw: number
   polyDrawId: number
-  /* ROUTES AND SHOTS ride the status the way the anchors do, so the panel can
-   * list them without reaching into the document. pathDraw is the live gesture
-   * and is the count of waypoints down so far, -1 when no line is open, which
-   * is how a button knows to say finish instead of draw. */
+  /* ROUTES AND SHOTS ride the status the way anchors do, so the panel can list them without reaching into the document. pathDraw is the live gesture's waypoint count, -1 when no line is open, which is how a button knows to say finish instead of draw. */
   paths: MapPath[]
   pathSel: number
   pathDraw: number
-  /* the legs of the SELECTED route that cross ground no body can stand on, and
-   * how many legs it has. Only the selected one is measured, because the panel
-   * only has room to say it about the route being looked at and the overlay
-   * only reddens that one. Empty for a sail line and for a camera. */
+  /* the legs of the SELECTED route that cross ground no body can stand on, and how many legs it has. Only the selected one, because that is the one the panel has room to say it about. Empty for a sail line and for a camera. */
   pathBad: number[]
   pathLegs: number
   framings: MapFraming[]
   framingSel: number
-  /* THE NAMED COLLECTIONS, and the missing names in the selected one.
-   *
-   * `setGaps` and `rackGaps` are the whole reason a set is worth authoring
-   * rather than typing five strings into python: MAPVIS can be asked whether the
-   * set is complete instead of one name at a time. Only the selected one is
-   * measured, exactly as pathBad only measures the selected route, because that
-   * is the one the panel has room to say it about.
-   *
-   * `anchorSetSel` is spelt the long way because `setSel` was already taken, by
-   * the method that selects several PLACEMENTS at once. Two different meanings of
-   * the word set in one class, and the shorter name belongs to the older one. */
+  /* THE NAMED COLLECTIONS, and the missing names in the selected one. setGaps and rackGaps are the whole reason a set is worth authoring rather than typing five strings into python: MAPVIS can be asked whether the set is complete. anchorSetSel is spelt the long way because setSel already means selecting several PLACEMENTS. */
   sets: MapAnchorSet[]
   anchorSetSel: number
   setGaps: string[]
   racks: MapRack[]
   rackSel: number
   rackGaps: string[]
-  /* THE NAMED EXCLUSIVE VARIANT SETS and the rows that say something about a
-   * placement group. `variantGaps` is the same idea as setGaps: the members of
-   * the selected set that name a placement this map does not have, measured for
-   * the selected one only because that is the one a panel has room to say it
-   * about. */
+  /* THE NAMED EXCLUSIVE VARIANT SETS and the rows about a placement group. variantGaps is setGaps again: the members of the selected set naming a placement this map does not have. */
   variants: MapVariantSet[]
   variantSel: number
   variantGaps: string[]
@@ -417,10 +260,7 @@ let clipboard: PlacedAsset[] = []
 
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v))
 
-// Which group a fresh placement lands in, from the library item's own name.
-// The four suggested groups exist even when empty; anything unrecognised is a
-// prop. A propose overrides this with the group Claude chose. Exported so the
-// generate-here auto-place files its result the same way a click would.
+// Which group a fresh placement lands in, from the library item's own name. The four suggested groups exist even when empty and anything unrecognised is a prop. Exported so generate-here files its result the way a click would.
 export const groupFor = (name: string): string => {
   const n = name.toLowerCase()
   if (/palm|tree|banyan|bush|fern|banana|tuft|grass|kapok|broadleaf|sapling|plant|flower/.test(n)) return 'trees'
@@ -434,62 +274,26 @@ export const groupFor = (name: string): string => {
 // so it does not vanish. [ and ] take it from there.
 const defaultScale = (it: LibItem): number => (it.h >= 120 ? 0.25 : 0.4)
 
-/* THE OVERLAY COLOURS FOR ROUTES AND SHOTS, and they have to be their own two.
- * The chrome already spends iris on anchors, green on the spawn and the
- * standing spot, yellow on the mask polygon, purple on occluders and magenta on
- * the cut, and a route drawn in any of those reads as one of those. Amber for a
- * route, cyan for a shot, brighter for whichever is selected. */
+/* THE OVERLAY COLOURS FOR ROUTES AND SHOTS, their own two: the chrome already spends iris on anchors, green on the spawn, yellow on the mask polygon, purple on occluders and magenta on the cut, so a route in any of those reads as one of those. */
 const PATH_COL = '#f0883e'
 const PATH_SEL = '#ffc27a'
 const SHOT_COL = '#5cc8e0'
 const SHOT_SEL = '#a9e6f5'
-/* a leg of a walk route that crosses ground nothing can stand on. The same red
- * check reach paints stranded ground with (255, 40, 40), because it is the same
- * sentence said about a different mark and an author should not have to learn a
- * second colour for "the floor is not there". */
+/* a leg of a walk route over ground nothing can stand on. The same red check reach paints stranded ground with, because it is the same sentence about a different mark and an author should not learn a second colour for "the floor is not there". */
 const PATH_BAD = '#ff2828'
 
-/* HOW CLOSE COUNTS AS GRABBING SOMETHING, in painting pixels, and both of these
- * exist because the anchor radius ceiling went from 64 to 512.
- *
- * ANCHOR_GRAB caps the drag target at the dot rather than the whole ring: a
- * region authored at 400 would otherwise eat every click within 400 pixels of
- * its middle, which on a 688px map is the map. HANDLE_GRAB is the square around
- * a drawn corner, small because corners of one shape sit close together and
- * grabbing the wrong one silently reshapes the area. */
+/* HOW CLOSE COUNTS AS GRABBING SOMETHING, both here because the anchor radius ceiling went from 64 to 512. ANCHOR_GRAB caps the drag target at the dot, or a region authored at 400 eats every click within 400 pixels, which on a 688px map is the map. HANDLE_GRAB is small because corners of one shape sit close together and grabbing the wrong one silently reshapes the area. */
 const ANCHOR_GRAB = 20
 const HANDLE_GRAB = 3
 
-/* THE TWO CHROME SURFACES THIS FILE DRAWS, written out because a 2d context
- * cannot read a custom property, and named for the token they mirror so a token
- * that moves can be followed here instead of drifting off it.
- *
- * PLATE was five different strings, '#16181bd9' in three places and a bare
- * '#16181bf2' in the toast rule, for one job: the dark card a caption sits on.
- * BOARD is --board in app.css and is the surface a painting lies on. */
+/* THE TWO CHROME SURFACES THIS FILE DRAWS, written out because a 2d context cannot read a custom property, and named for the token they mirror so a token that moves can be followed. PLATE was five different strings for one job, the dark card a caption sits on. */
 const PLATE = 'rgba(16,20,26,0.9)' // --panel at nine tenths
 const BOARD = '#0e1319' // --board
-/* AN ANCHOR'S INK IS NOT WRITTEN HERE. It was one pale iris for all six kinds,
- * and the ocean chart had its own list with a different colour per kind, so a
- * door was lavender in the tool that made it and orange on the page that places
- * it. Both read src/core/ink.ts now. */
-/* THE FLOOR SPOT AND THE HEADING OFF IT, and they are deliberately ONE colour
- * that is not the anchor's kind ink. A zone is per kind because the question it
- * answers is which of six things this is; where a body's feet end and which way
- * it turns is the same question on all six, and colouring it per kind would have
- * said there are six kinds of standing. Green is what the spawn cross and the
- * old stand ring already used for exactly this. */
+/* AN ANCHOR'S INK IS NOT WRITTEN HERE. It was one pale iris for all six kinds while the ocean chart had a colour per kind, so a door was lavender in the tool that made it and orange on the page that places it. Both read src/core/ink.ts now. */
+/* THE FLOOR SPOT AND THE HEADING OFF IT, deliberately ONE colour and not the kind ink: a zone is per kind because it answers which of six things this is, but where a body's feet end is the same question on all six, and colouring it per kind would say there are six kinds of standing. */
 const STAND_INK = '#6fd08c'
 
-/* WHAT EVERY MARK ON THE ANCHOR OVERLAY IS CASED IN, and it is the reason the
- * overlay can be on over a finished painting at all.
- *
- * Measured on the hub at 3x: a one-pixel dashed outline in a mid-tone hue laid
- * over pixel art of about that tone is not faint, it is gone. The quay's edge sat
- * on sand of its own value and could not be found, and so did the green heading
- * arrow over a green awning. A darker stroke under the coloured one separates the
- * mark from whatever it happens to be lying on, which is the same job the caption
- * plate's dark card has always done for text. --board, at two thirds. */
+/* WHAT EVERY MARK ON THE ANCHOR OVERLAY IS CASED IN, and the reason the overlay can be on over a finished painting at all. Measured on the hub at 3x: a one-pixel dashed outline in a mid-tone hue over pixel art of that tone is not faint, it is gone. A darker stroke underneath separates the mark from whatever it lies on, the same job the caption plate does for text. */
 const CASE_INK = 'rgba(14,19,25,0.66)'
 
 /* THE EIGHT HEADINGS AS DIRECTIONS ON THE PAINTING, for drawing the facing
@@ -506,19 +310,8 @@ const FACE_VEC: Record<string, [number, number]> = {
   'north-west': [-0.7071, -0.7071],
 }
 
-/* A ROUTE AS THE PAIRS OF POINTS IT IS ACTUALLY WALKED IN, so the checker and
- * the overlay count legs the same way. A closed route has one more leg than an
- * open one, the run back to the first point, and forgetting it is how a patrol
- * would have been declared clean while its closing leg went through a wall. */
-/* WHERE THE PAINT IS ON A COMPOSITED CANVAS, in that canvas's own pixels.
- *
- * The browser half of the same measurement server/store/publish.mjs makes at
- * publish, and it has to answer the same numbers or the disk export and the
- * platform export describe two different islands. Alpha 8 rather than 128 for
- * the same reason there: the cut writes a hard zero and generated art has soft
- * edges, so a high threshold eats a coastline. A canvas with nothing opaque on
- * it answers with the whole raster, because "this map is nothing" is a worse
- * claim than "this map is its canvas". */
+/* A ROUTE AS THE PAIRS OF POINTS IT IS WALKED IN, so the checker and the overlay count legs the same way. A closed route has one more leg than an open one, the run back to the first point, and forgetting it is how a patrol would be declared clean while its closing leg went through a wall. */
+/* WHERE THE PAINT IS ON A COMPOSITED CANVAS, the browser half of the measurement publish.mjs makes, and it has to answer the same numbers or the disk export and the platform export describe two different islands. Alpha 8 rather than 128, because the cut writes a hard zero and generated art has soft edges, so a high threshold eats a coastline. Nothing opaque answers with the whole raster. */
 function paintedBoxOf(c: HTMLCanvasElement): { w: number; h: number; ox: number; oy: number } {
   const g = c.getContext('2d') as CanvasRenderingContext2D
   const d = g.getImageData(0, 0, c.width, c.height).data
@@ -547,15 +340,7 @@ function legsOf(p: MapPath): [Pt, Pt][] {
 
 export class Editor {
   doc = new MaskDoc(1, 1)
-  /* THE BODY THIS MAP IS DRAWN FOR, read off the document rather than held here.
-   *
-   * This used to be `cfg: WalkCfg = defaultCfg()` and was never assigned again
-   * anywhere in the file, which is how every map this tool has ever produced
-   * came out describing an 18 px character walking at 34 px/s over ground
-   * squashed 0.72 — an island seen from far above and a room drawn at character
-   * scale alike. Now it belongs to the map, which is the thing it is a fact
-   * about, so it rides the save, the undo and the reopen with everything else,
-   * and a reassigned document takes its own numbers with it. */
+  /* THE BODY THIS MAP IS DRAWN FOR, read off the document rather than held here. It used to be a default never assigned again, which is how every map came out describing an 18px character at 34 px/s over ground squashed 0.72, island and room alike. It belongs to the map, so it rides the save, the undo and the reopen. */
   get cfg(): WalkCfg {
     return this.doc.walk
   }
@@ -586,16 +371,7 @@ export class Editor {
   // the pointer places, selects and drags placements instead of painting mask
   assetMode = false
   placing: LibItem | null = null
-  /* Selection is a SET with an anchor.
-   *
-   * selAsset is the anchor: the one the inspector shows numbers for, the one a
-   * handle belongs to when only one thing is picked. It stays a plain property
-   * so every path that already sets it keeps working — the setter underneath
-   * collapses the set to that one id, which is exactly what a plain click, a
-   * paste or a fresh placement means.
-   *
-   * Everything that acts on "the selection" reads selIds() instead, so one
-   * thing and forty things go down the same road. */
+  /* Selection is a SET with an anchor. selAsset is the anchor: the one the inspector shows numbers for. It stays a plain property so every path that sets it keeps working, and the setter collapses the set to that one id. Everything acting on "the selection" reads selIds(), so one thing and forty go down the same road. */
   private _selAsset = ''
   private selSet = new Set<string>()
   get selAsset(): string {
@@ -638,15 +414,7 @@ export class Editor {
   /* the preview clock, stopped, while an editing gesture has hold of something
    * that moves. Null the rest of the time. lifeNow says why. */
   private lifeHold: number | null = null
-  /* Where every moving placement's PICTURE is this frame, keyed by id.
-   *
-   * A behaviour draws a placement at its anchor plus however far it has walked,
-   * so the anchor is not where the picture is. The draw works that offset out
-   * once a frame and leaves it here; the picker, the handles and the outline all
-   * read these same numbers, so a click lands on the sprite that is on screen
-   * rather than on an empty box the wander left behind. Asking lifeAt a second
-   * time from the picker would answer for a different instant and miss by a
-   * pixel or two, which is this same bug again, smaller. */
+  /* Where every moving placement's PICTURE is this frame, keyed by id. A behaviour draws a placement at its anchor plus however far it has walked, so the anchor is not where the picture is. The draw works the offset out once a frame and the picker, handles and outline all read it, so a click lands on the sprite on screen. Asking lifeAt again from the picker would answer for a different instant. */
   private liveAt = new Map<string, LifeAt>()
   // the clock those offsets were worked out at, and -1 until the first frame
   // has drawn. A hold stops on THIS reading rather than on the wall clock, so
@@ -668,15 +436,7 @@ export class Editor {
     a: Pt | null
     b: Pt | null
     dragging: boolean
-    /* WHICH PART OF THE BOX THE POINTER TOOK, and this is what makes a crop a
-     * crop rather than a second selection.
-     *
-     * '' is the old behaviour and is what an AREA still does: press on empty
-     * ground and drag a fresh rectangle out of nothing. A sprite crop never
-     * does that. It opens with the box already round the whole picture, and
-     * every drag afterwards is one edge or one corner of THAT box moving, which
-     * is how a slide editor crops and is the thing everybody already knows.
-     * 'move' slides the whole window over the picture without resizing it. */
+    /* WHICH PART OF THE BOX THE POINTER TOOK, and what makes a crop a crop rather than a second selection. '' is what an AREA still does, dragging a fresh rectangle out of nothing; a sprite crop opens with the box round the whole picture and every drag after is one edge of THAT box moving. 'move' slides the window without resizing it. */
     grip: '' | 'move' | 'n' | 's' | 'e' | 'w' | 'nw' | 'ne' | 'se' | 'sw'
     // where the box and the pointer were when the grip was taken, so a drag is
     // measured as a delta rather than snapping the edge to the cursor
@@ -694,10 +454,7 @@ export class Editor {
    * touches. base is what was already selected when the drag began, so holding
    * shift adds a second sweep to a first one instead of replacing it. */
   private bandSt: { a: Pt; b: Pt; base: string[]; add: boolean } | null = null
-  // one live gesture on the selected placement: moving the body, scaling from
-  // a corner (uniform), stretching one axis from an edge, or rotating from
-  // the floating handle. The snapshot lands on the first real move, so a bare
-  // click never pushes an identical state onto the undo stack.
+  // one live gesture on the selected placement: moving, scaling from a corner, stretching one axis from an edge, or rotating from the floating handle. The snapshot lands on the first real move, so a bare click never pushes an identical state onto the undo stack.
   private dragAsset: {
     id: string
     mode: 'move' | 'scale' | 'stretchx' | 'stretchy' | 'rotate'
@@ -995,10 +752,7 @@ export class Editor {
       g.drawImage(img, 0, 0)
       this.pix = g.getImageData(0, 0, this.doc.W, this.doc.H).data
     }
-    // restoreDoc weighs this browser against the platform and takes the newer
-    // one; a bundle exported under this id is the last resort. It used to try
-    // the browser first unconditionally, which meant a map in a database was
-    // never actually read from it.
+    // restoreDoc weighs this browser against the platform and takes the newer one; an exported bundle is the last resort. Trying the browser first unconditionally meant a map in a database was never actually read from it.
     try {
       if (!(await this.restoreDoc())) await this.restoreFromDisk()
     } finally {
@@ -1018,10 +772,7 @@ export class Editor {
     return c.toDataURL('image/png')
   }
 
-  /* THE NOTCH THE WHOLE PAINTING FITS AT, lifted out of fit() so a saved shot
-   * can be expressed against it. Neither side knows the other's window, but both
-   * know what "the whole map on screen" means, so that is the only yardstick a
-   * camera can cross the bundle boundary on. */
+  /* THE NOTCH THE WHOLE PAINTING FITS AT, lifted out of fit() so a saved shot can be expressed against it: neither side knows the other's window, but both know what "the whole map on screen" means. */
   fitNotch(): number {
     if (!this.canvas || !this.painting) return 0
     const z = clamp(Math.floor(Math.min(this.canvas.clientWidth / this.doc.W, this.canvas.clientHeight / this.doc.H)), 1, 8)
@@ -1110,11 +861,7 @@ export class Editor {
     this.lastPx = [x, y]
     void r
 
-    /* A ROUTE BEING LAID EATS THE CLICK, ahead of everything including the
-     * anchor drag: a waypoint dropped near a door must not grab the door
-     * instead. It sits above the paintable gate below for the reason the anchor
-     * drag does, because routes are drawn on the test step where painting is
-     * off. */
+    /* A ROUTE BEING LAID EATS THE CLICK, ahead of everything including the anchor drag: a waypoint dropped near a door must not grab the door. It sits above the paintable gate because routes are drawn on the test step where painting is off. */
     if (this.newPath) {
       if (e.button === 2) this.cancelPath()
       else {
@@ -1126,12 +873,7 @@ export class Editor {
       return
     }
 
-    /* AN AREA BEING DRAWN eats the press for the same reason the route does: a
-     * drag that starts near an anchor must not grab the anchor instead.
-     *
-     * The press starts a fresh path every time, so an author who does not like
-     * what they let go of just draws again over the top of it. Nothing is
-     * written to the anchor until enter. */
+    /* AN AREA BEING DRAWN eats the press for the same reason: a drag that starts near an anchor must not grab the anchor. The press starts a fresh path every time, so an author who dislikes what they let go of draws again over the top, and nothing is written to the anchor until enter. */
     if (this.newPoly) {
       if (e.button === 2) this.cancelRegionDraw()
       else {
@@ -1145,18 +887,8 @@ export class Editor {
       return
     }
 
-    /* A CORNER OF A DRAWN AREA, tested BEFORE the anchor under it. A region big
-     * enough to be a plaza has a ring that covers its own corners, so grabbing
-     * the anchor first would make every handle on the map unreachable.
-     *
-     * EDITABLE, not merely visible. The overlay draws on every step now, and a
-     * corner handle that answered a click on the assets step would take the
-     * press meant for the art sitting under it. */
-    /* THE RING'S HANDLE, tested before the poly corners and the anchor dot for
-     * the same reason those are ordered that way: while the offset is zero the
-     * handle sits exactly on the dot, and testing the dot first would make the
-     * handle unreachable on every ring that has never been moved. Selected
-     * anchors only, so it can never take a press meant for the art. */
+    /* A CORNER OF A DRAWN AREA, tested BEFORE the anchor under it: a region big enough to be a plaza has a ring covering its own corners, so grabbing the anchor first would make every handle unreachable. EDITABLE, not merely visible, or a corner handle would take the press meant for the art under it. */
+    /* THE RING'S HANDLE, tested before the poly corners and the anchor dot: while the offset is zero the handle sits exactly on the dot, so testing the dot first would make it unreachable on every ring never moved. Selected anchors only, so it cannot take a press meant for the art. */
     if (e.button === 0 && this.anchorSel) {
       const ev = this.doc.events.find((v) => v.id === this.anchorSel)
       if (ev && this.anchorLive(ev) && anchorShape(ev) === 'circle') {
@@ -1188,19 +920,9 @@ export class Editor {
       }
     }
 
-    /* A DOOR CAN BE DRAGGED. Grab one by clicking inside its ring.
-     *
-     * Anchors were droppable and deletable and nothing else, so a door landing
-     * two pixels off meant deleting it and clicking again, and a door on ground
-     * nobody can stand on could not be rescued at all. The hub's only
-     * interactive thing has been stuck 22px from the nearest floor for exactly
-     * this reason. Editable rather than visible, for the reason above. */
+    /* A DOOR CAN BE DRAGGED, by clicking inside its ring. Anchors were droppable and deletable and nothing else, so a door landing two pixels off meant deleting it and clicking again, and one on unwalkable ground could not be rescued at all: the hub's only interactive thing sat 22px from the nearest floor for exactly this reason. */
     if (e.button === 0) {
-      /* THE GRAB IS THE DOT, NOT THE WHOLE RING, and that is what the raised
-       * radius ceiling forces. This was the full `v.r`, which was safe while r
-       * stopped at 64 and is not now: one region authored at 400 would swallow
-       * every click on the map, so nothing else could be selected, dragged or
-       * painted anywhere near it. */
+      /* THE GRAB IS THE DOT, NOT THE WHOLE RING, which the raised radius ceiling forces: at the old cap of 64 the full r was safe, and now one region authored at 400 would swallow every click on the map. */
       const onDot = (v: MapEvent) =>
         Math.hypot(v.x - x, v.y - y) <= Math.max(6, Math.min(v.r, ANCHOR_GRAB))
       const hit = [...this.doc.events].reverse().find((v) => this.anchorLive(v) && onDot(v))
@@ -1211,12 +933,7 @@ export class Editor {
         e.preventDefault()
         return
       }
-      /* ONE PRESS CHOOSES IT, THE NEXT ONE MOVES IT, on any step that does not
-       * own anchors. Selecting had one route in and it was opening the row in a
-       * panel that the assets step does not have, so the exception above could
-       * never be reached from the step it was written for. Choosing and nudging
-       * being separate presses is also what stops a stray click on a zone from
-       * quietly dragging the anchor an author only meant to look at. */
+      /* ONE PRESS CHOOSES IT, THE NEXT ONE MOVES IT, on any step that does not own anchors. Selecting had one route in and it was a panel the assets step does not have. Separate presses also stop a stray click on a zone dragging an anchor somebody only meant to look at. */
       if (!this.eventsEditable && this.eventsVisible) {
         const pick = [...this.doc.events].reverse().find(onDot)
         if (pick) {
@@ -1225,22 +942,12 @@ export class Editor {
           e.preventDefault()
           return
         }
-        /* AND PRESSING THE MAP ITSELF LETS GO OF IT. The form opens from this
-         * press now, and the step it opens on has no row list to close it with,
-         * so without this an anchor chosen once stayed chosen and its handles
-         * stayed live until the author left the step. Falls through rather than
-         * returning: the press still belongs to whatever is under it. */
+        /* AND PRESSING THE MAP ITSELF LETS GO OF IT: the form opens from this press and the step has no row list to close it with, so an anchor chosen once stayed chosen with its handles live. Falls through rather than returning, because the press still belongs to whatever is under it. */
         if (this.anchorSel) this.selectAnchor(0)
       }
     }
 
-    /* TOOLS BELONG TO THE STEP THAT OWNS THEM.
-     *
-     * The tool survived a step change, so arriving at test with the bucket
-     * still armed from cut meant one click cut a hole in the map, and arriving
-     * from levels painted walkable ground. Both silent, both undoable only if
-     * you noticed. Painting is now refused anywhere it is not the point of the
-     * screen you are on. */
+    /* TOOLS BELONG TO THE STEP THAT OWNS THEM. The tool survived a step change, so arriving at test with the bucket still armed cut a hole in the map on one click, and arriving from levels painted walkable ground. Both silent, both undoable only if you noticed. */
     if (!this.paintable) return
 
     if (this.assetMode) {
@@ -1321,15 +1028,7 @@ export class Editor {
       }
       return
     }
-    /* AN AREA BEING DRAWN FREEHAND, sampled here. Only `dirty` is set: emit()
-     * would run a React render for every pointer move, and the panel has nothing
-     * to say during the drag anyway. The count it does show is emitted once, on
-     * release.
-     *
-     * The same painting pixel twice running is dropped. At any zoom above 1 the
-     * pointer covers several screen pixels inside one painting pixel, so without
-     * this a slow careful drag stores the same point twenty times over and the
-     * simplifier has to throw them away again. */
+    /* AN AREA BEING DRAWN FREEHAND, sampled here. Only dirty is set, because emit() would run a React render per pointer move. The same painting pixel twice running is dropped: above zoom 1 the pointer covers several screen pixels inside one painting pixel, so a slow drag would store the same point twenty times. */
     if (this.newPoly?.drawing) {
       const [x, y] = this.toNative(e)
       const last = this.newPoly.pts[this.newPoly.pts.length - 1]
@@ -1449,11 +1148,7 @@ export class Editor {
             while (rot < -Math.PI) rot += Math.PI * 2
             a.rot = +rot.toFixed(4)
           } else if (d.mode === 'scale' && d.box && d.many && d.many.length > 1) {
-            // a group scale pivots on the corner OPPOSITE the one grabbed, so
-            // that corner stays put and the box grows toward the pointer, the
-            // way a slide handle behaves. Each member scales by the same factor
-            // and its distance from the pivot scales with it, so the whole
-            // arrangement grows without drifting apart.
+            // a group scale pivots on the corner OPPOSITE the one grabbed, so that corner stays put and the box grows toward the pointer. Each member scales by the same factor and its distance from the pivot with it, so the arrangement grows without drifting apart.
             const f = clamp(Math.hypot(fx - d.box.cx, fy - d.box.cy) / d.d0, 0.05, 12)
             for (const m of d.many) {
               const q = this.doc.assets.find((z2) => z2.id === m.id)
@@ -1492,12 +1187,7 @@ export class Editor {
       this.emit()
       return
     }
-    /* A TOOL THAT CANNOT ACT MUST NOT LOOK LIKE IT CAN.
-     *
-     * Painting is refused when the step does not own it, but this highlight was
-     * not, so arriving at the test step with fill-by-colour still selected lit
-     * a region under the cursor on every move. It read as an armed tool,
-     * because that is exactly what an armed tool looks like. */
+    /* A TOOL THAT CANNOT ACT MUST NOT LOOK LIKE IT CAN. Painting is refused when the step does not own it, but this highlight was not, so arriving at test with fill-by-colour selected lit a region under the cursor on every move and read as an armed tool. */
     if (this.tool === 'region' && this.paintable && !this.drawing && !this.walking) {
       const id = this.regionAt(x, y)
       if (id !== this.hoverRegion) {
@@ -1557,16 +1247,8 @@ export class Editor {
       const ev = this.doc.events.find((v) => v.id === this.dragEvent!.id)
       this.dragEvent = null
       if (ev) {
-        /* Say whether it can be reached, now, while the map is in front of you.
-         *
-         * An anchor drops on any pixel with no ground test, so a door can sit
-         * on a wall or open water and look completely correct. The hub's only
-         * interactive thing sat 22px from the nearest floor for weeks and
-         * nothing anywhere said so. */
-        /* The ring is only what the game tests when the ring is the live shape.
-         * On a region drawn as an area or boxed with two corners the radius is
-         * dormant data, so reporting on it would be reporting on a circle the
-         * game is never going to look at. */
+        /* Say whether it can be reached, now, while the map is in front of you. An anchor drops on any pixel with no ground test, so a door can sit on a wall or open water and look correct: the hub's only interactive thing sat 22px from the nearest floor for weeks. */
+        /* The ring is only what the game tests when the ring is the live shape. On a region drawn as an area the radius is dormant data, so reporting on it would report on a circle the game never looks at. */
         if (anchorShape(ev) !== 'circle') this.say(`${ev.name} at ${ev.x}, ${ev.y}`)
         else {
           const ok = this.ringHasGround(ev.x, ev.y, ev.r)
@@ -1642,11 +1324,7 @@ export class Editor {
       this.cancelPick()
       return
     }
-    /* AN AREA BEING DRAWN owns enter and escape, ahead of the crop and the walk
-     * test for the reason the route is, since either would eat the enter that
-     * saves the shape. Enter accepts what is on screen, escape throws the draft
-     * away and leaves whatever was stored before untouched, and backspace clears
-     * the draft without leaving the mode so the next drag starts clean. */
+    /* AN AREA BEING DRAWN owns enter and escape, ahead of the crop and the walk test, either of which would eat the enter that saves the shape. Escape throws the draft away and leaves what was stored untouched; backspace clears the draft without leaving the mode. */
     if (this.newPoly) {
       if (e.key === 'Enter') {
         e.preventDefault()
@@ -1670,11 +1348,7 @@ export class Editor {
         return
       }
     }
-    /* A ROUTE BEING LAID owns four keys, and it is checked ahead of the crop
-     * and the walk test because both of those would otherwise eat the enter or
-     * the space that was meant for the line. Space is swallowed and does
-     * nothing: starting the walk test under a half-drawn route is the same
-     * class of surprise as painting on the test step. */
+    /* A ROUTE BEING LAID owns four keys, checked ahead of the crop and the walk test because both would eat the enter or the space meant for the line. Space is swallowed: starting the walk test under a half-drawn route is the same surprise as painting on the test step. */
     if (this.newPath) {
       if (e.key === 'Enter') {
         e.preventDefault()
@@ -1885,13 +1559,7 @@ export class Editor {
     this.dirty = true
     this.emit()
   }
-  /* THE BASELINE OF THE ONE THAT IS SELECTED, and there is a selection now.
-   *
-   * This reached for occs[occs.length - 1] unconditionally, so drawing a second
-   * occluder made the first one's baseline permanently unreachable: the only
-   * number in the depth system a person sets by hand, on the only shape a
-   * building needs two of. The hub has none, which is why nobody had felt it,
-   * and the Maw is pillars over a pit. */
+  /* THE BASELINE OF THE ONE THAT IS SELECTED, and there is a selection now. This reached for occs[occs.length - 1] unconditionally, so drawing a second occluder made the first one's baseline permanently unreachable: the only number in the depth system a person sets by hand, on the only shape a building needs two of. */
   setBaseline(y: number) {
     const o = this.selectedOcc()
     if (!o) return
@@ -1986,10 +1654,7 @@ export class Editor {
     this.cutTol = clamp(Math.round(n), 0, 120)
     this.emit()
   }
-  // ---- the region-accept propose ---------------------------------------
-  // The app computes flat-ish colour regions off-thread and hands them in
-  // here. The editor only ever reads them: hover highlights one, a click
-  // assigns the active level to it. No network, no SAM, nothing lands unseen.
+  // ---- the region-accept propose. The app computes flat-ish colour regions off-thread and hands them in; the editor only reads them, hover highlights one and a click assigns the active level. No network, nothing lands unseen.
   pixelsCopy(): Uint8ClampedArray | null {
     return this.pix ? this.pix.slice() : null
   }
@@ -2061,10 +1726,7 @@ export class Editor {
     g.putImageData(d, 0, 0)
     this.regionHL = c
   }
-  // ---- the assets step ---------------------------------------------------
-  // Life the painting deliberately left out, placed on top of it. Every
-  // mutation snapshots the document first, so z walks placements, drags,
-  // scales and clears back exactly like mask strokes.
+  // ---- the assets step. Life the painting deliberately left out, placed on top of it. Every mutation snapshots the document first, so z walks placements, drags, scales and clears back exactly like mask strokes.
   setAssetMode(on: boolean) {
     if (this.assetMode === on) return
     this.assetMode = on
@@ -2078,12 +1740,7 @@ export class Editor {
     this.dirty = true
     this.emit()
   }
-  // ---- the generate-here pick ------------------------------------------
-  // One armed click-picker for the context-aware generate: while set, every
-  // canvas click hands its painting pixel to the callback instead of the
-  // tools, so the app can take a crop there. The callback owns validity (a
-  // miss stays armed); esc or right-click cancels with null; the app clears
-  // it with pickPoint(null) once a click lands.
+  // ---- the generate-here pick. One armed click-picker: while set, every canvas click hands its painting pixel to the callback instead of the tools. The callback owns validity so a miss stays armed; esc or right-click cancels with null.
   private pickCb: ((p: Pt | null) => void) | null = null
   pickPoint(cb: ((p: Pt | null) => void) | null) {
     this.pickCb = cb
@@ -2103,10 +1760,7 @@ export class Editor {
     const i = this.doc.idx(x, y)
     return !this.doc.cut[i] && this.pix[i * 4 + 3] > 0
   }
-  // the painting's own pixels around a point, cut pixels dropped to nothing.
-  // This is what an effect samples its colours from, and what the sway rule
-  // shears: raw rgba, no data url, no decode, so a click can read the palette
-  // and render frames in the same tick.
+  // the painting's own pixels around a point, cut pixels dropped to nothing. What an effect samples its colours from and what the sway rule shears: raw rgba, no data url, no decode, so a click can read the palette and render frames in one tick.
   patchAround(x: number, y: number, r: number): { data: Uint8ClampedArray; w: number; h: number } | null {
     if (!this.pix) return null
     const { W, H } = this.doc
@@ -2130,10 +1784,7 @@ export class Editor {
       }
     return { data: out, w, h }
   }
-  // a crop of the cut-applied painting around a point, the context a
-  // generation is given. Up to size px square; the window slides inside the
-  // canvas edges instead of shrinking, so it only comes back smaller than
-  // size on a painting smaller than size.
+  // a crop of the cut-applied painting around a point, the context a generation is given. The window slides inside the canvas edges instead of shrinking, so it only comes back smaller on a painting smaller than size.
   cropAround(x: number, y: number, size = 160): { crop: string; w: number; h: number } | null {
     if (!this.painting) return null
     const w = Math.min(size, this.doc.W)
@@ -2167,10 +1818,7 @@ export class Editor {
       }
       const p = this.cropPt(e)
       const c = this.cropSt
-      /* An AREA is drawn from nothing, so a press starts a new rectangle. A
-       * CROP already has one round the whole picture, so a press takes hold of
-       * part of it instead. Two gestures, and only one of them ever asks you to
-       * draw a box. */
+      /* An AREA is drawn from nothing, so a press starts a new rectangle. A CROP already has one round the whole picture, so a press takes hold of part of it. Two gestures, and only one ever asks you to draw a box. */
       if (!c.id || !c.a || !c.b) {
         c.a = p
         c.b = p
@@ -2300,15 +1948,7 @@ export class Editor {
       } else {
         this._selAsset = hit.id
       }
-      /* dragging moves everything picked, so each one's start point is kept.
-       *
-       * What the pointer carries is the ANCHOR, offset from the cursor by the
-       * same amount it was when the drag began, so the sprite travels exactly
-       * as far as the pointer does and the behaviour underneath it is untouched:
-       * a walker dragged across the quay goes on walking the same walk, and its
-       * roaming box comes with it (moveTo carries the bounds). Dragging the
-       * drawn position instead would have to fold the wander into the anchor and
-       * the figure would jump the moment the clock moved on. */
+      /* dragging moves everything picked, so each one's start point is kept. What the pointer carries is the ANCHOR, so the sprite travels exactly as far as the pointer and the behaviour underneath is untouched, roaming box included. Dragging the drawn position would fold the wander into the anchor and the figure would jump the moment the clock moved on. */
       this.dragAsset = {
         id: hit.id,
         mode: 'move',
@@ -2397,25 +2037,13 @@ export class Editor {
     this.touched()
     this.say(`placed ${it.name} in ${a.group} · esc stops`)
   }
-  // ---- the placement transform ------------------------------------------
-  // Local space is the png's own pixels with the feet anchor at the origin:
-  // x in [-w/2, w/2], y in [-h, 0]. The world transform is flip (negative
-  // scale), then axis scale, then rotation about the feet, then the anchor
-  // translation — the exact order Pixi composes anchor(0.5,1) sprites, so
-  // what the editor shows is what the game draws.
+  // ---- the placement transform. Local space is the png's own pixels with the feet anchor at the origin. The world transform is flip, then axis scale, then rotation about the feet, then the anchor translation, the exact order Pixi composes anchor(0.5,1) sprites, so the editor shows what the game draws.
   private assetNat(a: PlacedAsset): { w: number; h: number } {
     const img = this.assetImg(a.kind === 'animated' ? (a.frames && a.frames[0]) || '' : a.src || '')
     if (img) return { w: img.naturalWidth, h: img.naturalHeight }
     return { w: 24, h: 24 }
   }
-  /* The feet as DRAWN, which for anything that moves is not a.x,a.y.
-   *
-   * Everything the pointer touches hangs off this, so the box, the handles and
-   * the rotate stalk sit on the sprite. The live tilt rides with it for the same
-   * reason: a boat leaning 30 degrees is a box leaning 30 degrees. The live FLIP
-   * deliberately does not, because the box is symmetric about the feet so a
-   * mirror does not move it, and honouring it would swap which edge handle is
-   * "left" every time a figure turned round mid-drag. */
+  /* The feet as DRAWN, which for anything that moves is not a.x,a.y, so the box, the handles and the rotate stalk sit on the sprite. The live tilt rides with it because a boat leaning 30 degrees is a box leaning 30 degrees. The live FLIP does not, because the box is symmetric about the feet and honouring it would swap which edge handle is left every time a figure turned mid-drag. */
   private assetOrigin(a: PlacedAsset): Pt {
     const L = this.liveAt.get(a.id)
     return [a.x + (L ? L.dx : 0), a.y + (L ? L.dy : 0)]
@@ -2545,13 +2173,7 @@ export class Editor {
   }
 
   // ---- many at once ------------------------------------------------------
-  /* Align, distribute and stacking order, on the picked set.
-   *
-   * These read the placements' DRAWN bounds, not their anchors, because that is
-   * what the eye lines up: a rotated palm and an upright one share an edge when
-   * their painted edges share it, whatever their feet are doing. The anchor is
-   * then moved by the same delta the edge needed, so nothing else about the
-   * placement changes. */
+  /* Align, distribute and stacking order on the picked set, read off the placements' DRAWN bounds and not their anchors, because that is what the eye lines up. The anchor is then moved by the same delta the edge needed, so nothing else about the placement changes. */
   private drawnBox(a: PlacedAsset) {
     let x0 = Infinity
     let y0 = Infinity
@@ -2568,21 +2190,7 @@ export class Editor {
     }
     return { x0, y0, x1, y1, cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, w: x1 - x0, h: y1 - y0 }
   }
-  /* How wide a BODY is, for the separation pass and nothing else.
-   *
-   * The INK of the placement's own picture times the x scale, which is the
-   * number the game uses (PmapScene.tsx, bodyW). Not the canvas the picture was
-   * saved on: see inkWidth at the top of this file for what that cost. Not
-   * drawnBox either, which is the rotated bounding box: that folds in the height
-   * and the rotation, so a tall thing laid on its side would carry a keep-out
-   * circle several times its body here and its body's worth in the game, and the
-   * tool would be drawing a shove nobody gets. Where a behaviour has walked to is
-   * left out for the same reason it is left out of drawnBox: personal space
-   * belongs to the placement, and a width that breathed as a boat rocked would be
-   * a preview the game does not run.
-   *
-   * Look 0's first picture, which is the one the game measures too, so a troll
-   * and the boulder it becomes shove alike on both sides. */
+  /* How wide a BODY is, for the separation pass and nothing else: the INK of look 0's first picture times the x scale, which is the number the game uses. Not the canvas it was saved on, and not drawnBox, which folds in height and rotation so a tall thing laid on its side would carry a keep-out circle several times its body here and its body's worth in the game. Where a behaviour has walked to is left out, because a width that breathed as a boat rocked would be a preview the game does not run. */
   private bodyW(a: PlacedAsset) {
     const img = this.assetImg(a.kind === 'animated' ? (a.frames && a.frames[0]) || '' : a.src || '')
     return (img ? this.inkOf(img) : this.assetNat(a).w) * Math.abs(a.sx)
@@ -2612,19 +2220,7 @@ export class Editor {
     this.inkCache.set(img, out)
     return out
   }
-  /* Whether ANYTHING that moves can reach this standing placement, and so
-   * whether it is something to go round.
-   *
-   * Two kinds of mover and each is asked about its own fence: one the floor
-   * holds, which is the pixel scan, and one only its box holds, which is a
-   * rectangle test. The scan is kept per placement because its answer only moves
-   * when the floor or the placement does and touched() empties it for both; the
-   * key carries the radius so a picture that was still loading when the question
-   * was first asked is asked again once it has arrived. The box test is four
-   * comparisons against the handful of free placements on a map, so it is worked
-   * out fresh and never has to be invalidated when a life is edited. The caller
-   * gathers the free boxes once for the whole frame rather than this walking the
-   * document again for every standing placement it is asked about. */
+  /* Whether ANYTHING that moves can reach this standing placement, and so whether it is something to go round. Two kinds of mover, each asked about its own fence: the floor-held one is a pixel scan kept per placement and keyed by radius, so a picture still loading when the question was first asked is asked again; the box-held one is four comparisons and is worked out fresh, so a life edit never has to invalidate it. */
   private reachCache = new Map<string, boolean>()
   private moverCanTouch(a: PlacedAsset, free: (LifeBounds | null | undefined)[]) {
     if (this.walkerCanTouch(a)) return true
@@ -2667,10 +2263,7 @@ export class Editor {
     this.touched()
     this.say(`aligned ${picked.length} · ${edge}`)
   }
-  /* Even gaps between the picked things, outermost two held still. Spacing is
-   * measured edge to edge rather than centre to centre, so a wide tree and a
-   * narrow post end up with the same air between them, which is what "evenly
-   * spaced" looks like. */
+  /* Even gaps between the picked things, outermost two held still. Measured edge to edge rather than centre to centre, so a wide tree and a narrow post end up with the same air between them. */
   distribute(axis: 'h' | 'v') {
     const picked = this.selAssets()
     if (picked.length < 3) {
@@ -2700,10 +2293,7 @@ export class Editor {
     this.touched()
     this.say(`spaced ${picked.length} evenly`)
   }
-  /* Stacking order. The game y-sorts, so what this really moves is the feet: to
-   * put something in front of another thing you stand it lower down the map.
-   * Saying that plainly beats a "bring to front" that silently does nothing
-   * once the bundle is exported. */
+  /* Stacking order. The game y-sorts, so what this really moves is the feet: to put something in front you stand it lower down the map. Saying that plainly beats a "bring to front" that silently does nothing once the bundle is exported. */
   order(dir: 'front' | 'back') {
     const picked = this.selAssets()
     if (!picked.length) {
@@ -2739,10 +2329,7 @@ export class Editor {
     this.touched()
     this.say(`cleared ${group} · ${n} removed · z undoes`)
   }
-  // a library item was deleted on disk: take every placement that used it
-  // off the map in one snapshot, so z restores the placements even though
-  // the file itself stays gone. Matches by the item's own served url: the
-  // png for a static item, the frame folder for an animated one.
+  // a library item was deleted on disk: every placement that used it comes off the map in one snapshot, so z restores the placements even though the file stays gone. Matched by the item's own served url.
   removePlacementsOf(item: LibItem): number {
     const key =
       item.kind === 'animated'
@@ -2766,19 +2353,9 @@ export class Editor {
     this.touched()
     return n
   }
-  // a library item was rewritten in place: every placement of it takes the new
-  // frame list and rate. A re-render with more frames leaves the old placements
-  // playing a short loop otherwise, and a changed speed leaves them at the old
-  // one. One snapshot, so z puts the old timing back.
+  // a library item was rewritten in place: every placement takes the new frame list and rate, or a re-render with more frames leaves the old placements playing a short loop. One snapshot, so z puts the old timing back.
   refreshPlacementsOf(item: LibItem): number {
-    /* A DIRECTION SET IS NEITHER A FRAME LIST NOR A STILL, and this handled
-     * only those two: for a set of headings it built an empty key and returned
-     * nought. So a character animated AFTER it was placed kept the one-frame
-     * headings it was placed with and stood frozen for good, because the cycle
-     * reads the placement's own dirs and not the library's. Ash, 2026-09-02,
-     * the principal in the Maw, breathing on his own tile and still on the map.
-     * Keyed on the folder the headings live in; every placement drawn from it
-     * takes the new headings and rate, and its resting still moves with them. */
+    /* A DIRECTION SET IS NEITHER A FRAME LIST NOR A STILL, and this handled only those two, building an empty key and returning nought. So a character animated AFTER it was placed kept the one-frame headings it was placed with and stood frozen for good, because the cycle reads the placement's own dirs. Keyed on the folder the headings live in. */
     if (item.dirs && Object.keys(item.dirs).length) {
       const first = Object.values(item.dirs).find((l) => l && l.length)?.[0] || ''
       const folder = first.slice(0, first.lastIndexOf('/') + 1)
@@ -2896,16 +2473,7 @@ export class Editor {
   // copies of everything picked, and the copies become the selection so a
   // duplicate can be dragged straight off the originals. offset drops them
   // beside; ctrl+d asks for them in place, right on top.
-  /* Move a placement, and take its roaming box with it.
-   *
-   * life.bounds is in painting pixels, absolute, and nothing anywhere used to
-   * shift it. So dragging a wanderer across the map left its box behind and the
-   * thing walked back to where it had been placed, and duplicating one gave the
-   * copy the original's box, which is worse: a row of walkers all pacing the
-   * same square. The box is part of the placement, so it rides along.
-   *
-   * Everything that moves a placement goes through here. Nothing else should
-   * write x or y directly on something that might carry life. */
+  /* Move a placement, and take its roaming box with it. life.bounds is absolute painting pixels and nothing used to shift it, so dragging a wanderer left its box behind and the thing walked back to where it had been placed, and duplicating one gave the copy the original's box: a row of walkers pacing the same square. Everything that moves a placement goes through here. */
   private moveTo(a: PlacedAsset, nx: number, ny: number) {
     const x = clamp(Math.round(nx), 0, this.doc.W - 1)
     const y = clamp(Math.round(ny), 0, this.doc.H - 1)
@@ -2915,20 +2483,7 @@ export class Editor {
       // collapsing against the border
       b.x = clamp(Math.round(b.x + (x - a.x)), 0, Math.max(0, this.doc.W - b.w))
       b.y = clamp(Math.round(b.y + (y - a.y)), 0, Math.max(0, this.doc.H - b.h))
-      /* THE BOX MOVED, SO THE NUMBER THAT DESCRIBES IT IS NOW ABOUT SOMEWHERE
-       * ELSE.
-       *
-       * walkPct is the 35% law's input: at or above it a figure is held to the
-       * walkable pixels inside its box and told the area is open, below it the
-       * box alone fences it. It was measured once, when the box was drawn, and
-       * then carried verbatim through every drag and every duplicate. On the
-       * hub that left 8 of 17 walkOnly placements holding a fraction from
-       * ground they no longer stand over: stored 63.2% against 20.3% real.
-       *
-       * The result is a figure fenced to a box with almost no floor in it, and
-       * life falls back to holding still for a whole leg when nothing in the
-       * box is steppable. That is the "walking sprites randomly get stuck",
-       * and it is random because it resolves per leg. */
+      /* THE BOX MOVED, SO THE NUMBER THAT DESCRIBES IT IS NOW ABOUT SOMEWHERE ELSE. walkPct is the 35% law's input and was measured once when the box was drawn, then carried verbatim through every drag and duplicate: on the hub that left 8 of 17 walkOnly placements holding a fraction from ground they no longer stand over, 63.2% stored against 20.3% real. The result is a figure fenced to a box with almost no floor in it, holding still for a whole leg, which is the "walking sprites randomly get stuck" and is random because it resolves per leg. */
       if (a.life && typeof (a.life as { walkPct?: number }).walkPct === 'number')
         (a.life as { walkPct?: number }).walkPct = this.walkFraction(b)
     }
@@ -2979,11 +2534,7 @@ export class Editor {
           : `duplicated ${assetLabel(picked[0])} in place`,
     )
   }
-  // ---- copy and paste ----------------------------------------------------
-  // The clipboard holds a detached copy of the placement, not a reference, so
-  // deleting the original or loading another painting leaves it intact. It
-  // carries the item's own urls, so a paste into another scene still draws as
-  // long as those files are there.
+  // ---- copy and paste. The clipboard holds a detached copy, not a reference, so deleting the original or loading another painting leaves it intact. It carries the item's own urls, so a paste into another scene draws as long as those files are there.
   copySelected(): boolean {
     const picked = this.selAssets()
     if (!picked.length) {
@@ -2999,11 +2550,7 @@ export class Editor {
     )
     return true
   }
-  /* Paste lands under the cursor when the cursor is over the painting, and just
-   * off the originals when it is not, so a paste is never invisible. A pasted
-   * SET keeps its arrangement: the copies move as one block, positioned by the
-   * block's own top-left, so two palms twenty pixels apart stay twenty pixels
-   * apart wherever they land. */
+  /* Paste lands under the cursor when the cursor is over the painting and just off the originals when it is not, so a paste is never invisible. A pasted SET keeps its arrangement, positioned by the block's own top-left. */
   pasteClipboard(): boolean {
     if (!clipboard.length) {
       this.say('nothing copied yet')
