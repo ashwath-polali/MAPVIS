@@ -1,12 +1,4 @@
-/* Does the behaviour maths actually reproduce the beach map's crab and gull?
- *
- * Run: npx tsx src/core/life.check.ts
- *
- * The beach crab, from BeachIso.tsx: dashes to a target within +-4 tiles of
- * home, speed 2.6 to 4.2 tiles/sec, freezes 1.2 to 4.7s, flips to face the way
- * it went, scuttles 1.5px while moving. The gull: a 35s cycle with 9s of glide
- * across the cove, a sine rise and fall, absent the rest of the time.
- */
+/* Does the behaviour maths reproduce the beach map's crab and gull? Run: npx tsx src/core/life.check.ts. The crab dashes within 4 tiles of home at 2.6-4.2 tiles/sec, freezes 1.2-4.7s and scuttles 1.5px; the gull is a 35s cycle with 9s of glide. */
 import { cleanLife, lifeAt, type Life } from './life'
 
 let bad = 0
@@ -122,17 +114,7 @@ const w = lifeAt(wild, 12.5, home)
 ok('absurd numbers still render', isFinite(w.dx) && isFinite(w.dy), `dx ${w.dx.toFixed(1)}`)
 
 // ---- a sequence: the troll -----------------------------------------------
-/* Four states on a 63 second round: it rolls the rocks for 26s, is a boulder
- * for 16s, unfurls and ROLLS OFF for 9s, then settles for 12s. The flat fields
- * are state one's behaviour, which is why a reader that knows nothing about
- * states still sees a wandering troll.
- *
- * The rolling state has to genuinely travel or this fixture cannot see the bug
- * it is here for. It used to be a drift of one pixel either side, which nets out
- * to nothing over a round, so the wrap discarded nothing and every continuity
- * check below passed on code that teleported. At 40-45 px/s with almost no
- * pauses it covers a few hundred pixels a round, and the wrap discarding that is
- * exactly what the sweep now measures. */
+/* Four states on a 63s round: rolls 26s, boulder 16s, rolls off 9s, settles 12s. The rolling state has to genuinely travel at 40-45 px/s, because a one-pixel drift nets out over a round and every continuity check below passed on code that teleported. */
 const troll = cleanLife({
   kind: 'wander',
   range: 70,
@@ -177,20 +159,7 @@ ok(
 )
 ok('the round comes round again', artAt(5) === artAt(5 + ROUND) && artAt(45) === artAt(45 + ROUND * 3))
 
-/* CONTINUITY, over five whole rounds rather than three.
- *
- * 20000 frames of 16ms is 320s, which is 5.08 rounds of 63. Three rounds was
- * not enough to trust and twelve pixels a frame was not tight enough to notice:
- * the old fixture's rolling state drifted a pixel, so the sweep reported 0.50px
- * on code whose wrap threw away a whole round of travel.
- *
- * What a clean frame costs: the fastest state covers 45 px/s, so 0.72px in a
- * frame, and a wander rides a hop of `bob` px that drops to nothing the instant
- * a dash ends, which is another 1px. So under about 2px is the behaviour and
- * anything above it is a seam. Measured on the pre-fix code with this fixture:
- * worst step 166.69px at t=314.99s and 9 steps over 3px. After: worst 1.31px,
- * none over 3px. For scale, the plain beach crab with no sequence at all
- * measures 2.86px the same way, all of it that same hop. */
+/* CONTINUITY over five whole rounds, because three was not enough to trust and 12px a frame was not tight enough to notice a wrap throwing away a whole round of travel. A clean frame costs about 2px (0.72 of travel plus the bob hop); pre-fix this fixture measured a worst step of 166.69px at t=314.99s, after 1.31px. */
 let sjump = 0
 let worst = 0
 let worstT = 0
@@ -211,15 +180,7 @@ ok(
   `worst step ${worst.toFixed(2)}px at t=${worstT.toFixed(2)}s, ${sjump} steps over 3px in ${((20000 * 0.016) / ROUND).toFixed(2)} rounds`,
 )
 
-/* THE TWO SEAMS, named and measured one at a time.
- *
- * The sweep above can only say something jumped somewhere. These say where. The
- * wrap is the last state handing back to state zero, and it is the one that used
- * to throw away everything states one and up had travelled that round. The
- * re-entry seam is a state going live again carrying its own offset for the
- * round. Pre-fix on this fixture the wraps measured 58.37 / 22.27 / 28.99 /
- * 117.47 / 166.76px and re-entry into the rolling state measured 58.39 and
- * 22.22px. Both are arithmetic, not luck, so half a pixel is generous. */
+/* THE TWO SEAMS, named and measured separately, because the sweep above can only say something jumped somewhere. Pre-fix the wraps measured 58.37 / 22.27 / 28.99 / 117.47 / 166.76px and re-entry 58.39 and 22.22px. Both are arithmetic, not luck, so half a pixel is generous. */
 const d0 = 0.001
 const jumpAt = (t: number) => {
   const a = lifeAt(troll, t - d0, th)
@@ -281,13 +242,7 @@ const s1 = lifeAt(troll, 47.31, th)
 const s2 = lifeAt(troll, 47.31, th)
 ok('a sequence is a function of t alone', s1.dx === s2.dx && s1.dy === s2.dy && s1.art === s2.art)
 
-/* and EVERY field, asked for out of order. The editor preview and the game do
- * not walk the same times in the same sequence: one scrubs, one runs forward,
- * and a placement that answered differently depending on what was asked before
- * it would make the preview a lie. So the same times are read forwards, then
- * shuffled, and every field of every answer has to match. It also catches a
- * lifeAt that started keeping something between calls or reading a clock, which
- * is the one change that would quietly end the whole design. */
+/* and EVERY field, asked for out of order: the editor scrubs and the game runs forward, so a placement that answered differently depending on what was asked before it would make the preview a lie. It also catches a lifeAt that started keeping state or reading a clock. */
 const times = [0, 0.016, 3.5, 26, 41.99, 47.31, 62.9, 63, 126.5, 1800, 1937.19, 2400, 3600]
 const forwards = times.map((t) => lifeAt(troll, t, th))
 const shuffled = [7, 2, 11, 0, 9, 4, 12, 1, 6, 3, 10, 5, 8].map((i) => [i, lifeAt(troll, times[i], th)] as const)
@@ -306,11 +261,7 @@ ok('a state with no move stands still', held.dx === held2.dx && held.dy === held
 ok('the picture dissolves rather than cuts', lifeAt(troll, 26.05, th).alpha < 0.6, `alpha ${lifeAt(troll, 26.05, th).alpha.toFixed(2)}`)
 
 // ---- art is an INDEX, and only ever an index -----------------------------
-/* The planner answers in names because a name is the only thing a model can
- * write about a picture, and the server turns that name into a number before it
- * ever reaches here. So the guard's job is to be sure nothing else gets through:
- * a name that slipped past the server has to land on 0, the placement's own
- * picture, rather than on some other creature's. */
+/* The planner answers in names and the server turns them into numbers, so the guard's job is that a name which slipped past lands on 0, the placement's own picture, rather than on some other creature's. */
 const named = cleanLife({
   kind: 'drift',
   states: [{ secs: 5, art: 'mossy boulder' }, { secs: 5, art: 2 }, { secs: 5, art: 99 }, { secs: 5, art: -3 }],
@@ -327,25 +278,7 @@ ok(
   `99 -> ${named.states![2].art}, -3 -> ${named.states![3].art}`,
 )
 
-/* ---- THE FLOOR, INSIDE A SEQUENCE ---------------------------------------
- *
- * The 35% law: when the box a person drew is mostly walkable they fenced a path,
- * so the walkable pixels hold as well as the box. That worked on a placement with
- * no sequence and quietly did not inside one, because every state was worked out
- * from the PLACEMENT'S home while the sprite was drawn at home plus everything
- * the earlier states had travelled. The walk rejected the legs that would leave
- * the path measured from one point and stood at another. Correct code, wrong
- * pixels.
- *
- * A 40px path down a 100px box, so 40% walkable, which is over the 35% line and
- * is the case the law is written for. Measured before the fix: 15 frames of
- * 20000 off the path with no sequence, worst 0.6px, against 5630 frames and
- * 19.7px with one. After: 7 frames and 0.2px.
- *
- * The 0.6px floor is not a miss. It is the hop a wander rides while dashing,
- * which lifts the drawn sprite off the ground it is standing on, so a walker on
- * the last legal pixel of the path draws up to `bob` outside it. That is why the
- * threshold is a pixel and not zero. */
+/* ---- THE FLOOR, INSIDE A SEQUENCE. The 35% law worked on a placement with no sequence and quietly did not inside one: every state was worked out from the PLACEMENT'S home while the sprite was drawn at home plus everything earlier states had travelled, so the walk rejected legs measured from one point and stood at another. A 40px path down a 100px box measured 15 frames of 20000 off it with no sequence and 5630 with one, 19.7px out; after, 7 frames and 0.2px. The 0.6px floor is the bob hop, which is why the threshold is a pixel and not zero. */
 const BOX = { x: 100, y: 100, w: 100, h: 100 }
 const PATH = { y0: 130, y1: 170 }
 const onPath = (x: number, y: number) => x >= BOX.x && x < BOX.x + BOX.w && y >= PATH.y0 && y < PATH.y1
@@ -394,12 +327,7 @@ const [pn, pw] = strayed(fencedPlain)
 const [sn, sw] = strayed(fencedSeq)
 ok('a fenced walk keeps to the path', pn < 60 && pw < 1, `${pn}/20000 frames off, worst ${pw.toFixed(2)}px, no sequence`)
 
-/* and it walks the SAME path it always did. The four hashes further down are all
- * taken without a floor, because that is what lifeAt is given when nobody set
- * walkOnly, so on their own they say nothing about the placements that did. This
- * one is the same 20000 frames with the floor in force, folded the same way and
- * checked against `git show HEAD:src/core/life.ts`. Every hub placement fenced
- * by the 35% law is this. */
+/* and it walks the SAME path it always did. The four hashes below are taken with no floor, so on their own they say nothing about the placements that had one. This is the same 20000 frames with the floor in force, checked against git show HEAD. */
 let gf = 2166136261
 const eatF = (s: string) => {
   for (let i = 0; i < s.length; i++) {
@@ -419,15 +347,7 @@ ok(
   `${sn}/20000 frames off, worst ${sw.toFixed(2)}px, with a four state round`,
 )
 
-/* AND THE SAME PATH TURNED ON ITS SIDE, WHICH IS NOT THE SAME QUESTION.
- *
- * The reading above passed for a long time on code that had not solved this. The
- * share used to squeeze a state's HEIGHT to 0.35 of its width and touched
- * nothing else, so a path lying ACROSS the box came out inside the squeeze with
- * 2.5px to spare and a path running UP it did not. Same box, same four states,
- * same 20000 frames, corridor turned ninety degrees: 1360 frames off it and
- * 9.40px out, against 0 for the flat one. A fixture that only works one way up
- * is not a fixture, and a fault the check cannot see is one that ships. */
+/* AND THE SAME PATH TURNED ON ITS SIDE, WHICH IS NOT THE SAME QUESTION. The old share squeezed only a state's HEIGHT, so a path lying across the box came out inside the squeeze with 2.5px to spare and one running up it did not: 1360 frames off it and 9.40px out, against 0 for the flat one. A fixture that only works one way up is not a fixture. */
 const UPPATH = { x0: 130, x1: 170 }
 const upPath = (x: number, y: number) => y >= BOX.y && y < BOX.y + BOX.h && x >= UPPATH.x0 && x < UPPATH.x1
 const strayedUp = (l: Life): [number, number] => {
@@ -464,21 +384,7 @@ for (let i = 0; i < 20000; i++) {
 }
 ok('a fenced sequence never teleports either', fWorst < 2.5, `worst step ${fWorst.toFixed(3)}px over 20000 frames`)
 
-/* ---- A PASS IS NOT A STATE ----------------------------------------------
- *
- * Every other kind answers with an offset from where the thing lives, so a round
- * can add its states up. A cross answers with an absolute point on the painting,
- * and for most of its cycle it is off the map entirely, where it answers dx 0
- * dy 0 meaning absent rather than meaning here. Adding absent to a round walks
- * the placement off the island: measured on a 688px map, a two state round of a
- * wander then a cross reached max |dx| 737px with a single frame step of 404px.
- *
- * So it is refused, which is the same kind of rule as a state not being allowed
- * states of its own. Both doors: a state that names a cross keeps its seconds and
- * its picture and stands still, and a cross that was handed states loses them,
- * because the first state is BUILT from the flat fields when it does not name a
- * move, so a cross placement with a round had a cross installed as state one
- * without ever writing the word. That second door measured 356px on its own. */
+/* ---- A PASS IS NOT A STATE. Every other kind answers an offset from home, but a cross answers an absolute point and for most of its cycle answers dx 0 dy 0 meaning absent, and adding absent walks the placement off the island: max dx 737px on a 688px map with a single frame step of 404px. Both doors are shut: a state naming a cross stands still, and a cross handed states loses them, because the first state is BUILT from the flat fields and that path measured 356px on its own. */
 const passState = cleanLife({
   kind: 'wander',
   range: 60,
@@ -521,11 +427,7 @@ const passFlat = cleanLife({
   states: [{ secs: 30 }, { secs: 30, art: 1 }],
 }) as Life
 ok('and a pass handed a round keeps the pass and loses the round', !passFlat.states, `states: ${passFlat.states ? passFlat.states.length : 'none'}`)
-/* and losing the round leaves the pass EXACTLY as it was, which is the point:
- * refusing it is not a new behaviour, it is the old one. A pass does leave the
- * map, it always has, and it fades and goes to alpha 0 for the two thirds of the
- * cycle it is away, so nothing is drawn out there. That is a pass. What made the
- * state version a bug is that a state is drawn the whole time. */
+/* and losing the round leaves the pass EXACTLY as it was, which is the point. A pass does leave the map and fades to alpha 0 while it is away, so nothing is drawn out there. What made the state version a bug is that a state is drawn the whole time. */
 const passAlone = cleanLife({ kind: 'cross', cycle: 30, travel: 20, fromX: 0, fromY: 300, toX: 700, toY: 300, swayAmp: 0, seed: 11 }) as Life
 let passSame = true
 let passAway = 0
@@ -544,20 +446,7 @@ for (let i = 0; i < 500; i++) if (lifeAt(crab, i * 0.37, home).art !== 0) artZer
 ok('a placement with no sequence always draws art 0', artZero)
 ok('and an old bundle still cleans to no states', !crab.states && !gull.states)
 
-/* THE OLD BUNDLES, PIXEL FOR PIXEL.
- *
- * Every map already exported draws placements with no sequence at all, and the
- * sequence work must not move any of them by so much as a rounding error. So
- * fold 20000 frames of each behaviour into one number and check it against the
- * number the code before any of this produced, taken from
- * `git show HEAD:src/core/life.ts` and pasted in. Seven fields per frame, which
- * is every field LifeAt carried back then; art is the eighth and is checked
- * above.
- *
- * A hash rather than a table because 80000 frames of eight numbers is not
- * something anyone reads, and the only question being asked is whether a single
- * one of them moved. If one of these fails, the no-states path changed and the
- * change is a bug however good it looked. */
+/* THE OLD BUNDLES, PIXEL FOR PIXEL. Every exported map draws placements with no sequence, and the sequence work must not move one by a rounding error, so 20000 frames of each behaviour fold into one number checked against git show HEAD. A hash rather than a table, because the only question is whether a single one of them moved. */
 const trace = (l: Life, h: { x: number; y: number }, n: number): string => {
   let g = 2166136261
   const eat = (s: string) => {
@@ -588,21 +477,7 @@ for (const [name, l, h, want] of golden) {
   ok(`${name} with no states is unchanged from before sequences existed`, got === want, `${got} against ${want}, 20000 frames`)
 }
 
-/* THE 32 MINUTE FREEZE.
- *
- * The wander walks a fixed number of legs and the walk used to fall off the end
- * of them and answer `still`, which is dx 0 dy 0 on the placement's own anchor.
- * Not a stumble: the thing teleported home and stood there, visible, for the
- * rest of the session. Measured on this crab before the fix: moving at t=1800s,
- * frozen from t=1932.92s, and still frozen at every t after. That is 32.2
- * minutes and an advisory session is 30 to 45, so every wandering placement in
- * every bundle already exported reached it during real play.
- *
- * A sample is not enough to prove it is alive, because a wander is mostly
- * pauses: the crab is moving about 20% of any minute and a single reading at
- * t=3600s lands in a pause four times out of five. So the test is that it still
- * COVERS GROUND. Sixty seconds of frames at each of the four marks, and the
- * spread of dx across them. Frozen is 0.0. */
+/* THE 32 MINUTE FREEZE. The walk used to fall off the end of its legs and answer still, teleporting the thing home to stand there visible for the rest of the session: measured on this crab, moving at t=1800s and frozen from t=1932.92s, inside a 30 to 45 minute advisory session. A sample cannot prove it is alive, because a wander is mostly pauses, so the test is that it still COVERS GROUND across sixty seconds at each mark. */
 for (const t0 of [1800, 2400, 3600, 5400, 20000]) {
   let lo = Infinity
   let hi = -Infinity
@@ -620,16 +495,7 @@ for (const t0 of [1800, 2400, 3600, 5400, 20000]) {
   )
 }
 
-/* and the round closes rather than restarting from the anchor, or the freeze
- * has only been traded for a teleport every 32 minutes.
- *
- * Swept rather than read at one instant, because the seam does not sit at a
- * round number: the crab's round is 1937.19s and the old code's snap home is at
- * 1932.92s, so a probe at either would miss the other. Half a millisecond
- * between frames, so nothing but a discontinuity can show. What a clean frame
- * costs here is the hop a wander rides while dashing, which is `bob`, 1.5px.
- * Measured before the fix: 90.63px, the whole distance from wherever leg 511
- * ended back to the anchor. After: 1.50px, all of it that hop. */
+/* and the round closes rather than restarting from the anchor, or the freeze has only become a teleport every 32 minutes. Swept rather than read at one instant, because the crab's round is 1937.19s and the old snap home was at 1932.92s, so a probe at either would miss the other. Before 90.63px, after 1.50px, all of it the bob hop. */
 let worstRound = 0
 let worstRoundT = 0
 for (let t = 1900; t < 1990; t += 0.0005) {
@@ -647,14 +513,7 @@ ok(
   `worst step ${worstRound.toFixed(4)}px at t=${worstRoundT.toFixed(3)}s, swept 1900..1990s`,
 )
 
-/* THE PRE-CAP WINDOW, PIXEL FOR PIXEL.
- *
- * The four hashes above cover 320 seconds, which is a tenth of the way to the
- * cap, so on their own they say nothing about the legs near it. This one walks
- * the whole 1900 seconds below the cap at 20 samples a second and folds it into
- * one number. Taken from `git show HEAD:src/core/life.ts`, the code before any
- * of this: 55711aa4. The freeze fix adds a leg AFTER the 512th, so every leg
- * before it must land in exactly the same place at exactly the same second. */
+/* THE PRE-CAP WINDOW, PIXEL FOR PIXEL. The hashes above cover 320s, a tenth of the way to the cap, so they say nothing about the legs near it. This walks the whole 1900s below the cap at 20 samples a second, folded to 55711aa4 from git show HEAD: the fix adds a leg AFTER the 512th, so every leg before it must land identically. */
 let gl = 2166136261
 const eatL = (s: string) => {
   for (let i = 0; i < s.length; i++) {
@@ -669,17 +528,7 @@ for (let i = 0; i <= 38000; i++) {
 const long = (gl >>> 0).toString(16).padStart(8, '0')
 ok('nothing below the cap moved', long === '55711aa4', `${long} against 55711aa4, 38001 samples over 1900s`)
 
-/* WHAT THE ROUND COSTS.
- *
- * The cap is there to bound the price of a call, and it still has to. The hub
- * has 94 placements and this runs on school Chromebooks, so a walk that got
- * longer with the session would be a worse bug than the one being fixed. The
- * round costs a second walk of the legs, once, to learn its own length: measured
- * on this machine, 0.07us at t=0 either way, 14.1us at t=3600s before and 27.2us
- * after, and then FLAT. t=1e9 costs the same as t=3600, which is the property
- * that matters. A wall clock in a test is noisy, so the threshold is loose and
- * the number is printed; what is being caught is a walk that grew by a factor,
- * not a percent. */
+/* WHAT THE ROUND COSTS. The cap bounds the price of a call and still has to: the hub has 94 placements on school Chromebooks. The round costs one extra walk to learn its own length, measured 14.1us at t=3600s before and 27.2us after, and then FLAT, so t=1e9 costs the same as t=3600. The threshold is loose because a wall clock in a test is noisy; what is caught is growth by a factor. */
 const perCall = (t: number, n: number) => {
   for (let i = 0; i < 200; i++) lifeAt(crab, t + i * 1e-6, home)
   let best = Infinity
@@ -699,23 +548,7 @@ ok(
 )
 ok('and a fresh placement is still nearly free', perCall(0, 200000) < 1, `${perCall(0, 200000).toFixed(3)}us at t=0`)
 
-/* ---- A BOXED ROUND: THE LIVE STATE HAS TO BE THE ONE ON SCREEN -----------
- *
- * A state fenced to a box used to answer with a POSITION rather than a
- * displacement, because a box is a rectangle on the painting and the walk lands
- * inside it whatever it was handed. Summing positions is not summing anything:
- * the last state carrying a move simply overwrote every earlier one, so after
- * round zero the thing on screen was not doing what the live state said.
- *
- * Three states in a 200x200 box asking 12-24, 5 and 200 px/s. Measured before:
- * 3.9, 2.0 and 196.9, and the drawn position was the last moving state's own
- * position on 55.8% of 20000 frames. After: 17.3, 5.0 and 186.7, and 0.0%.
- *
- * The speeds are read only across frames the answer calls moving, because a
- * wander is mostly pauses, and they read a little under the ask at 16ms because
- * a frame that straddles the end of a leg counts the whole frame and only part
- * of the travel. The 200 reads 199.4 at a 1ms sample, so the gap is the
- * stopwatch and not the walk; the band below is wide enough to say so. */
+/* ---- A BOXED ROUND: THE LIVE STATE HAS TO BE THE ONE ON SCREEN. A fenced state answered with a POSITION rather than a displacement, so the last state carrying a move overwrote every earlier one. Three states asking 12-24, 5 and 200 px/s measured 3.9, 2.0 and 196.9 with the drawn position being the last mover's own on 55.8% of 20000 frames; after, 17.3, 5.0 and 186.7 and 0.0%. Speeds are read only across moving frames, and the 200 reads 199.4 at a 1ms sample, so the gap is the stopwatch. */
 const BOXR = { x: 100, y: 100, w: 200, h: 200 }
 const bh = { x: 200, y: 200 }
 const boxed = cleanLife({
@@ -780,26 +613,7 @@ ok(
   `${((100 * sameAsLast) / 20000).toFixed(1)}% of 20000 frames sat exactly on the last moving state, against 55.8% before`,
 )
 
-/* ---- WHAT A BOX MEANS INSIDE A ROUND ------------------------------------
- *
- * The box is the room the WHOLE ROUND has and the states that move divide it.
- * The live state decides everything anyone can watch happen, the speed and the
- * gait and the facing and the picture, at full asking. A state that is not live
- * decides one thing, how far it has already carried the thing, which is the
- * memory that lets a state resume where it froze.
- *
- * The fixture is deliberately lopsided, 15 px/s against 120, because a pair that
- * far apart is what showed the fault, and it is read from the middle of the box
- * AND from 5px inside its corner. A placement is not usually dropped dead
- * centre, and the corner is where the share used to run out of room: it handed
- * every state the same reach in both directions, so the sum overran the short
- * side and the hold took the difference. Measured from the corner before: 54.9%
- * of 60000 frames held against the fence and 8.6% of the moving frames covering
- * no ground at all, which is marching on the spot. After: 0.0% and 0.0%.
- *
- * Read from three sweep starts, because a state divides its own clock by the
- * round, so anything wrong in where it is worked out from multiplies by the
- * rounds already gone. t=0 is where a fault of this kind hides. */
+/* ---- WHAT A BOX MEANS INSIDE A ROUND: the box is the room the WHOLE ROUND has and the movers divide it. The live state decides everything watchable at full asking; a state that is not live decides only how far it has already carried the thing. Deliberately lopsided at 15 against 120 px/s and read from the corner as well as the middle, because the old share gave every state the same reach both ways and the sum overran the short side: 54.9% of 60000 frames held against the fence and 8.6% of moving frames covering no ground. After, 0.0% and 0.0%. Three sweep starts, because t=0 is where a fault of this kind hides. */
 const NBOX = { x: 100, y: 100, w: 100, h: 100 }
 const nRound = (slow: number) =>
   cleanLife({
@@ -925,11 +739,7 @@ ok(
   worstSlow[0] > 13.5 && worstSlow[1] < 16.5 && worstFast[0] > 105 && worstFast[1] < 132,
   `asked 15 / 120, drew ${worstSlow[0].toFixed(1)}-${worstSlow[1].toFixed(1)} / ${worstFast[0].toFixed(1)}-${worstFast[1].toFixed(1)} px/s over 6 sweeps`,
 )
-/* The whole box and not most of it is too much to ask of a walk that picks its
- * targets at random, so the bar is that the round is clearly using the room it
- * was given rather than a slice of it. The twelve readings land between 84 and
- * 96px of the 100. The number this replaces is 32, which is what the flattening
- * left of the box's height, and no threshold between them is arguable. */
+/* The whole box is too much to ask of a walk that picks targets at random, so the bar is that the round clearly uses the room it was given: twelve readings land between 84 and 96px of the 100, against the 32 the flattening left. */
 ok(
   'and the round uses the box the person actually drew',
   leastSpan > 80,
@@ -941,15 +751,7 @@ ok(
   `worst ${worstFence.toFixed(1)}% of 60000 frames on the fence and ${worstPin.toFixed(1)}% of the moving ones pinned, against 54.9% and 8.6%`,
 )
 
-/* and a state boxed into a round must not spend its life standing about. Its
- * legs ARE shorter, because its share of the room is, and at a fixed speed a
- * shorter leg is a shorter walk between the same pauses. That is the price of
- * the sum and it is arithmetic: two movers, so half the leg, so a state that
- * walked L/(L + pause*speed) of the time alone walks (L/2)/((L/2) + pause*speed)
- * inside a round. On this fixture that predicts 15% against 26%, and 15% is what
- * it measures. What is NOT allowed is the collapse the old share caused, which
- * squeezed the same state into a fifth of the box's height and took it to 11%.
- * The stretch it stands still for is the pause it asked for either way. */
+/* and a boxed state must not spend its life standing about. Its legs ARE shorter because its share is, and two movers predicts 15% walking against 26% alone, which is what it measures. What is NOT allowed is the old share's collapse to 11%, which squeezed the state into a fifth of the box's height. */
 const aloneFast = readRound(nAlone(120, 511), nMid, null, 12000, 60000)
 const inRoundFast = readRound(nRound(15), nMid, 1, 12000, 60000)
 ok(
@@ -963,19 +765,7 @@ ok(
   `longest ${worstStill.toFixed(2)}s against ${aloneFast.longestStill.toFixed(2)}s, both inside the 2s pause it asked for`,
 )
 
-/* ---- AND A STATE THAT IS NOT LIVE DECIDES NOTHING YOU CAN SEE -----------
- *
- * Read without knowing anything about how the round is worked out inside, which
- * is the point: a check that rebuilds the implementation only proves the
- * implementation equals itself. Two rounds that differ ONLY in the speed of
- * state zero. While state ONE is live, state zero's clock is stopped, so its
- * contribution is a constant, so the two rounds must step by exactly the same
- * amount on every frame. If a state that is not live is deciding anything, or if
- * the hold on the sum is biting, the two disagree.
- *
- * The control on the same sweep is the half that makes it a reading rather than
- * a tautology: while state ZERO is live the two MUST differ, because that is the
- * state whose speed was changed. */
+/* ---- AND A STATE THAT IS NOT LIVE DECIDES NOTHING YOU CAN SEE. Read without knowing how the round works inside, because a check that rebuilds the implementation only proves it equals itself: two rounds differing only in state zero's speed must step identically while state ONE is live. The control is the other half: while state ZERO is live the two MUST differ. */
 const nA = nRound(15)
 const nB = nRound(60)
 let liveDiffer = 0
@@ -1008,16 +798,7 @@ ok(
   `${controlDiffer} frames differ while the state whose speed changed IS the live one`,
 )
 
-/* ---- NOBODY MARCHES ON THE SPOT -----------------------------------------
- *
- * moving is what runs the walk cycle, so a frame that says moving while the feet
- * do not move is a figure walking in place. bob is 0 on this fixture, so a
- * moving frame that covers no ground is genuinely pinned rather than mid-hop.
- * The pin was the fence: the states' distances from home piled up, the hold on
- * the sum below took the difference, and the placement stood against the box
- * edge with its legs going. Measured over t=60..3060s: 27.8% of 187499 frames
- * and 8.30s unbroken before, 0.0% and 0.00s after, against 0.0% for the same
- * placement with no round at all. */
+/* ---- NOBODY MARCHES ON THE SPOT. moving is what runs the walk cycle, and bob is 0 here, so a moving frame covering no ground is genuinely pinned. The pin was the fence: states' distances piled up and the hold took the difference, leaving the placement against the box edge with its legs going. 27.8% of 187499 frames and 8.30s unbroken before, 0.0% after. */
 const MBOX = { x: 100, y: 100, w: 100, h: 100 }
 const mh = { x: 150, y: 150 }
 const mflat = { kind: 'wander', bounds: MBOX, range: 60, speedMin: 12, speedMax: 24, pauseMin: 0.8, pauseMax: 2.5, bob: 0, bobRate: 0, seed: 11 }
@@ -1054,28 +835,7 @@ ok(
   `${mp.toFixed(2)}% of 187499 frames, longest ${ml.toFixed(2)}s, against ${mp0.toFixed(2)}% with no round`,
 )
 
-/* ---- A FENCED ROUND DOES NOT TELEPORT, ON ANY SEED ----------------------
- *
- * A floor-fenced walk's legs are a BOOLEAN function of where it starts: move the
- * start and a candidate flips from clear to blocked, the walk takes a different
- * leg, and the answer steps. So nothing a state is worked out from may move
- * while its own clock is standing still. One seed cannot show this, because
- * whether a candidate is near the edge of the floor is luck, so it is 200.
- *
- * Swept from t=12000s rather than from zero, because the error grows with the
- * number of completed rounds and near zero it hides: the same 200 seeds on the
- * same broken code measured 0 over 2.5px at t=1200, 0 at t=4000, then 174 at
- * t=12000, 200 at t=30000 and 200 at t=60000. A worst step of 4.47px there.
- * Anchoring only the live state instead of every state put a 76 to 95px jump at
- * every state change on all 200 seeds from t=0. Re-measured here as the answer
- * to keeping the box: 200 of 200 seeds step over 2.5px, worst 89.65px, and the
- * jump exactly at a state change averages 32.5px over 1000 changes and reaches
- * 92.2. That is the cost of letting the live state's box win outright, and it is
- * why the round is a sum instead. After: 0 of 200.
- *
- * Read from the corner as well as the middle, because where the placement stands
- * in its own box is what decides whether the hold on the sum has anything to do,
- * and the hold is a second thing that can step. */
+/* ---- A FENCED ROUND DOES NOT TELEPORT, ON ANY SEED. A floor-fenced walk's legs are a BOOLEAN function of where it starts, so nothing a state is worked out from may move while its own clock stands still. 200 seeds, because whether a candidate sits near the floor's edge is luck. Swept from t=12000s, because the error grows with completed rounds: the same broken code measured 0 seeds over 2.5px at t=1200 and 200 at t=30000. Anchoring only the live state instead put a 76 to 95px jump at every state change on all 200 seeds, worst 89.65px, which is why the round is a sum. After: 0 of 200. */
 const seedSweep = (h: { x: number; y: number }, t0: number) => {
   let jumpy = 0
   let worstJump = 0
@@ -1139,17 +899,7 @@ ok(
   `${jumpySeeds}/600 seed sweeps step over 2.5px, worst ${jumpiest.toFixed(2)}px on seed ${jumpiestSeed} ${jumpiestWhere}`,
 )
 
-/* ---- AND IT DOES NOT GET WORSE THE LONGER THE SESSION RUNS --------------
- *
- * This is the gate the last round of work did not have, and it is why a blocker
- * got through: every sweep started at t=0, where the fault was 1.59px and looked
- * like rounding. A state divides its own clock by the round length, so an error
- * in where it is worked out from is multiplied by the number of completed
- * rounds. Measured before, worst single frame step by sweep start: 0.71px at
- * t=0, 0.72 at 3600, 1.35 at 12000, 82.42 at 60000 and 128.56 at 300000. After,
- * flat: 0.71 / 0.72 / 0.72 / 0.72 / 0.71. An advisory session is 30 to 45
- * minutes, but a map left open in the editor is not, and neither is a room a
- * class walks in and out of all period. */
+/* ---- AND IT DOES NOT GET WORSE THE LONGER THE SESSION RUNS, which is the gate the last round of work did not have: every sweep started at t=0 where the fault was 1.59px and looked like rounding. Worst step by sweep start before: 0.71px at t=0, 1.35 at 12000, 82.42 at 60000, 128.56 at 300000. After, flat at 0.71. A map left open in the editor is not a 45 minute session. */
 let worstLate = 0
 let worstLateT0 = 0
 const lateLine: string[] = []
@@ -1174,16 +924,7 @@ ok(
   `worst step by sweep start ${lateLine.join('  ')}, worst ${worstLate.toFixed(2)}px at t0=${worstLateT0}`,
 )
 
-/* ---- WHAT A ROUND COSTS PER CALL ---------------------------------------
- *
- * The claimed ceiling of two passes is per MOVING STATE and not per call, so a
- * six state round is six walks. The hub carries 22 placements with life and this
- * runs on school Chromebooks, which are several times slower than this machine,
- * so the number matters even though no bundle carries a round yet. Measured on
- * this machine at t=1e5, before and after: plain 28.3 / 28.5us, two states 57.8
- * / 62.6, four 133.4 / 119.4, six 185.0 / 138.4. A wall clock in a test is
- * noisy, so the threshold is loose and the number is printed; what is being
- * caught is a round that got dearer by a factor. */
+/* ---- WHAT A ROUND COSTS PER CALL. The two-pass ceiling is per MOVING STATE, not per call, so a six state round is six walks. Measured at t=1e5 before and after: plain 28.3 / 28.5us, two states 57.8 / 62.6, four 133.4 / 119.4, six 185.0 / 138.4. Loose threshold and the number printed, because what is caught is a round that got dearer by a factor. */
 const costOf = (l: Life, t: number) => {
   for (let i = 0; i < 500; i++) lifeAt(l, t + i * 1e-6, mh)
   let best = Infinity
@@ -1209,16 +950,7 @@ ok(
   c6 < 400 && c6 < c2 * 4,
   `${cPlain.toFixed(1)}us plain, ${c2.toFixed(1)}us at two states, ${c4.toFixed(1)} at four, ${c6.toFixed(1)} at six`,
 )
-/* AND IT IS LINEAR IN THE STATES THAT MOVE, WHICH IS THE HONEST CEILING.
- *
- * A state that is not live cannot cost nothing, because the sum needs its term:
- * the round's position is what every state has travelled on its own clock, and
- * dropping the terms that are not live is the one design that makes the live
- * state's box win outright, which measures an 89.65px step on 200 of 200 seeds
- * further up. So the price is one walk per MOVING state, and this reading is
- * here to say when that stops being true rather than to pretend it is not. A
- * state that only changes the picture is genuinely free, and that is worth
- * knowing, because it is the cheap half of what a round is usually for. */
+/* AND IT IS LINEAR IN THE STATES THAT MOVE, WHICH IS THE HONEST CEILING. A state that is not live cannot cost nothing, because the sum needs its term, and dropping those terms is the design that measures an 89.65px step on 200 of 200 seeds above. A state that only changes the picture is genuinely free, which is the cheap half of what a round is usually for. */
 const stillOnly = cleanLife({
   ...mflat,
   states: [{ secs: 10 }, { secs: 9, art: 1 }, { secs: 8, art: 2 }, { secs: 7, art: 1 }, { secs: 6, art: 2 }, { secs: 5, art: 1 }],
@@ -1230,26 +962,7 @@ ok(
   `${cStill.toFixed(1)}us for a six state round with one mover, against ${cPlain.toFixed(1)}us plain and ${c6.toFixed(1)}us with six movers`,
 )
 
-/* AND THE SAME READING WITH THE FLOOR IN FORCE, WHICH IS THE ONE THAT COSTS.
- *
- * The reading above has no floor, so it has never measured the expensive case.
- * Every walk the 35% law fences tests the ground at each candidate and every two
- * pixels along the leg, and that is where the time goes: a PLAIN fenced walk is
- * 164.6us against 22.7 for the same walk with no floor, seven times, before any
- * round exists.
- *
- * A round then multiplies it by the states that move, and it got dearer here
- * rather than cheaper: two states 257.8 to 364.5us, six states 377.9 to 713.7.
- * That is the price of the reach, not a slower walk. The old share squeezed a
- * six-mover state into 5.83px of height, so its legs were a few pixels long and
- * there was almost nothing to check; the legs are now as long as the box says
- * and the check is proportional to their length. Cheap because it was not
- * moving is not cheap.
- *
- * Worth watching rather than worth panicking about: no exported bundle carries a
- * round at all, and the hub's 22 living placements are single behaviours at
- * 164.6us here. What this gate is for is the day one of them gets a round on a
- * Chromebook, which is several times slower than this machine. */
+/* AND THE SAME READING WITH THE FLOOR IN FORCE, WHICH IS THE ONE THAT COSTS: a plain fenced walk is 164.6us against 22.7 with no floor, seven times, before any round exists. A round multiplies that by the movers and got dearer rather than cheaper, two states 257.8 to 364.5us and six 377.9 to 713.7, because the legs are now as long as the box says instead of the 5.83px the old share left. No exported bundle carries a round yet; this gate is for the day one does, on a Chromebook. */
 const costWith = (l: Life, t: number, floor: (x: number, y: number) => boolean) => {
   for (let i = 0; i < 200; i++) lifeAt(l, t + i * 1e-6, mh, floor)
   let best = Infinity
