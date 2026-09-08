@@ -1,40 +1,10 @@
 /* Calls to the local node side. Nothing here knows a key. */
 import type { CustomControl } from './core/customfx'
 
-/* KEEPALIVE CANNOT CARRY AN EXPORT, AND ASKING IT TO IS WHY THE HUB WOULD NOT
- * PUBLISH.
- *
- * The comment that used to sit here said keepalive lets a megabyte export
- * finish after the page is gone. It is the opposite of true. A keepalive
- * request is capped at 64 KiB of body by the fetch standard, and a browser
- * does not queue an over-quota one or send it slowly, it refuses it outright.
- *
- * Measured in the real browser against this dev server, one request per size,
- * with and without the flag: at 60 KiB keepalive reaches the server; at 64 KiB
- * it rejects with `TypeError: Failed to fetch` in FOUR MILLISECONDS, and every
- * larger size does the same. Without the flag every size answers normally.
- *
- * That is the whole of the export hang. A small map's bundle fits under the
- * cap and publishes in a second or two; the hub's is about half a megabyte, so
- * five presses over three hours never put a byte on the wire. Nothing reached
- * the route, nothing burned cpu and nothing was written, which is exactly what
- * it looked like from the outside and is why it read as a server problem.
- *
- * So the flag is honoured only when the payload actually fits, and the request
- * that matters goes out as an ordinary one. What protects an export in flight
- * is the beforeunload confirm in App.tsx, plus the fact that a torn-down
- * request arrives as a short body, fails at JSON.parse and writes nothing. */
+/* KEEPALIVE CANNOT CARRY AN EXPORT, and asking it to is why the hub would not publish. The fetch standard caps a keepalive body at 64 KiB and a browser refuses an over-quota one outright: measured in the browser, 60 KiB reaches the server and 64 KiB rejects with TypeError in four milliseconds. The hub's bundle is about half a megabyte, so five presses over three hours never put a byte on the wire. The flag is honoured only when the payload fits. */
 const KEEPALIVE_MAX = 60 * 1024
 
-/* A REQUEST THAT NEVER ANSWERS HAS TO BECOME AN ERROR, because a promise that
- * never settles is not a slow export, it is a dead button.
- *
- * fetch has no timeout of its own, so killing the server mid-request, or losing
- * the network, leaves the caller awaiting for ever. doExport holds a flag while
- * it waits, so one interrupted export left every later press returning without
- * making a request at all, saying nothing. Publishing the hub takes about
- * twenty-three seconds of which twenty go to the bucket, so the ceiling is
- * generous: this is here to catch never, not slow. */
+/* A REQUEST THAT NEVER ANSWERS HAS TO BECOME AN ERROR, because a promise that never settles is not a slow export, it is a dead button: doExport holds a flag while it waits, so one interrupted export left every later press returning without making a request. Publishing the hub takes about 23s, so the ceiling is generous; this catches never, not slow. */
 const POST_TIMEOUT_MS = 180_000
 
 async function jpost<T>(url: string, body: unknown, opts?: { keepalive?: boolean }): Promise<T> {
@@ -95,11 +65,7 @@ export interface SavedAssetEntry {
    * condition or its group's. An opaque string: MAPVIS declares it and python
    * decides what it means. */
   when?: string
-  /* what each face is called, indexed exactly the way `art` indexes them, so
-   * slot 0 is the placement's own picture and slot 1 is looks[0]. An empty
-   * string is a face nobody named and holds its slot, because dropping one would
-   * shift every later index down. Absent when nothing on this placement is
-   * named, which is every bundle exported before it existed. */
+  /* what each face is called, indexed the way art indexes them: slot 0 is the placement's own picture. An empty string holds its slot, because dropping one would shift every later index down. Absent on every bundle exported before it existed. */
   lookNames?: string[]
   src?: string
   frames?: string[]
@@ -142,15 +108,7 @@ export const savedScene = (id: string) => jget<SavedScene>('/api/scene/' + encod
 
 // one library entry: a single png, or a folder of frames played in order.
 // The library is per map: only what was generated for this scene id.
-/* A FACE this row has been given: the same thing edited into another state,
- * not a second thing that happens to look like one.
- *
- * It has the library's own three shapes because a state of a walking character
- * IS eight headings and has to stay that way, or a troll snaps round to face
- * south the instant it becomes a boulder. It is deliberately NOT a LibItem: a
- * face never appears in the library list, which is the whole reason the change
- * exists. A library that fills with boulder, boulder-2, sleeping-dragon is a
- * library of rows that mean nothing on their own. */
+/* A FACE this row has been given: the same thing edited into another state, not a second thing that looks like one. It keeps the library's three shapes because a state of a walking character IS eight headings, or a troll snaps round to face south the instant it becomes a boulder. Deliberately NOT a LibItem: a library that fills with boulder, boulder-2, sleeping-dragon is a library of rows that mean nothing alone. */
 export interface AssetState {
   name: string
   src?: string
@@ -166,10 +124,7 @@ export interface LibItem {
   kind: 'static' | 'animated'
   /* the faces it can wear, each one an edit of this row's own art */
   states?: AssetState[]
-  /* whether another face can be made at all. False for anything imported off
-   * the account or edited by hand: there is no pixellab id on record for it,
-   * and every state endpoint keys off that id. Saying so on the button beats
-   * finding out at spend time. */
+  /* whether another face can be made at all. False for anything imported off the account or edited by hand, which has no pixellab id on record, and every state endpoint keys off that id. Saying so on the button beats finding out at spend time. */
   canState?: boolean
   // an animated item that carries effect.json: the tuning panel can reopen it
   effect?: boolean
@@ -185,20 +140,11 @@ export interface LibItem {
 }
 export const library = (id: string) => jget<{ items: LibItem[] }>('/api/library/' + encodeURIComponent(id))
 
-/* Put an item's previous pixels back, out of the copy every in-place edit
- * already keeps. Free. It exists because z only ever undid the placement half
- * of a crop, which left art cropped and everything standing on it moved back,
- * and that reads as the whole map having shifted. */
+/* Put an item's previous pixels back, out of the copy every in-place edit keeps. Free. z only ever undid the placement half of a crop, which left art cropped and everything standing on it moved back, and that reads as the whole map having shifted. */
 export const assetRevert = (id: string, name: string) =>
   jpost<{ item: LibItem }>('/api/asset-revert', { id, name })
 
-/* ONE generation: this thing, edited into another face.
- *
- * Not a new library row and not a second drawing. The endpoint behind it edits
- * the art already on the account, which is what makes the face match the thing
- * it belongs to, and for a character it edits all 4 or 8 rotations in one job
- * so the swap keeps its heading. The answer is the OWNER row, refreshed, with
- * the new face on it. */
+/* ONE generation: this thing, edited into another face. The endpoint edits the art already on the account, which is what makes the face match the thing it belongs to, and for a character it edits all 4 or 8 rotations in one job so the swap keeps its heading. */
 export const assetState = (
   id: string,
   name: string,
@@ -208,11 +154,7 @@ export const assetState = (
 
 // ---- what the account already owns --------------------------------------
 
-// The objects on the pixellab account, browsable. This is the cheap half of
-// the assets step and the good half: 700 objects are already sitting there and
-// the ones written in the house style are better than anything a fresh ask
-// comes back with. Picking one costs nothing. thumb is pixellab's own public
-// preview url, so the grid draws straight off their cdn.
+// The objects on the pixellab account, browsable: 700 already sitting there, and the ones written in the house style beat anything a fresh ask comes back with. Picking one costs nothing, and thumb is pixellab's own public preview url.
 export interface AccountObject {
   id: string
   name: string
@@ -233,13 +175,7 @@ export const accountImport = (id: string, sceneId: string, name?: string) =>
 
 // ---- the style card -----------------------------------------------------
 
-// What this map looks like, read off the painting ONCE and kept on disk.
-// The ask has never carried the map's look: a request for tropical palm trees
-// on a warm golden-hour island came back generic bright green, because the
-// words could not tell the generator what the island is like. clause is the
-// deliverable, one short phrase that hangs off the end of any sprite
-// description. FREE: nothing on this route touches pixellab, and a scene that
-// never answers just goes without.
+// What this map looks like, read off the painting ONCE and kept on disk. The ask has never carried the map's look, so tropical palm trees came back generic bright green. clause is the deliverable, one phrase that hangs off any sprite description. FREE, and a scene that never answers just goes without.
 export interface StyleCard {
   palette: string
   light: string
@@ -250,14 +186,7 @@ export interface StyleCard {
 export const styleCard = (id: string, image: string, refresh = false, job?: string) =>
   jpost<{ card: StyleCard; cached: boolean }>('/api/style-card', { id, image, refresh, job })
 
-// the ask interpreter alone, free: called at arm time so the confirm button
-// can show exactly what will be drawn before anything spends. styleClause is
-// the style card's line, appended to the thing that comes back, so what the
-// button promises already includes it.
-// belongs is how much the thing should look like it came off this map: a palm
-// on the island is 1, a generic crate 0.8, a magic item 0.2. The style clause
-// is appended server-side only at or above 0.5, so the will-draw line reads
-// belongs to say which of the two happened before anything spends.
+// the ask interpreter alone, free: called at arm time so the confirm button can show exactly what will be drawn before anything spends. belongs is how much the thing should look like it came off this map, and the style clause is appended server-side only at or above 0.5, so the will-draw line reads belongs to say which happened.
 export interface AskTranslation {
   thing: string
   motion: string
@@ -275,11 +204,7 @@ export const translate = (
   job?: string,
 ) => jpost<{ t: AskTranslation }>('/api/translate', { ask, kind, styleClause, id, job })
 
-// ONE pixellab generation into this map's library. Only ever called after an
-// explicit cost confirm. name pins the library filename (a run of takes passes
-// <slug>-1 up to <slug>-8) and seed pins the starting noise, so several takes
-// of the same prompt land as distinct pictures. thing/tw/th carry the CONFIRMED
-// translation through verbatim, so what the button showed is what runs.
+// ONE pixellab generation into this map's library, only ever after an explicit cost confirm. name pins the filename and seed pins the starting noise, so several takes of one prompt land as distinct pictures. thing/tw/th carry the CONFIRMED translation verbatim, so what the button showed is what runs.
 export const assetGen = (
   id: string,
   prompt: string,
@@ -291,12 +216,7 @@ export const assetGen = (
     thing?: string
     tw?: number
     th?: number
-    /* A crop of the painting, once sent so pixellab would draw into this map's
-     * art. Nothing sends it. Measured 2026-08-25 over twenty-two generations in
-     * both modes the schema allows: handed a picture, that endpoint continues
-     * the picture instead of drawing the subject into it. Kept on the type
-     * because the route still accepts one and a caller with a real reason may
-     * turn up; see mapObject in server/pixellab.mjs before believing in it. */
+    /* A crop of the painting, once sent so pixellab would draw into this map's art. Nothing sends it: measured over twenty-two generations in both modes the schema allows, that endpoint continues the picture it is handed instead of drawing the subject into it. Kept only because the route still accepts one. */
     background?: string
     // a generation already asked for is already paid for, so what a stop buys
     // is the one NOT yet asked for. The server checks the job before it sends.
@@ -304,16 +224,7 @@ export const assetGen = (
   },
 ) => jpost<{ item: LibItem }>('/api/asset-gen', { id, prompt, ...o })
 
-/* ---- characters: people and animals ------------------------------------
- *
- * Pixellab's own distinction, and it matters. An OBJECT is a prop — a crate, a
- * well — and that is all MAPVIS has ever made. A CHARACTER has a skeleton, 4 or
- * 8 directions, and walk cycles from a template library. Their docs say plainly
- * not to use the eight-direction object endpoint for a person; an earlier
- * version of this file did exactly that.
- *
- * Both of these are free: listing reads the account, importing moves bytes that
- * already exist. */
+/* ---- characters: people and animals. Pixellab's own distinction and it matters: an OBJECT is a prop, a CHARACTER has a skeleton, 4 or 8 directions and walk cycles. Their docs say plainly not to use the eight-direction object endpoint for a person, and an earlier version of this file did exactly that. Both calls here are free. */
 export interface AccountCharacter {
   id: string
   name: string
@@ -333,34 +244,7 @@ export const accountCharacters = () =>
 export const characterImport = (id: string, sceneId: string, o?: { name?: string; animation?: string }) =>
   jpost<{ item: LibItem }>('/api/character-import', { id, sceneId, ...o })
 
-/* A NEW sprite, made rather than picked. The only paid call on this half.
- *
- * Not an object with more sides. An object endpoint given a body answers with a
- * generic character instead of the one that was asked for, which is pixellab's
- * own warning and not a guess; a sprite is generated off a skeleton, which is
- * what makes eight views of the SAME body possible and what a motion hangs on.
- * So the two live on different endpoints and this one is theirs.
- *
- * The price is the thing to say out loud. One generation for the body in
- * standard mode, then ONE PER DIRECTION for the motion, so eight-way moving is
- * nine. It is also slow: two to five minutes for the body and longer again for
- * the motion, all inside this one request.
- *
- * confirm true is the server's own gate and only the confirmed press sends it,
- * so a reload or a retry cannot spend. job makes the wait stoppable, and a stop
- * that lands between the body and its motion is worth eight generations.
- *
- * Nothing here is picked off a control. skeleton, view, size and anim are the
- * router's answer, carried through verbatim from the plan the button showed.
- * The server splits skeleton into pixellab's bodyType and template, because a
- * four-legged rig has to name which body it is and mannequin must not.
- *
- * What lands is the same on-disk shape the account import writes, so placement,
- * facing, life and the export never learn that it was generated.
- *
- * note carries a motion that did not happen. The body is bought the moment it
- * is asked for, so a motion that fails or is stopped leaves the sprite standing
- * rather than losing it, and this is where the reason comes back. */
+/* A NEW sprite, made rather than picked, and the only paid call on this half. An object endpoint given a body answers with a generic character instead of the one asked for, which is pixellab's own warning; a sprite is generated off a skeleton, which is what makes eight views of the SAME body possible. The price: one generation for the body, then ONE PER DIRECTION for the motion, so eight-way moving is nine, and two to five minutes for the body alone. confirm true is the server's gate, so a reload cannot spend, and a stop between the body and its motion is worth eight generations. skeleton, view, size and anim are the router's answer carried through verbatim. note carries a motion that did not happen, because the body is bought the moment it is asked for. */
 export const characterGen = (
   id: string,
   o: {
@@ -386,40 +270,14 @@ export const characterGen = (
     // standard is one generation. pro is twenty to forty and can never be a
     // default here, and the price on the button assumes standard.
     mode?: 'standard' | 'pro' | 'v3'
-    /* ONE OF YOUR OWN EIGHT-WAY CHARACTERS, whose rotations guide every
-     * direction of this one. Pro only. This is how a new person comes back in
-     * Thor's build and rendering instead of the template rig's: measured
-     * 2026-09-01, four standard-mode principals were flat upright humanoids
-     * whatever the words said, and the first pro one styled on Thor was right. */
+    /* ONE OF YOUR OWN EIGHT-WAY CHARACTERS, whose rotations guide every direction of this one. Pro only, and how a new person comes back in Thor's build instead of the template rig's: four standard-mode principals were flat upright humanoids whatever the words said. */
     styleCharacterId?: string
   },
 ) => jpost<{ item: LibItem; note?: string }>('/api/character-gen', { id, ...o })
 
-/* ---- the ask, read with the map open ------------------------------------
- *
- * One call, and the only one before a generation. It is handed the painting
- * itself and, if the user drew one, the boxed area at 2x, and it answers with
- * the WHOLE generator prompt plus the pixel size it measured against what is
- * already on the map.
- *
- * This replaced a translator, a style card, a prompt assembled in code, a
- * ground-word filter and a pixel trimmer. Those five existed because the map
- * was compressed to eighteen words of text before anything could use it. It is
- * not compressed any more.
- *
- * It is also the ROUTER. A sprite has a body, so somebody has to answer which
- * skeleton, which view, how big, and what moving MEANS for that thing. None of
- * those belong in a dropdown: a list of creatures is always shorter than what
- * somebody wants to make, and a dragon does not walk. So the ask goes in whole
- * and the model, holding the painting, answers the routing as well as the
- * words.
- *
- * FREE, and stoppable: job is any string, and stop(job) ends it mid-thought. */
+/* ---- the ask, read with the map open. One call, the only one before a generation: handed the painting itself and the boxed area at 2x, it answers the WHOLE generator prompt plus the pixel size measured against what is already on the map. It replaced a translator, a style card, a prompt assembled in code, a ground-word filter and a pixel trimmer, all of which existed because the map was compressed to eighteen words first. It is also the ROUTER, because a list of creatures is always shorter than what somebody wants to make and a dragon does not walk. FREE and stoppable. */
 
-// how the sprite moves. template is one of pixellab's named humanoid cycles;
-// action is written prose for anything a template cannot say, which is most of
-// what is interesting: hovering, lurching, servos idling. none is a sprite that
-// stands.
+// how the sprite moves. template is one of pixellab's named humanoid cycles; action is written prose for anything a template cannot say, which is most of what is interesting: hovering, lurching, servos idling.
 export interface SpriteAnim {
   how: 'none' | 'template' | 'action'
   template?: string
@@ -427,12 +285,7 @@ export interface SpriteAnim {
   // only on the written path. 4..16, even.
   frames?: number
 }
-/* Pixellab builds a sprite off a skeleton and there are exactly six: the
- * upright mannequin and five four-legged bodies. There is no dragon rig and no
- * robot rig, so anything else is mapped onto the NEAREST one by body plan. That
- * decision is the router's, and the skeleton never leaks into the words: a
- * mannequin-rigged patrol robot still reads as a machine because the prompt
- * says plating and a lens where a face would be. */
+/* Pixellab builds a sprite off a skeleton and there are exactly six: the upright mannequin and five four-legged bodies. Anything else maps onto the NEAREST by body plan, and the skeleton never leaks into the words, so a mannequin-rigged patrol robot still reads as a machine. */
 export interface SpriteRoute {
   skeleton: 'mannequin' | 'bear' | 'cat' | 'dog' | 'horse' | 'lion'
   view: 'low top-down' | 'high top-down' | 'side' | 'perspective'
@@ -453,37 +306,12 @@ export interface MakePlan {
   // switches on its own, because a switch changes the price.
   crossing?: string
   sprite?: SpriteRoute
-  /* WHERE ON THE MAP this thing belongs: the patch of painting whose light and
-   * surface it should have been painted under. Not where it will be placed.
-   *
-   * It rides to the generator as pixellab's background_image, which is the one
-   * lever measured to beat the generator's own idea of what a noun looks like.
-   * The router names it because it is already looking at the whole painting to
-   * write the prompt, so nothing new is asked of the person typing. */
+  /* WHERE ON THE MAP this thing belongs: the patch of painting whose light and surface it should have been painted under, not where it will be placed. It rides as pixellab's background_image, the one lever measured to beat the generator's own idea of what a noun looks like. */
   where?: { x: number; y: number; w: number; h: number } | null
-  /* THE REST OF ONE SENTENCE, split by the router so one press can do all of it.
-   *
-   * Somebody describing a creature usually describes what it does in the same
-   * breath, and what it does can need pictures that do not exist yet. Made the
-   * long way that is three boxes in three places with an ordering rule between
-   * them that is written on none of them: the faces have to exist before a round
-   * can name one. Splitting it here moves that rule to the side that knows it.
-   *
-   * Both are usually absent. A plain ask for a fisherman is a body and nothing
-   * else, which is most asks. */
+  /* THE REST OF ONE SENTENCE, split by the router so one press can do all of it: somebody describing a creature describes what it does in the same breath, and what it does can need pictures that do not exist yet. Splitting it here moves the faces-before-rounds rule to the side that knows it. Both are usually absent. */
   faces?: { name: string; edit: string }[]
   does?: string
-  /* HOW MANY DIFFERENT THINGS the ask is asking for. A stone well is one. "a
-   * few crates" is three, and one png with three crates welded into it is the
-   * wrong answer to it: the generator draws every noun it is given, so a plural
-   * ask bought a single picture of a pile.
-   *
-   * The router already reads the ask and the map, so this is one more number on
-   * the answer it was giving anyway rather than a second reading. Absent or 1
-   * means one thing, which is every ask the tool had until now, so the single
-   * path does not move. Above 1 the client carries the same free press on into
-   * scenePlan, which already writes a set of them, and prompt/w/h above describe
-   * only the first. */
+  /* HOW MANY DIFFERENT THINGS the ask is asking for. The generator draws every noun it is given, so "a few crates" bought a single picture of a pile. Absent or 1 is every ask the tool had until now, so the single path does not move; above 1 the client carries the same free press on into scenePlan. */
   count?: number
 }
 export const assetPlan = (
@@ -502,22 +330,7 @@ export const assetPlan = (
   },
 ) => jpost<{ plan: MakePlan }>('/api/asset-plan', { id, ask, ...o })
 
-/* ---- give a placement life ----------------------------------------------
- *
- * Free. What comes back is a handful of numbers saying how the thing MOVES,
- * which the game works out each frame; it is not animation frames and cannot
- * be, because every effect here has to loop and a wander that returns to its
- * start is a dance. See src/core/life.ts.
- *
- * bounds is the box drawn on the map, and skipping it is a real answer: with no
- * fence the movement is judged from the map itself.
- *
- * names is what this map's library already holds. A sequence that CHANGES the
- * picture can only name something that exists, so without the list the answer
- * was invented names and every art index landed on 0, so the sequence changed
- * timing and movement and never the picture, which is the whole point of it.
- * looks comes back as the pictures those indices count through, index 0 being
- * the placement's own, so a state with no picture keeps the one it had. */
+/* ---- give a placement life. Free. What comes back is numbers saying how the thing MOVES, not animation frames, because every effect has to loop and a wander that returns to its start is a dance. bounds is the drawn box and skipping it is a real answer. names is what this map's library holds: without the list the answer was invented names, every art index landed on 0, and the sequence changed timing and movement and never the picture. */
 export const lifePlan = (
   id: string,
   ask: string,
@@ -536,10 +349,7 @@ export const lifePlan = (
     // every library item this map has, by name. The server picks from these
     // and never names anything else.
     names?: string[]
-    /* the LIBRARY ROW this placement is drawn from. When that row has faces of
-     * its own the server offers those instead of the library, so a sequence
-     * picks between the pictures THIS thing can wear rather than between every
-     * picture on the map. That is what makes "which boulder" not a question. */
+    /* the LIBRARY ROW this placement is drawn from. When that row has faces of its own the server offers those instead of the library, so a sequence picks between the pictures THIS thing can wear. That is what makes "which boulder" not a question. */
     owner?: string
     job?: string
   },
@@ -547,10 +357,7 @@ export const lifePlan = (
 
 export const stop = (job: string) => jpost<{ stopped: boolean }>('/api/stop', { job })
 
-/* A whole boxed area planned in one look: what belongs in it, and where each
- * thing stands. Free and stoppable, same as the single read. Positions come
- * back in the box's own pixels, feet-anchored, so the client only has to add
- * the box's corner. Nothing generates until the list has been seen. */
+/* A whole boxed area planned in one look: what belongs in it and where each thing stands. Free and stoppable. Positions come back in the box's own pixels, feet-anchored. Nothing generates until the list has been seen. */
 export interface SceneItem {
   what: string
   prompt: string
@@ -577,16 +384,7 @@ export const scenePlan = (
   },
 ) => jpost<{ plan: ScenePlan }>('/api/scene-plan', { id, ...o })
 
-// ONE pixellab generation WITH context, same price class as assetGen: crop is
-// a square of the cut painting around the user's chosen spot (up to 160px,
-// clamped to the canvas), cx/cy the clicked painting pixel. The server sends
-// the crop as the background of pixellab's map-object endpoint, so the asset
-// comes back drawn in that spot's palette and light, transparent, and lands
-// in this map's library like any other static item. The client places it.
-//
-// note is the same disclosure characterGen carries: asked for moving, a stop
-// between the base and its frames files the base as a still object, and this is
-// where the reason travels so the ui does not have to guess why it stands.
+// ONE pixellab generation WITH context, same price class as assetGen: crop is a square of the cut painting around the chosen spot, up to 160px, so the asset comes back drawn in that spot's palette and light. note is the same disclosure characterGen carries, because a stop between the base and its frames files the base as a still object.
 export const assetGenHere = (
   id: string,
   prompt: string,
@@ -606,20 +404,7 @@ export const assetGenHere = (
   },
 ) => jpost<{ item: LibItem; note?: string }>('/api/asset-gen-here', { id, prompt, ...o })
 
-// TWO pixellab generations behind the same confirm: a transparent base
-// sprite, then its 8-frame animation. The ui passes motion as '' and the
-// server's ask interpreter splits the one prompt into thing + movement words
-// (scene words in the motion bleed objects into the sprite, the measured
-// smoke-summoned-a-volcano failure); a non-empty motion still wins. The
-// frames land in work/<id>/library/<name>/0..n.png, the folder shape the
-// library lists as one animated item. thing/tmotion/tw/th carry the confirmed
-// translation through verbatim.
-//
-// note carries a motion that did not happen, the way characterGen's does. The
-// base is bought the moment it is asked for, so a stop landing between the two
-// halves files it as a still object rather than losing it; without the note
-// travelling with it the user gets a still where they asked for a moving one
-// and nothing on screen says why.
+// TWO pixellab generations behind one confirm: a transparent base sprite, then its 8-frame animation. The server's ask interpreter splits the one prompt into thing plus movement words, because scene words in the motion bleed objects into the sprite (the measured smoke-summoned-a-volcano failure). note carries a motion that did not happen, or the user gets a still where they asked for a moving one with nothing saying why.
 export const assetAnim = (
   id: string,
   prompt: string,
@@ -636,46 +421,7 @@ export const assetAnim = (
   },
 ) => jpost<{ item: LibItem; note?: string }>('/api/asset-anim', { id, prompt, motion, ...o })
 
-/* ---- making a thing that is already in the library MOVE -------------------
- *
- * Everything above makes something new. This points at a thing that exists and
- * says what it should DO: breathing while it stands, a rod cast, wings, a hop, a
- * crab scattering. Five people were standing dead still on the hub and there was
- * no way to ask for that without generating them again.
- *
- * Nothing on this path shows a list of animations. The user types it and the
- * server routes it, because a list of animations is always shorter than what
- * somebody wants. There are three ways to get there and they do not cost the
- * same, which is exactly why the price cannot be worked out on this side:
- *
- *   character  something drawn from headings. Every heading goes through ONE
- *              coordinated job, priced per heading. Eight separate single-image
- *              calls would come back as eight loops with eight rhythms, so a
- *              figure would breathe faster facing north than facing south.
- *   sprite     one png, or a folder of frames, animated off its own first
- *              frame. One generation.
- *   written    the ask needs the thing to TRAVEL, and neither generator can
- *              carry a sprite anywhere: both only redraw it where it stands. A
- *              written recipe stamps the item's own sprite at a position it
- *              works out per frame, and costs NOTHING. The route names this
- *              path rather than running it, so the free answer is offered
- *              instead of the wrong one being quietly charged for.
- *   blocked    it cannot be done honestly, and why. A figure whose character on
- *              the account cannot be found is the case that exists: animating
- *              its headings one at a time would come back out of register, so
- *              the route refuses instead of selling a defect.
- *
- * Everything except written rewrites the item IN PLACE, the way crop and
- * pixelate do, so an item that already moves has its frames REPLACED and the
- * library keeps one row per thing. Nothing touches the library folder until
- * every byte has landed under .stage, and the bytes that were there go to
- * work/<id>/.prev.
- *
- * ONE route, two presses. Without confirm it is a free read that answers the
- * plan and the true price. With confirm it runs the plan it was handed back, so
- * the number the button showed is the number that gets spent; the price itself
- * is re-derived server-side from the item and the account, so a client cannot
- * talk it down and the router cannot talk it up. */
+/* ---- making a thing that is already in the library MOVE. Five people were standing dead still on the hub with no way to ask for that without generating them again. The user types it and the server routes it, because a list of animations is always shorter than what somebody wants. Four paths, priced differently: `character` puts every heading through ONE coordinated job, because eight separate calls come back as eight rhythms and a figure would breathe faster facing north; `sprite` is one generation; `written` costs NOTHING and is named rather than run, because neither generator can carry a sprite anywhere; `blocked` refuses instead of selling a defect. Everything but written rewrites the item IN PLACE, staged under .stage with the old bytes going to work/<id>/.prev. ONE route, two presses: the free read answers the plan and the true price, and the price is re-derived server-side so a client cannot talk it down. */
 export interface AnimPlan {
   path: 'character' | 'sprite' | 'written' | 'blocked'
   // exact, and the number the armed button shows. 0 on written and on blocked,
@@ -705,14 +451,7 @@ export interface AnimPlan {
   // set only on blocked: the reason, in words, and it is the whole answer
   why?: string
 }
-/* The read has no confirm and buys nothing. The confirmed press hands the plan
- * straight back so what was priced is what runs; job makes the wait stoppable,
- * which on the character path is worth up to seven of the eight.
- *
- * What comes back: { plan } from a read, { item, note } from a run that drew
- * something, { plan, free: true } from a confirmed written path, which spends
- * nothing and leaves the item alone. note carries a half that did not happen,
- * the way characterGen's does. */
+/* The read has no confirm and buys nothing; the confirmed press hands the plan straight back so what was priced is what runs. What comes back: { plan } from a read, { item, note } from a run that drew, { plan, free: true } from a confirmed written path. */
 export const assetAnimate = (
   id: string,
   o: {
@@ -721,11 +460,7 @@ export const assetAnimate = (
     plan?: AnimPlan
     confirm?: true
     job?: string
-    /* collect frames an earlier press already paid for instead of drawing
-     * again. The host answers `pending` with the group it started when a
-     * generation outlives its function budget; sending that group back here
-     * is how the client finishes the job for free. A bare true is the older
-     * repair: whatever complete motion is on the account. */
+    /* collect frames an earlier press already paid for instead of drawing again: the host answers pending with the group it started when a generation outlives its function budget, and sending that group back finishes the job for free. */
     recover?: true | string
   },
 ) =>
@@ -736,18 +471,7 @@ export const assetAnimate = (
 
 // ---- the effect engine --------------------------------------------------
 
-// Which motion rule fits the ask, what numbers to start it at, and WHOSE
-// COLOURS it is made of. palette 'map' means the sampled painting pixels, which
-// is right for smoke and dust; 'own' means the effect brought its own ramp in
-// colors, which is the only way a purple portal on a brown island is purple.
-// FREE: no generation happens on this path at all, and the server answers from
-// a keyword match when the planner is unreachable, so it never hard-fails.
-//
-// type "custom" is the eighth answer and the one that is not a rule: when no
-// built-in fits, the plan carries a WRITTEN renderer instead. code is the body
-// of (p, colors, api) => void, run in the sandbox in core/customfx, and
-// controls are the knobs it declared for itself, which replace the fixed five
-// sliders in the panel. Still free, still no generation anywhere on this path.
+// Which motion rule fits the ask, what numbers to start it at, and WHOSE COLOURS it is made of: palette 'map' is the sampled painting, 'own' is the only way a purple portal on a brown island is purple. FREE, and it answers from a keyword match when the planner is unreachable so it never hard-fails. type "custom" is the eighth answer and carries a WRITTEN renderer run in the core/customfx sandbox, still free.
 export interface EffectPlan {
   type: string
   name: string
@@ -762,11 +486,7 @@ export const effectPlan = (ask: string, colors: string[], id?: string, job?: str
 
 // ---- the review loop ----------------------------------------------------
 
-// The frames the client just rendered, laid out as one strip on disk and LOOKED
-// AT. verdict good means ship it; revise carries a full replacement body for a
-// written effect, or better numbers for one of the seven. FREE, every pass: the
-// render is local and the look never touches pixellab. strip is the absolute
-// path of what was looked at, so a failure can be seen rather than guessed at.
+// The frames the client just rendered, laid out as one strip on disk and LOOKED AT. verdict good means ship it; revise carries a replacement body or better numbers. FREE every pass, and strip is the absolute path of what was looked at, so a failure can be seen rather than guessed at.
 export interface FxVerdict {
   strip: string
   verdict: 'good' | 'revise'
@@ -791,38 +511,22 @@ export const fxReview = (
   },
 ) => jpost<FxVerdict>('/api/fx-review', { id, ...o })
 
-// The generated candidates side by side, LOOKED AT: which one, and why. fix is
-// only set when none of them are usable, and it is a corrected prompt to try,
-// which costs generations and so stays behind the armed confirm. Looking itself
-// is free: no generation happens anywhere on this route.
+// The generated candidates side by side, LOOKED AT: which one and why. fix is set only when none are usable and costs generations, so it stays behind the armed confirm. Looking itself is free.
 export interface ObjVerdict {
   strip: string
   best: number
   why: string
   fix: string
-  /* Whether what came back ANSWERS THE ASK, which best on its own cannot say:
-   * best is clamped into 1..n, so a row of things that are all wrong still
-   * comes back with one of them praised. revise means none of them are it, and
-   * the client shows that as advice next to every candidate still keepable.
-   *
-   * Absent from a server that has not been given it yet, and absent reads as
-   * good, which is the same default the effect loop takes: anything unclear
-   * means stop and leave it alone. */
+  /* Whether what came back ANSWERS THE ASK, which best on its own cannot say: best is clamped into 1..n, so a row of things that are all wrong still comes back with one praised. Absent reads as good, the same default the effect loop takes. */
   verdict?: 'good' | 'revise'
 }
-/* An options object, not a positional list. The one that was here took five
- * ordered arguments, so the day the look is given something more to judge with
- * every call site has to be counted out again. fx-review already takes an
- * object; this matches it. */
+/* An options object, not a positional list: the five ordered arguments that were here meant counting out every call site the day the look is given something more to judge with. */
 export const objReview = (o: {
   id: string
   ask: string
   prompt: string
   frames: string[]
-  /* the real size of every candidate on the strip, in map pixels. The strip is
-   * blown up 3x to be visible at all, so without this the look cannot tell a
-   * sprite drawn at the map's own chunky pixel from one drawn finer. Left out
-   * when the candidates are different sizes. */
+  /* the real size of every candidate on the strip, in map pixels. The strip is blown up 3x to be visible, so without this the look cannot tell a sprite drawn at the map's chunky pixel from one drawn finer. */
   w?: number
   h?: number
   job?: string
@@ -834,11 +538,7 @@ export const keepNote = (
   o: { ask: string; prompt: string; name: string; kind: 'asset' | 'effect' },
 ) => jpost<{ n: number }>('/api/keep-note', { id, ...o })
 
-// The frames the client rendered, written as an animated library item:
-// work/<id>/library/<name>/0..n.png, plus effect.json beside them so the rule,
-// its numbers and the sampled colours can be reopened later. Also free.
-// overwrite rewrites an existing item in place: same name, same frame urls, so
-// every placement of it plays the new render without being touched.
+// The frames the client rendered, written as an animated library item plus effect.json beside them so the rule, its numbers and the sampled colours reopen later. Free. overwrite keeps the name and the frame urls, so every placement plays the new render untouched.
 export const effectSave = (
   id: string,
   name: string,
@@ -852,10 +552,7 @@ export const effectSave = (
 // answer to "what did I type to get that". A record, not a feature to feed.
 export interface Ask {
   name: string
-  // character is here so a past ask reopens in the mode that made it. Without
-  // it a sprite came back in the object box, which draws a prop of a body. The
-  // on-disk word stays 'character' so old asks.json rows still replay; the ui
-  // calls that mode a sprite.
+  // character is here so a past ask reopens in the mode that made it: without it a sprite came back in the object box, which draws a prop of a body. The on-disk word stays 'character' so old asks.json rows replay.
   kind?: 'asset' | 'effect' | 'character'
   ask: string
   prompt: string
@@ -879,22 +576,7 @@ export interface EffectSaved {
 export const effectRead = (id: string, name: string) =>
   jpost<EffectSaved>('/api/effect-read', { id, name })
 
-/* Pixels the client already holds, written back to the item IN PLACE.
- *
- * Every edit used to land as a second row — palm, palm-trimmed,
- * palm-trimmed-bit2, palm-matched — and a library of near-identical rows is
- * worse than whatever each edit fixed. So crop, base-trim, pixelate and the
- * palette lock all rewrite the item they were given. One thing, one row.
- *
- * The bytes that were there are copied to work/<id>/.prev first, which is not
- * the library and is never listed anywhere. Nothing reads it; it exists because
- * these files cost generations.
- *
- * keepCopy asks for the old behaviour and names the copy <name>-<suffix>. Only
- * the compare panel uses it, where the point IS to hold two versions at once.
- * An animated item arrives with every frame handled identically, so its loop
- * stays in register.
- */
+/* Pixels the client already holds, written back to the item IN PLACE. Every edit used to land as a second row, palm then palm-trimmed then palm-matched, and a library of near-identical rows is worse than whatever each edit fixed. The old bytes go to work/<id>/.prev, which is never listed, because these files cost generations. keepCopy asks for the old behaviour and only the compare panel uses it. */
 export const assetCrop = (
   id: string,
   name: string,
@@ -912,10 +594,7 @@ export const assetCrop = (
   },
 ) => jpost<{ item: LibItem }>('/api/asset-crop', { id, name, rect, ...o })
 
-// takes one item out of this map's library for good: the png for a static
-// item, the frame folder for an animated one. The file deletion is not
-// undoable; the ui clears the item's placements through the editor, so that
-// part is.
+// takes one item out of this map's library for good. The file deletion is not undoable; the ui clears the item's placements through the editor, so that part is.
 export const libraryRemove = (id: string, name: string) =>
   jpost<{ removed: 'static' | 'animated' }>('/api/library-remove', { id, name })
 
@@ -927,26 +606,13 @@ export const saveCutPNG = (id: string, image: string, cut: string) =>
 export const exportBundle = (b: unknown) =>
   jpost<{ dir: string; files: string[]; published?: { version: number } }>('/api/export', b, { keepalive: true })
 
-/* The map's own state, saved to the platform on the same beat as the browser
- * autosave. Export is a different job: it is the bundle the game reads, it is
- * lossy about the editor's state, and it should not be the only way work leaves
- * the browser. This is the save. The payload is the exact string the doc
- * serializes to, so nothing here has to understand the format.
- *
- * savedAt is the server's own clock, not this browser's, and it is what decides
- * which copy wins when the browser also has one. wrote says which halves
- * actually changed: an autosave with nothing new in it writes neither. */
+/* The map's own state, saved to the platform on the same beat as the browser autosave. Export is a different job and should not be the only way work leaves the browser. savedAt is the server's clock, not this browser's, and it decides which copy wins; wrote says which halves actually changed. */
 export const saveDoc = (id: string, doc: string) =>
   jpost<{ bytes: number; savedAt?: number; wrote?: string[] }>('/api/doc', { id, doc })
 
 export const loadDoc = (id: string) =>
   jget<{ doc: string; savedAt?: number; from?: string }>('/api/doc/' + encodeURIComponent(id))
 
-/* Give a map a different id. It is the publish slug, every door's target, the
- * objective's map field and the save key at once, and it came from whatever the
- * dropped file was called. The server carries the doors that point here over
- * with it and says how many it moved. It refuses a slug somebody already has,
- * because a door names one as a bare string with no owner in it, so two people
- * cannot both own `hub`. */
+/* Give a map a different id. It is the publish slug, every door's target, the objective's map field and the save key at once. The server carries the doors that point here over and says how many it moved, and refuses a slug somebody already has, because a door names one as a bare string with no owner in it. */
 export const renameMap = (from: string, to: string) =>
   jpost<{ slug: string; repointed: number }>('/api/map-rename', { from, to })
