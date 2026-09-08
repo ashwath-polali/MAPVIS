@@ -1,27 +1,4 @@
-/* LIFE: a placement that moves, as data.
- *
- * The beach map's crab is a 27x18 png with no animation frames at all. Every
- * bit of its life is code running each tick: pick a target within a few tiles
- * of home, dash there at a random speed, freeze for a second or four, face the
- * way it went, bob while moving. The gull is one still png too, on a 35 second
- * cycle with 9 seconds of glide.
- *
- * That is why baking travel into animation frames cannot work, and it was tried
- * here first. Every effect in this tool has to loop: frame N must equal frame 0
- * or it pops on the wrap. A wander that must return to its exact starting spot
- * every cycle IS a dance, and no prompt fixes that, because the loop rule is
- * load-bearing for everything else.
- *
- * So the motion is not pixels. It is a few numbers on the placement, and the
- * game works out where the thing is each frame. That means it never repeats, it
- * costs nothing to store, it can be told to stay inside a boundary, and it can
- * run for an hour without a seam.
- *
- * It is DATA on purpose, not a script. These bundles run in front of students,
- * and a map file that can execute code in the game is not a door worth opening.
- * The liberty lives in the numbers instead, and there are enough of them: the
- * two behaviours below reproduce the beach crab and the beach gull exactly.
- */
+/* LIFE: a placement that moves, as DATA and never a script, because a map file that can execute code in front of students is not a door worth opening. Baking travel into frames cannot work: every effect has to loop, and a wander that returns to its exact start each cycle is a dance. The position is a function of t, so it never repeats and runs for an hour with no seam. */
 
 export type LifeKind = 'wander' | 'cross' | 'orbit' | 'drift'
 
@@ -32,44 +9,15 @@ export interface LifeBounds {
   h: number
 }
 
-/* A SEQUENCE: one placement, several states, on a round.
- *
- * A troll rolls around the rocks, goes still as a boulder, then rolls off
- * again. That is not a fifth kind of movement. It is the SAME placement wearing
- * a different picture and following a different behaviour for a stretch of the
- * round, and then the round starts over.
- *
- * The only new idea is the clock. A state keeps its OWN time, which is the time
- * it has been live, not the time on the wall. So a wander that stops to be a
- * boulder for fifteen seconds resumes exactly where it froze rather than
- * fifteen seconds further down a walk nobody saw. That is what makes the change
- * back look like the same creature and not a teleport, and it is arithmetic
- * rather than something remembered between frames.
- */
+/* A SEQUENCE: one placement, several states, on a round. The only new idea is the clock: a state keeps its OWN time, the time it has been live, so a wander that stops to be a boulder resumes where it froze rather than fifteen seconds further down a walk nobody saw. */
 export interface LifeState {
   /* seconds this state is live, once round */
   secs: number
-  /* which picture to draw, as an INDEX and never a name. 0 is the art the
-   * placement already carries; 1 and up are the extra looks it was given, so 1
-   * is looks[0]. A caller that knows nothing about looks draws 0 and is right
-   * about a placement that never changes.
-   *
-   * The planner answers in names, because a name is the only thing a model can
-   * write about a picture. The SERVER turns that name into this number, since
-   * the server is the side that can see the map's library and can refuse a name
-   * that has no row. By the time a Life reaches here the name is gone, and
-   * anything that is not a number lands on 0, which is always the placement's
-   * own picture and so is always safe. */
+  /* which picture to draw, as an INDEX and never a name: 0 is the placement's own art, 1 is looks[0]. The planner answers in names and the SERVER turns them into numbers, because the server can see the library and refuse a name with no row. Anything that is not a number lands on 0, which is always safe. */
   art?: number
-  /* seconds of fade at each end, so a change of picture dissolves rather than
-   * cuts. One sprite per placement means the seam dips through nothing for an
-   * instant; at these sizes that reads as a puff, which is what a
-   * transformation looks like anyway. */
+  /* seconds of fade at each end, because one sprite per placement means the seam dips through nothing for an instant. At these sizes that reads as a puff, which is what a transformation looks like anyway. */
   fade?: number
-  /* how it moves while this state is live. Absent means it does not move at
-   * all: it stands exactly where the sequence left it, which is what a creature
-   * freezing in place looks like. A state's own move may not carry states of
-   * its own. */
+  /* how it moves while this state is live. Absent means it does not move at all, which is what a creature freezing in place looks like. A state's move may not carry states of its own. */
   move?: Life | null
 }
 
@@ -118,17 +66,7 @@ export interface Life {
    * the air, which is not standing on the ground it is drawn over */
   airborne?: boolean
 
-  /* ---- rock: a tilt, on any behaviour --------------------------------------
-   *
-   * A boat at its mooring does not travel and does not change shape, it LEANS.
-   * That is a rotation over time, and baking a rotation into frames is what
-   * turns a gentle rock into a generic wobble that loops wrong: the animator is
-   * handed a still and asked to invent motion it has no physics for.
-   *
-   * So it lives here with the rest of the movement-as-data. Degrees either side
-   * of upright, and how many leans a second. It rides on top of whatever the
-   * placement is already doing, so a moored boat drifting an inch can tilt while
-   * it does it, and a hanging sign can tilt while standing perfectly still. */
+  /* ---- rock: a tilt on any behaviour. A boat at its mooring does not travel, it LEANS, and baking a rotation into frames turns a gentle rock into a wobble that loops wrong. Rides on top of whatever the placement is already doing. */
   rock?: number
   rockRate?: number
 
@@ -144,13 +82,7 @@ export interface Life {
   driftX?: number
   driftY?: number
 
-  /* Stay on ground a person could stand on, INSIDE the box as well.
-   *
-   * Set when the box the person drew is mostly walkable, because that says
-   * something: they fenced a path, a plaza, a stretch of sand. Two barriers
-   * then, the box and the floor, and the thing stops walking through walls and
-   * out over water. A box that is mostly not walkable means the opposite, that
-   * they fenced a region regardless of the ground, so the box alone holds. */
+  /* Stay on ground a person could stand on, INSIDE the box as well. Set when the drawn box is mostly walkable, which says they fenced a path or a plaza; a box that is mostly unwalkable means the opposite, so the box alone holds. */
   walkOnly?: boolean
   /* how much of the boxed area was walkable when it was drawn, 0..1. Kept for
    * the panel to explain itself, and for the planner to judge with. */
@@ -236,34 +168,7 @@ export function cleanLife(raw: unknown, depth = 0): Life | null {
     out.faceMotion = !!r.faceMotion
   }
 
-  /* Read last, because the flat fields above ARE the first state's behaviour
-   * when the first state does not name one of its own. One level only: a
-   * state's move may not carry states, so working out which state is live stays
-   * a division and a walk of at most six numbers.
-   *
-   * A PASS IS NOT A STATE, so a cross never gets a round.
-   *
-   * Every other kind answers with an offset from where the thing lives, which is
-   * what lets a round add its states up. A cross does not: it is an absolute
-   * scripted line from fx,fy to tx,ty across the whole painting, and for most of
-   * its cycle it is not on the map at all, where it answers dx 0 dy 0 meaning
-   * absent rather than meaning here. A round cannot add absent to anything. On a
-   * 688px map, a two state round of a wander then a cross measured max |dx| 737px
-   * and a single frame step of 404px: the placement walks clean off the island.
-   *
-   * It is not a wording problem and it is not fixable by holding the sum inside
-   * the box, because the thing being summed is not a displacement. A gull that
-   * crosses the cove and a crab that wanders the sand are two placements, and
-   * asking for one that does both is asking for two. So this is refused here,
-   * which is the same kind of validity rule as a state not being allowed states
-   * of its own, and refusing it costs nothing anybody has: no exported bundle
-   * carries a sequence at all.
-   *
-   * A cross carrying states loses the states and stays the pass it always was.
-   * That covers the flat-field path as well, which is the one that hides: the
-   * first state is BUILT from the fields around here when it does not name a
-   * move of its own, so a cross placement with a round would have had a cross
-   * quietly installed as state one. That path measured 356px on its own. */
+  /* Read last, because the flat fields above ARE the first state's behaviour. One level only. A PASS IS NOT A STATE: every other kind answers an offset from home, but a cross is an absolute scripted line and answers dx 0 dy 0 meaning absent, which a round cannot add. Measured: a two state round of a wander then a cross gave max dx 737px on a 688px map and a single frame step of 404px. */
   if (depth === 0 && kind !== 'cross' && Array.isArray(r.states)) {
     const st: LifeState[] = []
     for (const s of (r.states as unknown[]).slice(0, 6)) {
@@ -272,19 +177,9 @@ export function cleanLife(raw: unknown, depth = 0): Life | null {
       const secs = clamp(num(q.secs, 12), 0.2, 3600)
       const state: LifeState = {
         secs,
-        /* an index into the placement's pictures, never a name: the server has
-         * already turned the planner's name into this number. A name that got
-         * this far is not a number, so it lands on the default 0, which is the
-         * placement's own picture. The top is 7 because a placement carries at
-         * most 7 extra looks, so 0..7 is every picture there can be. */
+        /* an index into the placement's pictures, never a name: the server already turned the planner's name into this number. The top is 7, because a placement carries at most 7 extra looks. */
         art: clamp(Math.round(num(q.art, 0)), 0, 7),
-        /* no fade unless the state asked for one. A fade here is a dip through
-         * nothing, because one placement is one sprite: alpha runs to 0 and back
-         * at BOTH ends of every state it is set on. Measured with the old 0.15
-         * default on a three-state round where nothing asked to fade: alpha 0.00
-         * at t=0, so the thing is invisible on the first frame it is ever drawn,
-         * and it blanks again at every state change, three times a round. A
-         * state that wants the puff still says so. */
+        /* no fade unless the state asked for one: a fade is a dip through nothing at BOTH ends of every state it is set on. With the old 0.15 default a three-state round where nothing asked to fade drew alpha 0.00 at t=0 and blanked three times a round. */
         fade: clamp(num(q.fade, 0), 0, Math.min(2, secs / 2)),
       }
       const mv = q.move ? cleanLife(q.move, 1) : null
@@ -292,19 +187,7 @@ export function cleanLife(raw: unknown, depth = 0): Life | null {
       // simply does not move, which is a state the round already knows how to
       // draw, rather than the placement leaving the map
       if (mv && mv.kind !== 'cross') {
-        /* A STATE MAY NOT NAME A BOX OF ITS OWN, which is the third rule of the
-         * same kind as the two above and it is refused for the same reason.
-         *
-         * A box is a place on the painting: "this one stays over THERE". A round
-         * cannot honour that, because the round is a sum of displacements and a
-         * place is not one, and `share` below turns whatever box a state carries
-         * into a reach around where the placement stands. So a state that named
-         * a corner of the map got a box the size of that corner drawn around
-         * home instead, somewhere else entirely, and nothing said so. Silently
-         * moving a fence a person drew is worse than not letting them draw it.
-         *
-         * So the placement's fence and the placement's floor are the only ones,
-         * and a state keeps its seconds, its picture, its speed and its pauses. */
+        /* A STATE MAY NOT NAME A BOX OF ITS OWN. A box is a place and a round is a sum of displacements, so share() turns a state's box into a reach around where the placement stands: a state naming a corner of the map got that corner's size drawn around home instead. Silently moving a fence a person drew is worse than not letting them draw it. */
         mv.bounds = out.bounds ? { ...out.bounds } : null
         if (out.walkOnly) mv.walkOnly = true
         // the phase is added to t before any of this, so a state carrying one
@@ -329,16 +212,7 @@ export function cleanLife(raw: unknown, depth = 0): Life | null {
   return out
 }
 
-/* Where a placement is at time t, given where it was put.
- *
- * Pure and stateless: the same t always gives the same answer, so the editor
- * preview and the game agree without sharing anything but this file, and a
- * paused frame is a real frame rather than wherever a simulation happened to
- * get to.
- *
- * home is the placement's own x,y. dx and dy come back as an OFFSET from it, so
- * a caller that knows nothing about this can just add them.
- */
+/* Where a placement is at time t. Pure and stateless, so the editor preview and the game agree without sharing anything but this file. dx and dy come back as an OFFSET from home. */
 export interface LifeAt {
   dx: number
   dy: number
@@ -346,20 +220,9 @@ export interface LifeAt {
   flip: boolean
   /* 0 to 1, for the fade at the ends of a pass */
   alpha: number
-  /* Which way it is heading, as one of the eight names Thor's own frames use.
-   *
-   * A flip gives a thing two apparent directions, which is all a crab needs. A
-   * person walking a plaza needs eight, or they moon-walk across it. An asset
-   * that carries directional frames is drawn with this; one that does not
-   * ignores it and keeps flipping, so nothing had to change to gain it. */
+  /* Which way it is heading, as one of the eight names Thor's frames use. A flip gives two apparent directions, which is all a crab needs; a person walking a plaza needs eight or they moon-walk across it. */
   facing: LifeFacing
-  /* Whether it is travelling right now, as opposed to standing through a pause.
-   *
-   * A walk cycle is a GAIT: it is what the legs do while the thing is moving,
-   * and a wander is mostly pauses. Without this the caller ran the cycle from
-   * the clock alone and a figure standing at the end of a leg marched on the
-   * spot until the next one. The frames are right, the question is when to run
-   * them. A caller with a single-frame sprite can ignore it. */
+  /* Whether it is travelling right now. A walk cycle is a GAIT, and a wander is mostly pauses: run from the clock alone, a figure standing at the end of a leg marched on the spot until the next one. */
   moving: boolean
   /* Extra tilt in radians, added to whatever rotation the placement already
    * carries. Zero unless the behaviour asked to rock. */
@@ -379,12 +242,7 @@ export type LifeFacing =
   | 'north'
   | 'north-east'
 
-/* the same mapping the walk test uses (core/walk.ts dirFrom), so a walking
- * figure and Thor pick the same frame for the same heading. The deltas coming
- * in are painting pixels, and the map's foreshortening is already inside them:
- * Thor's facing is read off the pixels he MOVED, dirFrom(dx, dy * yScale), so
- * squashing again here would pick a different frame for the same heading. That
- * is what a yScale of 1 means; 0.72 or 2 would both be that second squash. */
+/* the same mapping the walk test uses, so a walking figure and Thor pick the same frame. The deltas are painting pixels with the foreshortening already inside them, so squashing again here would pick a different frame for the same heading. */
 export function facingFrom(dx: number, dy: number, yScale = 1): LifeFacing {
   if (Math.abs(dx) < 0.001 && Math.abs(dy) < 0.001) return 'south'
   const a = (Math.atan2(dy * yScale, dx) * 180) / Math.PI
@@ -398,65 +256,9 @@ export function facingFrom(dx: number, dy: number, yScale = 1): LifeFacing {
   return 'west'
 }
 
-/* PERSONAL SPACE, without giving up the pure function.
- *
- * Two figures wandering the same quay walked straight through each other, which
- * reads as broken however good the art is. Avoidance sounds like it needs a
- * simulation, and a simulation would end the property everything here rests on:
- * that the editor and the game compute the same answer from the same numbers
- * with no state carried between frames.
- *
- * It does not need one. Every mover's position at t is already a pure function
- * of t, so EVERY mover's position at t is knowable at once. Resolve them all,
- * then push apart whatever overlaps. Still pure, still reproducible, as long as
- * both sides pass the same list.
- *
- * One pass, not settled to convergence. Two figures shoving each other back and
- * forth over several rounds is where this would start to jitter, and one push is
- * enough to keep bodies out of each other at these sizes.
- *
- * y is measured squashed because the ground is: two figures a pixel apart up the
- * screen are much further apart in the world than two a pixel apart across it,
- * and separating in screen space would shove them into a vertical line.
- */
-/* A BODY IS PART OF THE FLOOR, WHICH IS THE FIX separate() ASKS FOR BELOW.
- *
- * The note under PASSES says it outright: a walker crosses straight through a
- * stander because nothing in the floor knows the stander is there, it ends up
- * 87 percent inside, and only then does the push try to eject it. Ejecting a
- * body from the middle of another body is violent whatever the numbers are, and
- * the direction flips as it crosses the centre. Three shapes of fix were tried
- * inside the push and all three measured worse.
- *
- * So the floor learns about bodies instead. Wrap the ground test in this and a
- * leg search will not choose a step that lands in somebody, a walker turns aside
- * a body-width out rather than tunnelling, and the push goes back to being the
- * rare small correction it was designed as.
- *
- * Everyone is in one list, the player included, so one rule decides walker
- * against walker, walker against stander, and player against either. `skip` is
- * how a body avoids blocking itself: pass the index it occupies.
- *
- * y is divided by yScale for the same reason it is in separate(): the ground is
- * squashed, so a circle on screen is an ellipse in the world.
- */
-/* rx and ry are the FOOTPRINT, and they are optional because most bodies do not
- * have one. A figure is a circle on squashed ground and r says all there is to
- * say about it. A market stall is not: it is 26 painting pixels across and about
- * 19 deep, and a circle at its anchor either misses most of it or, sized to
- * cover it, swallows the walkway beside it. So a published placement can carry
- * the ellipse its own art measures, and when it does, rx and ry are the two
- * half-axes in painting pixels and r is ignored.
- *
- * Given neither, the answer is exactly what it always was: r across and r*yScale
- * up the screen. That is the same ellipse the old code wrote as dividing dy by
- * yScale and comparing to r squared, rearranged, so a body with no footprint
- * cannot behave differently after this than before it.
- *
- * separate() does NOT read them. The push apart is circles and stays circles:
- * its strength, its two passes and its 0.6 body radius were all tuned over
- * 30000 frames on that geometry, and a footprint answers a different question
- * anyway. This is where the floor is solid; that is how close two figures stand. */
+/* PERSONAL SPACE, without giving up the pure function. Every mover's position at t is already knowable, so resolve them all and push apart what overlaps; still reproducible as long as both sides pass the same list. One pass, not settled to convergence. y is measured squashed because the ground is, or separating would shove everyone into a vertical line. */
+/* A BODY IS PART OF THE FLOOR, which is the fix separate() asks for below: a walker tunnels 87 percent into a stander before the push tries to eject it, and ejecting from the middle is violent whatever the numbers are. Wrap the ground test in this and a leg search will not choose a step that lands in somebody. skip is how a body avoids blocking itself. */
+/* rx and ry are the FOOTPRINT and are optional: a figure is a circle on squashed ground, a 26x19 market stall is not, and a circle at its anchor either misses most of it or swallows the walkway. Given neither, the answer is r across and r*yScale up, which is what the old code computed. separate() does NOT read them: its two passes and 0.6 body radius were tuned over 30000 frames on circles. */
 export type Body = { x: number; y: number; r: number; rx?: number; ry?: number }
 
 export function bodyAt(bodies: Body[], yScale = 0.72) {
@@ -496,65 +298,14 @@ export function separate(
   // ends the pass still inside each other and the whole point was that they
   // stop overlapping. Measured: 0.6 removed 2% of overlaps, 1 removes them.
   strength = 1,
-  /* the same floor the behaviours are fenced by. Shoving someone out of a
-   * neighbour and into a wall is not an improvement, so a push that lands
-   * somewhere it could not stand is dropped and the overlap is kept. Being
-   * inside another figure for a moment looks better than standing in stone. */
+  /* the same floor the behaviours are fenced by. A push that lands somewhere it could not stand is dropped and the overlap kept: being inside another figure for a moment looks better than standing in stone. */
   stands?: (x: number, y: number) => boolean,
 ): { dx: number; dy: number }[] {
   const out = pts.map(() => ({ dx: 0, dy: 0 }))
-  /* RELAXATION, not one shot, and this is what stopped the shoves reading as
-   * spasms.
-   *
-   * Every pair used to be measured against the ORIGINAL positions and every
-   * answer added up, so a figure caught between three others was handed the sum
-   * of three separate full-depth corrections, none of which knew about the
-   * others. Measured on nine figures walking a 40px path, 30000 frames: the
-   * worst single-frame shift was 21.39px on bodies 11px across, which is not a
-   * shove, it is a teleport, and 125 frames moved somebody more than 4px.
-   *
-   * Passing over the pairs several times and re-measuring each time fixes that
-   * by construction: the second pass sees the gap the first one already opened,
-   * so nobody is corrected twice for the same overlap. The total is then bounded
-   * by the real geometry instead of by how many neighbours happen to be close.
-   *
-   * Two passes at half strength, swept rather than picked. Same nine figures,
-   * 30000 frames, against the single full-strength pass that shipped:
-   *
-   *   passes   >4px shifts   worst shift   deepest overlap
-   *   1 (old)          171       31.93px           15.69px
-   *   2                 97       25.80px           12.45px
-   *   4                195       33.95px            9.10px
-   *   8                379       40.07px           17.78px
-   *
-   * Two is better than one on all three. Four buys less overlap and pays for it
-   * in exactly the thing being complained about, and eight is worse at both.
-   *
-   * This is an improvement and NOT a fix, and the number that says so is the
-   * 25.80px worst shift, which is still more than a body width. See the note
-   * under it. */
+  /* RELAXATION, not one shot. Measuring every pair against the ORIGINAL positions handed a figure caught between three others the sum of three full-depth corrections: worst single-frame shift 21.39px on bodies 11px across. Two passes at half strength, swept: 97 shifts over 4px against 171, worst 25.80px against 31.93, deepest overlap 12.45px against 15.69. Four and eight are worse. An improvement and NOT a fix; see the note under it. */
   const PASSES = 2
   const step = strength * 0.5
-  /* WHAT IS STILL WRONG HERE, so nobody spends another session tuning numbers.
-   *
-   * Traced frame by frame: a walker crosses straight THROUGH a stander, because
-   * nothing in the floor knows the stander is there. lifeAt's leg search samples
-   * every 2px and refuses a leg over ground it cannot stand on, and a person
-   * standing on that ground is not part of that test. So the walker gets 87%
-   * inside, and only then does this pass try to eject it. Ejecting something
-   * from the middle of something else is violent whatever the numbers are, and
-   * the direction flips as it passes the centre: measured -8.46px one frame and
-   * +11.20px the next while the walker's own position moved a third of a pixel.
-   *
-   * Three shapes of fix were measured and all three made it worse or nothing:
-   * blending the direction toward a fixed per-pair angle, anchoring it to where
-   * the two figures belong (32.61px worst, worse than doing nothing), and more
-   * relaxation passes.
-   *
-   * The fix is not in here. Standing figures belong in the FLOOR, so the leg
-   * search routes around them and penetration never happens, and this pass goes
-   * back to being the rare small correction it was designed as. That is a change
-   * to what canStand means and it has not been made. */
+  /* WHAT IS STILL WRONG HERE, so nobody spends another session tuning numbers. A walker crosses THROUGH a stander because nothing in the floor knows the stander is there, gets 87% inside, and the ejection direction flips as it passes the centre: -8.46px one frame and +11.20px the next. Three fixes were measured and all made it worse. The fix is putting standing figures in the FLOOR, and that has not been made. */
   for (let pass = 0; pass < PASSES; pass++) {
     let moved = false
     for (let i = 0; i < pts.length; i++) {
@@ -568,24 +319,7 @@ export function separate(
         const d2 = dx * dx + dy * dy
         if (d2 >= want * want) continue
         const d = Math.sqrt(d2)
-        /* THE DIRECTION HAS TO BE STEADY WHERE THE PUSH IS STRONGEST, and it
-         * was the exact opposite, which is where the spasm came from.
-         *
-         * The shove is (want - d) / 2, so it is biggest when two bodies are
-         * nearly on the same spot. That is also where dx / d is worthless: a
-         * tenth of a pixel of drift swings the direction right round, and the
-         * biggest push in the pass swings with it. Measured on nine figures on
-         * a 40px path: 20.07px of movement in a single frame on bodies 11px
-         * across, while the same figures with no push at all never moved more
-         * than 1.75px. It was never the pile-up and never the floor guard;
-         * both were measured with the same harness and neither changed it.
-         *
-         * So near the middle the geometry is faded out and a direction that
-         * cannot swing is faded in. The fallback is fixed for a given pair, so
-         * a pass that lands deep inside pushes the same way this frame and the
-         * next, and the blend keeps it continuous instead of switching over.
-         * The angle is arbitrary and only has to be stable and to differ
-         * between pairs, so neighbours do not all shove along one axis. */
+        /* THE DIRECTION HAS TO BE STEADY WHERE THE PUSH IS STRONGEST and it was the opposite: the shove is biggest when two bodies are nearly on one spot, which is exactly where dx/d swings right round on a tenth of a pixel. Measured 20.07px in one frame on bodies 11px across, against 1.75px with no push at all. Near the middle the geometry fades out and a per-pair fixed direction fades in. */
         // dead centre on each other: shove along x by index so the answer is the
         // same every time rather than depending on which arrived first
         const ux = d > 0.001 ? dx / d : i < j ? -1 : 1
@@ -613,13 +347,7 @@ export function separate(
   return out
 }
 
-/* WHICH STATE IS LIVE AT t: the division, then a walk of at most six numbers.
- *
- * Exported because the editor has to draw the fence that is in force right now,
- * and a second copy of this walk somewhere else would be a second law. c is how
- * many whole rounds have gone by, which is what gives each state its own clock:
- * a state has been live for c of its own durations plus however far into it we
- * are. into is that remainder. */
+/* WHICH STATE IS LIVE AT t: the division, then a walk of at most six numbers. Exported because the editor has to draw the fence in force right now, and a second copy of this walk would be a second law. */
 export function liveState(states: LifeState[], t: number): { k: number; c: number; into: number } {
   let T = 0
   for (let i = 0; i < states.length; i++) T += states[i].secs
@@ -634,65 +362,7 @@ export function liveState(states: LifeState[], t: number): { k: number; c: numbe
   return { k, c, into: p - start }
 }
 
-/* A BOX IS A PLACE, AND A PLACE IS NOT A TERM IN A SUM.
- *
- * A round is the sum of what every state has travelled on its own clock, and
- * that sum only closes if each term is a DISPLACEMENT: a fixed function of that
- * state's clock and of nothing else. A behaviour with no box is one, because it
- * moves by offset from wherever it stands. A behaviour fenced to a box is not.
- * The box is a rectangle on the painting, so the walk lands inside it whatever
- * it was handed, and the term stops meaning "how far this state carried the
- * thing" and starts meaning "where this state is", which REPLACES the sum
- * instead of adding to it. The last state carrying a move overwrites every
- * earlier one. Measured on a three state round in a 200x200 box: the drawn
- * position was the last moving state's own position on 55.8% of 20000 frames, a
- * state asking 12-24 px/s drew 3.9, and the placement stood still with its walk
- * cycle running on 27.8% of 187499 frames, up to 8.30s unbroken.
- *
- * Anchoring each state where the round has left it looks like the fix and is
- * not. It makes every term a function of the anchor as well as the clock, and
- * with the floor in force a walk's legs are a step function of where it starts,
- * so the term jumps the moment the anchor moves. Measured two ways. Anchoring
- * every state walked the worst single frame step from 0.71px to 128.56px by
- * t=300000s, and it grew with the session because the error multiplies by
- * completed rounds. Anchoring only the live state instead put a 76 to 95px jump
- * at every state change, on 200 of 200 seeds of a fenced round. Neither ships.
- *
- * So a state inherits the fence's ROOM and not its position, and this is what
- * the box MEANS inside a round: the box is the room the WHOLE ROUND has, and the
- * states that move divide it. The live state decides everything anyone can watch
- * happen, the speed and the gait and the facing and the picture, at full asking.
- * A state that is not live decides one thing only, how far it has already
- * carried the thing, which is the memory that lets a state resume where it
- * froze. What no state gets is the whole box to itself, because n bounded walks
- * summed inside one rectangle cannot each have all of it. That is arithmetic
- * rather than a policy, and it is the price of the sum.
- *
- * The room is measured FROM WHERE THE PLACEMENT STANDS and on each side
- * separately, so the n offsets add up to exactly the box and the hold below
- * never has to bite. A rectangle of the right size centred on the placement is
- * not the same thing and it was what shipped: a placement standing in the corner
- * of its own box had the same reach in both directions, so the sum ran out of
- * the box on the short side and the hold took the difference. Measured with a
- * two state round in a 100x100 box, the placement 5px in from the corner: 60.5%
- * of 60000 frames were held against the fence and 8.6% of the moving frames
- * covered no ground at all, which is marching on the spot, back again on any
- * placement not dropped dead centre.
- *
- * Nor is the room flattened. It used to be held to 0.35 of its own width, on the
- * reasoning that a wander's reach is already flattened by the map's
- * foreshortening. That reasoning belongs to a wander with NO box, which spreads
- * range by range*0.35; one with a box uses the box's own height and always has.
- * So the flattening made a state move differently from the identical behaviour
- * outside a round, and it took most of the vertical room: the same 100x100 box
- * gave the round 32px of dy against 95 for the same walk with no round.
- *
- * Measured after, on the same fixture: 0.0% of 60000 frames outside the box from
- * the centre and from the corner alike, reach 96x95 and 95x91 of 100x100, and
- * each state still draws the speed it asked for. Sharing less strictly was tried
- * for the extra reach and is not worth it: box/n^0.75 bought 107x108 and put
- * 5.5% of frames outside the box, and box/sqrt(n) bought 129x125 and put 23.3%
- * outside, which is the hold biting again for reach the sum already has. */
+/* A BOX IS A PLACE, AND A PLACE IS NOT A TERM IN A SUM. A round only closes if each term is a displacement; a fenced behaviour lands inside its box whatever it was handed, so the term starts meaning where this state IS and the last moving state overwrites every earlier one (the drawn position was the last mover's own on 55.8% of 20000 frames, and a state asking 12-24 px/s drew 3.9). Anchoring each state to where the round left it is not the fix: it walked the worst frame step to 128.56px by t=300000s. So a state inherits the fence's ROOM and not its position, measured FROM WHERE THE PLACEMENT STANDS and on each side separately, because a centred rectangle held a corner placement against the fence on 60.5% of 60000 frames. Not flattened either: that took a 100x100 box down to 32px of dy against 95. After: 0.0% of 60000 frames outside the box. */
 function share(m: Life, home: { x: number; y: number }, n: number): Life {
   const b = m.bounds
   if (!b) return m
@@ -733,56 +403,7 @@ export function lifeAt(
   const rot = rock ? rock * Math.sin(t * Math.PI * 2 * (life.rockRate ?? 0.35)) : 0
   const still: LifeAt = { dx: 0, dy: 0, flip: false, alpha: 1, facing: 'south', moving: false, rot, art: 0 }
   if (!life) return still
-  /* WHICH STATE IS LIVE, AND WHERE THE ROUND LEFT IT, AS ARITHMETIC.
-   *
-   * The round is the sum of the durations, so t modulo that sum says where in
-   * the round it is and walking the durations says which state that lands in.
-   *
-   * The part that matters is the clock each state keeps. A state's own time is
-   * the time it has been LIVE: the number of completed rounds times its
-   * duration, plus however far into it we are now. A state that finished earlier
-   * this round has one more whole run behind it; one still to come this round
-   * has one fewer. So a wander that stops to be a boulder resumes at exactly the
-   * second it froze, and there is nothing to remember between frames.
-   *
-   * The position is the SUM of what every state has travelled on that clock.
-   * State zero is the placement's own behaviour drawn as it stands, which is why
-   * a reader that knows nothing about states sees the same creature. Every later
-   * state adds only its displacement since it first went live, so one that has
-   * not run yet this round adds nothing and one that has adds exactly what it
-   * covered.
-   *
-   * That sum is what closes the round. Anchoring each state where the walk of
-   * the states before it left off looks like the same thing and is not: state
-   * zero is then anchored at home every round with no memory of the round
-   * before, so the wrap throws away everything states one and up travelled.
-   * Measured on the check file's troll, five rounds of a 63s sequence with a
-   * rolling state at 40-45 px/s: wrap jumps of 58.37 / 22.27 / 28.99 / 117.47 /
-   * 166.76px and a worst single-frame step of 166.69px. A travelling state also
-   * arrived carrying its own offset for the round, which is the seam the old
-   * comment here called half a pixel for a drift: 58.39px for a wander.
-   *
-   * A state's live clock is continuous in t, since it only ever stops and starts
-   * again where it stopped, and each behaviour is continuous in its own clock.
-   * So the sum is continuous everywhere, at a state change and at the wrap
-   * alike. Same measurement after: worst wrap jump 0.019px, worst state change
-   * 0.044px, worst step 1.31px. That 1.31 is not a seam, it is the hop a wander
-   * rides while dashing dropping to nothing when the dash ends, which every
-   * wander has always done: the plain beach crab measures 2.86px the same way.
-   *
-   * The price is that every state is worked out from the placement's own home
-   * rather than from wherever the sequence has wandered to, because a sum only
-   * telescopes when each term is a fixed function of its own clock. The note on
-   * `share` above has the two measurements that killed the alternative. What it
-   * costs is that a state's floor test is taken in the placement's frame and not
-   * in the drawn one, so it is right to within the reach the other states have,
-   * and sharing the fence between the movers is what bounds that reach. On the
-   * 35% law's own case, a 40px path down a 100px box, that measures 0 frames off
-   * the path in 20000, and on an L of two 40px arms 0 in 40000. On a box that is
-   * mostly NOT walkable, a 12px corridor down a 300x40 box, it measures 9384 of
-   * 40000 frames and 6px out, which is the case the 35% law says to hold by the
-   * box alone rather than by the floor.
-   */
+  /* WHICH STATE IS LIVE AND WHERE THE ROUND LEFT IT, AS ARITHMETIC. t modulo the sum of the durations says where in the round we are; each state's own clock is completed rounds times its duration plus however far in we are, so a wander that stopped to be a boulder resumes at the second it froze with nothing remembered between frames. The position is the SUM of what every state has travelled on that clock, and state zero is the placement's own behaviour, which is why a reader that knows nothing about states sees the same creature. */
   if (life.states && life.states.length > 1) {
     const st = life.states
     const { k, c, into } = liveState(st, t)
@@ -790,31 +411,7 @@ export function lifeAt(
      * fence. A state that only changes the picture takes none of it. */
     let movers = 0
     for (let j = 0; j < st.length; j++) if (st[j].move) movers++
-    /* THE FLOOR IS SHARED FOR THE SAME REASON THE BOX IS.
-     *
-     * Every state is worked out from the placement's own home, so its floor test
-     * is taken there and not where the sprite is drawn. One state held to a 40px
-     * path is on the path; two of them, each held to it around the same point,
-     * add their offsets and the SUM is off it by as much as the path is wide.
-     * Measured on the 35% law's own case, a 40px path down a 100px box with a
-     * four state round: 1190 of 20000 frames off the path, 14.11px out.
-     *
-     * That used to be hidden rather than solved. The share held a state's height
-     * to 0.35 of its width, which on this fixture came to 8.75px against the
-     * path's 20, so the sum squeaked inside by 2.5px. It is luck and it is
-     * orientation, because the flattening only ever squeezed y: the same fixture
-     * turned on its side, a 40px corridor running up the box instead of across
-     * it, measures 1360 of 20000 frames and 9.40px out on the code that passes
-     * the flat one.
-     *
-     * So the floor is divided the same way the box is: a state may stand where
-     * the placement could stand if its step from home were multiplied by the
-     * number of movers. That gives each state a walkable region 1/n as wide
-     * about home, so n of them still sum to the region the placement really has,
-     * and it is the identity when only one state moves. Same fixture after: 0 of
-     * 20000 frames off the path both ways up, and it uses more of the path than
-     * the flattening allowed, 34.4px of the 40 across and 32.2 up, against 28.5
-     * across and 56.6 up-and-off-it before. */
+    /* THE FLOOR IS SHARED FOR THE SAME REASON THE BOX IS. Every state is tested at home, so two states each held to a 40px path add their offsets and the SUM is off it by the path's width: 1190 of 20000 frames off, 14.11px out. The old flattening hid that by luck and by orientation, and the same fixture on its side measured 1360 of 20000. So the floor is divided the way the box is, by the number of movers. After: 0 of 20000 both ways up. */
     const near =
       movers > 1 && canStand
         ? (x: number, y: number) => canStand(home.x + (x - home.x) * movers, home.y + (y - home.y) * movers)
@@ -827,43 +424,8 @@ export function lifeAt(
     for (let j = 0; j < st.length; j++) {
       const raw = st[j].move
       if (!raw) continue
-      /* THE FLOOR REACHES THE STATES HERE, and it has to be done at read time
-       * rather than trusted to construction.
-       *
-       * A state's move only takes the floor as a second fence when it carries
-       * walkOnly of its own, and cleanLife copies the parent's down into them.
-       * But the editor learns walkOnly from the box the person drew, which is
-       * AFTER the plan has already been cleaned, so it stamps the flag on the
-       * finished object and every state inside it keeps the false it was built
-       * with. Measured 2026-08-25 on the troll's own four-state round over a
-       * 40px path: 20.4% of 36000 frames off the floor and 20.2px out at worst,
-       * against 0.2% and 1.2px for the identical walk with no round. Nothing
-       * without a round was ever affected, which is why nineteen hub people
-       * behaved and the first thing with a sequence did not.
-       *
-       * Fixing only the caller would leave every doc.json already written on
-       * disk carrying stateless states, so the parent's flag is applied here
-       * too. A state that asks for the floor itself still gets it. */
-      /* THE PLACEMENT'S OWN FENCE, BOTH HALVES OF IT, applied here rather than
-       * trusted to whoever built the round.
-       *
-       * cleanLife hands a state the parent's box and the parent's floor flag,
-       * and it reads both off `out` at the moment it runs. The editor learns
-       * both from the box the person drew, which is AFTER the plan has already
-       * been cleaned, so it stamped them on the finished object and every state
-       * inside kept the null and the false it was built with. One line,
-       * `mv.bounds = out.bounds ? ... : null`, and both halves went missing
-       * together.
-       *
-       * Measured on the troll actually placed on the hub, its saved life against
-       * the map's own mask: 16.5% of 36000 frames off the walkable ground and
-       * 16px from anything standable, with a box that is 47.9% standable and
-       * walkOnly true at the top. Fixing the caller alone cannot help it,
-       * because that life is already on disk with `bounds: null` in every state,
-       * and so is every other round anybody has already made.
-       *
-       * A state that carries its own is left alone: cleanLife refuses to let one
-       * name a box, so anything that has one got it from a parent already. */
+      /* THE FLOOR REACHES THE STATES HERE, at read time rather than at construction: the editor learns walkOnly from the drawn box AFTER cleanLife has run, so every state kept the false it was built with. Measured on the troll's four-state round over a 40px path: 20.4% of 36000 frames off the floor, against 0.2% for the identical walk with no round. Applied here too, because every doc.json already on disk carries stateless states. */
+      /* THE PLACEMENT'S OWN FENCE, BOTH HALVES, applied here rather than trusted to whoever built the round: one line, and the box and the floor flag went missing together. Measured on the troll actually on the hub: 16.5% of 36000 frames off walkable ground, 16px from anything standable. Fixing the caller alone cannot help a life already on disk with a null box in every state. */
       const eff =
         (life.bounds && !raw.bounds) || (life.walkOnly && !raw.walkOnly)
           ? {
@@ -881,10 +443,7 @@ export function lifeAt(
       ax += a.dx
       ay += a.dy
       if (j > 0) {
-        // only what it has travelled since it first went live. Without this a
-        // state arrives already displaced by wherever its own behaviour sits at
-        // second zero, which is the second seam: a pixel for a drift, the whole
-        // radius for an orbit, the length of a leg for a wander.
+        // only what it has travelled since it first went live, or a state arrives already displaced by wherever its own behaviour sits at second zero: a pixel for a drift, the whole radius for an orbit.
         const z = lifeAt(m, 0, home, near)
         ax -= z.dx
         ay -= z.dy
@@ -900,48 +459,13 @@ export function lifeAt(
     }
     let dx = ax - home.x
     let dy = ay - home.y
-    /* the fence, on the sum rather than on any one state. Every behaviour holds
-     * itself inside the box already, so this only bites when several states each
-     * walk a box and their distances from home pile up. Held rather than wrapped
-     * or bounced, because holding is the one that stays continuous. */
+    /* the fence, on the sum rather than on any one state, so it only bites when several states each walk a box and their distances from home pile up. Held rather than wrapped, because holding stays continuous. */
     const box = life.bounds
     if (box) {
       dx = clamp(home.x + dx, box.x, box.x + box.w) - home.x
       dy = clamp(home.y + dy, box.y, box.y + box.h) - home.y
     }
-    /* THE FLOOR, ON THE SUM, and nothing above this line could do it.
-     *
-     * Every state is worked out as a displacement from HOME and the states are
-     * added up, so each one can be fenced only around home, never around where
-     * the round has actually carried the thing. `near` scales that test by the
-     * number of movers to keep the sum inside the room, which is sound for a
-     * rectangle and cannot be sound for a walkable mask: ground is an arbitrary
-     * shape, so a point tested three times as far from home is a different
-     * point, not a smaller version of the same one. Measured on the troll
-     * actually standing on the hub, its own saved life against the map's own
-     * mask: 16.5% of 36000 frames off the walkable ground, 16px from anything
-     * standable. Taking the scaling out makes it 51.1%, so the proxy is helping
-     * and is still not a fence.
-     *
-     * So the sum is tested where the sum lands. Home is standable by
-     * construction, the thing was put there, and the offset shrinks toward it
-     * until the feet are back on ground. Direction is kept and only distance
-     * gives way, so it reads as coming up short of somewhere rather than being
-     * dragged sideways.
-     *
-     * Sixteen steps is a sixteenth of the offset, well under a pixel at these
-     * ranges, and it is a fixed loop so the editor and the game land on the
-     * same answer for the same second.
-     *
-     * WHAT IT COSTS, measured on the same troll and the same mask: off-mask
-     * frames 5936 of 36000 to 0, and in exchange 4 frames of 36000 move more
-     * than 4px in one tick, worst 11.78px, where before the worst was 1.75px.
-     * That is the fence biting when the line back to home crosses a hole in the
-     * ground, so the pull-back skips to the near side of it. Once every two and
-     * a half minutes against being 16px inside a market stall, which is the
-     * trade taken. Anything better than this wants the walk itself to know
-     * where the round has carried it, and that is a bigger change than a
-     * fence. */
+    /* THE FLOOR, ON THE SUM, and nothing above this line could do it: every state is fenced around HOME, and near() scales that test by the number of movers, which is sound for a rectangle and cannot be for an arbitrary mask. Measured on the hub's troll: 16.5% of 36000 frames off the ground with the scaling, 51.1% without, so the proxy helps and is still not a fence. So the sum is tested where the sum lands and the offset shrinks toward home in sixteen fixed steps, keeping direction and giving up only distance. It costs 5936 off-mask frames going to 0, in exchange for 4 frames of 36000 moving over 4px, worst 11.78px. */
     if (life.walkOnly && canStand && (dx || dy) && !canStand(home.x + dx, home.y + dy)) {
       let lo = 0
       for (let s = 15; s >= 1; s--) {
@@ -955,13 +479,7 @@ export function lifeAt(
       dy *= lo
     }
     const f = st[k].fade || 0
-    /* the opening of the very first round has nothing to dissolve out of. The
-     * placement has not been drawn yet, so a fade in there is a fade in from
-     * nothing and the game draws no sprite at all while it lasts, because it
-     * drops anything at 0.01 alpha or under (PmapScene.tsx:918). Measured on the
-     * example the planner prompt itself hands over, whose first state asks for
-     * 0.25s: alpha 0.00 at t=0, so the thing was invisible on the first frame it
-     * ever had. The round opens at full and only the seams inside it melt. */
+    /* the opening of the very first round has nothing to dissolve out of, and the game drops any sprite at 0.01 alpha or under, so a fade in there is a first frame with nothing drawn. Measured on the planner prompt's own example, whose first state asks 0.25s: alpha 0.00 at t=0. */
     const opening = k === 0 && c === 0
     const fa = f > 0 ? Math.max(0, Math.min(1, Math.min(opening ? f : into, st[k].secs - into) / f)) : 1
     const art = st[k].art || 0
@@ -983,16 +501,7 @@ export function lifeAt(
     // it was facing when it stopped
     return { dx, dy, flip: heldFlip, alpha: fa, facing: heldFace, moving: false, rot, art }
   }
-  /* THE PATH, not only where it ends.
-   *
-   * The floor test used to ask whether the far end of a leg was standable and
-   * nothing about the line to it, so a walker cut the corner off a quay and
-   * crossed stone it could never step on. On a map whose walkable ground is thin
-   * paths that reads as walking through a wall.
-   *
-   * Sampled every two pixels, which is finer than a foot is wide here, and it
-   * runs on the same fixed candidate sequence as before, so the editor and the
-   * game still choose the identical leg. */
+  /* THE PATH, not only where it ends. Asking only whether the far end of a leg was standable let a walker cut the corner off a quay and cross stone it could never step on. Sampled every two pixels, finer than a foot is wide, on the same fixed candidate sequence, so the editor and the game still choose the identical leg. */
   const clearPath = (ax: number, ay: number, bx: number, by: number) => {
     if (!floor) return true
     const d = Math.hypot(bx - ax, by - ay)
@@ -1018,48 +527,18 @@ export function lifeAt(
     let py = home.y
     let clock = 0
     let flip = false
-    /* THE CAP IS A ROUND, NOT A CLIFF.
-     *
-     * 512 legs bounds the cost, and it has to: this walk is the whole per-call
-     * price, the hub has 94 placements, and it runs on school Chromebooks. But
-     * the walk used to fall off the end of those legs and answer `still`, which
-     * put the thing back on its anchor at dx 0 dy 0 and left it standing there
-     * for the rest of the session. Measured on the beach crab: moving at
-     * t=1800s, frozen from t=1932.92s, 32.2 minutes. An advisory session is 30
-     * to 45 minutes, so every wandering placement in every bundle already
-     * exported reaches that during real play.
-     *
-     * So the legs close into a round instead. Leg 512 walks back to the anchor,
-     * which is where leg 0 starts, so the last position of the round is the
-     * first position of the next one and the walk simply carries on. The round's
-     * length is not known until the legs have been walked, so a t past the end
-     * costs a second walk: one to learn the round, one to place the thing inside
-     * it. That is bounded and it never grows again, which is the property that
-     * matters. Measured on the crab: 0.07us at t=0 either way, 14.1us at t=3600s
-     * before, 21.9us after, and flat from there to any t.
-     *
-     * Legs 0 to 511 are untouched, so nothing that has ever been exported moves
-     * by a rounding error before the 32 minute mark. */
+    /* THE CAP IS A ROUND, NOT A CLIFF. 512 legs bounds the cost, and the walk used to fall off the end and answer still, putting the thing back on its anchor for the rest of the session: measured on the beach crab, frozen from t=1932.92s, 32.2 minutes, inside an advisory session. Leg 512 walks back to the anchor, so the round closes. Costs a second walk past the end, 21.9us against 14.1us at t=3600s, flat from there. Legs 0 to 511 are untouched. */
     let tw = t
     for (let pass = 0; pass < 2; pass++) {
       px = home.x
       py = home.y
       clock = 0
       for (let k = 0; k <= 512; k++) {
-        /* the leg home. It is not offered to the floor test the way the others
-         * are, because a leg that got refused would end somewhere else and the
-         * round would not close: the wrap would be a teleport again. The anchor
-         * is the pixel a person dropped the placement on, so it is ground it can
-         * stand on, and this line is walked once every 32 minutes. */
+        /* the leg home, not offered to the floor test: a refused leg would end somewhere else and the wrap would be a teleport again. The anchor is the pixel a person dropped the placement on, so it is standable. */
         const homing = k === 512
         let tx = homing ? home.x : cx + (rnd(k * 2 + 1, seed) * 2 - 1) * halfW
         let ty = homing ? home.y : cy + (rnd(k * 2 + 2, seed) * 2 - 1) * halfH
-        /* the second fence. Candidates are drawn from the same fixed sequence and
-         * the first standable one wins, so this stays reproducible: the editor
-         * and the game pick the identical target as long as they agree about the
-         * floor, which they do, it is the same mask. If none of the tries land on
-         * floor the thing simply stays put for that leg, which is what a creature
-         * boxed into a wall would do anyway. */
+        /* the second fence. Candidates come from the same fixed sequence and the first standable one wins, so the editor and the game pick the identical target. If none land on floor the thing stays put for that leg. */
         if (!homing && floor && (!floor(tx, ty) || !clearPath(px, py, tx, ty))) {
           let found = false
           for (let try_ = 0; try_ < 12; try_++) {
@@ -1072,23 +551,7 @@ export function lifeAt(
               break
             }
           }
-          /* Blocked everywhere, so it stays put for that leg, which is what a
-           * creature boxed into a wall would do anyway.
-           *
-           * Sliding along x and then y instead, the rule Thor walks by, was
-           * tried here and taken back out. It only fires when all twelve
-           * candidates are refused, which is a thin path rather than a plaza, so
-           * it was measured on the two worst: a 12px corridor 300 long and an L
-           * of two 20px arms, 20000 frames each, walkOnly on. Sliding covered
-           * the same 284px of the corridor and the same 186px of the L, left the
-           * same 36 frames off the floor on the L and twice as many on the
-           * corridor, and shrank the L's vertical coverage from 181px to 140px.
-           * The one thing it bought was walking 77% of the time instead of 72%.
-           * Against that it moved 19298 of 20000 frames of an ordinary fenced
-           * walk, by up to 264.6px, and four bundles are already exported. The
-           * fence bug it was suggested for is the anchor above, and that is
-           * fixed: this fixture goes from 19.7px off the path to 0.2px without
-           * any of this. */
+          /* Blocked everywhere, so it stays put for that leg. Sliding along x then y, the rule Thor walks by, was tried and taken back out: on a 12px corridor and an L of two 20px arms it covered the same ground, left twice as many off-floor frames on the corridor and shrank the L's vertical coverage from 181px to 140px, while moving 19298 of 20000 frames of an ordinary fenced walk by up to 264.6px. */
           if (!found) {
             tx = px
             ty = py
@@ -1134,10 +597,7 @@ export function lifeAt(
         px = tx
         py = ty
       }
-      /* past the end of the round, so `clock` is now the length of the whole
-       * round and the second pass lands inside it. A round of no length means a
-       * thing that neither travels nor pauses, and there is nowhere for that to
-       * be but its anchor, so stop rather than divide by zero. */
+      /* past the end of the round, so clock is the round's length and the second pass lands inside it. A round of no length is a thing that neither travels nor pauses, so stop rather than divide by zero. */
       if (!(clock > 0)) break
       tw = tw % clock
     }
