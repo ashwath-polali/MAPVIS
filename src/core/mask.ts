@@ -1,17 +1,6 @@
 import type { Life } from './life'
 import { defaultCfg, type WalkCfg } from './walk'
-/* The mask document: the walkable ground, the elevation levels, the occluders.
- *
- * Ported from tools/maskdraw/app.js in the game repo. The pixel operations are
- * the same ones that were used to author the harbor scene, kept exact on
- * purpose: they have no antialiasing, they write whole pixels, and the seam
- * heal has already caught a bug that a person could not see below 6x.
- *
- * Encoding (matches src/game/painted/PaintedScene.tsx in the game):
- *   0 = blocked. 40 = L0, 50 = ramp01, 60 = L1, 70 = ramp12, 80 = L2,
- *   90 = ramp23, 100 = L3. A step is legal when |a-b| <= 10, so two plateaus
- *   only connect through the stair painted between them.
- */
+/* The mask document: walkable ground, elevation levels, occluders. Pixel ops kept exact from the harbor authoring tool: no antialiasing, whole pixels. Encoding: 0 blocked, 40/60/80/100 the plateaus, 50/70/90 the ramps, and a step is legal at |a-b| <= 10, so two plateaus only connect through the stair painted between them. */
 
 export interface PalEntry {
   v: number
@@ -42,11 +31,7 @@ export interface Occluder {
   baseline: number
 }
 
-/* AN OUTLINE THAT WAS DRAWN, KEPT. Three tools take polygon points, all three
- * rasterize into a plane and clear the list, and nothing ever stored it, so the
- * same outline is traced by hand for the level, again for the cut and again for
- * the occluder. This is that outline, kept so the second and third are a press.
- * The planes stay the only truth about the map; a stencil is a stencil. */
+/* AN OUTLINE THAT WAS DRAWN, KEPT. Three tools take polygon points and all three rasterize and clear, so one outline was traced by hand for the level, the cut and the occluder. The planes stay the only truth; a stencil is a stencil. */
 export interface Stencil {
   id: number
   pts: [number, number][]
@@ -54,29 +39,10 @@ export interface Stencil {
 // no more than this many, newest first, so the list stays a tool and not a log
 export const STENCIL_KEEP = 12
 
-/* A placed asset: a piece of life set ON the painting after mechanics exist.
- * x,y is the FEET anchor in painting pixels (sprite anchor 0.5, 1); the game
- * y-sorts by y. sx/sy scale each axis against the png's native size, rot is
- * radians around the feet anchor, fx/fy mirror the sprite (the game applies
- * them as negative scale, so the editor draws them the same way). scale is
- * the legacy uniform field, kept equal to sx so every older reader stays
- * alive. Static assets carry src, animated ones carry an ordered frame list
- * and an fps. The urls here are the editor's own (/work/<id>/library/... for
- * this map's generated assets); export rewrites them to the bundle's assets/
- * folder. */
+/* A placed asset. x,y is the FEET anchor in painting pixels (sprite anchor 0.5, 1) and the game y-sorts by y. `scale` is the legacy uniform field kept equal to sx so older readers stay alive. Urls here are the editor's own; export rewrites them to the bundle's assets/ folder. */
 export interface PlacedAsset {
   id: string
-  /* WHAT CODE CALLS THIS THING, typed by a person and unique in this map.
-   * The id above is machine-made: it is 'a' plus a counter, nobody chose it,
-   * and it does not survive being deleted and placed again. So it is not an
-   * address anybody can write python against, and until this field existed the
-   * complete set of addressable things in a bundle was the anchors. Every
-   * speaking figure, every fixture and every trophy slot needs to be one.
-   *
-   * Optional, because almost nothing needs one. Nineteen palms and a gull are
-   * scenery and naming each of them would be noise in the only list that
-   * matters. Absent means nothing outside this map can address it, which is
-   * the honest default. */
+  /* WHAT CODE CALLS THIS THING, typed and unique in this map, because the id is 'a' plus a counter that does not survive being deleted and placed again. Optional: nineteen palms are scenery, and absent means nothing outside this map can address it. */
   name?: string
   group: string
   kind: 'static' | 'animated'
@@ -100,90 +66,30 @@ export interface PlacedAsset {
   /* the extra appearances a sequence switches to, index 1 and up. Absent on
    * everything that does not change. */
   looks?: AssetLook[]
-  /* WHAT LOOK 0 IS CALLED, which cannot live on AssetLook because look 0 is not
-   * one of those. The placement's own src / frames / dirs ARE look 0 and `looks`
-   * holds 1 and up, so a name for the picture a thing was placed with has
-   * nowhere else to go. Without it the vocabulary is half a vocabulary: an
-   * author could name the boulder and not the troll it turns back into. */
+  /* WHAT LOOK 0 IS CALLED. It cannot live on AssetLook because look 0 is the placement's own src/frames/dirs, so without this an author could name the boulder and not the troll it turns back into. */
   lookName?: string
-  /* WHEN THIS THING IS THERE AT ALL, declared here and decided somewhere else.
-   *
-   * MAPVIS says the condition, python says what it means. This tool has no run
-   * state, no year, no flags, and no idea what `cord_earned` is, and putting an
-   * evaluator here would move half the game's progression rules into a map
-   * editor. So it is an opaque string the bundle carries to whoever can answer
-   * it, and MAPVIS never looks inside it.
-   *
-   * A placement with none is always there, which is every placement on every map
-   * that exists today. */
+  /* WHEN THIS THING IS THERE AT ALL: MAPVIS declares the condition, python decides what it means. An opaque string this tool never looks inside, because an evaluator here would move half the game's progression into a map editor. */
   when?: string
-  /* WHAT THIS THING BLOCKS ON THE GROUND, as [cx, cy, rx, ry] in painting
-   * pixels around the feet anchor. An ellipse, because the ground is squashed
-   * by yScale and a circle drawn on it reads as one.
-   *
-   * MEASURED WHEN ABSENT, and absent is the right default: publish scans the
-   * png's own alpha at the base band and gets a better answer than anybody
-   * types. This is the correction for when it does not, which is a sprite with
-   * a faint alpha halo, a shadow painted into the frame, or a thing whose
-   * drawn base is not the part a body should bump into. Absent means measured. */
+  /* WHAT THIS THING BLOCKS ON THE GROUND, as [cx, cy, rx, ry] round the feet anchor. An ellipse because the ground is squashed by yScale. Absent means measured, which is the right default and nearly always better. */
   foot?: [number, number, number, number]
 }
 
-/* ONE APPEARANCE of a placement: exactly the four fields that say what to draw.
- * A placement's own src / frames / dirs / fps are look 0, and `looks` holds the
- * extra ones a sequence switches to, so nothing that edits look 0 today has to
- * learn about this. */
+/* ONE APPEARANCE of a placement: the four fields that say what to draw. A placement's own src/frames/dirs/fps are look 0 and `looks` holds the extra ones. */
 export interface AssetLook {
   kind: 'static' | 'animated'
   src?: string
   frames?: string[]
   fps?: number
   dirs?: Record<string, string[]>
-  /* WHAT A PERSON CALLS THIS FACE, and the vocabulary `show(placement, state)`
-   * never had to select from.
-   *
-   * The index stays the data. life.ts documents `art` as "an INDEX and never a
-   * name", clamped 0 to 7, because lifeAt runs for every placement on every
-   * frame and a name would be a search where a number is a lookup. The planner
-   * already answers in names and server/api.mjs resolves each one to an integer
-   * before the row is saved, so by the time a look reaches here the word the
-   * author used is gone and a bundle addresses a face by number alone.
-   *
-   * This is that word, kept BESIDE the index and never instead of it. The
-   * positional packing is untouched: a look that will not load still holds its
-   * slot, art still counts 0, 1, 2 through the same list, and anything reading
-   * by index cannot tell the difference. */
+  /* WHAT A PERSON CALLS THIS FACE, kept BESIDE the index and never instead of it: lifeAt runs per placement per frame and a name would be a search where a number is a lookup. The positional packing is untouched. */
   name?: string
 }
 
-/* THE NAME OF A FACE OR A SET STATE, and it is deliberately the anchor rule.
- *
- * A look name is a python string rather than an identifier, so a looser rule
- * would work, and one namespace shape across every name in this tool is worth
- * more than that freedom. Library rows arrive hyphenated (`boulder-2` from the
- * exporter's own collision suffix), so a name derived from one is folded through
- * anchorName first rather than refused, which is what stops the derivation
- * silently dropping half the vocabulary it was written to supply. */
+/* THE NAME OF A FACE OR A SET STATE, deliberately the anchor rule: one namespace shape across every name is worth more than the freedom a looser rule would buy. A hyphenated library row is folded through anchorName rather than refused. */
 export const isLookName = (s: unknown): s is string =>
   typeof s === 'string' && /^[a-z][a-z0-9_]{0,47}$/.test(s)
 
-/* THE NAME A PICTURE ALREADY HAS, read off the url it lives at.
- *
- * The planner names every look and App.tsx resolves that name to an index at
- * src/App.tsx:1924 and then throws the word away, so nothing downstream of the
- * life panel has ever seen it. Until that panel hands the word over, this
- * recovers it from the one place it is still written down: the path.
- *
- * Two shapes, both built by server/store/platform.mjs and neither of them a
- * guess. A face is /work/<slug>/states/<item>/<face>/[<heading>/]<n>.png, so the
- * name is the segment two past `states`. A library row is
- * /work/<slug>/library/<name>.png or /work/<slug>/library/<name>/... , so it is
- * the segment one past `library`. Anything else answers nothing, because a wrong
- * name is worse than no name once python is writing against it.
- *
- * NOT assetLabel: that one takes the second-to-last segment for anything with
- * dirs, which on a face is the HEADING. It answered `south` for every one of
- * them, which is the same bug that turned 38 of the hub's figures round. */
+/* THE NAME A PICTURE ALREADY HAS, read off the url, because the life panel resolves a name to an index and throws the word away. Two path shapes, neither a guess; anything else answers nothing, since a wrong name is worse than no name once python writes against it. NOT assetLabel, which answers the HEADING for a face. */
 export function lookNameFrom(look: {
   src?: string
   frames?: string[]
@@ -208,11 +114,7 @@ export function lookNameFrom(look: {
   return isLookName(n) ? n : undefined
 }
 
-/* EVERY FACE THIS PLACEMENT HAS, BY NAME, indexed exactly the way `art` indexes
- * them: slot 0 is the placement's own picture, slot 1 is looks[0]. An empty
- * string is a face nobody named, and it holds its slot for the same reason a
- * look that would not load holds its slot. Answers an empty array when nothing
- * anywhere is named, so a bundle from a map with no vocabulary grows no field. */
+/* EVERY FACE BY NAME, indexed the way `art` indexes them: slot 0 is the placement's own picture. An empty string is a face nobody named and holds its slot. Empty array when nothing is named, so a bundle grows no field. */
 export function lookNames(a: {
   lookName?: string
   looks?: { name?: string }[]
@@ -229,11 +131,7 @@ export const lookOf = (a: PlacedAsset, i: number): AssetLook =>
     ? a.looks[i - 1]
     : { kind: a.kind, src: a.src, frames: a.frames, fps: a.fps, dirs: a.dirs }
 
-/* A placement name is legal to type in python, and is never the shape of a
- * machine id. The second half is not fussiness: the game resolves a placement
- * reference against the names AND the ids, so that a binding made before an
- * author named the thing keeps working. Allowing somebody to name a placement
- * `a55` would let one string mean two different objects on the same map. */
+/* A placement name is legal python and is never the shape of a machine id. The game resolves a reference against names AND ids, so allowing `a55` would let one string mean two objects on one map. */
 /* TYPE FIRST, and that is not pedantry. String(undefined) is "undefined",
  * which passes the pattern, so an unnamed placement exported as literally named
  * `undefined` and two of them collided on one map. Found by exporting one. */
@@ -254,12 +152,7 @@ export function migrateAsset(a: PlacedAsset): PlacedAsset {
   a.fx = !!a.fx
   a.fy = !!a.fy
   a.scale = a.sx
-  /* THE FACE NAMES, DROPPED RATHER THAN CORRECTED, exactly the way the placement
-   * name above is. A name a person did not type is a name their python will call
-   * and miss on, and a look with no name is still perfectly drawable by index.
-   * The look itself is never removed here: art counts through the slots, so
-   * dropping one shifts every later face down and a troll/boulder/troll round
-   * draws its third picture where its second belongs. */
+  /* THE FACE NAMES, DROPPED RATHER THAN CORRECTED: a name a person did not type is one their python will miss on. The look itself is never removed, because art counts through the slots and dropping one shifts every later face down. */
   if (!isLookName(a.lookName)) delete a.lookName
   for (const L of a.looks || []) if (L && !isLookName(L.name)) delete L.name
   // an opaque string MAPVIS never reads. Whitespace-only is nothing, because a
@@ -274,42 +167,17 @@ export function migrateAsset(a: PlacedAsset): PlacedAsset {
 export const assetLabel = (a: PlacedAsset): string => {
   const f = a.src || (a.frames && a.frames[0]) || ''
   const parts = f.split('/')
-  /* A set of VIEWS lives in a folder like an animation does, so its name is the
-   * folder and not the file. It is kind 'static' though, because each view IS
-   * one still picture, and without this line the label came back as "south" —
-   * the view it happened to point at — so every lookup by name missed and
-   * ctrl+P, ctrl+T, crop and the palette lock all silently did nothing. */
+  /* A set of VIEWS lives in a folder like an animation, so its name is the folder and not the file. Without this the label came back as the view it pointed at, so ctrl+P, ctrl+T, crop and the palette lock all silently did nothing. */
   if (a.kind === 'animated' || (a.dirs && Object.keys(a.dirs).length)) return parts[parts.length - 2] || a.id
   return (parts[parts.length - 1] || a.id).replace(/\.png$/i, '')
 }
 
-/* An EVENT: a spot on the map plus an action. x,y is the anchor in painting
- * pixels, r the activation radius the game tests the character's feet
- * against. The first type is a door — label is its human name, to the bundle
- * id it leads to. type stays an open string so a later kind (dialogue, a
- * trigger) rides the same list without a format change; a reader skips types
- * it does not know.
- *
- * SINCE ANCHORS: the above described a door and nothing else could be
- * addressed by name. `guide_to("maw_entrance")` has to resolve to something and
- * this tool is the only place that name can be created, so an event grew into
- * an anchor.
- *
- * name and label are separate, and that is the most important line here.
- * `label` is what a player reads on the door prompt. `name` is what code
- * addresses. One string doing both means renaming a door for the player
- * silently breaks a member's island. */
+/* An anchor: a spot on the map plus what it is for. `type` stays an open string so a later kind rides the same list. name and label are separate and that is the most important line here: label is what a player reads, name is what code addresses, and one string doing both means renaming a door for the player breaks a member's island. */
 export type AnchorKind = 'point' | 'region' | 'door' | 'post' | 'spawn' | 'trigger'
 
 export const ANCHOR_KINDS: AnchorKind[] = ['point', 'region', 'door', 'post', 'spawn', 'trigger']
 
-/* THE THREE SHAPES A ZONE CAN BE, and one of them is live at a time.
- *
- * EVERY KIND HAS A ZONE, not only a region. The control was gated to region and
- * the other five were stuck with a ring round their own pixel, so a table
- * against a wall got a circle hanging half over the pit behind it and a door got
- * a ring instead of the doormat you can actually stand on. The reach an author
- * means is a shape they can see, whatever the anchor is called. */
+/* THE THREE SHAPES A ZONE CAN BE, one live at a time, and EVERY KIND HAS ONE. Gated to region, a table against a wall got a circle hanging over the pit behind it and a door got a ring instead of the doormat you can stand on. */
 export type AnchorShape = 'circle' | 'rect' | 'poly'
 
 export const ANCHOR_SHAPES: AnchorShape[] = ['circle', 'rect', 'poly']
@@ -323,70 +191,15 @@ export interface MapAnchor {
   x: number
   y: number
   r: number
-  /* WHERE A BODY ENDS UP WHEN IT USES THIS PLACE, and it is a different pixel
-   * from the one above. x,y is the middle of the thing: the centre of the
-   * interaction ring, the origin of the prompt, what the objective chevron
-   * points at. A chart table's middle is the tabletop, and standing on the
-   * tabletop is not what anybody meant. So the author marks the floor beside
-   * it, once, and walk_to and an arrival through a door both aim there.
-   *
-   * Absolute painting pixels, not an offset, because that is what an author
-   * clicks. A bound anchor carries it along by the same amount the placement
-   * has moved, which is worked out where the following happens rather than
-   * stored. Absent means the body aims at x,y, which is what every anchor did
-   * before this existed. */
+  /* WHERE A BODY ENDS UP WHEN IT USES THIS PLACE, a different pixel from x,y: x,y is the middle of the thing, and a chart table's middle is the tabletop. Absolute painting pixels because that is what an author clicks. Absent means the body aims at x,y. */
   stand?: [number, number]
-  /* WHICH OF THE THREE SHAPES IS THE ONE THE AUTHOR MEANS. Any kind.
-   *
-   * It exists because the exclusivity used to be enforced by deletion: writing a
-   * rect deleted the poly, writing a poly deleted the rect, and going back to a
-   * circle deleted both. So an author who drew an area, saved, then touched the
-   * circle button lost the whole drawing with no undo across a reload, which is
-   * the worst thing this panel could possibly do. The mode is the only thing
-   * that says which shape is authoritative now; `rect` and `poly` keep whatever
-   * they were given until an explicit clear throws one away.
-   *
-   * Absent means "work it out from the data", which is what every region
-   * authored before this field existed needs. See anchorShape.
-   *
-   * IT RIDES IN THE META BAG, for the same reason `when` below does: the anchors
-   * upsert, the game's readAnchors and the publish projection each copy a fixed
-   * list of top-level fields plus the whole of meta, so a new top-level field is
-   * dropped three times over. */
+  /* WHICH OF THE THREE SHAPES THE AUTHOR MEANS. Exclusivity used to be enforced by deletion, so touching the circle button lost a drawn area outright with no undo across a reload. Absent means work it out from the data. Rides in the meta bag, because a new top-level field is dropped by three copiers. */
   shape?: AnchorShape
-  /* THE FOUR NUMBERS ARE [x0, y0, x1, y1], two opposite corners,
-   * and not [x, y, w, h]. The schema comment said one thing and the game's own
-   * box test did the other, and nothing was authoritative because no rect had
-   * ever been authored. The game is the side that already had running code, so
-   * the game wins and everything else was moved to it. Order does not matter:
-   * both readers take the min and the max. */
+  /* THE FOUR NUMBERS ARE [x0, y0, x1, y1], two opposite corners, not [x, y, w, h]. The schema comment said one thing and the game's box test the other; the game had running code, so the game wins. Both readers take min and max. */
   rect?: [number, number, number, number]
-  /* THE SHAPE THE PLACE ACTUALLY IS, in painting pixels, closed
-   * by the reader rather than by a repeated last point.
-   *
-   * A circle and a box are the only two shapes this tool could describe, and
-   * neither is a pier that bends or an L-shaped plaza: an author marking the
-   * hub's waterfront either took in half the water or left out half the pier.
-   * Exclusive with `rect`, enforced in migrateEvent below, because a region
-   * carrying two different shapes gives the exporter a choice nobody authored.
-   *
-   * WHAT SHIPS IS BOTH THIS AND ITS BOUNDING BOX. The running game tests a
-   * region with a box and has no polygon test at all, so a bundle carrying only
-   * the points would be an area nothing can ever be inside. See polyBounds. */
+  /* THE SHAPE THE PLACE ACTUALLY IS, because neither a circle nor a box is a pier that bends. Exclusive with rect. WHAT SHIPS IS BOTH THIS AND ITS BOUNDING BOX: the game tests a region with a box and has no polygon test, so points alone would be an area nothing can be inside. */
   poly?: [number, number][]
-  /* WHERE THE CIRCLE SITS, as an offset from the anchor's own pixel.
-   *
-   * A rect and a drawn outline carry absolute corners, so an author can put
-   * either one anywhere. A circle carried only `r`, so it was pinned to x,y
-   * with no way to move it, and for a BOUND anchor x,y is the placement's
-   * origin, which in this projection is the bottom middle of the art. Ash,
-   * 2026-09-01: the ring sat under the front legs of a table and the tabletop
-   * was outside its own zone, with nothing to drag.
-   *
-   * An offset rather than an absolute point, unlike the other two, because the
-   * circle is the one shape that already follows a placement that moves. Storing
-   * a point would freeze a ring that is meant to travel with somebody who paces.
-   * Absent means centred on the anchor, which is every map authored so far. */
+  /* WHERE THE CIRCLE SITS, as an offset from the anchor's own pixel: a ring carried only r, so on a bound anchor it sat under the front legs of a table with the tabletop outside its own zone. An offset and not a point, because the circle is the one shape that already follows a placement that moves. */
   ring?: [number, number]
   /* door only: the map this leads to */
   to: string
@@ -401,26 +214,9 @@ export interface MapAnchor {
   facing?: string
   /* what a player reads. NOT the identity. */
   label: string
-  /* author key/values a grape can read, and the bag every boundary copies whole.
-   * The `when` comment below is the reason it has to keep existing: the anchors
-   * upsert, readAnchors in the game and the publish projection each copy a fixed
-   * list of top-level fields plus all of meta, so this is what carries anything
-   * new across intact. */
+  /* author key/values a grape can read, and the bag every boundary copies whole: the upsert, the game's readAnchors and the publish projection each copy a fixed list plus all of meta, so this is what carries anything new across. */
   meta?: Record<string, unknown>
-  /* WHEN THIS PLACE IS THERE AT ALL, and the reason the carrier could not stay
-   * on the placement alone. A door barred until a cord is earned and a berth
-   * that does not exist until the ship has been repaired are conditions on the
-   * NAME, not on any picture: the anchor may have no placement bound to it and
-   * still need to be off. Same contract as PlacedAsset.when, declared by MAPVIS
-   * and decided by python, and MAPVIS never looks inside the string.
-   *
-   * IT RIDES IN THE META BAG ACROSS EVERY BOUNDARY, and that is not a shortcut.
-   * The anchors table's upsert column list, the game's readAnchors and the
-   * publish projection each copy a fixed set of top-level fields plus the whole
-   * of `meta`, so a new top-level field is dropped three times over while the
-   * bag arrives intact. That is the framings lesson, paid for once already.
-   * migrateEvent below folds this into meta and lifts it back out, so the field
-   * and the bag can never disagree about what the author typed. */
+  /* WHEN THIS PLACE IS THERE AT ALL. A condition on the NAME, not on a picture: an anchor may have no placement bound to it and still need to be off. Rides in the meta bag, because three copiers take a fixed field list plus all of meta, and migrateEvent folds it both ways so the field and the bag cannot disagree. */
   when?: string
 }
 
@@ -443,41 +239,11 @@ export function anchorName(s: string): string {
 
 export const isAnchorName = (s: string) => /^[a-z][a-z0-9_]{0,47}$/.test(String(s))
 
-/* HOW BIG A NAMED PLACE IS ALLOWED TO BE, and the old ceiling was 64.
- *
- * A region is what a plaza, a pier, a shop floor or a bay gets authored as, and
- * a 64px circle on a 688px map covers under two percent of it. None of those
- * things fit, so the one shape an author could reach for could not describe the
- * thing they were marking.
- *
- * THE CONSUMER NEVER ENFORCED 64 AND STILL DOES NOT. AdventureGame's
- * src/game/pmap/anchors.ts reads `r: Math.max(1, Math.round(num(e.r, 14)))`
- * with no upper bound; the anchors.r column is a plain integer with no check
- * constraint; neither exporter clamps. The cap lived in one line of this tool
- * and nowhere else, so raising it cannot outrun anything downstream.
- *
- * 512 rather than unbounded: PixelLab's measured area budget is about 265,000
- * output pixels, so 688x377 is the widest painting that exists and a corner of
- * it is 392 pixels from the middle. 512 covers any map this project can make
- * and still refuses a number that could only be a typo. */
+/* HOW BIG A NAMED PLACE MAY BE. The old ceiling was 64, which on a 688px map is under two percent, so no plaza, pier or bay fit the one shape an author could reach for. Nothing downstream ever enforced 64, so raising it cannot outrun anything. 512 covers the widest painting the pixel budget allows and still refuses a typo. */
 export const ANCHOR_R_MIN = 4
 export const ANCHOR_R_MAX = 512
 
-/* WHICH SHAPE THIS ANCHOR ACTUALLY IS, asked once so the form, the overlay and
- * both exporters can never answer it differently.
- *
- * The mode wins, but only when the shape it names has something in it: an author
- * who pressed draw and then pressed escape is on the draw mode with nothing
- * drawn, and shipping that as an area would be shipping an area of no pixels. It
- * falls back to what is there, which is also how every region authored before
- * the mode field existed reads.
- *
- * IT NO LONGER ASKS WHAT KIND THIS IS. It used to answer circle for anything
- * that was not a region, which made the whole area control region-only by
- * arithmetic even where the form offered it. A door's zone is the doormat, a
- * post's is the side of the table you can reach it from, and neither of those is
- * a ring round the middle of the thing. An anchor with no area authored still
- * falls through to circle, which is what every kind did before this. */
+/* WHICH SHAPE THIS ANCHOR IS, asked once so the form, the overlay and both exporters cannot answer differently. The mode wins only when the shape it names has something in it, so pressing draw then escape does not ship an area of no pixels. It no longer asks the KIND: a door's zone is the doormat, not a ring round the middle. */
 export function anchorShape(e: {
   kind?: string
   shape?: string
@@ -492,18 +258,7 @@ export function anchorShape(e: {
   return hasPoly ? 'poly' : hasRect ? 'rect' : 'circle'
 }
 
-/* FEWER POINTS FOR THE SAME LINE. Ramer-Douglas-Peucker: keep the two ends, keep
- * whichever point in between sits furthest off the line between them, and stop
- * when nothing is further off than the tolerance.
- *
- * A freehand drag samples the pointer on every move event, so two seconds of
- * drawing arrives as several hundred points describing an edge that a couple of
- * dozen would describe just as well. All of them would go into the document, the
- * anchors table, both exporters and the game's bundle, and every one of them
- * would be drawn as a draggable handle. The tolerance is about one screen pixel
- * at the zoom the author drew at, which is the smallest error they could see: a
- * point that is not that far off the line between its neighbours is not a corner
- * they meant to draw, it is the hand shaking. */
+/* FEWER POINTS FOR THE SAME LINE, Ramer-Douglas-Peucker. A freehand drag samples on every move, so two seconds arrives as several hundred points that would each become a document field, a row, a bundle entry and a draggable handle. The tolerance is about one screen pixel at the zoom drawn at, which is the smallest error the author could see. */
 export function simplifyPoly(pts: [number, number][], tol: number): [number, number][] {
   if (pts.length < 3) return pts.slice()
   const t2 = Math.max(0.01, tol * tol)
@@ -544,14 +299,7 @@ export function simplifyPoly(pts: [number, number][], tol: number): [number, num
   return pts.filter((_, i) => keep[i])
 }
 
-/* THE BOX A DRAWN AREA SITS IN, two opposite corners, in the order `rect` uses.
- *
- * This is what makes a poly safe to ship. The game tests a region by its rect
- * and has no polygon test at all (src/game/pmap/anchors.ts:224), so a bundle
- * carrying only the points would be an area no player is ever inside and every
- * grape hung on it would go quiet. Both exporters write the box beside the
- * points: the box is what runs today, the points are what a reader that learns
- * them will use, and until then an L-shaped plaza tests as its bounding box. */
+/* THE BOX A DRAWN AREA SITS IN, in the order `rect` uses, and what makes a poly safe to ship: the game tests a region by its rect and has no polygon test, so points alone would be an area no player is ever inside. */
 export function polyBounds(poly: [number, number][]): [number, number, number, number] {
   let x0 = poly[0][0]
   let y0 = poly[0][1]
@@ -566,10 +314,7 @@ export function polyBounds(poly: [number, number][]): [number, number, number, n
   return [x0, y0, x1, y1]
 }
 
-/* A saved route, made safe. Two points is the minimum that means anything, and
- * a mark pointing past the end of the line is dropped rather than carried,
- * because a beat that waits for waypoint nine on a six-point path waits for
- * ever. Returns null for anything that cannot be a path at all. */
+/* A saved route, made safe. Two points is the minimum, and a mark past the end of the line is dropped rather than carried, because a beat waiting for waypoint nine on a six-point path waits for ever. */
 export function migratePath(p: MapPath): MapPath | null {
   if (!p || !isAnchorName(p.name)) return null
   const points = (Array.isArray(p.points) ? p.points : [])
@@ -628,18 +373,8 @@ export function migrateFraming(f: MapFraming): MapFraming | null {
   }
 }
 
-/* HOW FAR FROM ITS OWN ANCHOR A STAND POINT MAY BE, in bodies.
- *
- * The stand point is the floor beside a thing, so it is a step away by
- * definition. Nothing stopped it being a step away across the whole map, and
- * two on the hub ended up 60 and 214 pixels from the anchor they belong to
- * because dragging the anchor left them where they were. Two bodies is far
- * enough to stand beside a wide table and near enough that a body aiming at it
- * has plainly gone to the thing rather than to somewhere else. */
-/* THE KEYS IN AN ANCHOR'S BAG THAT BELONG TO THE TOOL. An author's key/value
- * grid must not offer these: `when` and `shape` are fields with their own
- * controls that only ride in the bag, and `derived` and `docId` are MAPVIS's
- * own record of where a name came from. */
+/* HOW FAR FROM ITS ANCHOR A STAND POINT MAY BE, in bodies. Two on the hub ended up 60 and 214 pixels away because dragging the anchor left them where they were. Two bodies reaches past a wide table and no further. */
+/* THE KEYS IN AN ANCHOR'S BAG THAT BELONG TO THE TOOL, kept off the author's grid: `when` and `shape` have their own controls, `derived` and `docId` are MAPVIS's record of where a name came from. */
 export const ANCHOR_META_RESERVED = ['when', 'shape', 'derived', 'docId', 'shots', 'variants']
 
 export const STAND_REACH_BODIES = 2
@@ -663,10 +398,7 @@ export function clampStand(
   return [x + Math.trunc(dx * k), y + Math.trunc(dy * k)]
 }
 
-/* An anchor from an older save: absent numbers fill in sane, absent strings
- * empty. Anything saved before anchors existed is a door with no name, so one
- * is derived from its label and marked derived — code written against a
- * derived name is code written against a guess, and the editor says so. */
+/* An anchor from an older save: absent numbers fill in sane, absent strings empty. A pre-anchor door has no name, so one is derived from its label and marked derived, because code written against a derived name is written against a guess. */
 export function migrateEvent(e: MapAnchor & { type?: string }, charH = defaultCfg().charH): MapAnchor {
   e.id = Number(e.id) > 0 ? Math.round(Number(e.id)) : 1
   const legacy = typeof e.type === 'string' ? e.type : ''
@@ -693,38 +425,14 @@ export function migrateEvent(e: MapAnchor & { type?: string }, charH = defaultCf
   if (Array.isArray(e.rect) && e.rect.length === 4 && e.rect.every((n) => isFinite(Number(n))))
     e.rect = e.rect.map((n) => Math.round(Number(n))) as [number, number, number, number]
   else delete e.rect
-  /* THE DRAWN AREA, and three points is the floor rather than a nicety: two
-   * points are a line, a line has no inside, and a region built from one would
-   * test as empty for every player forever with nothing saying why. Refused
-   * here rather than repaired, the way an illegal name is refused, because a
-   * shape somebody half-drew is not a shape they meant. */
+  /* THE DRAWN AREA, and three points is the floor: two are a line, a line has no inside, and a region built from one tests empty for every player forever. Refused rather than repaired, because a half-drawn shape is not a shape anybody meant. */
   const poly = (Array.isArray(e.poly) ? e.poly : [])
     .filter((q) => Array.isArray(q) && q.length === 2 && isFinite(Number(q[0])) && isFinite(Number(q[1])))
     .map((q) => [Math.round(Number(q[0])), Math.round(Number(q[1]))] as [number, number])
   if (poly.length >= 3) e.poly = poly
   else delete e.poly
-  /* THE MODE, FOLDED INTO THE BAG AND LIFTED BACK OUT OF IT, the same trip
-   * `when` makes below and for the same reason.
-   *
-   * A rect used to be deleted the moment a poly landed, so the two could never
-   * be on one anchor and the exporters never had to choose. That cost an author
-   * their drawing every time they touched another mode button. Both are kept
-   * now, the mode says which one is authoritative, and the exporters ask
-   * anchorShape rather than guessing from what happens to be present.
-   *
-   * Written only when there is an area to be authoritative over, so an anchor
-   * nobody has drawn a zone on carries no mode at all and no bundle grows a
-   * field for it.
-   *
-   * THE KIND IS NOT ASKED. It was `kind === 'region' && ...`, which threw the
-   * mode away the instant a drawn door was migrated, so a zone drawn on a door
-   * survived exactly until the next save and then read back as a circle. The
-   * zone belongs to the anchor, not to the word in front of it. */
-  /* THE RING OFFSET, validated and folded the way `shape` and `when` are, and in
-   * the bag for the same reason: three separate copy lists take a fixed set of
-   * top-level fields plus the whole of meta, so a new column would be dropped by
-   * all three. Two finite numbers or nothing, and a zero offset is stored as
-   * nothing so an untouched ring never grows a field. */
+  /* THE MODE, FOLDED INTO THE BAG AND LIFTED BACK OUT. Both shapes are kept now and the mode says which is authoritative, so touching a mode button no longer costs an author their drawing. Written only when there is an area to be authoritative over. THE KIND IS NOT ASKED: a zone drawn on a door used to survive until the next save and read back as a circle. */
+  /* THE RING OFFSET, validated and folded like `shape` and `when` and in the bag for the same reason. Two finite numbers or nothing, and a zero offset stores as nothing so an untouched ring grows no field. */
   const bagRing = e.meta && Array.isArray((e.meta as { ring?: unknown }).ring)
     ? ((e.meta as { ring?: unknown[] }).ring as unknown[])
     : null
@@ -773,15 +481,7 @@ export function migrateEvent(e: MapAnchor & { type?: string }, charH = defaultCf
     e.name = anchorName(e.label || `${e.kind}_${e.id}`)
     e.meta = { ...(e.meta || {}), derived: true }
   }
-  /* THE CONDITION, FOLDED INTO THE BAG AND LIFTED BACK OUT OF IT.
-   *
-   * Both directions, in one place, because the field and the bag must never
-   * disagree about what the author typed. Going out: syncEventsToAnchors copies
-   * a fixed list of columns plus the whole of meta, so a top-level `when` never
-   * reaches postgres and is gone by the next open. Coming in: eventsFromAnchors
-   * hands the bag back and nothing else knows to look inside it, so an anchor
-   * that has been round the database once would come back with no condition and
-   * the panel would show it as unconditional. */
+  /* THE CONDITION, FOLDED BOTH WAYS IN ONE PLACE, because the field and the bag must never disagree: syncEventsToAnchors copies a fixed column list plus meta, so a top-level `when` never reaches postgres, and eventsFromAnchors hands the bag back with nothing else knowing to look inside it. */
   const bagWhen = e.meta && typeof (e.meta as { when?: unknown }).when === 'string'
     ? String((e.meta as { when?: string }).when)
     : ''
@@ -811,35 +511,12 @@ export interface StairRegion {
 
 export type Pt = [number, number]
 
-/* WHAT KIND OF PLACE A MAP IS. The engine guessed this from whether the
- * painting's border was transparent, on every map, because MAPVIS knew the
- * answer and never wrote it down. `hall` is the third value: a shared space
- * that is neither a club's own island nor a room inside something, and it is
- * the shape anything a member builds for other people to use will take. */
+/* WHAT KIND OF PLACE A MAP IS, which the engine guessed from whether the border was transparent because MAPVIS knew and never said. `hall` is a shared space that is neither a club's island nor a room inside something. */
 export type MapClass = 'island' | 'room' | 'hall'
 
 export const MAP_CLASSES: MapClass[] = ['island', 'room', 'hall']
 
-/* Everything about the map itself that is not pixels and not a named point.
- *
- * All four of these were missing in different ways. `title` was a real postgres
- * column, machine-filled with the slug, shown on the dashboard and dropped
- * before the export, so every named place a student reads is a slug or a string
- * typed into the game's source. `class` was known and never said. `meta` is the
- * author's own bag and there was no map-level one at all, so the only place to
- * hang map-scoped data was a `meta` on some arbitrarily chosen anchor.
- *
- * `islandId` HAS NO READER YET, AND THIS NOTE CLAIMED OTHERWISE. It is the join
- * between a published map and the school offering behind it, and the reason
- * given for adding it was that the binding lived in a hardcoded Set in the other
- * repo, so shipping a member's island was a source edit and a deploy. That is
- * still true now the field ships: the game declares islandId on its map type and
- * never reads it, and the only binding is islandOfMap(mapId), a lookup over
- * member-islands.json, so a new island is still a row added there and a deploy.
- * The field is right and the emit stays. The reader belongs in the game repo,
- * and this says so rather than reading as a problem somebody solved. MAPVIS
- * emitting a field is not the same as the consumer having a reader, which is the
- * lesson the framings array and the top-level anchor fields already taught. */
+/* Everything about the map that is not pixels and not a named point. title was a real column machine-filled with the slug and dropped before the export; class was known and never said; meta is the author's own bag and there was no map-level one. islandId HAS NO READER YET: the game declares it and never reads it, and the only binding is still a row in member-islands.json plus a deploy. MAPVIS emitting a field is not the consumer having a reader. */
 export interface MapProps {
   /* what a player reads. The id is what code addresses, the same split anchors
    * make between name and label, and for the same reason. */
@@ -847,51 +524,23 @@ export interface MapProps {
   class: MapClass
   /* the school offering this map is about, joining it to a grape */
   islandId: string
-  /* WHERE THE PAINT ACTUALLY IS INSIDE THE CANVAS, as [w, h, ox, oy], stated
-   * rather than measured. Absent means measured, and measured is nearly always
-   * the better answer: both exporters scan the scene's own alpha and get the
-   * real extent off the bytes that ship. This is the correction for a painting
-   * whose edge is a faint alpha halo the scan reads as picture, which makes the
-   * footprint too big and the centre wrong. */
+  /* WHERE THE PAINT IS INSIDE THE CANVAS, as [w, h, ox, oy], stated rather than measured. Absent means measured, which is nearly always better; this is the correction for an edge the scan reads as picture. */
   paint?: [number, number, number, number]
   meta: Record<string, unknown>
 }
 
 export const defaultProps = (): MapProps => ({ title: '', class: 'island', islandId: '', meta: {} })
 
-/* A NAMED POLYLINE, WHICH IS THE LARGEST THING THIS TOOL COULD NOT SAY.
- *
- * Every anchor is one pixel, so the only route a map could describe was a
- * straight line between two of them. The ship reaching the dock, an actor
- * crossing a room on a line somebody chose rather than a lerp, a patrol that
- * follows a shape, a camera that travels: all of them are this, and all of them
- * were being hand-typed as numbers in the other repo.
- *
- * `marks` is the part that stops a cutscene being retuned every time the text
- * changes. A mark names a waypoint index, so a beat says "be at the doorway by
- * the time this line ends" instead of "walk for 2.4 seconds". */
+/* A NAMED POLYLINE, the largest thing this tool could not say: every anchor is one pixel, so the only route a map could describe was a straight line between two. `marks` names a waypoint index, so a beat says "be at the doorway by the time this line ends" instead of "walk for 2.4 seconds". */
 export interface PathMark {
   /* index into points, so a mark cannot name a waypoint that is not there */
   at: number
   name: string
-  /* WHAT A PERSON READS, the same split an anchor makes between name and label.
-   * Ash, 2026-08-29: waypoints get labels too. Until this existed the only
-   * string a mark carried was the python identifier, so the canvas captioned a
-   * waypoint `at_the_doorway` and the panel listed it the same way, which is
-   * the exact thing the name/label split was paid for to stop. Optional,
-   * because every mark saved before today has none and displayName unpacks the
-   * identifier for those. */
+  /* WHAT A PERSON READS, the same split an anchor makes. Without it the canvas captioned a waypoint `at_the_doorway`, which is the exact thing the name/label split was paid for to stop. Optional, because every mark saved before has none. */
   label?: string
 }
 
-/* WHAT TRAVELS THE LINE, and the thing that decides whether a route crossing
- * open water is a defect or the whole point of it.
- *
- * Until this existed a route was just points, so nothing could be checked: the
- * hub's own the_dock_walk runs over pixels no body can stand on, and the tool
- * had no way to know whether that was a mistake or a boat. A walk line is held
- * to the floor. A sail line is expected to leave it. A camera is a dolly with
- * no feet and is held to nothing. */
+/* WHAT TRAVELS THE LINE, and what decides whether a route over open water is a defect or the point: the hub's own the_dock_walk runs over pixels no body can stand on and nothing could tell a mistake from a boat. A walk line is held to the floor, a sail line is expected to leave it, a camera is held to nothing. */
 export type PathKind = 'walk' | 'sail' | 'camera'
 
 export const PATH_KINDS: PathKind[] = ['walk', 'sail', 'camera']
@@ -915,18 +564,7 @@ export interface MapPath {
   meta?: Record<string, unknown>
 }
 
-/* A NAMED SHOT. Every "point the camera at the thing" beat needs one, and
- * without them every camera move in the game is hand-typed numbers nobody can
- * check without running it.
- *
- * It hangs off an ANCHOR by preference rather than off coordinates, because raw
- * numbers re-break every time a painting is re-cut, which happens on every map.
- * A shot on `coach_post` travels when the coach does; a shot on (412, 208) is
- * wrong the next time the coast is shaved by a pixel.
- *
- * zoom is a real number, not one of the renderer's integer notches. The pull-out
- * shot cannot exist on integer notches, and an authored value the renderer
- * cannot honour is a defect at the renderer rather than a reason to round here. */
+/* A NAMED SHOT, hung off an ANCHOR by preference rather than coordinates, because raw numbers re-break every time a painting is re-cut. zoom is a real number and not one of the renderer's integer notches: the pull-out shot cannot exist on those. */
 export interface MapFraming {
   id: number
   name: string
@@ -939,39 +577,14 @@ export interface MapFraming {
   dx: number
   dy: number
   zoom: number
-  /* HOW MANY TIMES TIGHTER THAN THE WHOLE MAP THIS SHOT IS, recorded when it
-   * was armed. `zoom` above is the editor's own view: screen pixels per
-   * painting pixel, which only means anything next to the canvas that was open
-   * at the time. The game has no such number. It multiplies whatever it is
-   * given by the scale the map loaded at, so handing it a 3 asks for a face
-   * filling the screen. This is the ratio that survives the crossing, and
-   * shotZoom below turns it into the multiple the game reads. */
+  /* HOW MANY TIMES TIGHTER THAN THE WHOLE MAP THIS SHOT IS, recorded when armed. `zoom` above is the editor's own screen-pixels-per-painting-pixel and means nothing outside the canvas that was open; the game multiplies what it is given by the scale the map loaded at. */
   overFit?: number
   /* the framing a player gets on arriving in this map, at most one per map */
   entry?: boolean
   meta?: Record<string, unknown>
 }
 
-/* A NAMED SET OF ANCHORS. `steles` meaning those five, `the_berths` meaning
- * every one on this map.
- *
- * WHAT THE GAME DOES WITH ONE TODAY: nothing, and nothing like it. Read before
- * this was written rather than assumed. AdventureGame's src/game/pmap/anchors.ts
- * holds every anchor in one flat map keyed by name, and the only question it can
- * answer about several at once is `ofKind`, which is the tool's own vocabulary
- * and not the author's. Nothing groups anchors, nothing iterates a named
- * collection, and no intent in src/vine/intents.ts takes anything but a single
- * `anchor: string`. So a grape that wants the five steles hard-codes five
- * strings, and neither side can say whether that is all of them.
- *
- * MEMBERSHIP, NOT ORDER. A set answers "is this one of them" and "how many are
- * there". Where the third one has to be the third one every run, that is a rack
- * below and not this.
- *
- * AN EMPTY SET IS KEPT, unlike a one-point path, which is dropped. A path with
- * one point is not a line at all; a set with no members is an author who has
- * named the thing before drawing the anchors, and iterating it yields nothing,
- * which is a correct answer rather than a broken one. */
+/* A NAMED SET OF ANCHORS. WHAT THE GAME DOES WITH ONE TODAY: nothing, read rather than assumed. Nothing groups anchors and no intent takes more than a single anchor string, so a grape wanting five steles hard-codes five and neither side can say whether that is all of them. Membership, not order; a rack below is the ordered one. An empty set is kept, because iterating it yields nothing, which is a correct answer. */
 export interface MapAnchorSet {
   id: number
   /* author-typed, python-shaped, and unique across sets AND racks. See
@@ -986,26 +599,7 @@ export interface MapAnchorSet {
   meta?: Record<string, unknown>
 }
 
-/* ONE POSITION IN A RACK, and `slot` is its address for the whole life of the
- * map.
- *
- * WHY THIS NUMBER IS NOT AN ARRAY POSITION. The whole demand is that the third
- * hook is the third hook every run. An index into `slots` renumbers the moment
- * somebody deletes the second hook, so every trophy after it moves one place
- * left, a save that says "slot 3 is filled" now means a different hook, and
- * nothing anywhere says so. So each slot carries a number assigned once from the
- * rack's own counter and never reused: delete slot 2 of five and the rack is
- * 1, 3, 4, 5, and the next one added is 6.
- *
- * WHY IT IS CALLED `slot` AND NOT `id`. A path and a shot both carry an `id`
- * which is deliberately stripped at the bundle boundary, because across that
- * boundary a name is the only identity there is. This one is the opposite: it
- * ships, and it is what `hook[3]` means. Naming it `id` would put it in the
- * class of fields a reader is meant to drop.
- *
- * THE ANCHOR IS REQUIRED. "Each empty or filled" is about whether a thing has
- * arrived, which is run state and belongs to python. The position itself is a
- * place on a wall, so a slot with nowhere to be is not a slot. */
+/* ONE POSITION IN A RACK, and `slot` is its address for the life of the map. NOT an array position: deleting the second hook would renumber every trophy after it and a save saying "slot 3 is filled" would mean a different hook. Numbers come from the rack's counter and are never reused. Called `slot` and not `id` because it SHIPS, and `id` is the class of field a reader is meant to drop. The anchor is required: a slot with nowhere to be is not a slot. */
 export interface RackSlot {
   slot: number
   anchor: string
@@ -1013,18 +607,7 @@ export interface RackSlot {
   meta?: Record<string, unknown>
 }
 
-/* AN ORDERED SLOT RACK: the trophy wall, the banner wall, the three season
- * tokens, the graduation front row.
- *
- * The reverse of a group. A group is things that exist acting as one; a rack is
- * one authored empty position per thing that does not exist yet, and the filling
- * of it is the only progression readout in the game that is not a number on a
- * panel.
- *
- * ARRAY ORDER IS ARRIVAL ORDER AND THE SLOT NUMBER IS THE ADDRESS. The two are
- * separate on purpose. Things arrive in the order the list is written, so an
- * author who wants the first trophy on the left end drags it to the front;
- * `hook[3]` still means the slot numbered 3 wherever it now sits in the list. */
+/* AN ORDERED SLOT RACK: the trophy wall, the banner wall, the season tokens. The reverse of a group, one authored empty position per thing that does not exist yet. ARRAY ORDER IS ARRIVAL ORDER AND THE SLOT NUMBER IS THE ADDRESS, separate on purpose, so dragging a trophy to the front does not change what hook[3] means. */
 export interface MapRack {
   id: number
   name: string
@@ -1036,12 +619,7 @@ export interface MapRack {
   meta?: Record<string, unknown>
 }
 
-/* A saved set, made safe. A member that is not a legal anchor name is dropped
- * rather than carried: it can never resolve, and the publish gate that refuses a
- * set naming a missing anchor would then be refusing over a string nobody typed
- * into the members list on purpose. A duplicate is dropped for the same reason a
- * duplicate anchor name is, and it is what makes "the set is complete" a
- * countable question. */
+/* A saved set, made safe. A member that is not a legal anchor name is dropped rather than carried, or the publish gate would refuse over a string nobody typed. Duplicates go too, which is what makes "the set is complete" a countable question. */
 export function migrateAnchorSet(s: MapAnchorSet): MapAnchorSet | null {
   if (!s || !isAnchorName(s.name)) return null
   const seen = new Set<string>()
@@ -1061,11 +639,7 @@ export function migrateAnchorSet(s: MapAnchorSet): MapAnchorSet | null {
   }
 }
 
-/* A saved rack, made safe. Two hooks numbered 3 is not a rack, so the second one
- * loses: an address that resolves to two positions is worse than a missing
- * position, because nothing downstream can tell which one it got. slotNext comes
- * back at least one past the highest number present, so a hand-edited save can
- * never hand out a number that is already on the wall. */
+/* A saved rack, made safe. Two hooks numbered 3 is not a rack and the second loses: an address resolving to two positions is worse than a missing one. slotNext comes back past the highest number present, so a hand-edited save cannot hand out a number already on the wall. */
 export function migrateRack(r: MapRack): MapRack | null {
   if (!r || !isAnchorName(r.name)) return null
   const seen = new Set<number>()
@@ -1100,42 +674,13 @@ export interface MapVariant {
   /* what python sets. Folded through the same rule every other name in this
    * tool goes through, because one namespace shape beats four. */
   name: string
-  /* WHICH PLACEMENT, BY ITS AUTHOR NAME and never by its id. The id is a counter
-   * MAPVIS made up that does not survive a delete and a re-place, which is the
-   * same reason an anchor binds by name. The game resolves both, so a name is
-   * the half that stays true. */
+  /* WHICH PLACEMENT, BY ITS AUTHOR NAME and never by its id: the id is a counter that does not survive a delete and a re-place. The game resolves both, so the name is the half that stays true. */
   placement: string
   /* what a person reads in the panel. Never the identity. */
   label?: string
 }
 
-/* A NAMED EXCLUSIVE VARIANT SET: one name, several PLACEMENTS, at most one of
- * them visible.
- *
- * NOT ONE PLACEMENT WEARING ANOTHER FACE. That is `looks` and `art`, it is
- * already built, and it is the wrong tool here. §8.12's ship and empty berth is
- * the case that settles it: a ship at a dock and the empty water where it is not
- * are two objects with different silhouettes, different footprints and different
- * anchors, and drawing them as two frames of one sprite would give the empty
- * berth the ship's collision and the ship the berth's y-sort. A face swap is one
- * thing changing; this is two things trading places.
- *
- * WHAT IT BUYS: python sets a state without knowing how many faces exist. Five
- * dock placements, one per island state, and a grape writes the word rather than
- * showing one and hiding four by hand, which is the version that ships with the
- * fifth `show` forgotten and two docks on screen at once.
- *
- * IT HANGS ON AN ANCHOR, AND THAT IS REQUIRED. The anchor namespace is the only
- * addressing system the running game has: every intent in src/vine/intents.ts
- * that touches the world takes `anchor: string`, `show` resolves an anchor to
- * `a.placement` and then to a sprite, and readAnchors carries an anchor's meta
- * bag across intact. A set with nowhere to be addressed from is a set nobody can
- * name, so the anchor it hangs on is where it is published to. Several sets may
- * share one anchor, keyed by name, exactly as several shots may.
- *
- * The state a run OPENS on is `initial`, and empty is a legal answer: an author
- * who wants nothing showing until the story says otherwise says so here rather
- * than shipping a placement they then have to hide on the first frame. */
+/* A NAMED EXCLUSIVE VARIANT SET: one name, several PLACEMENTS, at most one visible. NOT one placement wearing another face, which is `looks`: a ship at a dock and the empty water where it is not have different silhouettes, footprints and anchors, so two frames of one sprite would give the empty berth the ship's collision. It buys python setting a state without knowing how many faces exist, instead of showing one and hiding four by hand. It hangs on an ANCHOR because the anchor namespace is the only addressing system the running game has. `initial` may be empty, which is an author saying nothing shows until the story says otherwise. */
 export interface MapVariantSet {
   id: number
   name: string
@@ -1148,18 +693,7 @@ export interface MapVariantSet {
   meta?: Record<string, unknown>
 }
 
-/* A saved variant set, made safe.
- *
- * A member naming a placement twice is dropped, because two states pointing at
- * one placement cannot be exclusive: setting either one leaves the same sprite
- * on screen and nothing downstream can say which state it is in. A duplicate
- * state name goes for the reason a duplicate anchor name does. An `initial`
- * naming a member that is not in the list falls back to nothing rather than to
- * the first one: showing an arbitrary member is worse than showing none, because
- * none is a state an author can see is wrong.
- *
- * A set with fewer than two members is KEPT. One member is an author part way
- * through building the second, and it still answers correctly. */
+/* A saved variant set, made safe. A member named twice is dropped, because two states pointing at one placement cannot be exclusive. An `initial` naming a non-member falls back to nothing rather than the first: showing an arbitrary member is worse than showing none, because none is visibly wrong. One member is KEPT, being an author part way through the second. */
 export function migrateVariantSet(v: MapVariantSet): MapVariantSet | null {
   if (!v || !isAnchorName(v.name) || !isAnchorName(String(v.anchor))) return null
   const names = new Set<string>()
@@ -1189,17 +723,7 @@ export function migrateVariantSet(v: MapVariantSet): MapVariantSet | null {
   }
 }
 
-/* A GROUP OF PLACEMENTS, WHICH ALREADY EXISTED AS A STRING AND NOW HAS A ROW.
- *
- * Every placement carries `group`, the editor hides and shows by it, and there
- * was nowhere to say anything ABOUT one. That matters for exactly one field so
- * far: a dozen placements that are the same year's dressing share one condition,
- * and copying that string onto each of them means the thirteenth is added
- * without it and nothing anywhere says so.
- *
- * The name IS the group string on the placements. There is no id, because
- * `a.group` is the join and adding a second identity would let a placement point
- * at a group that has been renamed out from under it. */
+/* A GROUP OF PLACEMENTS, WHICH WAS ALREADY A STRING AND NOW HAS A ROW, so there is somewhere to say something ABOUT one. It matters for one field so far: a dozen placements sharing a condition, where copying the string onto each means the thirteenth is added without it. The name IS the group string; a second identity would let a placement point at a group renamed out from under it. */
 export interface MapGroup {
   name: string
   /* what a person reads. The group string itself is what the panel shows today
@@ -1211,12 +735,7 @@ export interface MapGroup {
   when?: string
 }
 
-/* A saved group, made safe. The name is a placement's `group` string rather than
- * an anchor name, and those have always been free text (`props`, `effects`,
- * `people`), so it is folded rather than refused: refusing would silently drop
- * the condition off every group that was made before this existed. A group
- * carrying nothing at all is dropped, because a row that says only its own name
- * is what every placement already says. */
+/* A saved group, made safe. The name is a placement's free-text `group` string, so it is folded rather than refused: refusing would drop the condition off every group made before this existed. A row that says only its own name is dropped, because every placement already says it. */
 export function migrateGroup(g: MapGroup): MapGroup | null {
   if (!g || typeof g.name !== 'string' || !g.name.trim()) return null
   const when = typeof g.when === 'string' ? g.when.trim().slice(0, 240) : ''
@@ -1229,75 +748,25 @@ export function migrateGroup(g: MapGroup): MapGroup | null {
   }
 }
 
-/* THE CONDITION A PLACEMENT ACTUALLY SHIPS WITH: its own if it has one, its
- * group's otherwise. Resolved here rather than in the game, because the game's
- * assets loop has a placement in hand and no group table beside it, and handing
- * it one would be a second lookup for a string that never changes after export. */
+/* THE CONDITION A PLACEMENT SHIPS WITH: its own if it has one, its group's otherwise. Resolved here rather than in the game, whose assets loop has a placement in hand and no group table beside it. */
 export function whenOf(a: { when?: string; group?: string }, groups: MapGroup[]): string {
   if (typeof a.when === 'string' && a.when.trim()) return a.when.trim()
   const g = groups.find((q) => q.name === a.group)
   return g && g.when ? g.when : ''
 }
 
-/* THE GAME'S OWN PULL-OUT CONSTANT, and MAPVIS carries it because MAPVIS is the
- * one that moves. The consumer computes its opening scale as
- * `max(1, floor(min(sw / W, sh / H))) * 1.18` and then multiplies a framing's
- * zoom by that, so a shot exported as 1 is the map's opening view and 1.9 is
- * pushed in. Nothing here can change what the game does with the number, so the
- * conversion happens on the way out and this constant lives at the emit.
- * AdventureGame/src/game/pmap/PmapScene.tsx:828-829 is where it comes from. */
+/* THE GAME'S OWN PULL-OUT CONSTANT, carried here because MAPVIS is the one that moves: the consumer multiplies a framing's zoom by its own opening scale, so a shot exported as 1 is the opening view. The conversion happens on the way out, so the constant lives at the emit. */
 export const GAME_OPENING_PULL = 1.18
 
-/* What a shot is worth to the game. A framing armed before overFit existed has
- * no honest answer, so it becomes the map's opening view rather than the raw
- * editor notch: an opening view is a shot somebody can look at and re-arm, and
- * a notch shipped straight through is a nose filling the screen with nothing
- * anywhere saying why. */
+/* What a shot is worth to the game. A framing armed before overFit existed has no honest answer, so it becomes the opening view: a raw editor notch shipped straight through is a nose filling the screen with nothing saying why. */
 export function shotZoom(f: { zoom?: number; overFit?: number }): number {
   const rel = isFinite(Number(f.overFit)) && Number(f.overFit) > 0 ? Number(f.overFit) : 0
   if (!rel) return 1
   return Math.round((rel / GAME_OPENING_PULL) * 1000) / 1000
 }
 
-/* SHOTS FOLDED ONTO THE ANCHOR THEY NAME, which is where the consumer looks.
- *
- * MAPVIS keeps its shots in a list of their own, and that list is the authoring
- * record: it is what the panel edits, what reloads, and what the api hands to
- * python. The game has never had a reader for it. What the game reads is the
- * anchor's own `meta` bag, `meta.framings[name]` first and `meta.framing` as the
- * unnamed default, with the fields spelt exactly zoom, dx, dy and name. So the
- * list stays and this writes the same shots into the place they are read from.
- *
- * WHICH ONE IS THE DEFAULT matters more than it looks. look_at asks for a shot
- * with no name at all, and a script naming a shot the map does not carry falls
- * back to the same slot, so an anchor with named shots and no default has a
- * silently dead camera on both paths. The entry shot takes it if there is one
- * on this anchor, otherwise the oldest, because ids only ever count upwards and
- * the first shot somebody armed on a station is the one they framed it with.
- *
- * MERGED, NEVER SWAPPED IN. panthers_maw on the real hub already carries
- * docId and derived, and the game writes `derived` itself when it has to invent
- * a name, so replacing the bag would take both out. `framing` and `framings` are
- * the only two keys touched, and only when a shot actually hangs here.
- *
- * A name of `(default)` cannot happen: framing names go through isAnchorName,
- * and that is the literal string the game's own refusal listing prints for the
- * unnamed slot. */
-/* OWNING A KEY MEANS OWNING ITS ABSENCE TOO.
- *
- * Both projections below were additive only: with no shots on an anchor they
- * handed the incoming bag straight back, so a `framings` or `framing` key
- * already sitting in it shipped as a live camera the shot list no longer
- * contained. That is reachable and permanent. restoreFromDisk pulls map.json's
- * anchors into the document carrying the PROJECTED meta from the previous
- * export, and the shot list is empty at that point, so syncEventsToAnchors bakes
- * the stale projection into postgres and every later publish reads it back and
- * re-ships it. The author sees no shots, cannot edit or delete the camera, and
- * the game keeps pushing in on it, because framingOf reads meta.framings[name]
- * and meta.framing and never cross-checks anything.
- *
- * A DELIBERATE SECOND COPY of the same helper in server/store/publish.mjs. If
- * either half changes, change both. */
+/* SHOTS FOLDED ONTO THE ANCHOR THEY NAME, which is where the consumer looks: the game reads meta.framings[name] and meta.framing and has never had a reader for the shot list. WHICH ONE IS THE DEFAULT matters: look_at asks for an unnamed shot and a missing name falls back to the same slot, so an anchor with named shots and no default has a dead camera on both paths. The entry shot takes it, otherwise the oldest. MERGED, NEVER SWAPPED IN, because the real hub's anchors already carry docId and derived. */
+/* OWNING A KEY MEANS OWNING ITS ABSENCE TOO. Additive-only projections handed a stale `framings` key back as a live camera the shot list no longer held, permanently: restoreFromDisk pulls the PREVIOUS export's projected meta in while the shot list is empty, so the stale copy is baked into postgres and re-shipped forever. A DELIBERATE SECOND COPY of this helper lives in server/store/publish.mjs; change both. */
 const without = (meta: Record<string, unknown> | undefined, ...keys: string[]): Record<string, unknown> | undefined => {
   if (!meta) return undefined
   const out = { ...meta }
@@ -1319,25 +788,7 @@ export function shotsOntoMeta(
   return { ...(meta || {}), framings: set, framing: { ...one(def), name: def.name } }
 }
 
-/* VARIANT SETS FOLDED ONTO THE ANCHOR THEY HANG ON, for the same reason the
- * shots above are, and read off the running game before it was written.
- *
- * WHAT THE GAME READS TODAY. src/game/pmap/anchors.ts:readAnchors builds its
- * Anchor from a fixed list of top-level fields and then copies `meta` whole, so
- * a new top-level field on an anchor is thrown away by the reader that already
- * ships. src/game/pmap/PmapScene.tsx keys every placement into `placedById` by
- * BOTH its MAPVIS id and its author name, and `show(anchor, visible)` resolves
- * `anchor.placement` through that map. So the two things the consumer can
- * already do are: read an anchor's bag, and turn a placement name into a sprite.
- * A set written as { state: placement-name } inside the bag needs neither a new
- * reader shape nor a new lookup, only a loop.
- *
- * MERGED, NEVER SWAPPED IN, the same as the shots: panthers_maw on the real hub
- * carries docId and derived, and the game writes `derived` itself.
- *
- * MAPVIS DOES NOT PICK A DEFAULT HERE, and that is the difference from a shot. A
- * missing shot has to fall back to something or the camera is dead; a set with
- * `initial` empty means nothing is showing, which is a state an author chose. */
+/* VARIANT SETS FOLDED ONTO THE ANCHOR THEY HANG ON, read off the running game before it was written: readAnchors copies meta whole and throws away new top-level fields, and PmapScene keys placements by both id and author name, so a set written as { state: placement-name } inside the bag needs only a loop. MERGED, never swapped in. MAPVIS PICKS NO DEFAULT here, unlike a shot: a missing shot leaves the camera dead, a missing state does not. */
 export function variantsOntoMeta(
   variants: MapVariantSet[],
   anchor: string,
@@ -1379,15 +830,7 @@ export class MaskDoc {
   assetNext = 1
   events: MapEvent[] = []
   eventNext = 1
-  /* THE BODY THIS MAP IS DRAWN FOR: six numbers, and the most demanded shape in
-   * the authoring sweep. bundle() writes all six into map.json, the game
-   * consumes all six, this repo's own walk law reads them and check-anchors
-   * reads two back out. They lived on the editor as `cfg = defaultCfg()` and
-   * were never assigned again anywhere, with no control and no column, so every
-   * map MAPVIS ever produced shipped an 18 px character at 34 px/s on ground
-   * squashed 0.72, whether it was a 688 px island seen from far above or a room
-   * drawn at character scale. They belong to the document because they describe
-   * the map, and living here is what lets one save carry them. */
+  /* THE BODY THIS MAP IS DRAWN FOR: six numbers, written into map.json and consumed by the game. They lived on the editor as a default that was never assigned again, so every map shipped an 18px character at 34px/s on ground squashed 0.72, island or room. They belong to the document because they describe the map. */
   walk: WalkCfg = defaultCfg()
   props: MapProps = defaultProps()
   /* routes and shots, both addressed by name and both belonging to the map for
@@ -1404,18 +847,12 @@ export class MaskDoc {
   setNext = 1
   racks: MapRack[] = []
   rackNext = 1
-  /* the named exclusive variant sets, and the rows that say something about a
-   * placement group. Both belong to the map for the reason the collections above
-   * do: they are made of this map's own names and nothing outside it can hold
-   * them. */
+  /* the named exclusive variant sets and the rows about a placement group, on the map for the reason the collections above are: they are made of this map's own names. */
   variants: MapVariantSet[] = []
   variantNext = 1
   groups: MapGroup[] = []
   spawn: Pt
-  // boundary growth: bw/bh is the base painting's own size (set once at
-  // construction), ox/oy is how far that base sits inside the grown canvas.
-  // Zero until the map is expanded; the editor composites the art at this
-  // offset and the autosave uses it to re-grow on reload.
+  // boundary growth: bw/bh is the base painting's size, ox/oy how far it sits inside the grown canvas. Zero until the map is expanded; the autosave uses it to re-grow on reload.
   bw: number
   bh: number
   ox = 0
@@ -1465,10 +902,7 @@ export class MaskDoc {
     return this.inB(x, y) ? this.cut[this.idx(x, y)] : 0
   }
 
-  // ---- history ----------------------------------------------------------
-  // assets and events ride the same timeline as the planes: a placement, a
-  // drag, a dropped door or a group clear is one z away, and a mask undo can
-  // never strand their state
+  // ---- history. assets and events ride the same timeline as the planes, so a placement, a drag or a group clear is one z away and a mask undo can never strand their state
   snap() {
     this.hist.push({
       w: this.W,
@@ -1485,13 +919,7 @@ export class MaskDoc {
     })
     if (this.hist.length > 60) this.hist.shift()
   }
-  /* HOW DEEP THE UNDO STACK IS, so something outside the document can pin an
-   * edit of its own to a point in it.
-   *
-   * The pixel edits (crop, ctrl+P, trim, palette match) rewrite files on disk,
-   * which this document knows nothing about and cannot restore. The panel keeps
-   * its own list of those and has to know WHICH z is the one that should undo
-   * them, or a crop followed by three moves would be undone by the first z. */
+  /* HOW DEEP THE UNDO STACK IS, so something outside the document can pin an edit to a point in it: the pixel edits rewrite files on disk this document cannot restore, and the panel has to know WHICH z should undo them. */
   histLen() {
     return this.hist.length
   }
@@ -1521,11 +949,7 @@ export class MaskDoc {
     return true
   }
 
-  // ---- boundary growth ---------------------------------------------------
-  // Grow the canvas by a transparent margin: every plane is re-laid at the
-  // same offset, and the spawn, the occluder baselines and the placed assets
-  // shift with it. Pure memory copy, never a resample. The caller owns the
-  // undo snapshot and the painting recomposite.
+  // ---- boundary growth. Grow by a transparent margin: every plane re-laid at the same offset, spawn, baselines and placements shifted with it. Pure memory copy, never a resample. The caller owns the undo snapshot.
   grow(dx: number, dy: number, nw: number, nh: number) {
     const { W: ow, H: oh } = this
     const move = (src: Uint8Array) => {
@@ -1599,13 +1023,7 @@ export class MaskDoc {
     for (let y = cy - h0; y <= cy + h1; y++)
       for (let x = cx - h0; x <= cx + h1; x++) this.setCut(x, y, v)
   }
-  // The machine proposal: flood the painting's own colour from the clicked
-  // pixel, Manhattan RGB distance against the SEED colour, never chained
-  // neighbour to neighbour (chaining is how sea-navy once walked into volcano
-  // rock). Contiguous, 4-way, added to (or removed from) the cut mask.
-  // The seen buffer can be handed in and reused across many floods (auto sea
-  // runs hundreds); the generation stamp makes each flood see it as fresh
-  // without a clear. A manual click passes neither and behaves as it always has.
+  // The machine proposal: flood the painting's own colour from the clicked pixel against the SEED colour, never chained neighbour to neighbour, which is how sea-navy once walked into volcano rock. The seen buffer is reusable across the hundreds of floods auto sea runs, stamped rather than cleared.
   cutFlood(sx: number, sy: number, v: number, tol: number, pix: Uint8ClampedArray, seen?: Int32Array, gen = 1): number {
     if (!this.inB(sx, sy)) return 0
     const s4 = this.idx(sx, sy) * 4
@@ -1633,17 +1051,7 @@ export class MaskDoc {
     return n
   }
 
-  // The outer sea in one press. The seed set is computed ONCE, before any
-  // flood: every opaque, not-yet-cut pixel on the image border or 4-adjacent
-  // to ORIGINAL transparency (alpha 0 in the painting). It never seeds from
-  // already-cut pixels and never repeats until stable: the frontier version
-  // did both, and reseeding from freshly cut pixels let each flood hand its
-  // own edge to the next seed colour, chaining tone to tone until it proposed
-  // the whole painting (measured 264k of 264k px, 2026-08-15). Inner tones
-  // that never touch the border or the transparency stay for cut-fill clicks.
-  // Each flood matches against its own seed colour at the given tolerance,
-  // exactly the manual tool, deliberately never chained neighbour to
-  // neighbour. The caller owns the undo snapshot, so the run reverts as one.
+  // The outer sea in one press. The seed set is computed ONCE, before any flood, and never from already-cut pixels: the frontier version reseeded from fresh cuts, chaining tone to tone until it proposed the whole painting (measured 264k of 264k px). Each flood matches its own seed colour at the given tolerance, exactly the manual tool. The caller owns the undo snapshot.
   autoSea(tol: number, pix: Uint8ClampedArray): number {
     const seeds: number[] = []
     for (let y = 0; y < this.H; y++)
@@ -1669,10 +1077,7 @@ export class MaskDoc {
     return total
   }
 
-  // Coastline residue: after the sea is cut, the anti-aliased fringe leaves
-  // floating specks of blended tone too small to hunt down by hand. 4-way
-  // connected components over pixels that are opaque and not cut; the largest
-  // component is the land and survives, every other component joins the cut.
+  // Coastline residue: the anti-aliased fringe leaves floating specks too small to hunt by hand. Connected components over opaque, not-cut pixels; the largest is the land and every other joins the cut.
   despeckle(pix: Uint8ClampedArray): { px: number; specks: number } {
     const { W, H } = this
     const n = W * H
@@ -1722,10 +1127,7 @@ export class MaskDoc {
     return { px, specks: labels - 1 }
   }
 
-  // One ring off the coast: every opaque, not-cut pixel 4-adjacent to a cut
-  // pixel or to original transparency joins the cut. The ring is collected
-  // before any pixel is written, otherwise scan order would let a fresh cut
-  // qualify its own neighbour and one press would eat more than one ring.
+  // One ring off the coast. The ring is collected before any pixel is written, otherwise scan order lets a fresh cut qualify its own neighbour and one press eats more than one ring.
   shaveEdge(pix: Uint8ClampedArray): number {
     const { W, H } = this
     const ring: number[] = []
@@ -1803,14 +1205,7 @@ export class MaskDoc {
     return o
   }
 
-  // ---- SEAM HEAL --------------------------------------------------------
-  // Two polygons drawn as two independent outlines do not tile exactly: where
-  // their vertex chains disagree by a fraction of a pixel, a 1px row of 0
-  // survives between them. It is invisible below 6x and it hard-blocks the
-  // character, because his hip probes sit 2px out from his feet. This closes
-  // any blocked pixel pinched between two walkable pixels whose levels are a
-  // legal step apart, so a real wall (a level difference over the tolerance,
-  // or a gap thicker than one pixel) is never eaten.
+  // ---- SEAM HEAL. Two polygons drawn as independent outlines do not tile exactly, leaving a 1px row of 0 that is invisible below 6x and hard-blocks the character, whose hip probes sit 2px out. Only a pixel pinched between two walkable ones a legal step apart is closed, so a real wall is never eaten.
   healSeams(tol = 10) {
     let filled = 0
     let pass = 0
@@ -1854,10 +1249,7 @@ export class MaskDoc {
     return { walkable, pct: (100 * walkable) / this.lvl.length, cut }
   }
 
-  // ---- export -----------------------------------------------------------
-  // every ramp value becomes a named region with its bbox. The runtime does
-  // not need this (the level values carry the law) but the game does, for
-  // footstep sounds, camera, "you are on the stair" logic.
+  // ---- export. Every ramp value becomes a named region with its bbox. The runtime does not need it (the level values carry the law); the game wants it for footstep sounds, camera and "you are on the stair".
   stairRegions(): StairRegion[] {
     const out: StairRegion[] = []
     for (const rv of [50, 70, 90]) {
@@ -1965,12 +1357,7 @@ export class MaskDoc {
     for (let i = 0; i < this.cut.length; i++) this.cut[i] = d[i * 4] > 127 ? 1 : 0
   }
 
-  // levels + occluders + cut packed for the silent local autosave, wrapped in
-  // json so the placed assets and events ride along. v3 adds the canvas size,
-  // the base painting's size and offset (so a grown map re-grows on reload)
-  // and the spawn. A v2 save is the same envelope without them; an old save
-  // is the bare base64 (two planes, or three). All shapes load; a payload
-  // without events loads with none.
+  // levels + occluders + cut packed for the local autosave, wrapped in json so placements and anchors ride along. v3 adds the canvas size, the base size and offset and the spawn; older shapes still load, and a payload without events loads with none.
   serialize(): string {
     return JSON.stringify({
       v: 3,
@@ -1983,15 +1370,7 @@ export class MaskDoc {
       assetNext: this.assetNext,
       events: this.events,
       eventNext: this.eventNext,
-      /* THE OCCLUDER BASELINES, WHICH USED TO BE THROWN AWAY HERE.
-       *
-       * A baseline is the one hand-set number in the whole depth system: it is
-       * the row a character has to be north of before the piece of painting is
-       * drawn over him. It reached map.json and the game read it, and this
-       * method omitted `occs`, so unpack() rebuilt every one of them from the
-       * bottom edge of the polygon on the next open and the typed value was
-       * gone. The author watched the field take the number, which is what makes
-       * it the nastiest of the fourteen. */
+      /* THE OCCLUDER BASELINES, WHICH USED TO BE THROWN AWAY HERE. A baseline is the one hand-set number in the depth system, and omitting `occs` meant unpack() rebuilt every one from the polygon's bottom edge on the next open. The author watched the field take the number. */
       occs: this.occs,
       occNext: this.occNext,
       stencils: this.stencils,
@@ -2049,10 +1428,7 @@ export class MaskDoc {
           variantNext?: number
           groups?: MapGroup[]
         }
-        /* the saved baselines go in FIRST, because unpack() only invents them
-         * when there are none, which is exactly the guard that has to see them
-         * already here. A payload written before they were saved has none and
-         * unpack rebuilds them the way it always did. */
+        /* the saved baselines go in FIRST, because unpack() only invents them when there are none, which is exactly the guard that has to see them already here. */
         if (Array.isArray(d.occs)) {
           this.occs = d.occs
             .filter((o) => o && isFinite(Number(o.id)) && isFinite(Number(o.baseline)))
@@ -2087,10 +1463,7 @@ export class MaskDoc {
               : {}),
             meta: d.props.meta && typeof d.props.meta === 'object' ? d.props.meta : {},
           }
-        /* A ROUTE OR A SHOT FROM A HAND-EDITED SAVE HAS TO COME BACK AS DATA OR
-         * NOT AT ALL. A path with one point is not a path and a NaN in a zoom
-         * stops a camera dead, so both are filtered on the way in rather than
-         * trusted, the same way occs and walk are. */
+        /* A ROUTE OR A SHOT FROM A HAND-EDITED SAVE COMES BACK AS DATA OR NOT AT ALL: a one-point path is not a path and a NaN in a zoom stops a camera dead. */
         this.paths = Array.isArray(d.paths) ? d.paths.map(migratePath).filter((p): p is MapPath => !!p) : []
         this.pathNext =
           Number(d.pathNext) > 0 ? Math.round(Number(d.pathNext)) : this.paths.reduce((m, p) => Math.max(m, p.id), 0) + 1
@@ -2110,11 +1483,7 @@ export class MaskDoc {
         this.racks = Array.isArray(d.racks) ? d.racks.map(migrateRack).filter((r): r is MapRack => !!r) : []
         this.rackNext =
           Number(d.rackNext) > 0 ? Math.round(Number(d.rackNext)) : this.racks.reduce((m, r) => Math.max(m, r.id), 0) + 1
-        /* and the variant sets, on the same terms. A set whose members all name
-         * the same placement, or whose initial names a member that is not in the
-         * list, has to come back as data or not at all: an exclusive set that is
-         * not exclusive is worse than none, because every state leaves the same
-         * sprite on screen and nothing can tell which one it is in. */
+        /* and the variant sets, on the same terms. An exclusive set that is not exclusive is worse than none, because every state leaves the same sprite on screen and nothing can tell which one it is in. */
         this.variants = Array.isArray(d.variants)
           ? d.variants.map(migrateVariantSet).filter((v): v is MapVariantSet => !!v)
           : []
