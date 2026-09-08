@@ -1,30 +1,11 @@
-/* The shell: which page is on screen, and how one becomes the next.
- *
- * The editor is 5,700 lines and a WebGL-adjacent canvas app, so it is lazy and
- * it is the only route that gets the old stylesheet. Everything else is the
- * site. That split is deliberate: the tool and the platform are different
- * pieces of software that happen to share a domain.
- */
+/* The shell: which page is on screen and how one becomes the next. The editor is lazy and is the only route on the old stylesheet, because the tool and the platform are different software sharing a domain. */
 import { Component, Suspense, lazy, useEffect, type ReactNode } from 'react'
 import { useRoute, match, useScrollReset } from './router'
 import { useScrollProgress, installGrain } from './motion'
 import { useSession } from './session'
 import Landing from './Landing'
 
-/* A DEPLOY IS NOT A BROKEN PANEL, AND IT USED TO LOOK LIKE ONE.
- *
- * Every route below is its own chunk with its hash in the filename, and a deploy
- * replaces all of them. A tab that was already open still holds the previous
- * index.html, so the moment it navigates it asks for a chunk that no longer
- * exists, the dynamic import rejects, and the boundary catches it and renders an
- * error page carrying whatever the old build said. From the outside that is "I
- * clicked sign in and got an error with old UI in it", and it happens only to a
- * tab left open across a deploy, which is why it is rare.
- *
- * A missing chunk cannot be recovered in place and does not need to be: the fix
- * is the newest index.html, one reload away. Guarded by a session flag so a
- * genuinely missing file cannot put the tab in a reload loop; a second failure
- * falls through to the boundary and shows the real error. */
+/* A DEPLOY IS NOT A BROKEN PANEL, AND IT USED TO LOOK LIKE ONE: a tab left open across a deploy still holds the old index.html, asks for a chunk that no longer exists, and the boundary renders an error page in the old build's UI. */
 const RELOADED = 'mapvis:stale-chunk-reloaded'
 const STALE = /failed to fetch dynamically imported module|error loading dynamically imported module|importing a module script failed/i
 
@@ -82,14 +63,7 @@ export function Ink({ what = '' }: { what?: string }) {
   )
 }
 
-/* ONE BROKEN PANEL MUST NOT TAKE THE PAGE WITH IT.
- *
- * React unmounts the entire tree on an uncaught render error, so a bug in the
- * walk preview white-screened the whole app, navigation included. That is the
- * worst possible failure: nothing on screen and nothing to click.
- *
- * With a boundary, the broken thing says so and everything around it keeps
- * working, which also means a stack trace instead of a blank page. */
+/* ONE BROKEN PANEL MUST NOT TAKE THE PAGE WITH IT. React unmounts the whole tree on an uncaught render error, so a bug in the walk preview white-screened the app, navigation included. */
 class Boundary extends Component<{ children: ReactNode; what: string }, { err: Error | null }> {
   state: { err: Error | null } = { err: null }
   static getDerivedStateFromError(err: Error) {
@@ -122,14 +96,7 @@ export default function Shell() {
     installGrain()
   }, [])
 
-  /* THE TWO TOOLS OWN THE WHOLE VIEWPORT AND LOCK SCROLLING; the site does not.
-   *
-   * The map editor and the UI generator are one piece of software wearing one
-   * set of chrome, so they take the same body flag and therefore the same
-   * stylesheet. That is not a shortcut: /ui was drawn twice as a landing page
-   * with its own hero and its own greys, and the only reliable cure for a second
-   * page inventing a second look is for it to have no stylesheet of its own to
-   * invent one in. */
+  /* THE TWO TOOLS OWN THE WHOLE VIEWPORT AND LOCK SCROLLING; the site does not. One stylesheet for both, because /ui was drawn twice as a landing page and the only cure for a second page inventing a second look is having no stylesheet to invent one in. */
   const editing = route.path === '/edit'
   const making = route.path === '/ui'
   const tool = editing || making
@@ -146,10 +113,7 @@ export default function Shell() {
     )
   }
 
-  /* Outside the page-in wrapper, because .app is height:100% and a wrapper with
-   * automatic height collapses it. Inside a boundary, because this one is not
-   * the canvas app and a broken panel here should say so rather than white out
-   * the tab. */
+  /* Outside the page-in wrapper, because .app is height:100% and an automatic-height wrapper collapses it. Inside a boundary, because a broken panel here should say so rather than white out the tab. */
   if (making) {
     return (
       <Boundary what="the ui generator">
@@ -162,12 +126,7 @@ export default function Shell() {
 
   const mapMatch = match('/maps/:slug', route.path)
 
-  /* ONE ADDRESS, TWO DIFFERENT SCREENS.
-   *
-   * Signed out, / is the landing: a place, a camera, and a reason to make an
-   * account. Signed in, / is your work. Nobody who already has maps should ever
-   * be shown an advertisement for the thing they are already using, and nobody
-   * should have to know a second url to get to their own stuff. */
+  /* ONE ADDRESS, TWO SCREENS: signed out / is the landing, signed in / is your work. Nobody with maps should be shown an advertisement for the thing they already use. */
   let page: React.ReactNode = null
   if (route.path === '/') page = session.loading ? <Ink /> : session.user ? <Home /> : <Landing />
   else if (route.path === '/enter') page = <Enter />

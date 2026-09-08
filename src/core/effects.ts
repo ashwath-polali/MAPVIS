@@ -1,45 +1,10 @@
-/* The effect engine: small animated effects built from the map's own colours.
- *
- * Why this exists. The image generator draws objects, not effects. Twenty-odd
- * attempts at smoke, splash and sparkle came back as garbage, and no prompt
- * fixed it, because an effect is a motion rule applied to colours rather than a
- * picture of a thing. Three hand-built effects proved the alternative: sample
- * the painting's own pixels, run a rule over them, write looping frames. This
- * file is those three rules generalised, plus four more, with nothing
- * generated and nothing spent.
- *
- * The maths is ported from the accepted references:
- *   flow  <- hubgen/smoke/flow.py   the scrolling streak overlay on a waterfall
- *   spray <- hubgen/smoke/spray.py  arcing droplets plus a churn band
- *   rise  <- hubgen/smoke/build.py  lumpy puffs climbing, growing, evaporating
- *
- * The colours are a decision, not a mandate. Most effects are made OF the place
- * they stand in (smoke, dust, spray, falling leaves) and take the painting's own
- * pixels. Some things carry their own identity and have to bring their own
- * colours: a purple portal on a brown island is purple. So the caller hands in
- * whichever ramp applies and says which it is, and the rules that used to tint
- * toward the map's warmth back off when the ramp is the effect's own.
- *
- * Two rules hold for everything here. Every effect is a SEAMLESS loop: frame
- * N wraps onto frame 0 with nothing popping, which is true by construction, not
- * by luck. And nothing is random at render time: a small PRNG is seeded from
- * the seed param, so the same params always give the same frames.
- *
- * One meaning for speed. Every rule runs exactly one cycle over its `frames`
- * frames, so speed is how fast that cycle plays back, and it lands in the saved
- * item's fps. Nothing spatial rides on it, so the loop can never come apart.
- *
- * No network, no React, no document beyond a canvas to hand the frames back on.
- */
+/* The effect engine: small animated effects built from the map's own colours. The generator draws objects, not effects, and twenty-odd attempts at smoke and sparkle came back garbage because an effect is a motion rule over colours rather than a picture. Ported from hubgen's flow.py, spray.py and build.py. Every effect is a seamless loop by construction and nothing is random at render time. */
 import { mkCanvas } from './mask'
 import type { CustomControl } from './customfx'
 
 export type EffectType = 'flow' | 'rise' | 'spray' | 'twinkle' | 'sway' | 'glow' | 'swirl'
 
-/* The eighth answer, and the one that is not a rule. When an ask fits none of
- * the seven, the planner writes the renderer and it runs in the sandbox in
- * customfx. Everything else in this file is untouched by it: a custom effect
- * never reaches renderEffect, it only borrows the param plumbing and the fps. */
+/* The eighth answer, and the one that is not a rule: when an ask fits none of the seven the planner writes the renderer and it runs in customfx's sandbox, never reaching renderEffect. */
 export type AnyEffectType = EffectType | 'custom'
 
 export const CUSTOM_DESC = 'written for this ask'
@@ -203,17 +168,7 @@ export function guessType(ask: string): EffectType {
   return 'rise'
 }
 
-/* A colour named in the ask, as a small ramp of its own.
- *
- * This is the other half of the fall-back, and it exists because of a measured
- * failure: the plan carried a rule and numbers but never a colour, the renderer
- * only ever saw the map's sampled pixels, and "swirling purple portal" came out
- * brown because purple was not reachable from anywhere. When the words name a
- * colour, that colour wins, whether or not the planner is up.
- *
- * Four steps each, near-white first: the ramp helper sorts light to dark and
- * every rule puts its lightest entry where the eye goes, so a core reads bright
- * and the rim reads deep without any rule knowing which hue it is holding. */
+/* A colour named in the ask, as a small ramp. The plan carried a rule and numbers but never a colour, so "swirling purple portal" came out brown: purple was not reachable from anywhere. Near-white first, because every rule puts its lightest entry where the eye goes. */
 const COLOR_RAMPS: Record<string, string[]> = {
   purple: ['#f3e6ff', '#c58cf5', '#8a3fd1', '#4a1b78'],
   violet: ['#f3e6ff', '#c58cf5', '#8a3fd1', '#4a1b78'],
@@ -262,10 +217,7 @@ const mix = (a: RGB, b: RGB, t: number): RGB => [
 
 const scaleCol = (c: RGB, r: number, g: number, b: number): RGB => [c[0] * r, c[1] * g, c[2] * b]
 
-/* The sampled colours turned into a light-to-dark ramp of n steps. A palette
- * of two colours still gives a usable ramp, because the ends are extended
- * rather than repeated: an effect drawn from a flat patch should still read as
- * shaded, not as a sticker. */
+/* The sampled colours as a light-to-dark ramp of n steps. Ends are extended rather than repeated, so an effect drawn off a flat patch still reads shaded and not as a sticker. */
 function ramp(colors: string[], n: number): RGB[] {
   const src = (colors.length ? colors : ['#ffffff']).map(toRGB).sort((a, b) => lum(b) - lum(a))
   if (src.length === 1) {
@@ -284,11 +236,7 @@ function ramp(colors: string[], n: number): RGB[] {
   return out
 }
 
-/* build.py's lift. Straight off the art a puff reads as whatever it was cut
- * from (rock, in the measured case) because those pixels were painted against
- * a bright sky and the puff has to separate from the ground behind it. So each
- * ramp step is pulled most of the way to a pale tint of the palette's own hue,
- * keeping the value structure underneath. */
+/* build.py's lift: straight off the art a puff reads as the rock it was cut from, because those pixels were painted against a bright sky. Each step is pulled most of the way to a pale tint of the palette's own hue, keeping the value structure. */
 function liftedRamp(colors: string[], n: number, k = 0.65): RGB[] {
   const base = ramp(colors, n)
   const avg: RGB = [0, 0, 0]
@@ -311,20 +259,13 @@ function warmRamp(colors: string[], n: number): RGB[] {
   return base.map((c, i) => mix(c, warm, 0.55 * (1 - i / Math.max(1, n - 1)) + 0.12))
 }
 
-/* The same lift, without the warmth. A ramp the effect brought itself is
- * already the answer to what colour it is, so pulling it toward lamp-cream
- * would undo exactly the decision that was made: a purple glow would come back
- * peach. Only the bright end is lifted, toward a pale tint of its own hue. */
+/* The same lift without the warmth. A ramp the effect brought itself is already the answer to what colour it is, so pulling it toward lamp-cream would bring a purple glow back peach. */
 function ownRamp(colors: string[], n: number): RGB[] {
   const base = ramp(colors, n)
   return base.map((c, i) => mix(c, [255, 255, 255], 0.4 * (1 - i / Math.max(1, n - 1))))
 }
 
-/* The dominant colours of a patch of painting, lightest first.
- *
- * Coarse buckets, then the biggest buckets that are far enough apart in rgb to
- * be worth a separate entry. Fully transparent pixels never count: the sea and
- * the cut are not part of the map's palette. */
+/* The dominant colours of a patch, lightest first. Coarse buckets, then the biggest that sit far enough apart in rgb. Transparent pixels never count: the sea and the cut are not part of the palette. */
 export function samplePalette(patch: Patch, want = 6): string[] {
   const counts = new Map<number, { n: number; r: number; g: number; b: number }>()
   const d = patch.data
@@ -413,17 +354,7 @@ class Frame {
 
 // ---- the seven rules ------------------------------------------------------
 
-/* flow: scrolling streaks, ported from flow.py.
- *
- * The pattern is periodic along the scroll axis with period PERIOD, and each
- * frame shifts it by PERIOD / frames, so the loop closes on an integer number
- * of periods. Every column's own dash+gap span divides PERIOD, which is the
- * one change from the reference: there the spans were hand-picked and a few of
- * them did not divide the period, so the loop only nearly closed.
- *
- * The sides fade out so the overlay melts into the painted column instead of
- * showing a hard rectangle, and the tail breaks up so the streaks do not stop
- * dead at the last row. */
+/* flow: scrolling streaks from flow.py. Every column's dash+gap span divides PERIOD, which is the one change from the reference, where hand-picked spans meant the loop only nearly closed. */
 const PERIOD = 16
 const SPANS = [4, 8, 8, 16]
 
@@ -488,11 +419,7 @@ function flowFrames(p: EffectParams, colors: string[]): HTMLCanvasElement[] {
   return out
 }
 
-/* The lumpy puff silhouette, ported from build.py: one body plus shoulders all
- * the way round, so the outline reads as bubbles rather than an arc. A circle
- * reads mechanical, which is exactly what got the first stacked-circles version
- * rejected. A small box blur then a hard threshold rounds the joins without
- * softening the edge, so the boundary stays one crisp pixel. */
+/* The lumpy puff silhouette from build.py: one body plus shoulders all the way round, because a circle reads mechanical and stacked circles were rejected. Box blur then a hard threshold, so the boundary stays one crisp pixel. */
 function puffMask(size: number, rnd: () => number): Uint8Array {
   const cov = new Float32Array(size * size)
   const c = size / 2
@@ -539,10 +466,7 @@ function puffMask(size: number, rnd: () => number): Uint8Array {
   return m
 }
 
-/* A puff: the silhouette filled with the map's own colours, lit from the upper
- * left with a hue-shifted rim. Never a black outline, per the style rules. The
- * internal banding comes from a coarse blocky noise and an ordered dither, so
- * the fill has PixelLab-style structure rather than a smooth gradient. */
+/* A puff filled with the map's own colours, lit upper left with a hue-shifted rim and never a black outline. Blocky noise plus an ordered dither, so the fill has structure rather than a smooth gradient. */
 function buildBlob(size: number, colors: string[], seed: number, lift: number): { m: Uint8Array; px: Uint8ClampedArray } {
   const rnd = mulberry32(seed)
   const m = puffMask(size, rnd)
@@ -597,13 +521,7 @@ function blitBlob(
   }
 }
 
-/* rise: puffs climbing, growing and evaporating, ported from build.py.
- *
- * The loop is exact by construction: one shape, n+1 slots, and over one cycle
- * every puff advances exactly one slot while a newborn takes the bottom, so the
- * last frame lands on the first. The newborn starts off the bottom edge and
- * half-clipped, because the sprite is placed with its feet on the source: smoke
- * that starts fully inside the canvas reads as floating. */
+/* rise: puffs climbing and evaporating, from build.py. One shape and n+1 slots, so over a cycle every puff advances one slot and the last frame lands on the first. The newborn starts half-clipped, because smoke fully inside the canvas reads as floating. */
 function riseFrames(p: EffectParams, colors: string[], patch?: Patch | null, own = false): HTMLCanvasElement[] {
   void patch
   const { width: W, height: H } = p
@@ -616,15 +534,7 @@ function riseFrames(p: EffectParams, colors: string[], patch?: Patch | null, own
   const perp: [number, number] = [-dy, dx]
   const L = Math.abs(W * dx) + Math.abs(H * dy)
   const src: [number, number] = [W / 2 - dx * W * 0.49, H / 2 - dy * H * 0.49]
-  // the resting slots, first to last: how far along the travel axis, and how
-  // big. A puff grows as it climbs, the way real smoke spreads.
-  //
-  // The last slot has to leave room for the last puff's own body. The first
-  // pass ran the travel past the end of the frame while the puff was still
-  // nearly opaque, so a big plume came out guillotined flat against the top
-  // edge (measured: 47 opaque pixels sitting on row 0 of a 64x96 take at size
-  // 3). Stopping a radius short lets the top puff finish evaporating INSIDE
-  // the frame at any size or count.
+  // the resting slots: how far along the travel axis and how big. The last slot stops a radius short, because running the travel to the end guillotined a big plume flat against row 0 (measured: 47 opaque pixels on row 0 of a 64x96 take at size 3).
   const slotA: number[] = []
   const slotS: number[] = []
   const rTop = (base * (0.45 + 0.75)) / 2
@@ -663,11 +573,7 @@ function riseFrames(p: EffectParams, colors: string[], patch?: Patch | null, own
   return out
 }
 
-/* spray: particles arcing outward from a source point, ported from spray.py.
- *
- * Every particle's life is one full cycle and the particles are only
- * phase-shifted copies of each other, so frame N wraps onto frame 0 with
- * nothing popping. The stagger is the golden ratio, which never clumps. */
+/* spray: particles arcing from a source, from spray.py. Every particle's life is one full cycle and they are phase-shifted copies, so frame N wraps onto 0. The stagger is the golden ratio, which never clumps. */
 function blob3(fr: Frame, cx: number, cy: number, size: number, col: RGB, a: number, lightest: RGB) {
   if (size <= 1) {
     fr.put(cx, cy, col, a)
@@ -767,12 +673,7 @@ function churnBand(
   }
 }
 
-/* twinkle: points fading in and out where they stand.
- *
- * Nothing moves, so the only thing carrying the effect is the timing: a long
- * dark hold and a brief bright peak, staggered by the golden ratio so no two
- * points flash together. The biggest points grow a four-point star at the peak,
- * which is what makes a glint read as a glint instead of a flickering dot. */
+/* twinkle: points fading where they stand. Nothing moves, so the timing carries it: a long dark hold and a brief peak, staggered by the golden ratio. The biggest points grow a four-point star at the peak. */
 function twinkleFrames(p: EffectParams, colors: string[]): HTMLCanvasElement[] {
   const { width: W, height: H } = p
   const rnd = mulberry32(p.seed * 22697 + 5)
@@ -860,12 +761,7 @@ function shearSource(p: EffectParams, colors: string[], patch?: Patch | null): U
   return out
 }
 
-/* sway: a shear cycle over the pixels that are already there.
- *
- * The bend grows toward the far end and pivots at the root, so a tree bends at
- * its crown and a flag whips at its tail while the pole stays put. The sample
- * is nearest-neighbour, never interpolated: a blurred leaf is not pixel art.
- * One sine over the cycle, so the loop closes exactly. */
+/* sway: a shear cycle over the pixels already there, pivoting at the root so a tree bends at its crown. Nearest-neighbour, never interpolated: a blurred leaf is not pixel art. */
 function swayFrames(p: EffectParams, colors: string[], patch?: Patch | null): HTMLCanvasElement[] {
   const { width: W, height: H } = p
   const src = shearSource(p, colors, patch)
@@ -899,12 +795,7 @@ function swayFrames(p: EffectParams, colors: string[], patch?: Patch | null): HT
   return out
 }
 
-/* glow: a soft radial pulse that stays pixel art.
- *
- * The radius and the alpha breathe together over one sine, so a lamp swells
- * rather than blinking. The falloff is quantised to a handful of steps and the
- * fringe is knocked out by the ordered matrix, which is what keeps it a dithered
- * halo instead of a smooth css gradient over the painting. */
+/* glow: radius and alpha breathe together over one sine, so a lamp swells rather than blinks. The falloff is quantised and the fringe knocked out by the ordered matrix, which keeps it a dithered halo. */
 function glowFrames(p: EffectParams, colors: string[], own = false): HTMLCanvasElement[] {
   const { width: W, height: H } = p
   const pal = own ? ownRamp(colors, 4) : warmRamp(colors, 4)
@@ -932,30 +823,9 @@ function glowFrames(p: EffectParams, colors: string[], own = false): HTMLCanvasE
   return out
 }
 
-/* swirl: a turning vortex, the seventh rule.
- *
- * It exists because the router had nowhere to send a portal: the ask went to
- * glow, and a radial pulse is a lamp, not a gateway. What reads as a gateway is
- * concentric bands of arcs orbiting one centre at different rates, tight and
- * bright in the middle and looser at the rim, with a handful of specks riding
- * round to keep it alive at map scale.
- *
- * THE LOOP CLOSES BY CONSTRUCTION, the same way every other rule's does. Ring i
- * carries A arms spaced evenly round the circle, so turning it by exactly 2pi/A
- * leaves it pixel-for-pixel identical. Over the whole cycle each ring turns by a
- * whole number m of those steps, and frame f sits at m * (2pi/A) * f / frames.
- * At f = frames the ring is back on a symmetry, so the last frame wraps onto the
- * first. m counts DOWN with the ring index, so the inner rings turn fastest,
- * which is what makes a vortex read as pulling inward instead of spinning as one
- * plate. Nothing spatial rides on speed, which stays playback rate alone.
- *
- * The specks close the same way: each rides a whole number of turns per cycle.
- */
+/* swirl: a turning vortex, and the rule a portal had nowhere else to go: the ask went to glow, and a radial pulse is a lamp. Ring i carries A arms, so turning by 2pi/A leaves it identical, and each ring turns a whole number of those steps per cycle. m counts DOWN with the ring index, so the inner rings turn fastest and it reads as pulling inward. */
 
-// the vertical squash. The map is isometric and a portal lies in a doorway
-// rather than facing the camera, so a circle drawn head-on reads wrong. 0.62 is
-// the ellipse the rest of this maths assumes: as wide as it is allowed, 62 per
-// cent as tall.
+// the vertical squash: the map is isometric and a portal lies in a doorway, so a circle drawn head-on reads wrong. 0.62 is the ellipse the rest of this maths assumes.
 const SWIRL_SQUASH = 0.62
 
 function swirlFrames(p: EffectParams, colors: string[], own: boolean): HTMLCanvasElement[] {
@@ -1050,14 +920,7 @@ function swirlFrames(p: EffectParams, colors: string[], own: boolean): HTMLCanva
 
 // ---- the one way in -------------------------------------------------------
 
-/* Frames for one effect. Pure: the same type, params, colours and patch always
- * give the same pixels, and nothing here reaches the network or the dom beyond
- * the canvases it hands back.
- *
- * own says the ramp is the effect's own rather than sampled off the painting.
- * Only the two rules that used to tint toward the map read it, and it defaults
- * to off, so every effect made before the colours were a decision renders
- * byte-identically. */
+/* Frames for one effect. Pure. `own` says the ramp is the effect's own rather than sampled, defaults to off, so every effect made before the colours were a decision renders byte-identically. */
 export function renderEffect(
   type: EffectType,
   params: EffectParams,

@@ -1,25 +1,4 @@
-/* Custom effects: the renderer is WRITTEN for the ask instead of picked.
- *
- * Why this exists. The seven rules in effects.ts are a menu, and a menu has a
- * ceiling: a portal was impossible until swirl was added by hand, in code,
- * first. So when an ask fits none of them the planner writes the renderer
- * instead, and this file is where that written code runs.
- *
- * It runs nowhere near the page. The code arrives as the body of
- * (p, colors, api) => void, it is built inside a worker made from a blob, and
- * the worker has had the network, the page and every way of loading more code
- * taken off it before the body is ever built. What comes back is raw rgba, one
- * buffer per frame, and nothing else. A throw inside is caught per frame and
- * reported; a body that never returns is killed by the wall clock and the call
- * rejects. The tool never breaks because a recipe did.
- *
- * The api the code draws with is deliberately small and pixel-art shaped:
- * whole pixels, no smoothing, no gradients, everything clipped to the buffer
- * so bad arithmetic cannot write outside it. And it is pure: api.t runs 0..1
- * across the cycle and rnd(n) answers the same number for the same n on every
- * frame, so a correct recipe loops by construction. The seam check below is
- * what tells us whether it did.
- */
+/* Custom effects: when an ask fits none of the seven rules in effects.ts, the planner WRITES the renderer and it runs here, in a blob worker with the network, the page and every loader taken off it. api.t runs 0..1 and rnd(n) is stable per n, so a correct recipe loops by construction. */
 import { mkCanvas } from './mask'
 
 // one declared knob: a custom effect ships its own sliders rather than
@@ -50,16 +29,7 @@ export interface CustomReq {
   seed: number
   // also render 2n frames and check frame k against frame 2k
   seam?: boolean
-  /* An existing sprite the recipe can DRAW and MOVE, rather than a blank
-   * canvas it has to invent something on.
-   *
-   * This is what makes a crab walk. PixelLab's animator only ever animates a
-   * sprite in place, so a crab it animates breathes where it stands; travel is
-   * not a thing it can do. A written recipe that blits an existing sprite at a
-   * position it works out per frame does it in one pass, for free.
-   *
-   * Plain RGBA and two numbers: it crosses none of the names the sandbox
-   * blocks, and buffers are already the currency going the other way. */
+  /* An existing sprite the recipe can draw and MOVE. PixelLab's animator only animates in place, so a crab it animates breathes where it stands; a recipe that blits at a per-frame position walks. */
   sprite?: { w: number; h: number; frames: Uint8ClampedArray[] }
 }
 
@@ -89,30 +59,7 @@ const SRC = `
 'use strict'
 var post = self.postMessage.bind(self)
 
-/* The doors come off before any written code is built. A worker has no dom to
-// begin with; this takes the network, the loaders and the other workers too.
-//
-// READ THIS BEFORE TRUSTING IT. A denylist over a shared JavaScript global is
-// hardening, not a security boundary, and it cannot be made into one: the ways
-// to reach a builtin are not enumerable. What follows closes the two holes that
-// make the naive version trivially escapable, and the honest limit is that a
-// determined body can still get out.
-//
-// That is tolerable only because of who writes the code: the planner, replying
-// to the author's own words, in the author's own browser, against their own
-// map. It stops being tolerable the moment one account's effect can be run by
-// somebody else, which is exactly what a shared club account means. The fix at
-// that point is not a longer list, it is not evaluating written JavaScript at
-// all; a structured effect description this file interprets has no escape.
-//
-// First hole: deleting a name off self does nothing when the property lives on
-// the prototype, so self.fetch = undefined only shadows it and
-// Object.getPrototypeOf(self).fetch is still the real one. The whole chain is
-// blanked now.
-//
-// Second: Function is shadowed as an argument below, but every value carries
-// .constructor, so (function(){}).constructor is Function again and
-// ('return this')() hands back the real global. */
+/* The doors come off before any written code is built. READ THIS BEFORE TRUSTING IT: a denylist over a shared global is hardening and not a boundary, and a determined body can still get out. Tolerable only because the planner writes it in the author's own browser against their own map; it stops being tolerable the moment one account's effect can be run by somebody else. The two holes closed here are the prototype chain (deleting off self only shadows) and .constructor handing Function back. */
 var SHUT = ['fetch','XMLHttpRequest','WebSocket','EventSource','importScripts','Worker','SharedWorker','indexedDB','caches','BroadcastChannel','FileReader','navigator','crypto','WorkerGlobalScope']
 var scope = self
 while (scope && scope !== Object.prototype) {
@@ -127,12 +74,7 @@ while (scope && scope !== Object.prototype) {
 // off the intrinsics a written body actually has in hand. post was bound above
 // this, so the worker can still answer.
 var VIA = [Object, Array, String, Number, Boolean, Function, RegExp]
-// the async and generator function constructors are separate intrinsics with
-// the same power, and they are the escape a list of the obvious ones misses.
-// Measured before this line existed: (async function(){}).constructor("return
-// this")() handed back the real global. It could not do anything with it,
-// because the chain above had already been stripped and the properties made
-// non-configurable, but reaching it at all is one step too many.
+// the async and generator function constructors are separate intrinsics with the same power: (async function(){}).constructor('return this')() handed back the real global before this line.
 try { VIA.push(Object.getPrototypeOf(async function () {}).constructor) } catch (e) {}
 try { VIA.push(Object.getPrototypeOf(function* () {}).constructor) } catch (e) {}
 try { VIA.push(Object.getPrototypeOf(async function* () {}).constructor) } catch (e) {}
@@ -160,10 +102,7 @@ function hex2rgb(s) {
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
 }
 
-// mulberry32's mixing, but over an index instead of a running counter: rnd(n)
-// is the same number for the same n on every frame, whatever order the code
-// calls it in. A running sequence would drift the pattern between frames and
-// quietly break the loop.
+// mulberry32's mixing over an INDEX rather than a running counter, so rnd(n) is the same number for the same n on every frame and the loop cannot drift.
 function mkRnd(seed) {
   return function (n) {
     var x = (Math.imul(n | 0, 0x27d4eb2d) ^ (seed >>> 0)) >>> 0
@@ -360,10 +299,7 @@ self.onmessage = function (ev) {
       var b = bufs[i]
       for (var j = 3; j < b.length; j += 4) if (b[j] !== 0) { empty = false; break }
     }
-    // the seam check: a recipe that is a pure function of api.t draws the same
-    // pixels at frame k of n as at frame 2k of 2n, so the loop closes. One that
-    // reads api.frame or api.frames directly does not, and that is the one way
-    // a written recipe pops on the wrap.
+    // the seam check: a recipe that is a pure function of api.t draws the same pixels at frame k of n as at 2k of 2n. One that reads api.frame does not, and that is the one way a recipe pops on the wrap.
     var loops = true
     var seamRan = false
     if (d.seam && Date.now() - t0 < ${SEAM_BUDGET}) {

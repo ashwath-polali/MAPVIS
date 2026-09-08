@@ -1,27 +1,6 @@
-/* THE OCEAN DOCUMENT, as the front end sees it.
- *
- * server/store/world.mjs has held the authoritative shapes since marks were
- * added, and the browser had none: World.tsx typed the third list as
- * `marks?: unknown` and carried it through the save untouched, which works
- * exactly until something wants to read one. A field nothing can name is a
- * field the next surface will drop.
- *
- * The rules below are the server's rules restated, not new ones. Where this
- * file and server/store/world.mjs disagree, the server is right: it is the one
- * that refuses a save.
- */
+/* THE OCEAN DOCUMENT as the front end sees it. The browser had no types for it and carried marks through the save as unknown, which works until something wants to read one. Where this and server/store/world.mjs disagree, the server is right: it is the one that refuses a save. */
 
-/* WHAT A POINT ON THE WATER IS FOR, AND THERE IS ONE KIND OF POINT.
- *
- * Ash, 2026-08-30, collapsed the whole category: a berth is a waypoint for the
- * ocean, it is placed and moved freely, and it is callable in code. So `berth`
- * is the word and the default. The rest of this list is a FILTER, not a second
- * type, so a grape can ask for the anchorages without being handed every
- * landmark too; they are drawn the same and dragged the same.
- *
- * `approach` is gone from the vocabulary. It was never a kind of point, it was
- * the second field on a place, and server/db/019_berths.sql lifted every one of
- * them out as a plain berth. */
+/* WHAT A POINT ON THE WATER IS FOR, and there is one kind of point: a berth. The rest of this list is a FILTER so a grape can ask for anchorages without being handed every landmark; they are drawn and dragged the same. `approach` is not a kind, it is a field on a berth. */
 export const MARK_KINDS = ['berth', 'waypoint', 'anchorage', 'landmark', 'spawn'] as const
 export type MarkKind = (typeof MARK_KINDS)[number]
 
@@ -39,43 +18,16 @@ export interface WorldMark {
   /* how close counts as arrived, so sailing to a berth is not an exact-pixel
      test on a hull that moves in floats */
   r?: number
-  /* WHAT A PERSON READS. Ash, 2026-08-29, asked for this directly: points get
-     labels too. The column and the cleaner have both carried it since
-     server/db/014_world_marks.sql, and nothing in the browser ever set it, so
-     every point fell through to displayName's derived branch and a student would
-     have read "North Passage" only by luck of the identifier being tidy. */
+  /* WHAT A PERSON READS. The column and the cleaner have carried it since 014 and nothing in the browser ever set it, so every point fell through to displayName's derived branch. */
   label?: string
-  /* WHICH ISLAND THIS BELONGS TO, if any. A place used to carry its berth
-     nested inside it, which is what made a mooring impossible to place: you had
-     to pick an island before you could put a point anywhere. Naming the island
-     from the point instead keeps everything the nesting bought, since the page
-     drags a bound point along when its island moves, and costs none of the
-     freedom. Empty means a point in open water that answers to nobody. */
+  /* WHICH ISLAND THIS BELONGS TO, if any. Nesting a berth inside a place made a mooring impossible to put anywhere until an island was picked. Empty means open water answering to nobody. */
   island?: string
-  /* WHERE THE HULL PUTS SOMEBODY DOWN ONCE THEY ARE ASHORE: an anchor name
-     inside the island being arrived at, not a point on the ocean. Without it a
-     voyage lands on that map's default spawn and the dock somebody drew is
-     walked past with nothing saying so. */
+  /* WHERE THE HULL PUTS SOMEBODY DOWN ONCE ASHORE: an anchor name inside the island being arrived at. Without it a voyage lands on that map's default spawn and the dock somebody drew is walked past. */
   at?: string
-  /* THE RUN-IN, AND IT IS THE ONE FIELD ON A BERTH THAT IS NOT A BERTH.
-     The game aims here first and swings onto the berth's own heading only once
-     it is astern, which is the difference between coming alongside and nosing
-     straight into a jetty: PmapScene reads `s.berth.approach` and sail.ts runs
-     a whole stage off it. 019 lifted the old nested one out as a second
-     free-standing point and 021 folded it back, and the browser still had no
-     name for it, so a field with a live consumer in the other repo was
-     authorable over the wire and by nothing a person could touch.
-
-     NESTED AND NOT FREE, which is not a retreat from 019. Nothing sails to a
-     run-in and no grape ever addresses one; it only means anything relative to
-     this berth, so it moves when this berth moves. That is the welding that was
-     wrong for a destination and is right here. */
+  /* THE RUN-IN, the one field on a berth that is not a berth: the game aims here first and swings onto the berth's heading once it is astern, which is coming alongside rather than nosing into a jetty. Nested and not free, because nothing sails to a run-in and it only means anything relative to this berth. */
   approach?: { x: number; y: number }
   meta?: Record<string, unknown>
 }
 
-/* the same name rule the server enforces, so a form can refuse before posting
- * rather than finding out from a 400. A bad name is REFUSED and never bent:
- * turning `North Passage` into `north_passage` invents an address the author
- * never wrote and nothing in their code calls. */
+/* the same name rule the server enforces, so a form refuses before posting. A bad name is REFUSED and never bent: turning `North Passage` into `north_passage` invents an address nothing in the author's code calls. */
 export const isMarkName = (s: string): boolean => /^[a-z][a-z0-9_]{0,47}$/.test(String(s || ''))
