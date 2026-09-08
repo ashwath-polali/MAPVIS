@@ -1,38 +1,11 @@
-/* Home, once you are signed in.
- *
- * Not a room, not a desk, not a bookshelf with maps in it. Skeuomorphism is
- * where this goes wrong: a fake wooden shelf is a costume over a list, and it
- * gets in the way the moment you have twenty maps.
- *
- * So it is an interface, and what stops it being a blank list is that the newest
- * map runs across the top at full width as a real banner, and every card below
- * is a big unfiltered painting. The only colour on the page comes out of the
- * work. Chrome stays out of the way.
- *
- * A FOLDER IS TWO THINGS AND THEY ARE THE SAME THING. It is a name in the rail
- * down the left, which is a filter you glance at, and it is a tile in the grid
- * with a folder shape on it instead of a painting, which is the thing your hand
- * is already near. Both select it; opening one shows only what is inside it and
- * the top level then shows the folders plus the maps that are in none of them.
- * Folder tiles always sort ahead of map tiles, so a map can never be dragged in
- * among them and a folder can never be dragged in among the maps.
- *
- * Folders are allowed to be absent. Everything to do with them hangs off one
- * GET, and when that GET does not answer, the rail, the tiles, the per-card
- * picker, the button in the bar and the dragging all disappear and this is the
- * page it has always been with every map in one list. Organising is never what
- * decides whether you can see your own work.
- */
+/* home. every folder feature hangs off one GET, and a failed GET falls back to every map in one list. */
 import { useEffect, useMemo, useState, type DragEvent } from 'react'
 import { createPortal } from 'react-dom'
 import { Link, go } from './router'
 import { useSession, signOut } from './session'
 import { Settings } from './Settings'
 import { Icon } from '../ui/icons'
-/* `m.title || m.slug` was written out at both card sizes, so a map nobody had
-   titled put its kebab-case id on the shelf as though that were its name. The
-   slug is still the address on every link here; it is just no longer the
-   words. */
+/* untitled maps showed their kebab-case slug as a name; the slug stays the link address, not the words. */
 import { displayName } from '../core/naming'
 
 type MapRow = {
@@ -61,48 +34,17 @@ const when = (iso: string) => {
   const d = Math.round(s / 86400)
   return d < 30 ? d + ' days ago' : new Date(iso).toLocaleDateString()
 }
-/* A MAP THAT HAS NEVER BEEN EXPORTED STILL HAS A PICTURE.
- *
- * This only ever pointed at a published bundle, so a map you had painted but
- * not yet exported showed "no painting yet", and every card on the page was a
- * read out of object storage. The working scene is the better source for a
- * thumbnail on both counts: it is what the map looks like right now rather than
- * at the last export, and /work/ is served from local disk when this machine
- * has it, so a page of cards costs nothing.
- *
- * The published copy stays the first choice, because on a host it is the only
- * one that exists. */
+/* published first, the only copy on a host, then /work/ so an unexported map still has a picture. */
 const shot = (m: MapRow) => `/work/${m.slug}/scene.png`
 
-/* THE ORDER SOMEBODY DRAGGED THINGS INTO, APPLIED TO THE LIST THE SERVER SENT.
- *
- * A map that is not in the sequence sorts to the top rather than the bottom,
- * and that is the whole rule: a map with no place in a hand-made order is a map
- * made after that order was made, so it is the newest thing here. Sinking new
- * work under a list sorted a month ago is how a dashboard starts hiding things.
- *
- * The incoming list is already newest-first (listMaps orders by updated_at
- * desc) and sort is stable, so everything unplaced keeps that order among
- * itself and an untouched account reads most recent first. */
+/* a map missing from the hand order sorts to the top, not the bottom: unplaced means newer than the order. */
 const inOrder = (list: MapRow[], seq: string[]) => {
   if (!seq.length) return list
   const at = new Map(seq.map((s, i) => [s, i]))
   return [...list].sort((a, b) => (at.get(a.slug) ?? -1) - (at.get(b.slug) ?? -1))
 }
 
-/* THE HAND ORDER OF THE FOLDERS IS KEPT IN THIS BROWSER AND NOWHERE ELSE.
- *
- * The server has exactly one order endpoint and it orders maps: /api/folders/order
- * writes folder_maps.sort or map_order.sort, looked up by map slug. Nothing
- * writes folders.sort after the row is created, so a folder dragged in front of
- * another is remembered here. When this is missing the fallback is the order the
- * server sent, which is folders.sort then created_at, so a browser that has
- * never rearranged anything is in creation order.
- *
- * The opposite rule to inOrder above, on purpose: an unplaced FOLDER sorts to
- * the end, because createFolder puts a new one on the end of the rail and it
- * should stay where it was put. An unplaced MAP sorts to the top, because it is
- * newer than the order somebody made. */
+/* nothing writes folders.sort after creation, so hand order lives here and an unplaced folder sorts last. */
 const FORDER = 'mapvis:folder-order'
 const readOrder = (): string[] => {
   try {
@@ -153,16 +95,7 @@ export default function Home() {
   // the drag in progress. A map and a folder are different things to be holding
   // and only one of them can be in the hand, so they are separate: it is what
   // decides which targets light up and what a drop means when it lands.
-  /* THE OCEAN IS ONE ACCOUNT'S, so the way to it is one account's too.
-   *
-   * There is a single world row for the whole platform and every map on it sits
-   * on that one water, so a second account following this link gets a chart it
-   * can drag but cannot save. The mark comes off the bar instead of the page
-   * apologising after the click.
-   *
-   * It stays on when the request does not answer: the route is new, an older
-   * deploy has no answer for it, and taking a working link away from its own
-   * owner because a 404 came back is the worse of the two failures. */
+  /* one world row for the whole platform, and a request that does not answer leaves the link on. */
   const [sea, setSea] = useState(true)
 
   const [lift, setLift] = useState('')
@@ -190,10 +123,7 @@ export default function Home() {
       })
       .catch(() => {})
 
-  /* Organising is optimistic: the card moves under the hand and the request
-   * follows it. A write that fails re-reads the whole thing rather than trying
-   * to undo one step of a list that has been dragged three more times since, so
-   * the page ends up agreeing with the database instead of with a guess. */
+  /* optimistic, and a failed write refetches everything rather than undoing one step of a dragged list. */
   const post = (path: string, b: unknown) =>
     fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(b) })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
@@ -208,15 +138,7 @@ export default function Home() {
       go('/', true)
       return
     }
-    /* A FAILED REFETCH MUST NOT LOOK LIKE AN EMPTY ACCOUNT.
-     *
-     * This set the list to [] on any error, and [] is not "we could not ask",
-     * it is "you have no maps", which renders the first-run screen. So a blip
-     * while a panel was open wiped a page full of work off the screen and a
-     * refresh brought it all back, because nothing was ever wrong with the data.
-     *
-     * A refetch that fails now leaves what is already on screen alone, and only
-     * an answer the server actually gave can empty the page. */
+    /* a failed refetch leaves the screen alone: an empty list reads as no maps and shows first-run. */
     let dead = false
     fetch('/api/my-maps')
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
@@ -298,25 +220,14 @@ export default function Home() {
     return inOrder(found.filter((m) => !filed.has(m.slug)), order)
   }, [found, folder, filed, order, q])
 
-  /* The most recently touched map leads the page, AND it is the first tile in
-   * the grid underneath. It used to be pulled out of the list once it was up
-   * there, which meant the banner was a map missing from its own grid: you went
-   * looking for it where it had always been and it was not there.
-   *
-   * Inside a folder there is no lead. You came to look at a set, not at one of
-   * them blown up over the rest. */
+  /* the lead map stays in the grid too, since pulling it out left it missing from its own list. */
   const lead = !q && !folder ? shown[0] : undefined
 
   // the tiles, at the top level only. Inside a folder there is nothing to show:
   // folders do not nest, so the grid there is maps and only maps.
   const tiles = folders && !q && !folder ? ranked : []
 
-  /* REORDERING WRITES THE WHOLE VISIBLE SEQUENCE, so it is only offered when
-   * the whole list is visible. With a search term on, the sequence sent would
-   * cover the matches and nothing else, and every map filtered out would keep
-   * a rank from before, which is not a rearrangement of anything anybody can
-   * see. Dropping onto a folder still works while searching, because that
-   * writes one membership and not an order. */
+  /* reorder writes the whole visible sequence, so it is off while searching; a folder drop is one write. */
   const sortable = !!folders && !q
   const move = (from: string, to: string, before: boolean) => {
     if (!sortable || from === to) return
@@ -380,21 +291,13 @@ export default function Home() {
             MAPVIS
           </button>
         <div className="home-bar-r">
-          {/* the water between the maps, which is a different document to any
-              of them and has no card in the grid to live on. A mark rather than
-              a sentence: two spelt-out links sat where every other control in
-              this bar is a 30px icon, and read as leftover text. The words stay
-              as the title and the accessible name. */}
+          {/* a 30px mark, because two spelt-out links read as leftover text in a bar of icons */}
           {sea && (
             <Link to="/world" className="home-icon" aria-label="the ocean" title="the ocean">
               <Icon name="ocean" />
             </Link>
           )}
-          {/* where the game's interface art gets drawn: the panels, boxes,
-              buttons, bars and marks the engine draws and an island needs. It
-              belongs to no single map for the same reason the water does not.
-              There were two of these links, /surfaces and /kit, and neither
-              word named anything a person could guess. */}
+          {/* the engine's interface art; it was two links, /surfaces and /kit, neither guessable */}
           <Link to="/ui" className="home-icon" aria-label="generate the game's UI" title="generate the game's UI">
             <KitIcon />
           </Link>
@@ -405,10 +308,7 @@ export default function Home() {
             placeholder="find a map"
             spellCheck={false}
           />
-          {/* the empty way in. The rail makes a folder next to the folders and
-              the picker makes one around a map you already have in front of
-              you; this one is for deciding a folder exists before deciding what
-              goes in it. */}
+          {/* the empty way in, for deciding a folder exists before deciding what goes in it */}
           {folders && (
             <div className="bar-fold">
               <button
@@ -475,19 +375,7 @@ export default function Home() {
                   </div>
                 )}
                 <div className="grid">
-                  {/* THE WAY TO MAKE A MAP, THEN THE FOLDERS, THEN THE MAPS.
-                      The dashed card sat between the two runs for a while, as a
-                      divider as much as a button, and that reads as the folders
-                      being the first thing the page hands you. Making a map is,
-                      so it goes first. Nothing separates the two runs now except
-                      that a folder tile does not look like a painting, which was
-                      always the thing actually doing the work.
-
-                      The order is only a paint order. What keeps a folder out of
-                      the map run is that a map card never calls preventDefault
-                      for a folder in the hand and a folder tile never accepts a
-                      map as a neighbour, so no sequence holding both can be
-                      produced no matter where this button sits. */}
+                  {/* only a paint order: neither kind takes the other as a neighbour */}
                   {!folder && (
                     <button className="card new" onClick={() => go('/edit')}>
                       <span className="new-plus" aria-hidden>
@@ -560,10 +448,7 @@ export default function Home() {
   )
 }
 
-/* The newest map, across the whole width. It is the one thing on this page that
- * is allowed to be big, and it is what stops the screen reading as a list. It is
- * also the first tile in the grid below, so this is the same map twice on
- * purpose and not a map that has gone missing from its own list. */
+/* the newest map at full width, and the first tile in the grid below: the same map twice on purpose. */
 function Lead({ m, onDelete }: { m: MapRow; onDelete: () => void }) {
   return (
     <div className="lead">
@@ -711,23 +596,7 @@ function Card({ m, onDelete, org }: { m: MapRow; onDelete: () => void; org?: Org
   )
 }
 
-/* A FOLDER, AS A TILE IN THE SAME GRID THE MAPS ARE IN.
- *
- * The rail is a list of names you read. This is the thing you open, and it is in
- * the grid because that is where your eyes and your pointer already are. It
- * carries a folder shape rather than a painting: a tile with a picture on it
- * would read as a map, and the one thing this has to say at a glance is that it
- * is not one.
- *
- * It takes two different drops and they mean different things. A map landing on
- * it goes in. A folder landing on it lands beside it, before or after depending
- * on which half of the tile the pointer is over, which is the same aiming the
- * map cards use. It never accepts a map as a neighbour and a map card never
- * accepts a folder, so no sequence containing both can be produced and folders
- * cannot end up after a map.
- *
- * Removing it takes the folder and not the maps, so this asks once, here, rather
- * than opening the two-step dialog that deleting a map opens. */
+/* a folder tile takes a map into it and a folder beside it, never a map as a neighbour. */
 function FolderTile({
   f,
   over,
@@ -789,14 +658,7 @@ function FolderTile({
       onDragOver={(e) => {
         if (!taking && !holding) return
         e.preventDefault()
-        /* MOVE, NOT COPY, AND THIS IS THE WHOLE OF THE OLD BUG.
-         *
-         * A card starts its drag with effectAllowed 'move'. The rail said
-         * dropEffect 'copy' here, and the html drag-and-drop model resolves the
-         * pair (move, copy) to no drag operation at all, so the browser cancels
-         * the drag instead of firing drop: the dragover handler had already run
-         * and lit the target, which is exactly what it looked like. Card onto
-         * card always worked because both ends said 'move'. */
+        /* dropEffect must be 'move': (move, copy) is no drag operation and drop never fires. */
         e.dataTransfer.dropEffect = 'move'
         if (taking) onOver()
         else onHover(half(e))
@@ -866,15 +728,7 @@ function FolderTile({
   )
 }
 
-/* WHICH FOLDERS THIS MAP IS IN, as checkboxes, because it can be in several.
- *
- * A dropdown would be the smaller control and it would be the wrong one: it
- * says pick one, and the hub is both "the island" and "what I am working on
- * this week". Ticking is also the only place a map leaves a folder, so the same
- * list has to read as the answer rather than as a menu of moves.
- *
- * It closes on a click anywhere else and on escape. Nothing in it is
- * destructive, so nothing in it confirms. */
+/* checkboxes and not a dropdown, since a map can be in several folders and only leaves one here. */
 function Pick({
   folders,
   mine,
@@ -952,16 +806,7 @@ function Pick({
   )
 }
 
-/* MAKING A FOLDER WITH NOTHING IN YOUR HAND, from the bar.
- *
- * The other two entry points both start from something: the rail makes one at
- * the end of the list of folders, the picker makes one around the map you are
- * looking at. This is the empty case, and it is next to the search box because
- * naming a place to put things is the same kind of act as looking for one.
- *
- * There is no blur-to-save here, unlike the rail. It has a create button, and a
- * blur handler that saves would fire on the way to that button and then save a
- * second time when the click landed. */
+/* no blur-to-save here, unlike the rail: blur fires on the way to the create button and saves twice. */
 function NewFolder({ onMake, onClose }: { onMake: (name: string) => void; onClose: () => void }) {
   const [name, setName] = useState('')
 
@@ -1008,14 +853,7 @@ function NewFolder({ onMake, onClose }: { onMake: (name: string) => void; onClos
   )
 }
 
-/* The rail. It says the same thing as the tiles in the grid and it says it
- * while you are scrolled a long way down, which is the whole reason to keep
- * both: the tiles are where you go, the rail is where you are.
- *
- * A folder row is also a drop target, so a card picked up next to the bottom of
- * the page can be filed without scrolling back up to find the tile. The counts
- * are there so an empty folder is visibly empty rather than looking like a
- * filter that broke. */
+/* the rail is where you are, the tiles where you go, and each row takes a drop without scrolling up. */
 function Rail({
   folders,
   all,
@@ -1137,15 +975,7 @@ function RailRow({
       onDragOver={(e) => {
         if (!taking) return
         e.preventDefault()
-        /* THE DROP THAT NEVER FIRED. This said 'copy'.
-         *
-         * A card leaves dragstart with effectAllowed 'move'. The html
-         * drag-and-drop model resolves the pair (effectAllowed move, dropEffect
-         * copy) to no drag operation, and a drag with no operation is cancelled
-         * rather than dropped: dragleave and dragend run and the drop event
-         * never happens. The highlight came up because it is set right here,
-         * one line earlier, so the target looked live and let go of nothing.
-         * Card onto card always worked because both ends of it said 'move'. */
+        /* this said 'copy', which against effectAllowed 'move' is no drag operation, so drop never fired. */
         e.dataTransfer.dropEffect = 'move'
         onOver()
       }}
@@ -1260,10 +1090,7 @@ function FolderIcon({ s = 13 }: { s?: number }) {
   )
 }
 
-/* The same shape at tile size, filled rather than outlined, because an outline
- * this big reads as a rectangle with a step in it. Two flat tones and no
- * gradient: the paintings are the only thing on this page allowed to have
- * shading in them. */
+/* filled, not outlined: an outline this big reads as a rectangle with a step in it. two flat tones. */
 function FolderBig() {
   return (
     <svg viewBox="0 0 30 22" width="86" height="63" shapeRendering="crispEdges" aria-hidden>
@@ -1273,19 +1100,7 @@ function FolderBig() {
   )
 }
 
-/* DELETING A MAP, IN TWO DELIBERATE STEPS.
- *
- * A map is months of painting and hand-drawn mask, and one of these was once
- * destroyed by a test that pointed at a real slug. So this asks twice, and the
- * two questions are different on purpose: the first confirms WHICH map, spelling
- * out its slug and what goes with it, and the second proves WHO you are. A
- * double confirm that asks the same question twice trains you to click through
- * both.
- *
- * The destructive button is never focused when a step opens, so a stray return
- * key lands on nothing. Escape and the backdrop both cancel. The password is
- * only ever sent to /api/maps/delete, which checks the session, the ownership
- * and the password again on the server; nothing here is the security. */
+/* a map was once destroyed by a test aimed at a real slug, so deleting asks which map, then who you are. */
 function DeleteMap({ m, onClose, onGone }: { m: MapRow; onClose: () => void; onGone: () => void }) {
   const [step, setStep] = useState<'confirm' | 'password'>('confirm')
   const [pw, setPw] = useState('')
@@ -1323,14 +1138,7 @@ function DeleteMap({ m, onClose, onGone }: { m: MapRow; onClose: () => void; onG
     }
   }
 
-  /* PORTALLED TO THE BODY, NOT LEFT INSIDE THE PAGE.
-   *
-   * .home and its cards carry transforms, and a transformed ancestor becomes the
-   * containing block for position:fixed, so a panel rendered inside the grid is
-   * fixed to the grid rather than to the window. That is how a dialog ends up
-   * dragging the page behind it around and leaving it looking like a different
-   * screen. At the body it is fixed to the viewport, which is the only thing it
-   * was ever meant to be fixed to. */
+  /* portalled to body, because a transformed ancestor is the containing block for position:fixed. */
   return createPortal(
     <div className="sheet-wrap" onMouseDown={(e) => e.target === e.currentTarget && !busy && onClose()}>
       <div className="sheet danger" role="dialog" aria-modal="true" aria-label={`delete ${m.slug}`}>

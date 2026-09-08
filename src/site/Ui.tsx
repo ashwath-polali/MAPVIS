@@ -1,49 +1,4 @@
-/* THE UI GENERATOR: where the game's interface art is drawn and measured.
- *
- * A picture of a panel is not a panel. The generator will happily draw a
- * dialogue box, and what comes back is a png; the vine still has to know that
- * the speaker's name goes at 14,9 and that the frame's top edge is 49 pixels
- * deep so the corners do not deform when the box is stretched. Without those
- * marks, nineteen call sites in the game say `background: <a png> center / 100%
- * 100% no-repeat` and squash one whole painting into whatever box the element
- * happens to be. This page draws the art and makes the marks.
- *
- * WHAT WENT WRONG THREE TIMES, so it does not go wrong a fourth.
- *
- * There were two pages doing this one job, /surfaces and /kit, and Ash could
- * name neither. "Surface" and "kit" are words out of internal documents; a
- * person opening a menu has no way to guess that either of them is where the
- * game's buttons and boxes get made. The route is /ui and every word on the
- * screen says panel, box, button, mark. Nothing on it is jargon.
- *
- * And it was drawn as a landing page: a serif display heading, three paragraphs
- * of explanation and grey placeholder cards, which is the grammar of Enter.tsx
- * and Landing.tsx. This is a tool, so it wears the tool's chrome. The classes
- * below are the map editor's own out of app.css, unchanged: `.app`, `header`,
- * `.brand`, `.stepper`, `.panel`, `.asec`, `.row`, `.insp`, `.seg`, `.numf`,
- * `.anchfield`, `.abtn`, `.stage` and `footer`. Two pages that copy each other's
- * numbers drift apart; two pages that share a stylesheet cannot.
- *
- * THE THIRD, and Ash's words for it: "its just a huge list of shit on the
- * sidebar. make it clean, probably in the empty space instead of the sidebar,
- * and clean examples for each one possibly." Twenty-one types were a scrolling
- * list of grey rectangles crammed into a 272px rail while a thousand pixels of
- * stage sat black. Picking a type is the FIRST act on this page, so it owns the
- * room: the twenty-one are a gallery on the stage and the rail holds only the
- * controls for whichever one is armed. Every card draws a diagram of what that
- * piece IS, because a grey rectangle captioned 448×448 tells a person nothing.
- *
- * WHERE THE EXPLANATION WENT. Every type carries three sentences from the
- * server, and printing them is what turned the first version into an essay. The
- * short one is a tip on the card and the long one is the standing line in the
- * rail once a type is armed, so the answer is always one hover or one press
- * away and the screen never becomes prose.
- *
- * docs/UI-KIT.md is the authority for the twenty-one types, the mark vocabulary
- * and the export shape, and server/store/ui.mjs holds the rules. Nothing here
- * re-derives any of it: the type list, its presets, its mark set and every enum
- * arrive from GET /api/ui, so a second copy cannot drift.
- */
+/* draws the chrome and marks it: a png with no edges or named rectangles is half a piece. */
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSession } from './session'
 import { go } from './router'
@@ -111,14 +66,7 @@ type Vocab = {
   core: string[]
   pending: { name: string; since: number } | null
   kinds: string[]
-  /* HORIZONTAL ALIGNMENT, which the API has published since the kit shipped and
-   * this type did not even declare, so the inspector carried controls for six
-   * qualifiers and none for this one. Every text region on the wire shipped with
-   * `align` absent, always: a field in the type, the vocabulary, the store and
-   * the export with no way for a human to enter a value, which is the
-   * half-plumbed sweep this page exists to end. It matters more than the rest,
-   * because a plaque's label is centred and a field's typed text is left, and a
-   * consumer drawing them cannot guess which. */
+  /* align had no control though the api published it: a plaque's label is centred, a field's text is left. */
   aligns: string[]
   valigns: string[]
   fits: string[]
@@ -158,10 +106,7 @@ const STEPS: { id: Step; n: number; name: string }[] = [
   { id: 'mark', n: 3, name: 'mark' },
 ]
 
-/* the three shelves, in the words the record uses for them. A tier is not a
- * category somebody invented for this page: it decides whether four edge
- * numbers mean anything on the piece, which is the whole reason the page has a
- * third step. */
+/* the tier decides whether four edge numbers mean anything, which is why there is a third step. */
 const TIERS: Array<[PType['tier'], string]> = [
   ['ground', 'grounds · they stretch'],
   ['sheet', 'sheets · one canvas of faces'],
@@ -204,14 +149,7 @@ export default function Ui() {
    * the one on the saved record and is the one worth reporting while somebody is
    * dragging rectangles. The footer lives up here, so the count has to. */
   const [marks, setMarks] = useState(0)
-  /* WHO WROTE THE PROMPT THAT WAS PAID FOR, carried up here because the answer
-   * arrives on the draw screen and the person reads it on the marking screen.
-   *
-   * Normally claude writes it, with the type's rules and the shipped chrome in
-   * front of it. With no claude the author's own sentence goes to the generator
-   * bare, and that has to be said: an author whose piece came back looking like
-   * nothing else on the shelf otherwise cannot tell a bad written prompt from
-   * no prompt at all, and those want opposite next moves. */
+  /* whether claude wrote the prompt is carried up, since with no claude the author's sentence goes bare. */
   const [bare, setBare] = useState('')
 
   const load = useCallback(async () => {
@@ -272,11 +210,7 @@ export default function Ui() {
     setStep('draw')
   }
 
-  /* THE WORDS AND NOT THE ADDRESS. This printed `dialogue_box · 688×384` at the
-   * top of the screen for a piece whose title is "Dialogue Box", which is the
-   * one rule src/core/naming.ts exists to stop being broken: a human reads a
-   * label, code reads a name. The type line beside it was already doing it
-   * right, so the same header said it both ways one gap apart. */
+  /* the label and not the name: this printed dialogue_box for a piece titled Dialogue Box. */
   const subject = piece && step === 'mark'
     ? `${displayName({ name: piece.name, label: piece.title }).text} · ${piece.w}×${piece.h}`
     : type && step === 'draw'
@@ -287,15 +221,7 @@ export default function Ui() {
         ? `${v.ui.length} drawn · ${types.length} types`
         : ''
 
-  /* `uikit` BESIDE `app`, AND IT IS A FENCE RATHER THAN A THEME.
-   *
-   * This page deliberately wears the editor's stylesheet: /ui was drawn twice
-   * as a landing page with its own greys, and the cure was for it to have no
-   * stylesheet of its own to invent a second look in. The cost is that the few
-   * places where /ui genuinely needs different metrics, because its rail holds
-   * three word buttons where the editor's holds one, have nowhere to say so
-   * without moving the editor too. This class is that somewhere, and every rule
-   * under it in ui.css is a metric and never a colour. */
+  /* uikit rides beside app as a fence: every rule under it in ui.css is a metric and never a colour. */
   return (
     <div className="app uikit">
       <header>
@@ -310,11 +236,7 @@ export default function Ui() {
               key={s.id}
               className={'step' + (step === s.id ? ' on' : '')}
               disabled={s.id === 'mark' && !piece}
-              /* `title` and not `data-tip`, and it is not a preference. A step
-                 draws its gold underline in its own ::after, and the tool's
-                 tooltip is also an ::after, so one element cannot have both: the
-                 two rules merged into a gold pill hanging under the header. The
-                 editor never hit it because its steps carry no tip. */
+              /* title and not data-tip: a step's underline and the tooltip are both ::after. */
               title={
                 s.id === 'pieces'
                   ? 'the panels, boxes, buttons and marks this account has drawn'
@@ -425,13 +347,7 @@ export default function Ui() {
   )
 }
 
-/* ---- step one: what this account has drawn --------------------------------
- *
- * Art first. The rail lists the pieces by name because a rail is for reaching
- * things; the stage is where they are big enough to judge, on a checker so that
- * the transparency every piece of chrome carries reads as transparency rather
- * than as black.
- */
+/* ---- step one: what this account has drawn, on a checker so transparency reads as transparency ---- */
 function Pieces({
   v,
   types,
@@ -467,10 +383,7 @@ function Pieces({
                   data-tip={p.description || undefined}
                   onClick={() => onOpen(p.name)}
                 >
-                  {/* THE PICTURE AND NOT A RECTANGLE. This slot used to hold an
-                      outline of the canvas, which said the shape of a thing the
-                      account has already drawn and could simply be shown. The
-                      diagram is the fallback, for a piece still in flight. */}
+                  {/* the real picture when there is one, the diagram only for a piece still in flight */}
                   <span className="row-ic">
                     {p.src ? (
                       <img src={`${p.src}?v=${stamp}`} alt="" draggable={false} />
@@ -507,11 +420,7 @@ function Pieces({
             <span>nothing drawn yet · draw a piece to put something here</span>
           </p>
         ) : (
-          /* THE SAME CARD THE TYPE GALLERY USES, one size up. Two grids of
-             pickable things on one page drifted into two card designs before,
-             so there is one class and a modifier for how much room the art
-             gets. Only this one wears the checker: it holds real art, and the
-             checker is a statement about that picture's transparency. */
+          /* one card class with a size modifier, since two grids drifted into two card designs before. */
           <div className="ui-gal">
             <div className="ui-gal-set wide">
               {v.ui.map((p) => {
@@ -536,13 +445,7 @@ function Pieces({
                         {p.w}×{p.h}
                       </span>
                     </span>
-                    {/* HALF A PIECE LOOKS EXACTLY LIKE A WHOLE ONE, and that is
-                        the whole reason this line is here. A picture with no
-                        marks on it and no edges measured is a png the game
-                        cannot consume: nineteen call sites want to know where
-                        the text goes and how deep the frame runs, and none of
-                        that is visible in the art. The footer said "0 of 4
-                        measured" and no card said which nought it was. */}
+                    {/* half a piece looks exactly like a whole one: the missing marks are not visible */}
                     <Made p={p} />
                   </button>
                 )
@@ -555,23 +458,7 @@ function Pieces({
   )
 }
 
-/* HOW FAR ALONG A PIECE IS, IN ONE LINE, WHEREVER IT IS LISTED.
- *
- * docs/UI-KIT.md is explicit that a picture of a page is not a page: without
- * the edges and the named rectangles, every drawn surface arrives with a second
- * half typed by hand into game source. So a piece that has been generated and
- * never marked is HALF DONE, and until now it looked identical on the shelf to
- * one that was finished. The footer counted them, in aggregate, at the far
- * bottom right of the screen.
- *
- * THREE STATES AND NOT TWO, because "not measured" hides the difference between
- * a piece nobody has touched and one somebody is halfway through. The middle
- * one is the one worth naming: it has marks and has not been called finished,
- * which is a piece to go back to rather than a piece to start.
- *
- * A dot and a phrase, the same pairing the settings sheet uses for what does
- * and does not work, so a state on this page and a state on that one are read
- * the same way. */
+/* three states and not two, because 'not measured' hides untouched from halfway through. */
 function Made({ p }: { p: Piece }) {
   if (p.status === 'pending') return <span className="ui-made">drawing</span>
   if (p.status === 'failed') return <span className="ui-made bad">nothing came back</span>
@@ -599,28 +486,7 @@ function Made({ p }: { p: Piece }) {
   )
 }
 
-/* ---- what a type IS, drawn -------------------------------------------------
- *
- * A grey rectangle captioned 448×448 is a caption for a thing nobody can
- * picture, and twenty-one of them was the screen Ash rejected. So every type
- * draws a small diagram of itself: the dialogue box has a speaker plate and a
- * line of speech in it, the gauge has a track part filled, the plank has three
- * faces with the middle one pressed, the portrait frame has a head standing on
- * the bottom of its aperture rather than floating in the middle of it.
- *
- * THESE ARE DIAGRAMS AND NOT PREVIEWS. Nothing here is generated, none of it is
- * spent, and none of it is what the piece will look like. Each one answers the
- * question somebody choosing between twenty-one is actually asking, which is
- * what is this piece FOR.
- *
- * DRAWN IN THE PIECE'S OWN PIXELS. The viewBox is the type's real canvas, so a
- * mark a third of the way down the box is a third of the way down the piece,
- * and the one divisor that sizes the box sizes everything inside it: a 384
- * square sits honestly beside a 688 by 384, which is the only way to feel why
- * six of the twenty-one are sheets of faces rather than their own generation.
- * Strokes are pinned to css pixels in ui.css, so the widest diagram and the
- * narrowest carry the same weight of line.
- */
+/* ---- what a type is, drawn as a diagram and never a preview: the viewBox is the real canvas ---- */
 
 /* THE TWO THAT ARE NEVER GENERATED still have to say what they are. Neither has
  * a canvas, so neither gets a real one: a shape to be drawn in, and the card's
@@ -630,10 +496,7 @@ const NOMINAL: Record<string, [number, number]> = {
   row: [480, 200],
 }
 
-/* every diagram is scaled by this one number, and so is the honest canvas box
- * around it. 688 is the widest and the tallest canvas in the record, so this is
- * the size of the biggest card's art and everything else is smaller than it by
- * exactly as much as its canvas is. .ui-card-art in ui.css holds the same 144. */
+/* one divisor for every diagram: 688 is the widest canvas, and .ui-card-art in ui.css holds the same 144. */
 const DIA_K = 144 / 688
 
 function diaSize(t: PType): [number, number] {
@@ -712,10 +575,7 @@ function Dia({ t }: { t: PType }) {
         </>,
       )
 
-    /* IT SPANS THE WINDOW, so the strip has no ends: three sides of a frame and
-       the fourth left open at both edges. Drawn as a closed rectangle running
-       off the card instead, the card's own overflow clipped the sides away and
-       what was left read as a broken box rather than as a band. */
+    /* three sides open at both edges: a closed rectangle was clipped and read as a broken box. */
     case 'band':
       return wrap(
         <>
@@ -790,10 +650,7 @@ function Dia({ t }: { t: PType }) {
         </>,
       )
 
-    /* a full-bleed painting with a title over it, a bar filling and one fact
-       under that. The land is class d and not class m: it is the picture, and
-       the three things drawn ON the picture have to stay the brightest marks on
-       the card or the type reads as scenery rather than as a surface. */
+    /* the land is class d and not m, so the marks on it stay the brightest or the type reads as scenery. */
     case 'cover_plate':
       return wrap(
         <>
@@ -879,10 +736,7 @@ function Dia({ t }: { t: PType }) {
         />,
       )
 
-    /* one face per season, then the spent one and the ghost drawn at zero. The
-       three seasons are punched with different marks rather than being three
-       identical discs, because a sheet of five identical circles says the count
-       and not the point, which is that every face is a different picture. */
+    /* the seasons carry different marks, because five identical discs say the count and not the point. */
     case 'pip':
       return wrap(
         <>
@@ -932,13 +786,7 @@ function Dia({ t }: { t: PType }) {
         </>,
       )
 
-    /* the world-space marker family: an arrow, a pin, and a ring lying flat on
-       the ground with the spot it marks in the middle of it.
-
-       TWO SHAPES HERE WERE ALREADY OTHER ICONS. A head above a stem is the
-       funnel every table filter in the world draws, so the arrow points down
-       with its head at the bottom, and a ring inside a ring is an eye, so the
-       ground ring is flattened far enough to read as perspective. */
+    /* the arrow points down and the ring is flattened, because both shapes were already other icons. */
     case 'pointer':
       return wrap(
         <>
@@ -997,21 +845,7 @@ function DiaBox({ t, children }: { t: PType; children?: React.ReactNode }) {
   )
 }
 
-/* ---- step two: pick a type and describe one -------------------------------
- *
- * THE STAGE IS WHERE YOU CHOOSE. Picking one of twenty-one is the first act on
- * this page and the largest one, so it gets the room: a gallery of cards on the
- * stage, each drawing what its piece is, grouped by the one fact that decides
- * whether four edge numbers will mean anything on it. The rail holds nothing at
- * all until something is armed, and then only that thing's controls.
- *
- * The type supplies the canvas, the generator's element list and the marks the
- * piece normally carries. What is left for a person is what this one looks like,
- * in their own words, and that is the only sentence on the screen.
- *
- * ONE PRESS DRAWS ONE PIECE. The server enforces it and this button does not
- * pretend otherwise: it is disabled while anything else is in flight.
- */
+/* ---- step two: pick a type and describe one, and one press draws one piece ---- */
 function Drawing({
   t,
   types,
@@ -1045,12 +879,7 @@ function Drawing({
   const legal = IDENT.test(name)
   const reserved = !core && v.core.includes(name)
   const replacing = taken.has(name)
-  /* ANY PENDING ROW BLOCKS, and the exemption for the same name was a live path
-   * to two spends on one row: `Drawing` is keyed by `armed`, so pressing "pick
-   * another" and re-arming the same type remounts this with a fresh busy flag
-   * and the name field defaulting to the type name both times, while v.pending
-   * is still null because load() has not run. The server refuses it now and this
-   * matches, so the button says why instead of firing into a 409. */
+  /* any pending row blocks: exempting the same name was two spends, since Drawing is keyed by armed. */
   const blocked = !!v.pending
   const can = !!t && !refused && legal && !reserved && !blocked && what.trim().length > 0 && !busy
 
@@ -1059,11 +888,7 @@ function Drawing({
     setBusy(true)
     setErr('')
     try {
-      /* THE ANSWER IS KEPT NOW, AND IT WAS THROWN AWAY. The server writes the
-       * prompt through claude with the type's rules and the shipped chrome in
-       * front of it, and says on every answer whether that happened. A press
-       * that discards the answer turns the one honest degrade in the route back
-       * into a silent one. */
+      /* the answer says whether claude wrote the prompt, and discarding it makes an honest degrade silent. */
       const said = (await post('/api/ui/generate', {
         name,
         type: t.name,
@@ -1099,15 +924,7 @@ function Drawing({
           {!t ? 'nothing armed' : refused ? 'this one is named so that nobody spends on it' : 'say what this one looks like, in your words'}
         </div>
 
-        {/* WHAT IS ARMED, ONCE, at the top of its own controls. The gallery
-            already carries the gold border on the card, so this is not a second
-            selection: it is the row the fields underneath belong to, and the way
-            back out of it.
-
-            ONE LINE AND NO SUBTITLE. The stretch law is already the footer's
-            right hand and the canvas size is already in the header, so a second
-            line here could only be one of those a third time, and at 272px with
-            a button beside it that line wrapped to three. */}
+        {/* one line and no subtitle: at 272px with a button beside it a second line wrapped to three */}
         {t ? (
           <div className="row on ui-armed">
             <span className="row-ic">
@@ -1215,13 +1032,7 @@ function Drawing({
         ) : null}
       </aside>
 
-      {/* THE TWENTY-ONE, IN THE OPEN. Grouped by tier and not by anything
-          prettier, because the tier is the one fact that decides whether four
-          edge numbers will mean anything on the piece, which is the whole reason
-          the page has a third step at all.
-
-          NO CHECKER ON THESE WELLS. A checker is a statement about a picture's
-          transparency, and all but one of these is a line drawing. */}
+      {/* grouped by tier, the fact that decides whether the edge numbers mean anything, and no checker */}
       <div className="stage">
         <div className="ui-gal">
           {TIERS.map(([tier, say]) => {
@@ -1232,10 +1043,7 @@ function Drawing({
                 <div className="asec">{say}</div>
                 <div className="ui-gal-set">
                   {rows.map((x) => {
-                    /* the one card that can stop being a diagram. Once the
-                       account has drawn this type, the card shows the real
-                       picture, so the gallery is a shelf of what exists and a
-                       set of promises about what does not. */
+                    /* the one card that stops being a diagram once the account has drawn this type */
                     const had = v.ui.find((p) => p.type === x.name)
                     return (
                       <button
@@ -1271,18 +1079,7 @@ function Drawing({
   )
 }
 
-/* ---- step three: the four edges and the named marks -----------------------
- *
- * THE FOUR-EDGE DRAG is the whole reason this page is worth building. The
- * smallest useful thing the game can consume is six lines of CSS carrying four
- * numbers, and those numbers have twice been got by measuring a png in an image
- * editor and typing a percentage into a stylesheet. Here they are dragged over
- * the picture, the nine regions shade as they move, and the piece is stretched
- * to three sizes under it, so the slice can be SEEN working rather than trusted.
- *
- * A PIECE THAT IS NOT DRAWN YET STILL TAKES ITS MARKS. The frame is the right
- * size whether or not a picture has arrived, so a redraw keeps every rectangle.
- */
+/* ---- step three: the four edges and the named marks, dragged so the slice is seen working ---- */
 function Marking({
   piece,
   type,
@@ -1350,10 +1147,7 @@ function Marking({
   // the coordinate belongs to this piece, so it goes when the piece does
   useEffect(() => () => onReadout(''), [onReadout])
 
-  /* An integer zoom at or above 1, because a pixel drawn 1.4 pixels wide has a
-   * seam down one side of it, and this is the surface somebody is measuring an
-   * edge against. Below 1 there is nothing to be done: a 688 wide painting has
-   * to fit the screen. */
+  /* an integer zoom at or above 1, because a pixel drawn 1.4 wide has a seam and an edge is measured here. */
   const raw = box.w && box.h ? Math.min((box.w - 28) / piece.w, (box.h - 28) / piece.h) : 1
   const z = raw >= 1 ? Math.floor(raw) : Math.max(0.1, raw)
 
@@ -1397,14 +1191,7 @@ function Marking({
     if (mode !== 'marks' || e.target !== e.currentTarget) return
     const a = at(e)
     setPick(-1)
-    /* CLAMPED AGAINST THE ROOM LEFT FROM THE ORIGIN, not against the whole
-     * canvas. The pointermove listener is on window, so dragging past the right
-     * or bottom edge produced x + w greater than piece.w, commitDraft added it
-     * with no further clamp, and the marks canvas drew a rectangle hanging off
-     * the art. checkUi then refused the whole save, naming a rectangle the
-     * author had no reason to think was illegal, and every later save failed the
-     * same way. moveRegion has always clamped correctly against the remaining
-     * room and the draft path did not, so the two disagreed. */
+    /* clamp against the room left from the origin: x + w past piece.w made checkUi refuse every save. */
     drag(({ x, y }) => {
       const x0 = clamp(Math.min(a.x, x), 0, piece.w)
       const y0 = clamp(Math.min(a.y, y), 0, piece.h)
@@ -1427,11 +1214,7 @@ function Marking({
       ),
     )
 
-  /* THE DEDUPE AND THE STAGGER BOTH READ THE LIST INSIDE THE UPDATER, because
-   * reading it from the closure is stale the moment two of these land in one
-   * tick, and the second then lands exactly on top of the first with the same
-   * name. A duplicate name is refused at save with "a name is the only address
-   * there is", which is the right refusal in the wrong place. */
+  /* both read the list inside the updater, since the closure is stale when two land in one tick. */
   const addNamed = (name: string, kind: string) => {
     const w = Math.max(8, Math.round(piece.w / 3))
     const h = Math.max(8, Math.round(piece.h / 4))
@@ -1625,12 +1408,7 @@ function Marking({
         ) : null}
 
         {regions.length === 0 ? (
-          /* TWO LINES, AND THE SECOND ONE IS THE MOVE.
-             One sentence carrying a fact and a definition wrapped to three
-             ragged centred lines and told nobody what to do next. Everywhere
-             else in this product an empty panel says what is missing and then
-             what press fills it, which is the shape `.nothing` was written for
-             out on the ocean. The buttons that fill it are directly above. */
+          /* two lines, and the second is the move: what is missing, then which press fills it. */
           <div className="panel-empty">
             <p>nothing marked yet</p>
             <p className="ui-empty-do">add one above, then drag it over the art</p>
@@ -1650,14 +1428,7 @@ function Marking({
                 <span className="ui-sw" data-kind={r.kind} />
                 <span className="row-tx">
                   <span className={'row-label' + (said.derived ? ' guessed' : '')}>{said.text}</span>
-                  {/* THE ADDRESS BELONGS HERE AND NOT ON THE ART. The tag drawn
-                      on the rectangle used to be the raw identifier, so the one
-                      place a mark was labelled over the picture read
-                      `plaque_hang` while the row beside it read "Plaque Hang".
-                      The words moved to the tag, because that is the mark
-                      somebody points at; the string a member's python holds is
-                      here, in the mono line, the way the roster on /world keeps
-                      its code name column. */}
+                  {/* the address belongs in this mono line and the words go on the tag over the art */}
                   <span className="row-desc mono">
                     {r.name} · {r.kind} · {r.x},{r.y} {r.w}×{r.h}
                   </span>
@@ -1673,10 +1444,7 @@ function Marking({
         {chosen ? (
           <div className="insp">
             <div className="insp-head">
-              {/* the words first and the address after, which is the shape the
-                  ocean's inspector already uses for the same pair. Mono alone
-                  said "this is an identifier" to somebody who already knew the
-                  convention and said `plaque_hang` to everybody else. */}
+              {/* the words first and the address after, since mono alone reads as plaque_hang */}
               <span className="insp-name">{displayName(chosen.name).text}</span>
               <span className="insp-code mono">{chosen.name}</span>
               <button className="arow-x" aria-label={`drop ${displayName(chosen.name).text}`} onClick={() => {
@@ -1701,10 +1469,7 @@ function Marking({
             </label>
             {chosen.kind === 'picture' ? (
               <>
-                {/* THE VERTICAL ON A PICTURE HAS NO DEFAULT. A person stands on
-                    the bottom of their box, and a frame that centres its content
-                    puts every character in the game floating. The server refuses
-                    the absence rather than inventing one, so this asks. */}
+                {/* the vertical has no default: a centred frame leaves every character floating */}
                 <label className="insp-row">
                   <span>stands</span>
                   <select
@@ -1764,11 +1529,7 @@ function Marking({
                 </label>
               </>
             ) : null}
-            {/* WHICH EDGE THE WORDS SIT AGAINST, on the two kinds that carry
-                words. It is the one qualifier a consumer cannot guess: a
-                plaque's label is centred and a field's typed text is left, and
-                both are text regions. The empty option means the reader decides,
-                which is what cleanRegion already means by omitting the field. */}
+            {/* align is the one qualifier a consumer cannot guess, and empty means the reader decides */}
             {chosen.kind === 'text' || chosen.kind === 'number' ? (
               <label className="insp-row">
                 <span>aligns</span>
@@ -1836,11 +1597,7 @@ function Marking({
           {busy ? 'saving…' : 'save the marks'}
         </button>
         <div className="actrow">
-          {/* ITS OWN LINE. Three buttons sharing a 272 px rail gave each of them
-              76 px, and "call it measured" is the widest label on the page, so
-              it wrapped to two lines and stood a row taller than the two beside
-              it. It is also not the same kind of act as the other two: it says
-              the measurement is finished, where they redraw and destroy. */}
+          {/* its own line: three buttons in a 272 px rail give 76 px each and this label wrapped */}
           <button
             className="abtn own-line"
             disabled={busy || dirty || piece.published}
@@ -1875,10 +1632,7 @@ function Marking({
       </aside>
 
       <div className="stage ui-stage">
-        {/* THE CHECKER IS ON THE PIECE, NOT ON THE BOARD, which is the editor's
-            own arrangement: its stage is one dark surface and only the painting
-            carries a checker, because the checker is a statement about that
-            picture's transparency and not about the room it sits in. */}
+        {/* the checker goes on the piece and not the board, since it is about that picture's transparency */}
         <div className="ui-board" ref={board}>
           <div
             className="ui-art ui-check"
@@ -2017,21 +1771,7 @@ function Marking({
   )
 }
 
-/* THE SLICE, WORKING. Three boxes at three shapes, because the failure this
- * whole record exists to end is one painting squashed into a box, and a single
- * preview at a single size cannot show a corner deforming. Drawn with the same
- * border-image rule the game will run, so what is on screen is what the game
- * does rather than a drawing of it.
- *
- * THE BOX IS SIZED FROM THE SLICE, not fixed. The corners never scale, so a
- * fixed 252 wide box with a 115 pixel slice on each side has no middle at all
- * and draws a stack of corners: the previous version did exactly that and blew
- * 300 pixels of stage doing it. Here the outer size is the two corners plus a
- * middle, which is the only shape the piece can honestly take.
- *
- * Then the whole strip is scaled down to fit the tray. That loses the pixel
- * size and keeps the geometry, and the geometry is the entire question being
- * asked here. */
+/* each box is sized FROM the slice: fixed at 252 with a 115 slice each side it drew a stack of corners. */
 const TRAY_ROOM = 118
 
 function Preview({
