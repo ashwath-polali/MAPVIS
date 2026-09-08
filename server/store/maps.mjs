@@ -1,16 +1,4 @@
-// The map repository: everything that reads or writes a map.
-//
-// The shape on the wire is still mask.ts serialize() v3, so the editor does not
-// know any of this happened. What changes is where it lands: the three mask
-// planes become a png in object storage, the placements and geometry become a
-// row, and each half is only written when its own content actually changed.
-//
-// That last part is not an optimisation, it is what makes a free database
-// survive. editor.ts autosaves every 4 seconds while the map is dirty. Writing
-// the whole document each time is 1.6 GB an hour against a 0.5 GB tier. Almost
-// every one of those saves changes a placement OR the mask, never both, so
-// hashing each half and skipping the unchanged one removes most of the traffic
-// without the editor having to say what it touched.
+// each half is written only when its own content changed, because a 4 second autosave of the whole document is 1.6 GB an hour against a 0.5 GB tier
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -22,20 +10,18 @@ import { hashPassword } from './crypto.mjs'
 import { env } from '../db/env.mjs'
 import { MAP_CLASSES } from './publish.mjs'
 
-/* HOW FAR FROM ITS ANCHOR A STAND POINT MAY BE, the same two bodies mask.ts
- * holds the browser to. Repeated here for the reason every other shape guard in
- * this file is repeated: putDoc is reachable by a hand-written POST. Truncated
- * toward the anchor so rounding cannot put it back outside. */
-function clampStand(x, y, stand, charH) {
+/* the same two-body reach mask.ts holds the browser to, repeated because putDoc is reachable by a hand-written POST, and truncated toward the anchor so rounding cannot put it back outside */
+export function clampStand(x, y, stand, charH) {
   if (!Array.isArray(stand) || stand.length !== 2) return null
-  const sx = Number(stand[0])
-  const sy = Number(stand[1])
-  if (!Number.isFinite(sx) || !Number.isFinite(sy)) return null
+  if (!Number.isFinite(Number(stand[0])) || !Number.isFinite(Number(stand[1]))) return null
+  // rounded BEFORE it is measured: rounding a point just inside the circle can push it back out by up to 0.71px
+  const sx = Math.round(Number(stand[0]))
+  const sy = Math.round(Number(stand[1]))
   const reach = Math.max(1, Math.round(Number(charH) || 18)) * 2
   const dx = sx - x
   const dy = sy - y
   const d = Math.hypot(dx, dy)
-  if (d <= reach) return [Math.round(sx), Math.round(sy)]
+  if (d <= reach) return [sx, sy]
   const k = reach / d
   return [x + Math.trunc(dx * k), y + Math.trunc(dy * k)]
 }
@@ -126,18 +112,10 @@ export async function createMap({ slug, ownerId, title = '', w, h, base, spawn =
 
 // ---- the document ----------------------------------------------------------
 
-/* The five things on a placement that a person TYPED, as opposed to the ten
- * that describe where it sits and what it is drawn from. Geometry can be put
- * back by dragging; a behaviour is minutes of authoring and a name is the only
- * address python can reach the placement through. These are the ones worth
- * making a copy of before a save takes them away. */
+/* the five fields a person TYPED, worth rescuing because geometry can be dragged back and a name is the only address python has */
 const AUTHORED = ['life', 'name', 'looks', 'lookName', 'when']
 
-/* Keep the placements that are about to lose authored work, and say what went.
- * Returns a line for the save report, or null when nothing was lost, which is
- * every ordinary save. Never throws: a save must not fail because the copy
- * could not be filed, since refusing the write would cost the author the edit
- * they just made on top of the one already gone. */
+/* never throws, because refusing the write over a failed rescue copy costs the author the edit they just made as well */
 async function keepLostAuthoring(mapId, wasAssets, nowAssets) {
   try {
     const before = new Map((Array.isArray(wasAssets) ? wasAssets : []).map((a) => [String(a.id), a]))
@@ -200,12 +178,7 @@ export async function putDoc(mapId, docString) {
   // Everything the row holds, hashed as one thing. Compared against the stored
   // hash rather than against md5(assets::text) in the query, because jsonb
   // renormalises key order on the way in and would never match what we hold.
-  /* THE MAP'S OWN PROPERTIES, which ride the document because they belong to
-   * it and because one save beat is easier to reason about than two. The six
-   * walk numbers describe the body the map is drawn for and had no column at
-   * all until 008, so they could not even be set out of band; title had a
-   * column and no writer but the slug. Defaults are walk.ts defaultCfg(), so a
-   * document saved by an older tab writes back exactly what it already had. */
+  /* the map's own properties ride the document so there is one save beat, and the defaults are walk.ts defaultCfg() so an older tab writes back what it already had */
   const wk = d.walk && typeof d.walk === 'object' ? d.walk : {}
   const pr = d.props && typeof d.props === 'object' ? d.props : {}
   const num = (v, dflt) => (isFinite(Number(v)) ? Number(v) : dflt)
@@ -223,32 +196,21 @@ export async function putDoc(mapId, docString) {
     islandId: typeof pr.islandId === 'string' ? pr.islandId : '',
     meta: pr.meta && typeof pr.meta === 'object' ? pr.meta : {},
   }
-  /* the occluder baselines. The polygons ride in the planes png as ids in the
-   * green channel; the number a character has to be north of is per id and had
-   * nowhere to live, so it was rebuilt from the polygon's bottom edge on every
-   * open and the typed value was lost. An older document sends none and keeps
-   * the behaviour it had. */
+  /* the occluder baselines, because the polygons ride in the planes png and a per-id typed baseline was rebuilt from the bottom edge on every open and lost */
   const occs = Array.isArray(d.occs)
     ? d.occs
         .filter((o) => o && isFinite(Number(o.id)) && isFinite(Number(o.baseline)))
         .map((o) => ({ id: Math.round(Number(o.id)), baseline: Math.round(Number(o.baseline)) }))
     : []
 
-  /* routes and shots. Both come off the document already filtered by mask.ts,
-   * so the job here is to store them, not to re-decide what a legal one is; the
-   * one thing repeated is the shape guard, because putDoc is reachable by a
-   * hand-written POST and mask.ts is not in front of it. */
+  /* only the shape guard is repeated, because mask.ts has already filtered these and putDoc is reachable by a hand-written POST */
   const paths = Array.isArray(d.paths)
     ? d.paths.filter((p) => p && typeof p.name === 'string' && Array.isArray(p.points) && p.points.length > 1)
     : []
   const framings = Array.isArray(d.framings)
     ? d.framings.filter((f) => f && typeof f.name === 'string' && isFinite(Number(f.zoom)))
     : []
-  /* sets and racks, on the same terms. mask.ts has already dropped a member that
-   * is not a legal anchor name and a rack with two hooks numbered 3; the shape
-   * guard is repeated here because putDoc is reachable by a hand-written POST and
-   * mask.ts is not in front of it. A slot with no number is the one that has to
-   * go: the number IS the address, and a hook nothing can name is not a hook. */
+  /* sets and racks on the same terms, and a slot with no number goes because the number is the address a save means */
   const sets = Array.isArray(d.sets)
     ? d.sets.filter((s) => s && typeof s.name === 'string' && Array.isArray(s.members))
     : []
@@ -260,13 +222,7 @@ export async function putDoc(mapId, docString) {
           slots: r.slots.filter((s) => s && isFinite(Number(s.slot)) && typeof s.anchor === 'string' && s.anchor),
         }))
     : []
-  /* the exclusive variant sets and the placement group rows, on the same terms.
-   * mask.ts has already dropped a set with two states on one placement and a
-   * group row that says nothing but its own name; the shape guard is repeated
-   * for the reason the others are, that putDoc is reachable by a hand-written
-   * POST and mask.ts is not in front of it. A set with no anchor is the one that
-   * has to go: the anchor is the only address python can reach the set through,
-   * so a set without one is a set nobody can name. */
+  /* variant sets and group rows on the same terms, and a set with no anchor goes because the anchor is the only address python can reach it through */
   const variants = Array.isArray(d.variants)
     ? d.variants
         .filter((v) => v && typeof v.name === 'string' && typeof v.anchor === 'string' && v.anchor && Array.isArray(v.members))
@@ -291,30 +247,7 @@ export async function putDoc(mapId, docString) {
   const cur = await one('select doc_sha from maps where id = $1', [mapId])
 
   if (cur?.doc_sha !== rowSha) {
-    /* AUTHORED FIELDS DO NOT GET TO VANISH QUIETLY.
-     *
-     * On 2026-09-05 the hub's row came back with `life` gone from all 22
-     * placements that carried a behaviour, and the one placement name gone with
-     * it, while every geometry and art field on all 94 survived untouched. The
-     * people stopped wandering and stood on the spot playing their walk cycles.
-     *
-     * Nothing on this side drops those. The document arrives, d.assets is stored
-     * verbatim, and the exporter copies life straight through. So a browser sent
-     * a document that had already lost them and the row simply took it. The only
-     * reason the work came back at all is that a fortnight-old doc.json on one
-     * laptop happened to still hold every behaviour, and it agreed with the
-     * published bundle on all 22. That is luck, not a system.
-     *
-     * Deleting a behaviour or a name is a real thing an author does, so this
-     * does not refuse the save. It keeps what is about to be overwritten and
-     * says so out loud, which is the same bargain library items already got in
-     * 1ce72d2. A loss that leaves a rescue file and a line in the log is one
-     * somebody can undo; this one left neither.
-     *
-     * Inside the sha check on purpose. The placements are about 100 kb and the
-     * editor autosaves every four seconds, so reading them on every beat would
-     * cost 90 mb an hour to answer a question that only has an answer when
-     * something is actually being written. */
+    /* a save that drops an authored field leaves a rescue file and a log line rather than being refused, and it sits inside the sha check because reading 100 kb of placements every four seconds is 90 mb an hour */
     const was = await one('select assets from maps where id = $1', [mapId])
     const rescued = await keepLostAuthoring(mapId, was?.assets, assets)
     if (rescued) wrote.push(rescued)
@@ -341,17 +274,7 @@ export async function putDoc(mapId, docString) {
         d.base?.h ?? h,
         d.base?.ox ?? 0,
         d.base?.oy ?? 0,
-        /* ROUNDED, NOT TRUNCATED, because the other side rounds.
-         *
-         * mask.ts reads a spawn back with Math.round and this wrote it with
-         * `| 0`, so the two disagree about any half pixel and the row ends up
-         * one north of the document. Not currently reachable, since every
-         * writer upstream already rounds, which is why changing it did NOT fix
-         * the hub's 557,508-in-557,507-out failure. Left as a consistency fix
-         * and written down so the next person does not read it as the cause of
-         * that one. The real cause is the doc_sha shortcut above: the columns
-         * were edited out of band, the sha still matches the document, and an
-         * unchanged save writes nothing, so the row can never correct itself. */
+        /* rounded and not truncated, because mask.ts reads a spawn back with Math.round and `| 0` puts the row a pixel north of the document */
         Math.round(Number(d.spawn?.[0]) || 0),
         Math.round(Number(d.spawn?.[1]) || 0),
         assetsJson,
@@ -390,10 +313,7 @@ export async function putDoc(mapId, docString) {
   return { wrote, skipped: !wrote.length }
 }
 
-// This machine's own copy of a map document, if it has one. Absent on a host,
-// where WORK is a scratch directory, and that is the case the blob covers.
-// when the local copy was last written, so getDoc can tell a genuinely newer
-// file from one that has simply been sitting there since the last import
+// when the local copy was last written, so getDoc can tell a genuinely newer file from one sitting there since the last import
 function localDocAt(slug) {
   try {
     if (!slug || env().MAPVIS_NO_DISK === '1') return 0
@@ -421,37 +341,8 @@ export async function getDoc(mapId) {
   const blob = await one('select key from map_blobs where map_id = $1 and role = $2', [mapId, 'planes'])
   let mm = ''
 
-  /* THE MASK IS THE ONE THING THAT CANNOT BE REDRAWN, SO NEVER LET ONE COPY
-   * DECIDE WHETHER IT OPENS.
-   *
-   * The planes live in object storage, and the day the bucket stopped serving,
-   * every map on this laptop stopped opening with it, even though work/<slug>/
-   * doc.json on the local disk held the identical mask the whole time. Hours of
-   * hand-drawn cut and levels were unreachable because a free tier's download
-   * counter had run out.
-   *
-   * So the local copy is tried first: it costs nothing, it is written by the
-   * same save that writes the blob, and it means an unreachable bucket degrades
-   * to slower rather than to stopped. The blob stays the source of truth for any
-   * machine that does not have the file. */
-  /* THE LOCAL COPY IS A FALLBACK. IT USED TO BE THE SOURCE, AND THAT IS A BUG.
-   *
-   * The reason above is right: the day the bucket stopped answering, no map on
-   * this laptop would open, while work/<slug>/doc.json held the identical mask
-   * the whole time. What it gets wrong is "written by the same save". It is
-   * not. With the platform on, POST /api/doc returns before any disk write, so
-   * the only writers of doc.json are the failure fallback and import-work.mjs.
-   *
-   * Measured on the hub: doc.json last written 05:57, map_blobs planes 19:55,
-   * fourteen hours apart, contents identical only because nothing edited the
-   * mask in between. Every mask edit from here would have gone to planes.png
-   * and then been discarded on the next open in favour of a morning-old file.
-   * That is the one thing this codebase says cannot be redrawn, silently
-   * reverting itself.
-   *
-   * So the file is used when the blob cannot be read, or when it is genuinely
-   * newer than the row. Otherwise the store wins, which is what makes it the
-   * source of truth it is called everywhere else. */
+  /* the mask cannot be redrawn, so an unreachable blob falls back to the local file rather than failing to open */
+  /* but the local file is only a fallback and never the source: doc.json is not written by the same save, and preferring it discarded fourteen hours of mask edits */
   const local = localDoc(m.slug)
   const localNewer = local && localDocAt(m.slug) > +new Date(m.updated_at || 0)
   if (local && typeof local.m === 'string' && local.m.length && (!blob || localNewer)) {
@@ -473,10 +364,7 @@ export async function getDoc(mapId) {
     assetNext: m.asset_next,
     events,
     eventNext: events.reduce((a, e) => Math.max(a, e.id), 0) + 1,
-    /* The row is the source for these, not the local copy, because they are the
-     * half of the document that has real columns behind it and can be corrected
-     * out of band. A map opened before 008 comes back holding the defaults,
-     * which are the numbers it was already shipping. */
+    /* the row is the source for these and not the local copy, because they have real columns behind them and can be corrected out of band */
     walk: {
       charH: m.char_h ?? 18,
       hip: m.char_hip ?? 2,
@@ -512,17 +400,8 @@ export async function getDoc(mapId) {
 
 // ---- events and anchors, the bridge between the two contracts ---------------
 
-// An old event has a label and no name, so a name is derived from the label and
-// flagged derived:true. The editor shows those as needing confirmation rather
-// than pretending the author chose them, because a name a member writes python
-// against must be one a human actually picked.
-/* The document is where an anchor is authored, because that is what rides undo,
- * autosave and the browser copy. The table is the mirror the api queries, so
- * python can ask what a map is called without downloading the map.
- *
- * Mirror means mirror: everything in the document is upserted by name, and any
- * row the document no longer has is deleted. Anything else and a renamed or
- * removed anchor lingers in the api forever. */
+// a derived name is flagged derived:true, because a name a member writes python against has to be one a human actually picked
+/* mirror means mirror: everything in the document is upserted by name and any row it no longer has is deleted, or a renamed anchor lingers in the api forever */
 export async function syncEventsToAnchors(mapId, anchors, charH = 18) {
   const { anchorName } = await import('./crypto.mjs')
   return tx(async (c) => {
@@ -541,50 +420,19 @@ export async function syncEventsToAnchors(mapId, anchors, charH = 18) {
       const meta = { ...(a.meta || {}) }
       if (derived) meta.derived = true
       if (a.id != null) meta.docId = Number(a.id)
-      /* THE CONDITION THIS PLACE IS THERE UNDER, folded into the bag the way
-       * derived and docId already are. It has to ride here rather than in a
-       * column: the upsert below copies a fixed list of columns plus the whole
-       * bag, the game's readAnchors copies the identical way, and the publish
-       * projection does it a third time, so a top-level field on an anchor is
-       * dropped three times over while the bag arrives intact.
-       *
-       * mask.ts migrateEvent does the same fold in the browser, and this is the
-       * repeat for the reason every other shape guard in this file is repeated:
-       * putDoc is reachable by a hand-written POST and mask.ts is not in front
-       * of it. Without this line an author's barred door was a field the editor
-       * showed and the database never heard of. */
+      /* `when` rides in the meta bag and not a column, because three readers copy a fixed column list plus the whole bag, so a new top-level field is dropped three times over */
       const when = typeof a.when === 'string' ? a.when.trim().slice(0, 240) : ''
       if (when) meta.when = when
       else delete meta.when
 
-      /* THE DRAWN AREA, checked here as well as in the browser, for the reason
-       * every other shape guard in this file is repeated: putDoc is reachable
-       * by a hand-written POST and mask.ts is not in front of it. Two points
-       * are a line and a line has no inside, so anything under three is stored
-       * as no shape at all rather than as an area nobody can ever be in. */
+      /* under three points is stored as no shape at all, because a line has no inside and would be an area nobody can ever be in */
       const poly = (Array.isArray(a.poly) ? a.poly : []).filter(
         (q) => Array.isArray(q) && q.length === 2 && Number.isFinite(Number(q[0])) && Number.isFinite(Number(q[1])),
       )
       const polyJson = poly.length >= 3 ? JSON.stringify(poly.map((q) => [Math.round(Number(q[0])), Math.round(Number(q[1]))])) : null
       const rectOk = Array.isArray(a.rect) && a.rect.length === 4
 
-      /* WHICH OF THE THREE AREA SHAPES IS THE LIVE ONE, folded into the bag the
-       * way `when` is above and for the identical reason: this upsert copies a
-       * fixed list of columns plus the whole bag, the game's readAnchors copies
-       * the same way, and the publish projection does it a third time, so a new
-       * top-level field would be dropped three times over.
-       *
-       * It has to survive because both shapes are now stored side by side. A
-       * rect used to be nulled the moment a poly arrived, which is why touching
-       * the circle button in the editor cost an author their whole drawing.
-       * Nothing is thrown away here any more, so without the mode a reopened map
-       * would have no way to know which of the two the author had chosen.
-       *
-       * EVERY KIND, not only a region. This read `a.kind === 'region' && ...`,
-       * so a zone drawn on a door or a post reached postgres with its points
-       * intact and its mode deleted, and eventsFromAnchors handed back an anchor
-       * the editor then read as a plain circle. A door's zone is the doormat you
-       * can stand on and a post's is the side of the table you can reach. */
+      /* the live shape rides in the bag for the same reason `when` does, on EVERY kind and not only a region, or a zone drawn on a door reads back as a plain circle */
       const stand = clampStand(Math.round(a.x), Math.round(a.y), a.stand, charH)
       const wanted = ['circle', 'rect', 'poly'].includes(a.shape)
         ? a.shape
@@ -616,11 +464,7 @@ export async function syncEventsToAnchors(mapId, anchors, charH = 18) {
           Math.round(a.x),
           Math.round(a.y),
           Math.round(a.r) || 14,
-          /* BOTH SHAPES ARE KEPT, and this line used to be where one of them
-           * died: a rect went in as null whenever a poly existed, so switching
-           * an anchor back to its box after drawing on it got an empty box. The
-           * mode in the bag says which one is authoritative, publish ships only
-           * that one, and neither is destroyed by choosing the other. */
+          /* both shapes are kept, because nulling the rect whenever a poly existed cost an author their box the moment they drew on it */
           rectOk ? JSON.stringify(a.rect.map((n) => Math.round(Number(n)))) : null,
           polyJson,
           stand ? JSON.stringify(stand) : null,
