@@ -1,13 +1,4 @@
-/* One screen, one visible workflow: 1 load, 2 cut, 3 levels, 4 test,
- * 5 assets, 6 export. The active step owns the left panel; the painting owns
- * the rest.
- *
- * Two rules hold everything together. A step never hides another step's
- * result: entering a step sets the view that shows its work, and every state
- * change says what it did in a toast. And the core document, the export
- * bundle, the autosave and the server wiring are byte-identical to the
- * previous MAPVIS: this file only changes how a human reaches them.
- */
+/* one screen, six steps: load, cut, levels, test, assets, export; only how a human reaches them changed. */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { CSSProperties, DragEvent, ReactNode } from 'react'
 import { Editor, isCutTool, loadImage, groupFor, type EditorStatus, type Tool } from './core/editor'
@@ -46,14 +37,7 @@ const ANCHOR_WHAT: Record<AnchorKind, string> = {
   trigger: 'a spot that fires once when it is reached',
 }
 
-/* WHAT THIS KIND'S ZONE IS, which is a different sentence per kind and is the
- * reason the control could not simply be un-hidden and left unlabelled.
- *
- * A zone used to be a region's alone, and "area" was an honest enough word for
- * the one thing that had one. Six kinds have one now and it does six jobs: the
- * doormat you arrive on, the side of the table you can reach, the patch a body
- * lands in. Naming it per kind is what stops an author drawing the object
- * instead of drawing the ground beside it. */
+/* what a zone is, per kind: a shared word lets an author draw the object instead of the ground beside it. */
 const ANCHOR_ZONE: Record<AnchorKind, string> = {
   point: 'the ground close enough to count as being here',
   region: 'the area the player has to be inside for it to fire',
@@ -63,12 +47,7 @@ const ANCHOR_ZONE: Record<AnchorKind, string> = {
   trigger: 'the ground that sets it off when it is crossed',
 }
 
-/* THE MARK EACH KIND WEARS IN THE LIST, from the one drawn set.
- *
- * Every anchor row wore a raw ⏻ typed into the markup, which is a font's power
- * symbol doing duty as "door" beside eleven pictograms somebody drew, and it
- * said the same thing about a region and a spawn as about a door. A kind is the
- * most useful fact on the row, so the tile carries it. */
+/* the drawn tile each kind wears in the list, replacing a raw ⏻ that said the same thing for every kind. */
 const ANCHOR_ICON: Record<AnchorKind, IconName> = {
   point: 'pin',
   region: 'rect',
@@ -129,17 +108,8 @@ const STEPS: { id: StepId; n: number; name: string }[] = [
 // the groups that exist even when empty, so placing has somewhere to aim
 const SUGGESTED_GROUPS = ['trees', 'people', 'smoke', 'effects', 'props']
 
-/* THE EIGHT HEADINGS, laid out the way a compass is. Used twice: for which way
- * a standing figure looks, and for which way a body faces once it has walked up
- * to an anchor. The middle cell is empty here and each caller decides what it
- * means, because a placement always faces somewhere and an anchor is allowed to
- * have no opinion. life.ts works out an eight-way facing and four would throw
- * half of it away. */
-/* what each class of map means, in a sentence, for the tip under the chips. The
- * engine used to work this out by looking at whether the border was
- * transparent, which is a guess about a picture standing in for a fact the
- * author knows. `hall` is the third one: a shared place that is neither a
- * club's own island nor a room inside something. */
+/* the eight headings; four throws away half of life.ts's eight-way facing. the empty middle is the caller's. */
+/* what each map class means. the engine guessed it off a transparent border instead of being told. */
 const MAP_CLASS_WHAT: Record<MapClass, string> = {
   island: 'seen from above, with sea around it · the engine draws the ocean',
   room: 'an interior at character scale · you leave it through a door',
@@ -180,11 +150,7 @@ interface Cand {
 interface Toast {
   id: number
   text: string
-  /* One thing the line can offer to do about itself. It exists for the edits
-   * that rewrite pixels, because z cannot take those back and finding that out
-   * afterwards is how nineteen trees ended up cropped with no way home. The
-   * offer sits on the line that announced the change, which is the one moment
-   * somebody is definitely looking at it. */
+  /* an offer on the toast: z cannot undo a pixel edit, and nineteen trees were cropped with no way home. */
   act?: { label: string; run: () => void }
 }
 
@@ -197,10 +163,7 @@ interface PlItem {
   raw: HTMLCanvasElement[]
 }
 
-/* Everything one open effect is made of. It is a named shape rather than an
- * inline one because the review loop takes it as an argument: the loop works
- * off explicit values instead of state, so it can render and check a revision
- * before anything it did reaches the panel. */
+/* one open effect, named because the review loop takes it as an argument and works off values, not state. */
 interface FxState {
   type: AnyEffectType
   name: string
@@ -218,37 +181,15 @@ interface FxState {
 // it. Every pass is free: the render is local and the look generates nothing.
 const FX_PASSES = 3
 
-/* How many things go on one contact sheet. The review route slices to this
- * whatever it is sent, so a run of eight takes or a fill of twenty-four has to
- * cut its own list to the same number: naming twenty-four things over a strip
- * with six cells in it is asking about pictures that are not there. */
+/* how many go on one contact sheet; the review route slices to it, so callers cut their own list to match. */
 const LOOK_CELLS = 6
 
-/* The one thing about a made sprite that is not a creative choice.
- *
- * Eight views because life.ts works out an eight-way facing and four makes the
- * diagonals snap to the wrong one. That is an engine requirement, so it is a
- * constant and never a routing answer.
- *
- * Everything else about a sprite used to be constants and dropdowns here: the
- * body type, the animal template, the view, the size, one walk cycle name. Each
- * one was a list, and a list is always shorter than what somebody wants to
- * make. A dragon is not on it, a robot is not on it, and neither of them walks.
- * So the ask goes to the router whole and it answers the skeleton, the view,
- * the size and what moving MEANS for that thing. See MakePlan in api.ts. */
+/* eight views: life.ts facings are eight-way, so this is an engine requirement and never a routing answer. */
 const CHAR_DIRS = 8
-/* WHAT A STYLED BODY COSTS AND HOW BIG IT IS ASKED FOR. Pro mode is twenty to
- * forty generations; twenty is the floor, and size 80 is what bought the floor
- * against a 56x67 reference (Thor). Pro fails fast when the size is under the
- * reference's content, and the server clamps sprites to 32..96, so 80 sits
- * safely inside both. The number on the button has to be this one. */
+/* pro is twenty generations at size 80, which clears a 56x67 reference and fits the server's 32..96 clamp. */
 const PRO_BODY = 20
 const STYLE_SIZE = 80
-/* WHERE THE GAME'S STYLE LIVES: three keys in the map's own bag. The id is
- * what pro mode is handed, the view is sent with it so the result is not
- * dragged to the wrong pitch, and the name is what the panel prints. In the
- * bag rather than in this file so MAPVIS stays a general tool: this game
- * points them at Thor, another account points them at its own. */
+/* the style reference lives in the map's bag and not in this file, so mapvis stays a general tool. */
 const STYLE_ID = 'styleCharacter'
 const STYLE_VIEW = 'styleCharacterView'
 const STYLE_NAME = 'styleCharacterName'
@@ -256,13 +197,7 @@ const STYLE_NAME = 'styleCharacterName'
 // a running wait, said the way a clock says it
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
 
-/* Where the filled part of a rail ends.
- *
- * Firefox works this out on its own through ::-moz-range-progress. Webkit has
- * no such part and never will, so the position is handed over as a custom
- * property and the gradient in app.css reads it. A range that skips this draws
- * its rail empty at every value, which is why every one of them goes through
- * here rather than only the two that were noticed. */
+/* webkit has no ::-moz-range-progress, so the fill goes out as a custom property or the rail draws empty. */
 const rail = (v: number, lo: number, hi: number): CSSProperties => ({
   ['--pct' as string]: `${hi > lo ? Math.max(0, Math.min(1, (v - lo) / (hi - lo))) * 100 : 0}%`,
 })
@@ -281,42 +216,17 @@ const slug = (s: string) =>
     .slice(0, 4)
     .join('-') || 'scene'
 
-/* the folder an item's pixels live in: the prefix every one of its placements
- * carries, and the key for dropping their cached bytes.
- *
- * A set of headings lives in a folder too. Reading only frames[0] answered ''
- * for those, and bustAssets('') returns without doing anything, so a person
- * whose frames were rewritten under the same names went on being drawn out of
- * the cache from the old pixels. It only started to matter when an item could
- * gain frames in place.
- *
- * A plain png has no folder at all, and it answered '' for the same reason and
- * with the same result: keep matched wrote new pixels under the same name and
- * the placement on the canvas went on drawing the old ones. Its own url is the
- * prefix that matches exactly itself, which is all bustAssets needs. */
+/* the cache-bust prefix. '' makes bustAssets a no-op, so a view set or plain png kept drawing old pixels. */
 const folderOf = (it: api.LibItem): string => {
   const f = (it.frames && it.frames[0]) || (it.dirs && Object.values(it.dirs)[0]?.[0]) || ''
   return f ? f.slice(0, f.lastIndexOf('/') + 1) : it.src || ''
 }
 
-/* one library row as ONE APPEARANCE, which is what a sequence switches to.
- *
- * The same three shapes placeAt reads when it turns a row into a placement, in
- * the same order: a set of views carries a src as well, pointing at whichever
- * heading came first, so views have to be taken before the src branch claims it
- * and loses the other seven. */
+/* one library row as one appearance. views before src, or a view set's src loses the other seven headings. */
 /* A face, in the shape the renderer draws. Same three shapes as a library row
  * and for the same reason: a state of a walking character is eight headings,
  * and losing them mid-round turns a troll south the moment it becomes a rock. */
-/* THE WORD THE FACE ALREADY HAS. A face and a library row both arrive carrying
- * the name somebody asked for it under, and both of these threw it away, so
- * `show(placement, state)` had no vocabulary and editor.ts had to recover the
- * word from the url the picture happens to live at. This is the real fix that
- * retires that derivation: the name comes across with the picture.
- *
- * Folded through anchorName rather than trusted, because a library row arrives
- * hyphenated (`boulder-2`, off the exporter's own collision suffix) and
- * migrateAsset drops anything that is not a look name instead of correcting it. */
+/* the face's name rides with the picture, not read off its url; anchorName fixes hyphenated library rows. */
 const lookNameOf = (want: string | undefined): string | undefined => {
   const n = anchorName(String(want || ''))
   return isLookName(n) ? n : undefined
@@ -351,40 +261,13 @@ const lookOfItem = (it: api.LibItem): AssetLook => {
   return L
 }
 
-// ---- the palette lock ---------------------------------------------------
-// The generator answers in its own colours whatever the ask said, so the
-// answer is pushed onto the map's palette after it lands. It is arithmetic,
-// not a generation: free, instant, and the same every time.
+// ---- the palette lock: pushed onto the map's palette after it lands, arithmetic and not a generation ----
 
 // every frame of a library item, decoded onto its own canvas. The compare
 // panel draws these and the lock reads them, so both halves work off the same
 // pixels the library is already showing.
-/* Every image an item is made of, and what each one is called.
- *
- * An item is one png, OR a folder of animation frames, OR a set of views, one
- * per heading. The third shape arrived with eight-sided art and every edit
- * operation was blind to it: they all read `src`, which on a view set points at
- * the south view, so a trim or a pixelate would have processed one of the eight
- * and written it back under the wrong name. Everything that edits pixels asks
- * here instead, so all three shapes go down one road.
- *
- * keys is null for the first two shapes and the view names for the third. */
-/* EVERY PICTURE AN ITEM IS MADE OF, and the word every is the whole of this.
- *
- * It used to answer the FIRST frame of each heading and nothing else. On a
- * standing view set that is right, because a heading is one picture. On a
- * walking one a heading is eight, so every in-place edit read 8 pictures out of
- * 64, wrote 8 back, and the item stopped being a walk cycle. Crop, ctrl+P and
- * trim the base all went through here, so all three did it.
- *
- * Seen on the hub 2026-08-25: cropping dock-porter left `dirs.json` pointing at
- * one `east.png` per heading where there had been `east-0.png` through
- * `east-7.png`, and took `fps` and `characterId` with it. The sprite kept its
- * name and quietly stopped walking.
- *
- * keys runs parallel to urls, one entry per picture, repeating a heading once
- * per frame it owns. That is what lets the writer put the set back together in
- * the shape it found it. */
+/* every picture an item is made of. src on a view set is only the south view, so an edit hit one of eight. */
+/* every picture, not the first frame per heading: reading 8 of 64 turned a walk cycle into eight stills. */
 function partsOf(it: { kind: string; src?: string; frames?: string[]; dirs?: Record<string, string[]> }): {
   urls: string[]
   keys: string[] | null
@@ -474,24 +357,7 @@ function TickPct({ value }: { value: number }) {
   return <>{shown.toFixed(1)}</>
 }
 
-/* ONE ROW: a target, its word, and the tile that says what kind of thing it is.
- *
- * THE DESCRIPTION IS NOT STANDING TEXT ANY MORE, and this is the change that
- * gave the rail its height back. Measured on step 4: 144 words in a 272px
- * column, of which about eight were data. Every control carried a permanent
- * full sentence set at the same weight as the control it explained, so the
- * column read as prose with buttons in it rather than as a list of things to
- * press, and the rail wanted 1073px inside 690px.
- *
- * The line between what stays and what goes is not "long" versus "short". It is
- * whether the sentence is TRUE ALL THE TIME or true only right now. "closes 1px
- * seams between shapes" is true whether or not you are looking at it, so it
- * belongs on hover. "right-click or esc cancels" only exists because you armed
- * the tool a second ago and the map is waiting for a click, so it stays on
- * screen where it can be obeyed. `on` is exactly that distinction and it was
- * already being passed, so nothing new has to be remembered at the call site.
- *
- * A caller with a description worth keeping either way passes `keep`. */
+/* one row. standing descriptions wanted 1073px of rail inside 690px, so only what is true right now stays. */
 function Row(props: {
   icon?: IconName
   label: string
@@ -528,15 +394,7 @@ function Row(props: {
   )
 }
 
-/* THE SWITCH FOR THE WHOLE ANCHOR OVERLAY, in the row grammar every other
- * toggle in this tool wears.
- *
- * It exists because the overlay stopped being the workflow's and became the
- * author's: every anchor's zone, floor spot, heading and binding are on the map
- * on every step, which is what an author placing art against a reach needs and
- * is also exactly the thing that can bury a painting on a map carrying thirty of
- * them. Two panels show it, one component, so the two can never disagree about
- * whether it is on. */
+/* the anchor overlay switch. thirty zones can bury a painting; one component so two panels cannot disagree. */
 function AnchorsShown({ ed, on }: { ed: Editor | null; on: boolean }) {
   return (
     <Row
@@ -556,26 +414,7 @@ function Sec({ children }: { children: ReactNode }) {
   return <div className="asec">{children}</div>
 }
 
-/* THE LINE UNDER A DATA ROW'S NAME, WHICH IS THE ONE PLACE THIS TOOL PRINTS A
- * PYTHON IDENTIFIER AT A PERSON.
- *
- * Two things were wrong with it and they were the same thing. `panthers_maw`
- * was printed bare, with nothing saying that the underscored string is what
- * code calls the door rather than a second, uglier name for it, while the
- * roster on /world puts a "code name" header over its own column and the form
- * two blocks up says "name · what code calls it". And it was joined to its
- * destination by a raw →, a font glyph in a list where every other mark is
- * drawn.
- *
- * Then the whole line ellipsised. Measured on the hub at 141px: the door read
- * "panthers_maw → pant…", the route lost "both ways" and the shot lost both
- * the anchor it hangs on and the fact that it is the arrival view. An address
- * a person cannot finish reading is worth nothing, so the pairs WRAP. A data
- * row is allowed to be two lines tall; a truncated identifier is not allowed
- * at all. Each pair is one flex item, so a break never lands inside a name.
- *
- * A null caption is for a part that says what it is on its own: "3 pts" and
- * "arrival" do not need a word in front of them and "the_dock_walk" does. */
+/* the pairs wrap: at 141px it clipped to "panthers_maw → pant…", one flex item each so a name never breaks. */
 function Addr({ parts }: { parts: [string | null, string][] }) {
   return (
     <i>
@@ -686,13 +525,7 @@ function NumField(props: {
   )
 }
 
-/* A STRING YOU CAN TYPE, held while it is being typed. NumField's contract for
- * words: enter and blur commit, escape puts the old value back.
- *
- * Not a controlled field straight onto the editor, because every setter behind
- * one of these takes an undo snapshot. Committing per keystroke would put one
- * undo step under every character typed, so z would walk a name back a letter
- * at a time instead of walking the change back. */
+/* held while typed: these setters snapshot undo, so per-keystroke commits undo a name one letter at a time. */
 function HeldInput(props: {
   value: string
   placeholder?: string
@@ -731,14 +564,7 @@ function HeldInput(props: {
   )
 }
 
-/* THE CONDITION A THING IS THERE UNDER, and the one field all three carriers
- * wear: a group, a placement, an anchor.
- *
- * MAPVIS DECLARES THE CONDITION AND PYTHON DECIDES WHAT IT MEANS. This tool has
- * no run state, no year, no flags and no idea what `cord_earned` is, so it never
- * looks inside the string, and an author is told that on the field rather than
- * by a paragraph standing under it. Blank is always there, which is what every
- * placement on every map shipped so far already is. */
+/* the condition string: mapvis declares it, python decides what it means, so nothing here looks inside it. */
 function WhenField({ what, value, onCommit }: { what: string; value: string; onCommit: (v: string) => void }) {
   return (
     <label className="anchfield" data-tip="mapvis only declares the condition · python decides what it means">
@@ -748,12 +574,7 @@ function WhenField({ what, value, onCommit }: { what: string; value: string; onC
   )
 }
 
-/* FOUR NUMBERS FOR WHAT A PLACEMENT BLOCKS, or blank for measured.
- *
- * Blank is not the absence of an answer here, it is the better answer: publish
- * scans the png's own alpha and beats anything a person types. This is the
- * correction for a sprite whose drawn base is not the part a body should bump
- * into, which is a shadow in the frame or an alpha halo. */
+/* what a placement blocks. blank is better: publish scans the png's alpha; type numbers only to fix a halo. */
 function FootField({
   value,
   onCommit,
@@ -835,16 +656,9 @@ export default function App() {
   // answer in the app instead of on disk
   const [asks, setAsks] = useState<api.Ask[]>([])
   const [asksOpen, setAsksOpen] = useState(false)
-  /* How chunky ctrl+p makes a sprite, as sprite-pixels per map-pixel. 1 is the
-   * strict match to the painting and it is the blockiest possible result, since
-   * the map has only as many pixels there as the sprite is wide on it. The
-   * strict match shipped first and was far too much; the gentlest step was then
-   * not quite enough. 2 is where his eye landed, so 2 is where this starts. */
+  /* ctrl+p grain, sprite pixels per map pixel. 1 is the strict match and too blocky, so this starts at 2. */
   const [grain, setGrain] = useState(2)
-  // the assets panel's two halves: place what exists, or make something new
-  // library thumbnails whose pixels were rewritten under the same name: the
-  // stamp goes on the img url so the browser cache can not answer with the old
-  // picture. The stored library urls stay clean.
+  // the assets panel's two halves, plus a cache stamp on thumbnail urls so rewritten pixels are not served stale
   const [bust, setBust] = useState<Record<string, number>>({})
   // the picker over what the pixellab account already owns. Open, which page,
   // what is typed in its search, what came back, and which one is being copied
@@ -860,16 +674,9 @@ export default function App() {
     taking: string
     err: string
   }>({ open: false, q: '', page: 0, items: [], total: 0, pages: 1, busy: false, taking: '', err: '' })
-  /* The account has two kinds of thing and they are not interchangeable.
-   * OBJECTS are props: crates, wells, trees. SPRITES are built on a skeleton,
-   * with four or eight directions and cycles hung on it. Anything that walks a
-   * harbour is the second kind, so the browser shows both and says which. */
+  /* objects are props; sprites have a skeleton, directions and cycles. the two are not interchangeable. */
   const [chars, setChars] = useState<{ items: api.AccountCharacter[]; busy: boolean; err: string } | null>(null)
-  /* THE TOGGLE: draw the next sprite in the game's style. Off is standard
-   * mode and the template rig, which is every sprite this tool made before
-   * and is one generation. On is a pro body styled on the character the map's
-   * bag names, and is twenty. Off by default so nobody buys twenty by
-   * accident; the price on the button changes the moment it is switched. */
+  /* draw the next sprite in the game's style: off is one generation, on is twenty, so off is the default. */
   const [styleOn, setStyleOn] = useState(false)
   const styleId = String(st?.props.meta?.[STYLE_ID] || '')
   const styleView = String(st?.props.meta?.[STYLE_VIEW] || '')
@@ -877,27 +684,15 @@ export default function App() {
   const [accTab, setAccTab] = useState<'objects' | 'sprites'>('objects')
   const [genPrompt, setGenPrompt] = useState('')
   const [genType, setGenType] = useState<'static' | 'animated'>('static')
-  /* What the one ask box is for. There used to be two boxes stacked in the
-   * column, an object one and an effect one, running the same gesture twice:
-   * type, point at the map, get a thing. One box and a four-way says the same
-   * with half the controls. */
+  /* one ask box: two stacked boxes ran the same gesture twice, so a four-way does it with half the controls. */
   const [makeWhat, setMakeWhat] = useState<'object' | 'effect' | 'fill' | 'sprite'>('object')
-  /* A sprite is the longest wait in the tool by a wide margin: minutes for the
-   * body, minutes again for eight directions of motion, all inside one request.
-   * So the button counts out loud, because a still label for six minutes is
-   * indistinguishable from a hang.
-   */
+  /* the button counts out loud: a still label for six minutes is indistinguishable from a hang. */
   const [charRun, setCharRun] = useState<{ at: number } | null>(null)
   const [charSecs, setCharSecs] = useState(0)
   // how many things a fill plans. A range, because "populate this" means
   // something different for a courtyard than for a whole beach.
   const [fillCount, setFillCount] = useState(6)
-  /* How many takes on ONE thing. Not fill's slider, which means a set of
-   * different things: this is the same core asset drawn again from a different
-   * seed, so what comes back is four palms rather than a palm, a barrel and a
-   * crate. Starts at 1, because the default press has to be the cheap one, and
-   * stops at 8, because a moving sprite is nine generations a take and the gate
-   * below is the only reason even that is safe. */
+  /* takes of one thing, not fill's different ones. 1 for a cheap default, 8 max at nine generations a take. */
   const [genCount, setGenCount] = useState(1)
   const [scene, setScene] = useState<api.ScenePlan | null>(null)
   // which of the planned things are still wanted, by index: a plan you can
@@ -916,10 +711,7 @@ export default function App() {
   // pressing again is a correction rather than a reroll of the same idea
   const [genLast, setGenLast] = useState('')
   const [genShow, setGenShow] = useState(false)
-  /* Giving a placement a way of moving. Three steps and they are the ones he
-   * described: the sparkle opens a box, the words go in, then the map is asked
-   * where it is allowed to roam. Esc at the boundary step is a real answer, not
-   * a cancel: no fence means the movement is judged from the map instead. */
+  /* three steps to give a placement movement. esc at the boundary is an answer, so the map is judged instead. */
   // the help panel, opened on the step you are standing in so the first
   // thing you read is about what is in front of you
   const [helpOn, setHelpOn] = useState(false)
@@ -933,24 +725,12 @@ export default function App() {
   const [lifeAsk, setLifeAsk] = useState('')
   const [lifeBusy, setLifeBusy] = useState(false)
   const [lifeNote, setLifeNote] = useState('')
-  /* Animating a thing that is already in the library.
-   *
-   * Life moves a placement around the map. This is the other half: what the
-   * pixels themselves do while they stand there. Five people on the hub were
-   * dead still, and dead still is what makes a map read as a diorama.
-   *
-   * One free-text box, the same two presses as every other spend, and no list
-   * of animations anywhere: the words go to the server and it answers whether
-   * that is a written recipe (free), one picture animated (one), or every
-   * heading in one coordinated job (one each). */
+  /* what the pixels do standing still; life moves the placement. the server prices it, never a list here. */
   const [animOpen, setAnimOpen] = useState(false)
   const [animAsk, setAnimAsk] = useState('')
   const [animBusy, setAnimBusy] = useState(false)
   const [animPlan, setAnimPlan] = useState<api.AnimPlan | null>(null)
-  /* The run carries the plan it is running as well as its start time. The plan
-   * is cleared the instant the confirmed press lands, so without this the
-   * button would have nothing left to say what it is doing for the several
-   * minutes it takes. */
+  /* the run keeps the plan: it is cleared on the confirmed press, and the button still has minutes to narrate. */
   const [animRun, setAnimRun] = useState<{ at: number; plan: api.AnimPlan } | null>(null)
   const [animSecs, setAnimSecs] = useState(0)
   const [animNote, setAnimNote] = useState('')
@@ -958,45 +738,13 @@ export default function App() {
   // steps so a batch ends after the generation already in flight
   const jobRef = useRef('')
   const stopRef = useRef(false)
-  /* A ROUND WAITING FOR SOMETHING TO PUT IT ON.
-   *
-   * One ask can describe a creature and what it does, and the drawing finishes
-   * long before anything is placed. The round cannot be applied to nothing, so
-   * it waits here until the first placement of that item lands and is handed
-   * over then. That is why nobody ever types the sentence twice.
-   *
-   * It is a ref and not state on purpose: it is read once inside a callback at
-   * the moment of placing, and putting it in state would re-run the placing
-   * effect every time it changed. */
+  /* a round waits here until the first placement lands. a ref, so it does not re-run the placing effect. */
   const pendingLife = useRef<{ name: string; ask: string } | null>(null)
-  /* THE PIXEL EDITS z HAS TO UNDO, and how it knows which z.
-   *
-   * Crop, ctrl+P, trim and palette match rewrite files on disk. The document
-   * knows nothing about that, so undo restored anchors around art that was
-   * still edited. Each edit is filed here with the undo depth it sat at, and
-   * the hook below only reverts when z arrives back at that exact depth: a crop
-   * followed by three moves takes four presses to reach, the way everything
-   * else in the tool already behaves. */
+  /* pixel edits filed with the undo depth they sat at, so z reverts them only on arriving back at that depth. */
   const pixelUndo = useRef<{ name: string; at: number }[]>([])
-  /* WHETHER A PIXEL EDIT CHANGES EVERY COPY OR JUST THE ONE PICKED.
-   *
-   * These edits rewrite one library row and every placement of it draws from
-   * that row, so the tool has always changed all of them at once. That is
-   * genuinely useful when nineteen trees came off one generation and want the
-   * same trim, and genuinely surprising when you selected one tree. It is off,
-   * because the surprising answer should never be the default one. */
+  /* whether a pixel edit hits every copy of the row; off, because the surprising answer is a bad default. */
   const [editAll, setEditAll] = useState(false)
-  /* The first take of a multi-take run that LANDED, held up for a yes.
-   *
-   * A moving sprite is nine generations, so four of them is thirty-six and
-   * about half an hour. Finding out at the end that the first one was wrong
-   * costs all of it. So the run pauses after the first, puts the actual picture
-   * on the panel, and asks. The resolver is a ref because the loop is awaiting
-   * it and a re-render must not mint a second promise.
-   *
-   * done is which take it is, not always one: a take that failed has no picture
-   * to hold up, so the gate falls through to the next one rather than letting
-   * the rest of the run past unseen. */
+  /* the first take that landed, held for a yes; a ref so a re-render cannot mint a second promise. */
   const [gate, setGate] = useState<{ item: api.LibItem; done: number; total: number } | null>(null)
   const gateRef = useRef<((go: boolean) => void) | null>(null)
   // the confirmed static generate is waiting for a spot on the map
@@ -1022,28 +770,16 @@ export default function App() {
    * holds the first corner while it waits for the second. */
   const [standPick, setStandPick] = useState(0)
   const [rectPick, setRectPick] = useState<{ id: number; from: [number, number] | null } | null>(null)
-  /* the radius while it is being typed. Held rather than applied per keystroke
-   * for the reason a name is: clearing the box to type 300 goes through the
-   * empty string, and an empty string committed straight through would clamp the
-   * anchor to the minimum and take the digits away as they were typed. */
+  /* the radius while typed: clearing the box to type 300 passes through '', which would clamp to the minimum. */
   const [radDraft, setRadDraft] = useState<string | null>(null)
-  /* which route's form and which shot's form are open, and a held name draft
-   * for each. Three separate draft pairs rather than one, for the reason the
-   * placement pair is separate from the anchor pair: all four forms can be open
-   * at once and one draft between them would put half a typed route name into
-   * a shot. */
+  /* a draft per form: all four can be open at once, and one shared draft puts half a route name into a shot. */
   const [pathEdit, setPathEdit] = useState(0)
   const [rnameDraft, setRnameDraft] = useState<string | null>(null)
   const [rnameSaid, setRnameSaid] = useState<{ id: number; why: string } | null>(null)
   const [shotEdit, setShotEdit] = useState(0)
   const [snameDraft, setSnameDraft] = useState<string | null>(null)
   const [snameSaid, setSnameSaid] = useState<{ id: number; why: string } | null>(null)
-  /* WHICH NAMED COLLECTION HAS ITS FORM OPEN, as one `kind:id` string and not
-   * three numbers, because only one of the three is ever open: opening a set
-   * closes the rack for the reason picking a route closes a shot, and stacked
-   * forms grew the column until neither was on screen at once. One held name
-   * draft between them for the same reason, since the form that owns the draft
-   * is the only one on screen. */
+  /* one kind:id, not three numbers: only one form is ever open, and stacked forms grew the column off screen. */
   const [collEdit, setCollEdit] = useState('')
   const [collDraft, setCollDraft] = useState<string | null>(null)
   const [collSaid, setCollSaid] = useState('')
@@ -1051,10 +787,7 @@ export default function App() {
    * The number is the whole guarantee a rack exists for, so nothing here can
    * carry an index around and hand it back as an address. */
   const [dragSlot, setDragSlot] = useState(0)
-  /* which layer's condition field is open. The group strip stays a strip: the
-   * field appears under it for one group at a time, rather than every group
-   * carrying a standing input, which is what made the old stacked layer list
-   * the tallest thing in this column. */
+  /* one group's condition field at a time; an input on every group made the layer list the tallest thing here. */
   const [grpWhen, setGrpWhen] = useState('')
   // the map's own id, held while it is typed, because a rename is a server call
   // that can be refused and half a slug is not a thing to send
@@ -1073,12 +806,7 @@ export default function App() {
   // set while the panel is reopened on an effect that already exists on disk:
   // save rewrites that item in place, save as new writes another one
   const [fxEdit, setFxEdit] = useState<api.LibItem | null>(null)
-  // colors is the live ramp, the one that renders and the one that is written.
-  // mapColors is what the click read off the painting and ownColors is the
-  // effect's own, so the toggle can go back and forth without losing either.
-  // custom is set only when the plan came back with a written renderer instead
-  // of one of the seven, and ask is kept so a recipe that will not run can fall
-  // back onto the closest built-in without asking the planner again.
+  // colors renders; mapColors and ownColors keep the toggle reversible; ask lets a dead recipe fall back free
   const [fx, setFx] = useState<FxState | null>(null)
   const [fxP, setFxP] = useState<EffectParams | null>(null)
   const [fxFrames, setFxFrames] = useState<HTMLCanvasElement[]>([])
@@ -1098,17 +826,9 @@ export default function App() {
   // thrown away for a built-in.
   const fxRan = useRef('')
   const [growPx, setGrowPx] = useState(64)
-  // the style card: what this map looks like, read off the painting once and
-  // kept on disk. Its clause rides on every later ask, so a sprite comes back
-  // in the map's family instead of the generator's own idea of the words.
-  // Everything still works when it is not there.
-  // the map's own colours, off the whole painting, for the palette lock
+  // the style card read off the painting once, and the map's colours for the palette lock; both are optional
   const [mapPal, setMapPal] = useState<string[]>([])
-  // the compare panel. raw is what came back; the matched side is rendered
-  // locally at whatever the slider is on, and neither has been written yet.
-  // ask and prompt are what made these, kept so a keep can be recorded. pick is
-  // the one the tool chose after looking at all of them, and -1 when nothing
-  // looked or when the look said none of them are it.
+  // the compare panel; nothing here is written yet, and pick is -1 when nothing looked or none of them are it
   const [pl, setPl] = useState<{
     mode: 'gen' | 'sel'
     selId: string
@@ -1117,16 +837,7 @@ export default function App() {
     prompt: string
     pick: number
   } | null>(null)
-  /* WHAT THE TOOL SAW IN WHAT CAME BACK, and it belongs to the run rather than
-   * to the compare panel, because most runs open no panel at all. A moving
-   * object, a sprite and a whole planned set all landed unlooked-at while a
-   * still object did not, and a thing that came back at the wrong angle is the
-   * same thing whichever of the four made it.
-   *
-   * It is advice and it reads as advice: one line, never a block. Whatever it
-   * says, the item is already in the library and stays there. fix is the only
-   * part with money behind it, so it is a button and the button only fills the
-   * box and reads the map again, both free. */
+  /* what the look saw, held on the run because most runs open no panel; advice only, the item stays either way. */
   const [said, setSaid] = useState<{ why: string; verdict: 'good' | 'revise'; fix: string } | null>(null)
   // the look itself, in flight. One flag for every path, so the stop button's
   // line has one thing to name however the run got here.
@@ -1157,23 +868,9 @@ export default function App() {
     const e = edRef.current
     if (!e) return
     e.setAssetMode(s === 'assets')
-    /* PAINTING BELONGS TO THE STEPS THAT PAINT. Cut and levels draw on the
-     * map; load, test and export do not. The tool used to survive a step
-     * change, so arriving at test with the bucket still armed from cut meant
-     * one click cut a hole in the island. */
+    /* tools disarm on a step change: a bucket surviving into test cut a hole in the island with one click. */
     e.setPaintable(s === 'cut' || s === 'levels' || s === 'assets')
-    /* THE OVERLAY IS NOT THE STEP'S ANY MORE, only the GRAB is.
-     *
-     * This was setEventsVisible(test || export), which drew every anchor's zone
-     * on the two steps where nothing is placed and hid all of it on the step
-     * where art goes down. Ash, 2026-08-31: "you place art blind against reaches
-     * you can't see." The zones draw everywhere now and the author turns them off
-     * with the row in the anchors panel.
-     *
-     * Grabbing is still the step's, because the anchor drag runs before the asset
-     * step ever sees the pointer: without this, drawing anchors on the assets
-     * step would mean every click near a post picked up the post rather than the
-     * table it is aimed at. */
+    /* zones draw on every step; grabbing stays the step's, since the anchor drag runs first and takes the post. */
     e.setEventsEditable(s === 'test' || s === 'export')
     if (s === 'cut') {
       e.setView({ cutPreview: true, mask: true })
@@ -1209,16 +906,7 @@ export default function App() {
     ed.attach(canvasRef.current as HTMLCanvasElement)
     setSt(ed.status())
 
-    /* OPENING A MAP THAT ALREADY EXISTS.
-     *
-     * ?img= is how a painting has always been dropped in, and it stays. But a
-     * map in the database has no ?img: the home page links to ?id=hub and the
-     * painting is in object storage, so the editor has to go and get it. It
-     * used to load nothing at all and say "no painting", which severed the
-     * whole link between the dashboard and the tool.
-     *
-     * The scene is served at /work/<id>/scene.png, the same address the tool
-     * has always used, which now resolves through the platform. */
+    /* ?id with no ?img fetches /work/<id>/scene.png; it used to say "no painting" and cut the dashboard off. */
     const q = new URLSearchParams(location.search)
     const img = q.get('img')
     const id = q.get('id')
@@ -1312,23 +1000,12 @@ export default function App() {
     }
   }, [sceneKey, gotoStep, push])
 
-  /* THE OPEN FORM IS THE LOUD MARK ON THE MAP. Every anchor's zone is drawn now,
-   * so without this a map with thirty of them is thirty equal shapes and no way
-   * to tell which one the panel is editing. One effect rather than a call beside
-   * each of the seven places that move doorEdit, because a selection that is
-   * right in six of them is a highlight an author learns not to trust. */
+  /* one effect, not a call at each of seven places that move doorEdit; right six times in seven is not trusted. */
   useEffect(() => {
     edRef.current?.selectAnchor(doorEdit)
   }, [doorEdit])
 
-  /* AND THE SAME SELECTION COMING BACK THE OTHER WAY, because an anchor can now
-   * be chosen by pressing it on the map and not only by opening a row. Without
-   * this the canvas knew which one was chosen and the form did not, so the one
-   * step that has no row list could select an anchor and never show it.
-   *
-   * Zero is deliberately not synced back: closing the form sets doorEdit to 0,
-   * and echoing that here would immediately reopen whatever the canvas still
-   * held. A press chooses, a close closes. */
+  /* the canvas selection back into the form; zero is not synced, or closing would immediately reopen it. */
   useEffect(() => {
     const sel = st?.anchorSel ?? 0
     if (sel && sel !== doorEdit) setDoorEdit(sel)
@@ -1379,11 +1056,7 @@ export default function App() {
     }
   }, [step])
 
-  /* A KEPT ROUTE OPENS ITS OWN FORM, the way a dropped door does. It has to be
-   * watched rather than returned from a handler, because three different things
-   * end a line (enter, a double click, the panel button) and two of them happen
-   * outside React. The line closing is the signal, and the editor has already
-   * selected whichever route it just made. */
+  /* watched, not returned from a handler: two of the three ways a line ends happen outside react. */
   const layingPath = (st?.pathDraw ?? -1) >= 0
   // the same read for an area being walked round. The gesture lives in the
   // editor, so this is how the form knows the shape is still open.
@@ -1426,18 +1099,7 @@ export default function App() {
       .catch(() => setAsks([]))
   }, [step, lib, sceneKey, push])
 
-  /* The style card is gone from this path, and it is worth saying why it was
-   * ever here. The map used to be read ONCE per scene, compressed to eighteen
-   * words, and those words stapled onto every later prompt. On the hub island
-   * the honest answer came back as "warm sandy-tan and earthy-brown palette,
-   * cool grey stone" — true of the map, and a materials list for a plinth. Then
-   * a filter was added to strip those words, then a pixel trimmer to cut the
-   * plinth off anyway. Four stages, all of them paying interest on the same
-   * mistake: describing a picture in text to a model that can look at it.
-   *
-   * Now every ask carries the painting itself. What is still read here is the
-   * map's COLOURS, which is local, free, instant, and used by the palette lock
-   * rather than by any prompt. */
+  /* only colours here, for the palette lock. every ask carries the painting, since words describing it failed. */
   useEffect(() => {
     if (step !== 'assets' || !sceneKey) return
     const e = edRef.current
@@ -1454,10 +1116,7 @@ export default function App() {
     edRef.current?.pickPoint(null)
   }, [])
 
-  /* The answer to the gate. stop sets the run's flag BEFORE it resolves, so the
-   * loop's own break and the flag it checks at the top of the next turn agree
-   * with each other. Nothing already drawn is thrown away: it is paid for and
-   * it stays in the library. */
+  /* stop sets the flag before it resolves so the break and the next-turn check agree; nothing drawn is lost. */
   const closeGate = useCallback((go: boolean) => {
     if (!go) {
       stopRef.current = true
@@ -1467,11 +1126,7 @@ export default function App() {
     gateRef.current?.(go)
   }, [])
 
-  // ---- picking from what he already owns --------------------------------
-  // The account holds hundreds of objects and the ones written in the house
-  // style are better than what a fresh ask comes back with, so browsing them
-  // is the first thing offered and generating is the second. Every call on
-  // this path is a read: the listing, the thumbnails, and the copy.
+  // ---- picking from what he owns: browsing beats a fresh ask, and every call on this path is a read ----
 
   const accLoad = useCallback(
     async (q: string, page: number) => {
@@ -1568,19 +1223,7 @@ export default function App() {
     setAnimNote('')
   }, [animSel])
 
-  /* THE ONE LOOK AT WHAT A RUN CAME BACK WITH, and the only caller of the
-   * review route.
-   *
-   * Free, every time: the strip is written locally and the look never touches
-   * pixellab. It runs at the end of every run whatever was made, because a
-   * moving object, a sprite and a whole planned set all landed unlooked-at
-   * while a still object did not, and a thing that came back at the wrong
-   * angle is the same thing whichever of the four drew it.
-   *
-   * What it answers is advice. The items are already paid for and already in
-   * the library, so nothing here removes one, and a look that fails or is
-   * stopped costs the run nothing. It returns the verdict for the compare
-   * panel to preselect from, and it writes the line either way. */
+  /* the one look at a run, free because the strip is local; advice only, nothing is removed from the library. */
   const lookAt = useCallback(
     async (sid: string, ask: string, prompt: string, all: api.LibItem[]): Promise<api.ObjVerdict | null> => {
       // the sheet holds six, so six is what gets sent. Cut here rather than at
@@ -1611,13 +1254,7 @@ export default function App() {
       // and stop has nothing to post against. It gets its own.
       const job = newJob('look')
       jobRef.current = job
-      /* HOW BIG THEY REALLY ARE, which is half of what the look is for: a thing
-       * drawn at a finer pixel than the map reads as pasted on, and that cannot
-       * be judged off a strip blown up 3x without being told the real number.
-       * Read off what actually landed rather than threaded down from three
-       * callers. Sent only when every candidate agrees: a run of takes shares
-       * one size, a planned set does not, and a wrong number is worse than
-       * none. */
+      /* the real size, hidden by a 3x strip. sent only when candidates agree; a wrong number is worse than none. */
       const w = made[0].w
       const h = made[0].h
       const oneSize = w > 0 && h > 0 && made.every((m) => m.w === w && m.h === h)
@@ -1637,15 +1274,7 @@ export default function App() {
     [],
   )
 
-  /* Hold a run after the first thing that landed and put the actual picture on
-   * the panel. Answers whether to carry on.
-   *
-   * This is the whole reason the take slider can go to eight and the fill
-   * slider to twenty-four. A moving sprite is nine generations and the best
-   * part of five minutes, so four of them is half an hour, and finding out at
-   * the end that the first one was wrong costs every minute of it. What has
-   * already been drawn is in the library before this opens, so a no here throws
-   * nothing away. */
+  /* hold the run after the first landing; four moving sprites is half an hour, and a no throws nothing away. */
   const askGate = useCallback(async (item: api.LibItem, done: number, total: number) => {
     setGate({ item, done, total })
     const go = await new Promise<boolean>((res) => {
@@ -1656,23 +1285,7 @@ export default function App() {
     return go
   }, [])
 
-  /* Sprites made to order, after the price has been confirmed.
-   *
-   * Nothing here was chosen off a control. The skeleton, the view, the size and
-   * what moving MEANS for this thing all came back in the plan the button
-   * showed, so a dragon can hover and a robot can stand its servos idling
-   * without either of them being on a list somewhere.
-   *
-   * One request holds one whole take: the body, then the motion run once per
-   * direction. Stopping is still worth having even though the body is paid for
-   * the moment it is asked for, because a stop that lands in the minutes before
-   * the motion keeps eight generations from ever being asked for. So the run
-   * carries a job id like the planners do, and every take reuses it: the
-   * requests are sequential, so there is never two of them registered at once.
-   *
-   * A scene swap mid-run drops the result rather than filing it under the wrong
-   * map, the same as every other spend here.
-   */
+  /* skeleton, view, size and motion come off the plan; one job id per run, reused, as takes are sequential. */
   const runSpriteGen = useCallback(
     async (p: string, plan: api.MakePlan) => {
       const e = edRef.current
@@ -1719,10 +1332,7 @@ export default function App() {
               nDirections: CHAR_DIRS,
               anim: route.anim,
               mode: 'standard',
-              /* THE STYLED BODY overrides the mode, the size and the view.
-               * The view has to be the reference's own: pro drags the result
-               * to its angle, and a router picking low top-down for a room
-               * whose props are low would fight a reference drawn high. */
+              /* pro overrides mode, size and view. the view must be the reference's, or pro drags the result off angle. */
               ...(styleOn && styleId
                 ? {
                     mode: 'pro' as const,
@@ -1739,18 +1349,7 @@ export default function App() {
             // standing, because the body was bought before the motion was ever
             // asked for.
             if (r.note) push(`${r.item.name} · ${r.note}`)
-            /* THE REST OF THE ASK, in the order that works.
-             *
-             * "a troll that curls into a boulder and rolls around" is one
-             * sentence and three jobs: a body, a second face, and a round. The
-             * router already split them, and doing them here means nobody has
-             * to learn that the faces have to exist before the round can name
-             * one. That ordering rule is real and it is not written on any
-             * button, so it belongs on this side of the screen.
-             *
-             * A face that fails does not take the body down with it. The body
-             * is bought and on disk, the failure is said out loud, and the
-             * round still runs against whatever faces did land. */
+            /* faces before the round, because a round can only name a face that exists; a failed face keeps the body. */
             let owner = r.item
             for (const f of plan.faces || []) {
               if (e.sceneId !== sid || stopRef.current) break
@@ -1767,11 +1366,7 @@ export default function App() {
                 push(m.includes('stopped') ? 'stopped before the faces' : `"${f.name}" did not draw · ` + m.slice(0, 90))
               }
             }
-            /* and the round, which is free and therefore always worth trying.
-             * It is held on the plan rather than applied here: nothing has been
-             * placed on the map yet, so there is no placement to give it to.
-             * The moment one is put down it gets this, and the person never
-             * types the sentence twice. */
+            /* the round is free, and held on the plan because nothing has been placed yet for it to be given to. */
             if (plan.does) {
               pendingLife.current = { name: owner.name, ask: plan.does }
               push(`put it down and it will ${plan.does.slice(0, 60)}${plan.does.length > 60 ? '…' : ''}`)
@@ -1785,14 +1380,7 @@ export default function App() {
             )
           }
           setGenRun({ done: i + 1, total: runs.length })
-          /* After the first take that LANDED, not after the first attempt.
-           *
-           * Keying this on i === 0 meant a take that failed took the gate with
-           * it, and the other seven ran unseen: at nine generations each that
-           * is sixty-three nobody looked at, which is the one thing this whole
-           * feature exists to stop. i < last is the other half, because asking
-           * when there is nothing left to buy is a card with no question in
-           * it. */
+          /* the first take that landed, not i === 0; a failed first took the gate with it and seven ran unseen. */
           if (!gated && made.length && i < runs.length - 1 && !stopRef.current) {
             gated = true
             if (!(await askGate(made[0], i + 1, runs.length))) break
@@ -1854,10 +1442,7 @@ export default function App() {
     [acc.taking, push],
   )
 
-  // ---- the palette lock ------------------------------------------------
-  // Nothing here is ever applied quietly. The raw take and the matched one sit
-  // side by side and a human says which goes in the library; both are already
-  // on the client, so every button on the panel is free.
+  // ---- the palette lock: raw and matched side by side, a human chooses, and both are local so it is free ----
 
   // the matched frames, redone on every slider move. A sprite holds a few
   // dozen distinct colours, so a whole batch re-renders inside one frame.
@@ -1893,12 +1478,7 @@ export default function App() {
 
   // open the compare on library items: a fresh static generate hands in what
   // it made, the inspector hands in the one item behind the selected placement
-  /* Cut the pedestal the generator keeps standing things on.
-   *
-   * No words can stop it, because every way of saying "no ground" hands the
-   * generator the word ground: measured on his palm, which came back on a
-   * stone slab under a prompt that refused ground four times. So it comes off
-   * afterwards, by arithmetic, free, and in place. */
+  /* cut the pedestal in arithmetic: a prompt refusing ground four times still came back on a stone slab. */
   const doDebase = useCallback(
     async (item: api.LibItem, placeId: string): Promise<boolean> => {
       const e = edRef.current
@@ -1956,12 +1536,7 @@ export default function App() {
     [push],
   )
 
-  /* ctrl+t on a whole selection.
-   *
-   * The pixels are shared, so this works per ITEM, not per placement: forty
-   * palms off one png are one trim, not forty. Items that turn out to have no
-   * base are counted and said out loud rather than silently skipped, because
-   * "nothing happened" is the one outcome that reads as a broken key. */
+  /* per item, not per placement: forty palms off one png are one trim; items with no base are said out loud. */
   const doTrim = useCallback(
     async (ids: string[]) => {
       const e = edRef.current
@@ -1990,18 +1565,7 @@ export default function App() {
     [lib, doDebase, push],
   )
 
-  /* Drop the picked placements to the map's own pixel size.
-   *
-   * The amount is not a setting. A sprite drawn at a quarter of its size has
-   * four of its pixels inside every map pixel, so it carries detail the
-   * painting does not have and reads as a sticker stuck on top. Reduced by that
-   * same four and stood back at scale 1, one of its pixels is one of the map's.
-   * The placement holds the answer, so nothing has to be guessed or typed.
-   *
-   * Placements sharing an item AND a factor share one new png: forty palms at
-   * the same scale write one file, not forty. Originals are never touched, so a
-   * result you dislike costs one z.
-   */
+  /* the factor is not a setting; the placement's scale answers it, and one item at one factor writes one png. */
   const doBitify = useCallback(
     async (ids: string[]) => {
       const e = edRef.current
@@ -2014,18 +1578,10 @@ export default function App() {
         const name = assetLabel(a)
         const item = (lib || []).find((it) => it.name === name)
         if (!item) continue
-        /* grain is how many of the sprite's pixels sit inside one map pixel
-         * when this is done. 1 is the strict match and it is the blockiest
-         * thing possible, because where a palm stands the map itself only has
-         * 24 by 32 pixels to spend. 2 keeps twice that and reads chunky
-         * without going to bricks, which is why it is the default. */
+        /* grain, sprite pixels per map pixel; 1 is blockiest since a palm's ground is 24 by 32, so 2 is the default. */
         const tw = Math.max(1, Math.round(item.w * Math.abs(a.sx) * grain))
         const th = Math.max(1, Math.round(item.h * Math.abs(a.sy) * grain))
-        // One item, one size: the pixels are rewritten under the item's own
-        // name, so two placements of the same palm at different scales cannot
-        // ask for two different results. The BIGGEST of them wins, because
-        // shrinking a sprite the little one needed would cost the big one
-        // detail it was using.
+        // one item, one size, rewritten under one name, so the biggest placement wins or the big one loses detail
         const j = jobs.get(name)
         if (j) {
           j.places.push(id)
@@ -2102,15 +1658,7 @@ export default function App() {
   /* the words, then the fence, then the answer. The placement is pinned by id
    * up front: drawing the box clears the selection, so anything reading it
    * live would lose its subject halfway through. */
-  /* ONE generation: this thing, edited into another face.
-   *
-   * It is deliberately not the sparkle's job. The sparkle is free and describes
-   * a round; this spends and draws a picture. Sharing a box would have put a
-   * cost behind a button that has never had one.
-   *
-   * The order matters and the ui does not have to explain it, because the face
-   * has to exist before a round can name it. Make the faces, then describe what
-   * it does. */
+  /* one generation for another face; kept off the free sparkle, and a face must exist before a round names it. */
   const runFace = useCallback(
     async (name: string) => {
       const e = edRef.current
@@ -2151,20 +1699,14 @@ export default function App() {
         push('no painting to read')
         return
       }
-      /* Taken NOW, for the same reason placeId is. markArea does not answer
-       * until a box has been drawn on the canvas, and drawing on the canvas is
-       * itself a selection gesture, so by the time the callback runs the set
-       * that was picked is down to one. */
+      /* taken now, because drawing the box is a selection gesture and the picked set is one by the callback. */
       const ids = e.selIds().includes(placeId) ? e.selIds() : [placeId]
       e.markArea(async (bounds) => {
         const job = 'life-' + Date.now()
         jobRef.current = job
         stopRef.current = false
         setLifeBusy(true)
-        /* THE 35% LAW. A box drawn mostly over walkable ground means a path or
-         * a plaza was fenced, so the floor becomes a second barrier and the
-         * thing keeps to it. Mostly not walkable means a region was fenced
-         * regardless of ground, and the box alone holds. */
+        /* the 35% law: a box mostly over walkable ground fences to the floor as well, otherwise the box alone holds. */
         const walkPct = bounds ? e.walkFraction(bounds) : 0
         const walkOnly = !!bounds && walkPct >= 0.35
         e.setBusy(bounds ? 'working out how it moves in there' : 'working out how it moves')
@@ -2189,42 +1731,19 @@ export default function App() {
             job,
           })
           if (stopRef.current) return
-          /* The fence goes IN, not on afterwards.
-           *
-           * These three were stamped onto the finished object, which meant
-           * cleanLife had already built every state inside it believing there
-           * was no floor, and a round then walked straight off the path. Passed
-           * in, the states are built knowing. lifeAt carries a guard for the
-           * same thing so bundles already on disk still fence; this is the
-           * source of it. */
+          /* passed in, not stamped on after: cleanLife built states with no floor and rounds walked off the path. */
           const life = cleanLife({
             ...(r.life as Record<string, unknown>),
             ...(bounds ? { bounds, walkPct } : {}),
             ...(walkOnly ? { walkOnly: true } : {}),
           })
           if (!life) throw new Error('that did not come back as movement')
-          /* The pictures a sequence switches between, resolved from names to
-           * the pixels they stand for.
-           *
-           * art counts through this list and index 0 is the placement's own,
-           * which lookOf answers off the placement itself, so only 1 and up are
-           * written down. A name this browser's library has not caught up with
-           * sends its state back to picture 0 rather than being dropped out of
-           * the list: dropping one shifts every later index down by one, and a
-           * troll/boulder/troll then draws the third picture where the second
-           * was meant. */
+          /* an unknown name falls back to picture 0, since dropping one shifts every later index down and misdraws. */
           const named = Array.isArray(r.looks) ? r.looks.slice(0, 8) : []
           const looks: AssetLook[] = []
           const artAt = [0]
           for (const nm of named.slice(1)) {
-            /* THIS THING'S OWN FACES FIRST, and the library only after.
-             *
-             * A face belongs to the row that owns it, so it is the only place
-             * a name can mean exactly one picture. The library is the fallback
-             * for a row with no faces — everything imported off the account,
-             * everything made before faces existed — and it is where the old
-             * ambiguity lived: three boulders on a map and no way to know which
-             * one was meant. Looking here first is what retires that. */
+            /* the row's own faces first, then the library: a name means one picture only on the row that owns it. */
             const face = (item?.states || []).find((f) => f.name === nm)
             const row = face ? null : (lib || []).find((x) => x.name === nm)
             if (!face && !row) {
@@ -2269,16 +1788,7 @@ export default function App() {
     [lifeAsk, lifeBusy, lib, push],
   )
 
-  /* HAND THE WAITING ROUND TO THE FIRST THING PLACED.
-   *
-   * The drawing finishes long before anything is on the map, so a round that
-   * came out of the same sentence has nothing to be applied to yet. It waits in
-   * pendingLife and lands here, once, on the first placement of that item that
-   * does not already move. Then it is cleared, so putting a second one down
-   * does not silently re-run a free call nobody asked for.
-   *
-   * Watching the placement list rather than hooking the click keeps this out of
-   * editor.ts, which does not otherwise know that asks exist. */
+  /* the pending round lands on the first placement, then clears, so a second one does not silently re-run it. */
   useEffect(() => {
     const want = pendingLife.current
     if (!want || lifeBusy) return
@@ -2289,21 +1799,7 @@ export default function App() {
   }, [st?.assets, lifeBusy, runLife])
 
 
-  /* Two presses, on a thing that is already in the library.
-   *
-   * FIRST press is free and buys nothing. The server looks at what the item IS
-   * on disk, which is one png or a folder of frames or eight headings, and at
-   * the words, and answers how it would do it and exactly what that costs.
-   * There are four answers at 0, 1, one-per-heading and no, so the price cannot
-   * be worked out on this side and the button refuses to arm over a guess.
-   *
-   * SECOND press spends precisely the number the button was showing. The frames
-   * land back under the same name, so every placement of that thing starts
-   * moving without being touched and the library keeps one row.
-   *
-   * A stop is worth pressing even after the first heading is paid for, because
-   * seven more are queued behind it. Whatever landed stays; stopping never
-   * undoes. */
+  /* two presses: the free read prices it, since 0, 1 or one-per-heading cannot be guessed on this side. */
   const doAnim = useCallback(
     async (item: api.LibItem) => {
       const e = edRef.current
@@ -2340,12 +1836,7 @@ export default function App() {
       // nothing to buy and nothing to draw here. Saying no is the answer, and
       // the button never arms over it.
       if (plan.path === 'blocked') return
-      /* The free path never posts.
-       *
-       * Travelling is the one thing neither animator can do: both redraw a
-       * sprite where it stands, so a crab asked to scatter comes back scuttling
-       * on the spot for real money. The recipe engine already does travel for
-       * nothing, so the words are carried across to it rather than spent here. */
+      /* travel goes to the free recipe engine: both animators redraw in place and a scatter comes back on the spot. */
       if (plan.path === 'written') {
         setAnimPlan(null)
         setAnimOpen(false)
@@ -2367,13 +1858,7 @@ export default function App() {
       e.setBusy(`animating ${item.name}`)
       try {
         let r = await api.assetAnimate(sid, { name: item.name, ask, plan, confirm: true, job })
-        /* STILL DRAWING IS NOT DONE AND NOT FAILED. The host cannot hold a
-         * request open for a fifteen-minute animation, so it answers pending
-         * with the group it started, and this side keeps the timer and asks
-         * again for that group until the frames are there. Every ask past the
-         * first is free: the generation was bought on the first press. Before
-         * this the request simply died, nothing was said, and the next press
-         * bought it again. */
+        /* pending is not failed: the host cannot hold a fifteen-minute request, so polling is free and never rebuys. */
         if (r.pending) {
           push(`${item.name} · ${r.note || 'pixellab is still drawing'}`)
           const want = r.group || true
@@ -2406,10 +1891,7 @@ export default function App() {
         // of the frames it already cached
         e.bustAssets(folderOf(next))
         setBust((q) => ({ ...q, [next.name]: Date.now() }))
-        /* pixellab pads a canvas to leave the motion somewhere to go, so what
-         * comes back is rarely the size that went in. Every placement is scaled
-         * by the difference BEFORE it is refreshed, or the figures change size
-         * on the map. Same order doBitify uses. */
+        /* pixellab pads the canvas, so placements are rescaled by the difference before refresh or figures resize. */
         if (next.w !== item.w || next.h !== item.h)
           e.rescalePlacementsOf(next, item.w / next.w, item.h / next.h)
         e.refreshPlacementsOf(next)
@@ -2474,16 +1956,7 @@ export default function App() {
     [mapPal, push],
   )
 
-  // The three ways out, and not one of them generates anything. keep matched
-  // writes the matched pixels as their own library item and, from the
-  // inspector, points the selected placement at it in one undo step, leaving
-  // the original file alone. keep raw leaves what came back exactly as it is.
-  // discard takes the just-generated files back off the disk.
-  //
-  // A batch that has been looked at comes in with one of them chosen, so keep
-  // means keep THAT one: the takes he did not pick come off the disk with it,
-  // since they were just made, nothing points at them, and three near-identical
-  // sprites in a per-map library is clutter he would delete by hand.
+  // three ways out, none generating. on a looked-at batch keep means the picked take and the rest come off disk
   const applyMatch = useCallback(
     async (which: 'matched' | 'raw' | 'discard') => {
       const e = edRef.current
@@ -2556,12 +2029,7 @@ export default function App() {
     [pl, plOut, plBusy, closeMatch, noteKeep, push],
   )
 
-  // The candidates, looked at before he is asked to choose. They are already
-  // paid for, so this only says which one and why: the compare opens on that
-  // one preselected with all of them still on screen, and one click overrules
-  // it. Looking generates nothing. A look that says none of them are it picks
-  // NOTHING instead, so every row stays keepable and the line above them says
-  // why, with a corrected prompt behind one press.
+  // looked at before he chooses. looking is free, and "none of them" picks nothing so every row stays keepable
   const reviewMade = useCallback(
     async (sid: string, ask: string, prompt: string, made: api.LibItem[]) => {
       await openMatch('gen', made, '', { ask, prompt })
@@ -2576,18 +2044,7 @@ export default function App() {
     [openMatch, lookAt],
   )
 
-  // ---- the effect engine -----------------------------------------------
-  // Effects are not generated. The generator draws objects, and every attempt
-  // at smoke, splash or sparkle came back unusable, so the seven motion rules in
-  // core/effects run over colours sampled off the painting itself. That makes
-  // every knob free and instant: the sliders re-render locally and nothing is
-  // written until keep.
-  //
-  // Seven rules is still a menu, and a menu has a ceiling: a portal was
-  // impossible until swirl was added by hand, in code, first. So an ask that
-  // fits none of them comes back with a renderer WRITTEN for those words, and
-  // it runs in the sandbox in core/customfx. Same panel, same preview, same
-  // keep; only the five fixed sliders are swapped for the ones it declared.
+  // ---- the effect engine: generated effects came back unusable, so local rules run over sampled colours ----
 
   // the current params turned into frames. Re-runs on every slider move; a
   // whole 8-frame effect at map scale renders in a few milliseconds.
@@ -2628,10 +2085,7 @@ export default function App() {
         } catch (err) {
           if (dropped) return
           const why = String(err instanceof Error ? err.message : err).slice(0, 90)
-          // a broken preview is never shown. One that HAS worked keeps its
-          // recipe and just says what went blank, so a knob is walkable back;
-          // one that has never drawn anything hands the panel to the closest
-          // built-in instead.
+          // a broken preview is never shown; one that worked keeps its recipe, one that never drew falls to a built-in
           setFxFrames([])
           if (fxRan.current === spec.code) {
             setFxNote(why)
@@ -2670,11 +2124,7 @@ export default function App() {
     edRef.current?.pickPoint(null)
   }, [])
 
-  // ---- the review loop --------------------------------------------------
-  // The planner never used to see what it made: it wrote a renderer, the tool
-  // drew it, and the first pair of eyes on the result belonged to the person
-  // being asked to judge it. Rendering is free and instant, so now the tool
-  // looks at its own frames first, fixes what it can, and only then asks.
+  // ---- the review loop: rendering is free, so the tool looks at its own frames before asking a person ----
 
   // one render, off explicit values instead of state, so a revision can be
   // proven to draw something BEFORE it reaches the panel
@@ -2697,20 +2147,7 @@ export default function App() {
     return renderEffect(f.type as EffectType, p, f.colors, f.patch, f.palette === 'own')
   }, [])
 
-  /* Render, look, revise, render. Up to three passes, stopping the moment the
-   * answer is good, and every one of them free: the render is local and the
-   * look never touches pixellab. A written effect gets its body rewritten; one
-   * of the seven gets better numbers, which is the same free improvement
-   * without writing a renderer.
-   *
-   * Two rules hold it together. Nothing is committed until it has been rendered
-   * successfully, so a bad revision leaves the last good frames on screen
-   * instead of blanking the panel. And the loop reads fxStop between every step,
-   * so use this one takes whatever is on screen and ends it.
-   *
-   * fxStop only lands BETWEEN passes, and one pass is two minutes, so the look
-   * itself carries a job as well: three passes with nothing to press is six
-   * minutes of staring at a spinner. */
+  /* three free passes; nothing commits until it renders, and the look carries a job as a pass is two minutes. */
   const reviewFx = useCallback(
     async (f0: FxState, p0: EffectParams, first: HTMLCanvasElement[]) => {
       const e = edRef.current
@@ -2801,15 +2238,7 @@ export default function App() {
     void reviewFx(fx, fxP, fxFrames)
   }, [fx, fxP, fxFrames, fxRev, reviewFx])
 
-  // the click landed on the painting: read the palette right there, ask which
-  // rule fits the words, then render. The plan call is free and the server
-  // answers from a keyword match when the planner is unreachable, so a click
-  // always ends in something on screen.
-  //
-  // The plan also says whose colours the effect is made of. Things made OF the
-  // place take the pixels the click sampled; things with their own identity
-  // bring their own ramp, which is the whole reason a purple portal can be
-  // purple on a brown island. Either way the toggle in the panel overrules it.
+  // the plan is free with a keyword fallback, so a click always draws something, and it says whose colours
   const planFx = useCallback(
     async (ask: string, at: [number, number]) => {
       const e = edRef.current
@@ -2824,12 +2253,7 @@ export default function App() {
       stopRef.current = false
       setFxBusy(true)
       e.setBusy('reading the ask')
-      // Writing a renderer takes a real 25-30s, and a dropped request used to
-      // fall straight through to the keyword guess in SILENCE: the panel then
-      // read SWIRL exactly as if that had been the considered answer, so a
-      // regex was quietly impersonating the planner and a nether portal came
-      // back as two galaxies. Ask twice, and if it still will not answer, say
-      // so instead of substituting a rule behind his back.
+      // a renderer takes a real 25-30s; a dropped request fell silently to the keyword guess, so ask twice and say so
       let plan: api.EffectPlan | null = null
       for (let attempt = 0; attempt < 2 && !plan && !stopRef.current; attempt++) {
         if (attempt) e.setBusy('reading the ask again')
@@ -2841,12 +2265,7 @@ export default function App() {
       }
       e.setBusy('')
       setFxBusy(false)
-      /* Stopped mid-read, so there is no answer to work from.
-       *
-       * Everything below treats a null plan as "the planner could not be
-       * reached" and falls through to the keyword guess, which is precisely
-       * what the note above says must never happen quietly. A stop is not a
-       * failed read, it is a change of mind, and it gets nothing. */
+      /* a stop is not a failed read: a null plan below falls to the keyword guess, and a stop must get nothing. */
       if (stopRef.current) return
       // a scene swap while the ask was being read drops the whole thing
       if (e.sceneId !== sid) return
@@ -2899,10 +2318,7 @@ export default function App() {
     [push, reviewFx],
   )
 
-  // the colour control, both halves free and instant like the sliders. Touching
-  // a swatch IS the decision that these are not the map's colours any more, so
-  // it moves the panel to own and edits that ramp; the toggle puts the sampled
-  // one back untouched.
+  // touching a swatch is itself the decision to own the ramp; the toggle puts the sampled one back untouched
   const setFxPalette = useCallback((mode: 'map' | 'own') => {
     setFx((f) => {
       if (!f || f.palette === mode) return f
@@ -2951,15 +2367,7 @@ export default function App() {
     })
   }, [fxAsk, fxBusy, fxPick, planFx])
 
-  // keep: the frames become an animated library item on disk, effect.json goes
-  // beside them so the rule and its numbers can be reopened, and the item lands
-  // on the map at the clicked point in one undo step.
-  //
-  // Three ways out of the tuning panel, and this is two of them. A fresh effect
-  // writes a new item and places it. A REOPENED effect either overwrites itself
-  // (same name, same frame urls, so every placement of it plays the new render
-  // the moment the caches are busted) or writes a second item and leaves the
-  // original alone. Discard is the third and touches nothing.
+  // keep writes the frames and effect.json so it reopens; reopened, it overwrites itself or writes a second item
   const keepFx = useCallback(
     async (how: 'new' | 'over') => {
       const e = edRef.current
@@ -3044,12 +2452,7 @@ export default function App() {
     [fx, fxP, fxFrames, fxSaving, fxEdit, noteKeep, push],
   )
 
-  // reopen a saved effect on the same panel that made it: the rule, the numbers
-  // and the colours come off effect.json, the preview starts playing, and
-  // nothing on disk moves until save or save as new. The patch (the painting
-  // pixels the sway and rise rules read) is re-sampled at whichever placement
-  // the effect was opened from, or at the middle of the map when it is only in
-  // the library.
+  // reopen off effect.json; nothing moves on disk until save, and the patch re-samples at the placement or middle
   const openFx = useCallback(
     async (it: api.LibItem, at?: [number, number]) => {
       const e = edRef.current
@@ -3100,10 +2503,7 @@ export default function App() {
     [fxBusy, push, stopPick],
   )
 
-  // ---- the test step's doors -------------------------------------------
-  // add door arms a one-shot map click (the same pick machinery the
-  // generate-here spot uses); the click drops the event and opens its form.
-  // A click off the painting stays armed; esc or right-click cancels.
+  // ---- the test step's doors: a one-shot map click drops the anchor, esc or right-click cancels ----
   const armDoor = useCallback(() => {
     const e = edRef.current
     if (!e) return
@@ -3127,10 +2527,7 @@ export default function App() {
     })
   }, [doorPick])
 
-  /* THE STANDING SPOT, pointed at rather than typed. Same one-shot pick as the
-   * door, because a coordinate a person has to read off the status bar and type
-   * into two boxes is a coordinate nobody sets. Pressing it while it is armed
-   * cancels, which is how every armed thing in this tool behaves. */
+  /* pointed at, not typed: a coordinate read off the status bar and retyped is a coordinate nobody sets. */
   const armStand = useCallback(
     (id: number) => {
       const e = edRef.current
@@ -3188,13 +2585,7 @@ export default function App() {
     [rectPick],
   )
 
-  /* THE AREA AN AUTHOR DRAWS, which a circle and a box could not describe.
-   *
-   * This one does NOT borrow pickPoint: pressing and dragging round the edge
-   * with the line following the hand is a held gesture and not a one-shot pick,
-   * so it lives in the editor beside the route and the cut outline. The
-   * rectangle pick is cancelled first, because arming both would put one press
-   * into two different shapes at once. */
+  /* a held drag, not a one-shot pick, so it lives in the editor; the rect pick cancels or one press feeds two. */
   const armPoly = useCallback(
     (id: number) => {
       const e = edRef.current
@@ -3208,15 +2599,7 @@ export default function App() {
     [rectPick],
   )
 
-  /* CHOOSING A SHAPE IS CHOOSING A MODE, and it is the whole of what the three
-   * buttons do. Two of them used to be able to look on at once, because each
-   * read whether its own data happened to exist rather than which one the author
-   * had chosen, and choosing one deleted the others' data outright.
-   *
-   * So: the mode is written first and always, which is what makes the row
-   * exclusive. The gesture is only armed when the mode being chosen has nothing
-   * in it yet, or when the author presses the mode they are already on, which is
-   * how they redraw. Switching away and back brings the shape back untouched. */
+  /* the mode is written first and always: reading whose data exists lit two at once and deleted a shape. */
   const pickShape = useCallback(
     (id: number, want: 'circle' | 'rect' | 'poly', ev: MapAnchor) => {
       const e = edRef.current
@@ -3235,17 +2618,7 @@ export default function App() {
     [rectPick, drawingRegion, armRect, armPoly],
   )
 
-  // The spend itself, after every confirm has happened. spot is the static
-  // path's context: the clicked painting pixel and a crop of the cut painting
-  // around it, which the server hands to pixellab as the background, so the
-  // asset comes back drawn in that spot's palette and light. With a spot the
-  // result also lands ON the map right there (one undo); a run of takes fans
-  // out beside the spot so all of them stay visible. Animated has no spot: its
-  // animate endpoint needs a standalone first frame.
-  //
-  // One job for the whole run, minted here. It used to mint none, so a stop
-  // mid-run posted a finished planner's id and the server answered that there
-  // was nothing to stop; only the flag between generations did anything.
+  // the spend; the spot's crop rides as pixellab's background, and one job id per run or a stop kills nothing
   const runGen = useCallback(
     async (p: string, t: api.MakePlan, bg: string) => {
       const e = edRef.current
@@ -3293,20 +2666,13 @@ export default function App() {
                   thing: t.prompt,
                   tw: t.w,
                   th: t.h,
-                  // the boxed art rides along, so pixellab draws into this
-                  // map's light instead of onto a bare canvas. With no box the
-                  // patch the router chose goes instead and the server crops
-                  // it, so the ordinary ask gets the same treatment as the
-                  // careful one without anybody drawing anything.
+                  // the boxed art rides along so pixellab draws into this map's light; with no box the router's patch goes
                   ...(bg ? { background: bg } : t.where ? { where: t.where } : {}),
                 })
           if (e.sceneId !== sid) break
           setLib((prev) => [...(prev || []).filter((x) => x.name !== r.item.name), r.item])
           made.push(r.item)
-          // a motion that did not happen is said out loud, the same as a
-          // sprite's. Asked for moving, a stop between the base and its frames
-          // files the base as a still object, and a still where a moving one
-          // was asked for has to explain itself.
+          // a stop between the base and its frames files a still, and a still asked for as moving has to say so
           if ('note' in r && r.note) push(`${r.item.name} · ${r.note}`)
         } catch (err) {
           const m = String(err instanceof Error ? err.message : err)
@@ -3317,11 +2683,7 @@ export default function App() {
           )
         }
         setGenRun({ done: i + 1, total: runs.length })
-        // The first take that LANDED, held up for a yes. Seven more of
-        // something he does not want is minutes and generations spent proving
-        // the same point twice. Keyed on what came back rather than on the
-        // index, because a first take that failed would otherwise carry the
-        // gate away with it and let the rest through unseen.
+        // the first take that landed, keyed on what came back: a failed first take would carry the gate away with it
         if (!gated && made.length && i < runs.length - 1 && !stopRef.current) {
           gated = true
           if (!(await askGate(made[0], i + 1, runs.length))) break
@@ -3344,22 +2706,7 @@ export default function App() {
               ? 'added to the library · click it, then the map'
               : `${made.length} added to the library · click one, then the map`,
         )
-        // what came back carries the generator's colours, not the map's. The
-        // compare opens on it; nothing changes until somebody clicks. The
-        // slider starts where the thing's relatedness says it should: a palm
-        // opens matched, an alien artifact opens raw, and either can be dragged.
-        // and it is looked at before he is asked to choose: a run of takes comes
-        // back with one of them picked and a line saying why, a single one comes
-        // back confirmed or with a corrected prompt to try. Looking is free.
-        //
-        // Both kinds, now. This used to read `if (genType === 'static')`, which
-        // meant a campfire came back in the generator's own colours with nobody
-        // having looked at it, on the same endpoint and from the same words as a
-        // well that did. The panel already handles a folder of frames: the
-        // inspector's own match button opens it on one.
-        //
-        // the prompt was written against this map's own pixels, so the take
-        // already belongs here: the lock opens matched
+        // both kinds, not only static, or a campfire comes back unlooked-at; the slider opens where relatedness says
         setPlStr(80)
         void reviewMade(sid, p, t.prompt, made)
       }
@@ -3367,10 +2714,7 @@ export default function App() {
     [genCount, genType, askGate, reviewMade, push],
   )
 
-  /* Box the area this thing will stand in. Optional, and skipping is a real
-   * answer: esc hands back null and the read goes ahead on the whole map. The
-   * box is what makes scale right, because a sprite is the right size when it
-   * is the right size NEXT TO WHAT IS ALREADY THERE. */
+  /* boxing is optional and esc reads the whole map; the box is what makes scale right, next to what is there. */
   const doBox = useCallback(() => {
     const e = edRef.current
     if (!e) return
@@ -3393,10 +2737,7 @@ export default function App() {
     })
   }, [genBox, push])
 
-  /* One press ends whatever is thinking or drawing. The planner is a process
-   * on the server, so it takes a round trip to kill; a generation already sent
-   * to pixellab cannot be recalled, but the run stops before the next one, and
-   * a run held on the gate is answered no on the way past. */
+  /* one press stops all of it. a sent generation cannot be recalled, but the run stops before the next one. */
   const doStop = useCallback(() => {
     stopRef.current = true
     const j = jobRef.current
@@ -3409,19 +2750,7 @@ export default function App() {
     push('stopped')
   }, [push])
 
-  /* SEVERAL THINGS, PLANNED IN ONE LOOK. Free, and the whole point of doing it
-   * separately from the spend: what comes back is a list you can read, drop
-   * items from, and only then buy.
-   *
-   * One call for both asks that end up here, because they are the same
-   * question. "fill this courtyard" says how many out loud; "a few crates" says
-   * it in the words and the router counts them. Either way the answer is a list
-   * of things to draw, and the press after this one buys it.
-   *
-   * A box is required by fill and optional here, exactly as it is for the
-   * single read: with no box the whole painting is the area, which is a real
-   * answer rather than a missing step. Throws on failure so the caller that
-   * owns the busy line owns the message too. */
+  /* free, and separate from the spend so the list can be read and cut first. no box means the whole painting. */
   const readMany = useCallback(
     async (ask: string, count: number, job: string) => {
       const e = edRef.current
@@ -3472,20 +2801,7 @@ export default function App() {
     }
   }, [genBusy, fillRun, genBox, genPrompt, fillCount, readMany, push])
 
-  /* DRAW A PLANNED SET, ONE AT A TIME. The second press behind both asks that
-   * produce several things, because past the plan they are the same job.
-   *
-   * The only difference is where they land, and it is one line. A fill was
-   * asked to populate an area, so each thing goes onto the map at the spot the
-   * plan chose for it. An asset ask was asked for THINGS, so they go in the
-   * library and the map is a later click, the same as every other asset ask.
-   * That is the whole of it: same planner, same loop, same gate, same stop.
-   *
-   * Sequential on purpose. Each generation is a spend, so stopping has to mean
-   * stopping: the flag is checked before every one, whatever has already been
-   * drawn stays rather than being rolled back, and the first one to land is
-   * held up for a yes exactly as a run of takes is.
-   */
+  /* one at a time and sequential, so the stop flag is checked before every spend and what landed stays. */
   const runMany = useCallback(async () => {
     const e = edRef.current
     if (!e || !scene || fillRun) return
@@ -3546,11 +2862,7 @@ export default function App() {
       } catch (err) {
         push(`${it.what} failed · ` + String(err instanceof Error ? err.message : err).slice(0, 80))
       }
-      /* The same hold a run of takes has, and for the same reason: twenty-four
-       * moving things is forty-eight generations, and finding out at the end
-       * that the first one was wrong costs all of them. Keyed on what LANDED,
-       * not on the index, so a first item that failed does not carry the gate
-       * away with it. */
+      /* the same first-landing hold: twenty-four moving things is forty-eight generations, keyed on what landed. */
       if (!gated && made.length && i < wanted.length - 1 && !stopRef.current) {
         gated = true
         if (!(await askGate(made[0], i + 1, wanted.length))) break
@@ -3576,38 +2888,11 @@ export default function App() {
       .asks(sid)
       .then((q) => setAsks(q.asks))
       .catch(() => {})
-    /* and the same free look. It reads the set as a set, because these all came
-     * from one ask and what it says about them is about that ask.
-     *
-     * The words it is given are the ones a person typed when there are any, and
-     * the plan's own line when the box was empty. What each candidate was
-     * MEANT to be goes in place of a prompt, named off what actually landed so
-     * the names line up with the strip even when one of them failed: six
-     * different things need six different names, and one item's full prompt
-     * would describe the first cell and none of the rest. */
+    /* the free look, over the set as a set: six things need six names, and one prompt describes only the first. */
     void lookAt(sid, ask, made.slice(0, LOOK_CELLS).map((m) => m.name).join(' · '), made)
   }, [scene, sceneOff, genBox, fillRun, genType, makeWhat, genPrompt, askGate, lookAt, push])
 
-  /* The whole flow, in two presses.
-   *
-   * FIRST press is free and spends nothing: the painting, and the boxed area if
-   * there is one, go to the model, which writes the entire generator prompt and
-   * picks the sprite's pixel size by measuring it against what is already on
-   * the map. What comes back is shown before anything is bought.
-   *
-   * SECOND press spends. The prompt runs verbatim, with the boxed art riding
-   * along as pixellab's background so the sprite is drawn into this map's light
-   * rather than onto a bare canvas.
-   *
-   * There is no translator, no style card, no assembled house prompt and no
-   * ground-word filter in this path any more. All four existed to carry a
-   * description of the map through a pipeline made of text. The model looks at
-   * the map instead.
-   *
-   * A sprite goes through the same two presses, and that is the change: it used
-   * to be one armed press against a row of dropdowns. The read is where the
-   * skeleton, the view, the size and the meaning of moving get decided, so the
-   * card can say "lion rig, hovering, wings beating" before a penny is spent. */
+  /* two presses: a free read writing the prompt off the painting, then a spend that runs it verbatim. */
   const doGen = useCallback(async (askIn?: string) => {
     const e = edRef.current
     // the words are normally the ones in the box. They are handed in only by
@@ -3643,27 +2928,13 @@ export default function App() {
         // held to the same 1..24 the area planner clamps to, so the busy line
         // and the price can never name a number the next call will not honour
         const many = Math.min(24, Math.max(1, Math.round(r.plan.count || 1)))
-        /* SEVERAL FROM ONE ASK, and it is still the same free press.
-         *
-         * "a few crates" came back as one png with three crates welded into it,
-         * because the generator draws every noun it is given and one ask bought
-         * one picture. Nothing about that is fixable in the words.
-         *
-         * So the router now says how many things the ask is, and when it is
-         * more than one the read carries straight on into the planner that
-         * already writes a set of them for a fill. Same list card, same rows to
-         * strike out, same second press, same stop. What changes is where they
-         * land: an asset ask fills the library, not the map. */
+        /* "a few crates" came back one welded png, so the router counts the ask and hands a set to the fill planner. */
         if (what === 'object' && many > 1) {
           e.setBusy(`working out the ${many}`)
           await readMany(p, many, job)
           return
         }
-        /* A sprite is priced per body, so several of THOSE is the takes slider
-         * rather than a set of different things: each one is its own rig and its
-         * own nine generations, and the fill planner writes prompts for a flat
-         * prop endpoint. Setting the number here is what makes the button state
-         * the real total before it is armed. */
+        /* a sprite is priced per body, so several means takes; fill only writes prompts for the flat prop endpoint. */
         if (what === 'sprite' && many > 1) setGenCount(Math.min(8, many))
         setGenPlan(r.plan)
         push(r.plan.note || 'read · press again to draw it')
@@ -3698,12 +2969,7 @@ export default function App() {
     runGen(p, plan, bg)
   }, [genPrompt, genRun, genBusy, charRun, makeWhat, genPlan, genBox, genType, genLast, readMany, push, runGen, runSpriteGen])
 
-  /* ONE PRESS BACK TO THE MAP, when the look said none of these are it.
-   *
-   * The corrected prompt goes in the box and the free read runs on it straight
-   * away, because a correction nobody acts on is a sentence. Nothing is armed
-   * by this: the read is free, and the press after it is still the one that
-   * states a price and spends. */
+  /* the corrected prompt goes in the box and the free read runs at once; nothing is armed and nothing spends. */
   const tryAgain = useCallback(
     (fix: string) => {
       setGenPrompt(fix)
@@ -3739,22 +3005,8 @@ export default function App() {
     [push],
   )
 
-  // ---- crop --------------------------------------------------------------
-  // The trim itself happens here, on canvas: the client already holds every
-  // frame decoded for the draw, so cutting a rectangle out of them costs one
-  // drawImage each and needs no image library on the node side. The result goes
-  // to the server as a NEW item called <name>-crop — the original png is never
-  // touched, so a bad crop costs nothing but a click on the original.
-  /* WHAT AN IN-PLACE PIXEL EDIT SAYS AFTERWARDS, and it is the same line for
-   * all of them because they carry the same surprise.
-   *
-   * These edits replace the art under its own name, so EVERY placement of that
-   * item changes at once. That is the point of them, and it is not what
-   * somebody who selected one tree expects. It also cannot be taken back with
-   * z, which only knows about the document: undoing a crop moved every tree
-   * back to where it belonged around art that was still cropped, and the whole
-   * map looked like it had slid. So the count is said out loud and the way home
-   * rides on the same line. */
+  // ---- crop: done on canvas since the frames are already decoded, and written as a new <name>-crop item ----
+  /* an in-place edit hits every placement, and z knows only the document, so it says the count and the way back. */
   const saidEdit = useCallback(
     (name: string, what: string, n: number) => {
       const e = edRef.current
@@ -3809,17 +3061,7 @@ export default function App() {
         // land so the kept pixels do not jump. Measured BEFORE the write, since
         // the anchor is worked out against the size the png still has.
         const mine = e.doc.assets.filter((q) => assetLabel(q) === name).map((q) => q.id)
-        /* JUST THIS ONE, unless the toggle says otherwise.
-         *
-         * Cropping rewrites a library row and every placement reads that row,
-         * so in place has always meant all of them. Selecting one tree and
-         * cropping nineteen is not what anybody means, so a crop of one asks
-         * the server to keep a copy under a new name and points only the picked
-         * placement at it. The others are not touched and their row is not
-         * rewritten, so there is nothing to put back either.
-         *
-         * With one placement the two are the same thing, and in place is the
-         * one that leaves the library tidy. */
+        /* a crop of one writes a copy under a new name, so the other placements keep their row untouched. */
         const alone = !editAll && mine.length > 1
         const res = await api.assetCrop(e.sceneId, name, r, {
           kind: a.kind,
@@ -3880,18 +3122,7 @@ export default function App() {
     if (e) e.cropReq = doCrop
   }, [doCrop])
 
-  /* z PUTS THE PIXELS BACK TOO.
-   *
-   * The editor asks first and says how deep its undo stack is. An edit only
-   * answers when z has arrived back at the depth it was filed at, so a crop
-   * followed by three moves needs four presses to reach and the three moves
-   * come off first, exactly as they would without any of this.
-   *
-   * The revert is a round trip and the document undo is not, so they do not
-   * finish together. That is fine and is why the anchors come back regardless:
-   * the placements land in the right places immediately and the art catches up
-   * a moment later, rather than the two disagreeing forever, which is the bug
-   * this replaces. */
+  /* z reverts pixels at the depth they were filed at, a round trip, so the art catches up to the anchors. */
   useEffect(() => {
     const e = edRef.current
     if (!e) return
@@ -4003,21 +3234,7 @@ export default function App() {
     [prompt],
   )
 
-  /* AN EXPORT MUST SURVIVE YOU LEAVING THE PAGE, AND THIS CONFIRM IS WHAT DOES
-   * IT.
-   *
-   * It is a single request carrying every png the map uses, so on the hub it is
-   * about half a megabyte and several seconds. Clicking back mid-flight tore
-   * the request down with the document, and a half-written publish is the one
-   * thing this whole system is built to make impossible.
-   *
-   * This asked keepalive to do the job as well, which capped the request at
-   * 64 KiB and stopped the hub publishing at all. See the finding at jpost in
-   * api.ts. Asking first is the part that worked, so it is the part that stays:
-   * "your export was cancelled" is a worse thing to discover later than a
-   * confirm dialog is now. A request torn down anyway arrives short, fails at
-   * the body parse and writes nothing, so there is no half-written version to
-   * come back to. */
+  /* confirm before leaving. keepalive was tried and capped the request at 64 KiB, stopping the hub publishing. */
   const exporting = useRef(false)
   useEffect(() => {
     const ask = (ev: BeforeUnloadEvent) => {
@@ -4033,31 +3250,11 @@ export default function App() {
     const e = edRef.current
     if (!e || !e.status().hasPainting) return
     if (exporting.current) return
-    /* THE LATCH THAT KILLS THE BUTTON FOR THE REST OF THE SESSION.
-     *
-     * This flag stops a second press landing on top of a running export, which
-     * is right. What was wrong is that it is only lowered after the await
-     * below, so it is lowered when the request SETTLES, and a request that
-     * never settles never lowers it. Kill the dev server mid-export, drop the
-     * wifi, let a socket stall, and from then on every press of export returns
-     * on this line, silently, with no request made and nothing said. Measured
-     * in the browser: after one interrupted export, pressing the button made no
-     * network call at all.
-     *
-     * That is the same symptom as the keepalive bug and a completely different
-     * cause, which is most of why this took three hours to find: two faults
-     * that both look like "the button does nothing". The fence is the timeout
-     * in jpost, which turns a request that never answers into an error this can
-     * catch, plus lowering the flag in a finally so no future branch can
-     * forget. */
+    /* lowered in a finally: after the await, one interrupted export made every later press a silent no-op. */
     exporting.current = true
     e.setBusy('writing')
     try {
-      /* THE DOCUMENT FIRST, AND WAITED FOR. The publisher reads the anchors out
-       * of postgres, and they only get there on the four-second autosave beat,
-       * so an anchor renamed or moved just before pressing this published with
-       * its previous values while work/<id>/map.json from the same request
-       * carried the new ones, with nothing saying the two disagreed. */
+      /* flush first: the publisher reads anchors out of postgres, which only fills on the four-second autosave. */
       await e.flush()
       const r = await api.exportBundle(e.bundle())
       e.say(
@@ -4073,14 +3270,7 @@ export default function App() {
     }
   }, [])
 
-  /* THE RENAME. The document is flushed first for the same reason the export
-   * flushes it: everything after this reads the row, and an autosave arriving
-   * afterwards would be written under the old id.
-   *
-   * The page then goes to the new id rather than patching the editor in place.
-   * The id is baked into the work folder, the browser's own save key and every
-   * url the panel builds, and re-entering by the front door means one thing
-   * knows the id rather than eleven. */
+  /* flush first, or a late autosave writes under the old id; then re-enter by url so one thing knows the id. */
   const doRename = useCallback(async (want: string) => {
     const e = edRef.current
     const from = e?.status().sceneId
@@ -4140,14 +3330,7 @@ export default function App() {
     <>
       <div className="panel-cap">bring in one whole painting</div>
 
-      {/* A PAINTING YOU ALREADY HAVE, FIRST.
-        *
-        * Dropping a file onto the canvas has always worked and nothing on
-        * screen said so, so the only visible way in was generating one, which
-        * needs a key. Everything after this step is free forever: cut, levels,
-        * doors, the walk test, export. Somebody with no keys at all should be
-        * able to bring their own png and use the whole tool, and that route has
-        * to be the obvious one rather than a gesture you have to guess. */}
+      {/* dropping your own png is first, because generating needs a key and everything after this step is free. */}
       <Sec>open a file</Sec>
       <label className="field openfile">
         <input
@@ -4387,10 +3570,7 @@ export default function App() {
           />
         </label>
       )}
-      {/* THE OUTLINES ALREADY DRAWN. Closing a polygon used to rasterize it and
-          throw the points away, so tracing one shape for the level, the cut and
-          the occluder was tracing it three times. Pressing one lays it down
-          again with whatever tool and level are live now. */}
+      {/* kept points: closing a polygon used to throw them away, so one shape had to be traced three times. */}
       {(st?.stencils.length ?? 0) > 0 && (
         <>
           <Sec>outlines you drew</Sec>
@@ -4447,14 +3627,7 @@ export default function App() {
           on={tool === 'occ'}
           onClick={() => ed?.setTool('occ')}
         />
-        {/* ONE ROW PER OCCLUDER, because there was no way back to the first one.
-            *
-            * The baseline is the row a character has to be north of before this
-            * piece of the painting is drawn over him, and it is the one number
-            * in the whole depth system a person sets by hand. The field used to
-            * write to whichever occluder was drawn last, unconditionally, so a
-            * second one made the first's baseline unreachable forever. The hub
-            * has none, which is why nobody had felt it. The Maw is pillars. */}
+        {/* one row per occluder; the baseline wrote to the last one drawn, so a second made the first unreachable. */}
         {st && st.occs.length > 0 && (
           <div className="occrows">
             {st.occs.map((o) => (
@@ -4509,13 +3682,7 @@ export default function App() {
   // the map's anchors. Every named place, not only the doors.
   const doors = st?.events ?? []
   const editingDoor = doors.find((v) => v.id === doorEdit)
-  /* WHICH OF THE THREE AREA MODES IS LIVE ON THE OPEN FORM, asked once so the
-   * three buttons and the line under them cannot disagree.
-   *
-   * The stored mode leads and the derived answer is the fallback, which is the
-   * difference between "draw is selected and nothing is drawn yet" and "there is
-   * no drawing so this must be a circle". A gesture in flight wins over both,
-   * because arming a mode is choosing it. */
+  /* the stored mode leads and the derived shape is only the fallback; a gesture in flight beats both. */
   const liveShape = !editingDoor
     ? 'circle'
     : rectPick?.id === editingDoor.id
@@ -4532,12 +3699,7 @@ export default function App() {
   const pathBad = editingPath && st?.pathSel === editingPath.id ? (st?.pathBad ?? []) : []
   const framings = st?.framings ?? []
   const editingShot = framings.find((f) => f.id === shotEdit)
-  /* What an anchor can be bound to, split the way the picker offers it. The
-   * named ones lead because a name is what somebody chose in order to address
-   * the thing, and `has` answers whether a stored binding still points at
-   * anything, which is the only way a broken one becomes visible. Resolved by
-   * name first and then by id, exactly as editor.placementRef and the game
-   * both resolve it. */
+  /* by name first and then id, the way the game resolves it; `has` is the only way a broken binding shows. */
   const bindTargets = (() => {
     const all = st?.assets ?? []
     const named = all.filter((a) => a.name)
@@ -4550,12 +3712,7 @@ export default function App() {
     return { named, rest, has: (ref: string) => keys.has(ref) }
   })()
 
-  /* THE THREE NAMED COLLECTIONS, and whichever one has its form open.
-   *
-   * The gaps come off the status the way pathBad does, and are read only when
-   * the open form is the one the editor has selected: each list is measured for
-   * the selected row alone, so a form opened without the same row selected would
-   * report another collection's missing names. */
+  /* gaps are measured for the selected row alone, so they are read only when the open form is that row's. */
   const sets = st?.sets ?? []
   const racks = st?.racks ?? []
   const variants = st?.variants ?? []
@@ -4588,28 +3745,17 @@ export default function App() {
       {readable(d)} · {d.name}
     </option>
   ))
-  /* the same list with the identifier alone, for the picker inside a rack slot.
-   * That one shares its row with a grip, a number and a remove, so `Panther's
-   * Maw · panthers_maw` clipped to `Panther's Maw · ` in every slot and lost the
-   * half that says which anchor is on the hook. A slot is addressed by the
-   * identifier, so the identifier is what the row shows. */
+  /* identifier alone for a rack slot: the full pair clipped to "Panther's Maw · " and lost the address. */
   const anchorCodeOpts = doors.map((d) => (
     <option key={d.id} value={d.name}>
       {d.name}
     </option>
   ))
-  /* WHICH COLLECTIONS THE OPEN ANCHOR IS IN, so somebody looking at stele_2 can
-   * see it is one of the five rather than having to open all five. A rack says
-   * the slot number too, because that number is the address and it is the only
-   * fact about a rack membership worth knowing. */
+  /* which collections the open anchor is in; a rack says its slot number, because the number is the address. */
   const anchorIn = editingDoor
     ? [
         ...sets.filter((s) => s.members.includes(editingDoor.name)).map((s) => `set ${s.name}`),
-        /* one rack says its numbers once. An anchor is allowed on several hooks
-         * of the same rack, and one line per hook read `rack rack_1 slot 3 ·
-         * rack rack_1 slot 1 · rack rack_1 slot 2`, which is three sentences
-         * saying one thing in the order the rows happen to sit in. Sorted by
-         * the number, because the number is the address. */
+        /* one line per rack with its hooks sorted, since a line per hook said the same rack three times out of order. */
         ...racks
           .map((r) => ({
             r,
@@ -4624,20 +3770,10 @@ export default function App() {
       ]
     : []
 
-  /* THE ANCHOR FORM IS A VARIABLE, NOT A BLOCK INSIDE ONE PANEL.
-   *
-   * It only ever rendered inside the test step, so an anchor clicked anywhere
-   * else could be selected and dragged and still not have its kind switched,
-   * its zone redrawn or its binding read. Ash, 2026-09-01: clicking an anchor
-   * should open the same form wherever you are. Both panels are built in this
-   * one scope, so this is a variable rather than a component and none of the
-   * fifteen pieces of state it reads has to be threaded through props. */
+  /* a variable, not a component, so both panels share the form without threading fifteen states through props. */
   const anchorForm = editingDoor ? (
         <div className="doorform">
-          {/* THE NAME IS THE IDENTITY, and it is first for that reason. It is
-              the string a member writes in python. The label below is only what
-              a player reads, and keeping them apart is the whole point: renaming
-              a door for the player must not break somebody's island. */}
+          {/* name is what python writes, label is what a player reads; a rename must not break somebody's island. */}
           <label className="anchfield">
             <span>name · what code calls it</span>
             <input
@@ -4721,31 +3857,14 @@ export default function App() {
             </>
           )}
 
-          {/* WHEN THIS ANCHOR EXISTS AT ALL: a door barred until a cord is
-              earned, a berth that is not there until the ship is repaired. It
-              sits under the two names because it is the same kind of thing as
-              them, a string the author declares and code somewhere else
-              answers. Typed, tabled, exported and read by the game since
-              anchors shipped, with no way for anybody to enter a value. */}
+          {/* when the anchor exists at all; read by the game since anchors shipped with no way for anybody to set it. */}
           <WhenField
             what="this anchor"
             value={editingDoor.when ?? ''}
             onCommit={(v) => ed?.setAnchorWhen(editingDoor.id, v)}
           />
 
-          {/* WHICH PAINTED THING THIS NAME IS ON.
-              *
-              * Until this box existed the field was typed, tabled, exported and
-              * read by the game, with nothing anywhere that could put a value in
-              * it, so `show` could not fire on any bundle this tool was capable
-              * of producing. It is the whole mechanism behind the world
-              * reflecting the run: bind a name to a placement and the trophy
-              * wall can fill as the cords are earned.
-              *
-              * Named placements lead, because those are the ones anybody binds
-              * on purpose. The rest are offered by what they are drawn from,
-              * with their machine id after it, since two crates need telling
-              * apart somehow. */}
+          {/* binds a name to a placement; with no value here `show` could not fire on any bundle this tool made. */}
           <label className="anchfield">
             <span>bound to · the placement it follows</span>
             <select
@@ -4786,15 +3905,7 @@ export default function App() {
             </div>
           )}
 
-          {/* WHERE A BODY ENDS UP, which is not the middle of the thing.
-              *
-              * stations.ts in the game repo states the requirement in prose to
-              * somebody who will never open that file: "a table big enough to
-              * spread a paper sheet on, with standing room on one side". One
-              * point was doing four jobs at once, so a table's anchor either
-              * sat on unwalkable pixels or sat on the floor with the prompt
-              * hovering over bare ground. This is the floor beside it, and
-              * walk_to and an arrival through a door both aim at it. */}
+          {/* the floor beside the thing, not its middle: one point doing four jobs sat on unwalkable pixels. */}
           <div className="anchspot">
             <span>stand at</span>
             <button
@@ -4818,11 +3929,7 @@ export default function App() {
             )}
           </div>
 
-          {/* WHICH WAY A BODY LOOKS WHILE IT IS THERE. Laid out as a compass,
-              the same grid the placement facing picker uses, and the middle is
-              the one that clears it because an anchor genuinely can have no
-              opinion. Typed, tabled, exported and read since anchors shipped,
-              with arrival() its only consumer and no way at all to set it. */}
+          {/* which way a body looks; the middle clears it, and arrival() read this for a value nobody could ever set. */}
           <div className="anchface">
             <span>facing</span>
             <div className="facegrid">
@@ -4850,30 +3957,7 @@ export default function App() {
             </div>
           </div>
 
-          {/* THE SHAPE A NAMED PLACE IS, and there are three of them now.
-              *
-              * A region could be a circle or a box and nothing else, and the
-              * things a region is actually for are neither: a pier bends, a
-              * plaza turns a corner, a waterfront follows a coast. Marking the
-              * hub's dock as a box takes in half the water. So the third option
-              * is the edge itself, drawn freehand by dragging round it.
-              *
-              * AND IT IS OFFERED ON EVERY KIND NOW. This was `kind === 'region'`
-              * and the other five anchors were stuck with a ring round their own
-              * pixel: a table against a wall got a circle hanging half over the
-              * pit behind it, and a door got a ring where the thing an author
-              * means is the doormat you can actually stand on. The zone is the
-              * reach, the reach is not a property of the word in front of it,
-              * and the model has carried shape, rect and poly on every kind the
-              * whole time.
-              *
-              * EXACTLY ONE OF THESE IS LIT AND IT IS THE MODE, not whichever
-              * fields happen to hold data. Two of them could be on at once,
-              * because circle read "no rect and no poly" and draw read "there is
-              * a poly", so an anchor with a drawing showed both. Worse, pressing
-              * one deleted the others' shape, so a mis-click cost an author
-              * their whole drawing. The mode is now the only thing that
-              * switches, and every shape keeps what it was given. */}
+          {/* three shapes on every kind. the lit one is the mode: reading whose data exists lit two and deleted one. */}
           <div className="anchface">
             <span>zone</span>
             <div className="anchkinds">
@@ -4921,10 +4005,7 @@ export default function App() {
               )}
             </div>
           </div>
-          {/* WHAT THE ZONE IS FOR, in this kind's own words, because "area" on a
-              door meant nothing until it said doormat. The same three shapes do
-              six different jobs and the hint is the only place that can say
-              which one is being drawn. */}
+          {/* the zone hint per kind, because "area" on a door meant nothing until it said doormat. */}
           <div className="doorhint">
             {rectPick?.id === editingDoor.id
               ? rectPick.from
@@ -4976,11 +4057,7 @@ export default function App() {
               only visible from its own form, so an author looking at stele_2
               cannot tell it is one of the five that python iterates. */}
           {anchorIn.length > 0 && <div className="doorhint">in {anchorIn.join(' · ')}</div>}
-          {/* THE BAG A GRAPE READS, which is the stated extension point and had
-              no author writer at all: everything in it was MAPVIS bookkeeping,
-              shipped to every grape. One row per key and a blank pair at the
-              end, the same shape the map's own bag uses. The tool's own keys
-              are not listed, because they have their own controls. */}
+          {/* the bag a grape reads, which had no author writer at all and carried only mapvis bookkeeping. */}
           <div className="metarows">
             <div className="doorhint">what a grape can read off this anchor</div>
             {[
@@ -5054,39 +4131,16 @@ export default function App() {
         on={st?.walking}
         onClick={() => ed?.toggleWalk()}
       />
-      {/* THE START POINT LOOKS LIKE IT COMPETES WITH A SPAWN ANCHOR AND IT DOES
-          NOT. The game resolves arrival in three steps: the anchor a door named
-          in its `arrive at`, then any spawn anchor on this map, then this. So
-          this is where somebody lands who opened the map cold with no door
-          involved, and a spawn anchor is a named address a door can aim at.
-          Both are real and neither is redundant. The desc says the order now,
-          because two controls that both look like "the spawn" and never say
-          which one wins is a question an author should not have to read the
-          engine to answer. */}
+      {/* not a rival to a spawn anchor: arrival resolves door `arrive at`, then a spawn anchor, then this. */}
       <Row
         icon="pin"
         label="set start point"
         desc="under the cursor, or the walker mid-test · last resort: a door's arrive at wins, then a spawn anchor, then this"
         onClick={() => ed?.setSpawnHere()}
       />
-      {/* THE BODY THIS MAP IS DRAWN FOR, and it sits under the walk test
-          because the walker on screen is the thing these numbers describe.
-          *
-          * All six ride into map.json, the game reads all six, this tool's own
-          * walk law reads them and the anchor checker reads two back out. They
-          * had no control and no column, so every map MAPVIS ever produced
-          * shipped an 18 px character at 34 px/s on ground squashed 0.72,
-          * whether it was a 688 px island seen from far above or a room drawn
-          * at character scale. The ten-second arithmetic that caps how big a
-          * room can be is 688 divided by twice the speed, so this is the number
-          * under the rest of them. */}
+      {/* the body this map is drawn for; with no control every map shipped an 18px body at 34 px/s squashed 0.72. */}
       <Sec>the body it is drawn for</Sec>
-      {/* THE SENTENCE UNDER THIS BLOCK IS GONE. It was twenty-six words
-          explaining six fields that are already called height, speed, hip out,
-          hip up, squash and step, so it spent three lines of a 272px column
-          restating the labels. What a field means that its name does not say
-          now lives on the field, on hover, where somebody who does not know can
-          ask and somebody who does is not charged for it. */}
+      {/* no standing sentence here: twenty-six words restating six labels cost three lines of a 272px column. */}
       <div className="walkcfg">
         <NumField
           label="height"
@@ -5140,11 +4194,7 @@ export default function App() {
         desc="stranded ground turns red"
         onClick={() => ed?.check()}
       />
-      {/* THIS PANEL HAS NEVER ONLY MADE DOORS. Six kinds sit in the form below
-          and a door is one of them, but the button and the header both still
-          said door, from back when it was the only kind there was. An author
-          reading the sidebar had no way to find out that a post, a region or a
-          spawn is made here, so the words now say what the thing does. */}
+      {/* six kinds are made here, not just doors, and the button and header both used to say door. */}
       <Sec>anchors</Sec>
       <Row
         icon="door"
@@ -5161,12 +4211,7 @@ export default function App() {
             <div
               key={ev.id}
               className={'evrow' + (doorEdit === ev.id ? ' sel' : '')}
-              /* WHAT THIS KIND OF ANCHOR DOES, which is the one thing about the
-                 row that is nowhere on screen, and then where it goes in full,
-                 because a 272px column genuinely does cut that line. The
-                 tooltip here used to be a native `title` holding a verbatim
-                 copy of the row's own two visible lines and nothing else, so
-                 hovering read back exactly what the pointer was sitting on. */
+              /* what this kind does and where it goes, since the old title just repeated the two lines under the pointer. */
               data-tip={
                 /* the reach is the radius only while the radius is the live
                    shape. On a region drawn as an area the ring is dormant data
@@ -5187,11 +4232,7 @@ export default function App() {
                 setDoorEdit(doorEdit === ev.id ? 0 : ev.id)
               }}
             >
-              {/* the tile, and the same 26px tile an action row wears. It was a
-                  bare ⏻ typed straight into the markup, which is a font's power
-                  symbol standing in for "door" next to eleven drawn pictograms,
-                  and it started the words at x=43 where every action row starts
-                  them at x=59. */}
+              {/* the drawn 26px tile: a bare ⏻ stood in for "door" and started the words at x=43 instead of x=59. */}
               <span className="row-ic">
                 <Icon name={ANCHOR_ICON[ev.kind]} />
               </span>
@@ -5199,19 +4240,8 @@ export default function App() {
                   door is. Its address and where it goes sit on the line under
                   it, captioned, in Addr above. */}
               <span className="ev-name">
-                {/* THE WORDS LEAD AND THE ADDRESS FOLLOWS, and it used to be
-                    the address on its own. `panthers_maw` is what a member
-                    types, which is why it is still on the line below, but it is
-                    not what the door is called and this row was the only place
-                    it was ever seen. displayName takes the label the author
-                    typed for the player, and unpacks the identifier when nobody
-                    has typed one yet. */}
-                {/* the mark says THESE WORDS were not typed, and nothing else.
-                    `ev.meta.derived` was being read into it too, which is a
-                    different fact: that the python IDENTIFIER was invented from
-                    an old door's label. A door with a label somebody wrote came
-                    out dotted for a defect in a field the row does not show.
-                    The form says that one, on the name field, where it is. */}
+                {/* the label leads and the identifier follows; displayName unpacks the identifier when no label was typed. */}
+                {/* the mark is only about these words: reading ev.meta.derived dotted a label somebody actually typed. */}
                 <b className={displayName(ev).derived ? 'guessed' : undefined}>{displayName(ev).text}</b>
                 {ev.kind === 'door' ? (
                   <Addr
@@ -5241,12 +4271,7 @@ export default function App() {
           ))}
         </div>
       )}
-      {/* ROUTES. An anchor is one pixel, so before this the only line a map
-          could describe was a straight run between two of them, and every real
-          route (a ship into a berth, an actor crossing a room on a line
-          somebody chose, a patrol) was hand-typed as numbers in the other repo.
-          It sits under the doors because it is the same act: naming a piece of
-          this map so code somewhere else can address it. */}
+      {/* routes, because an anchor is one pixel and every real line was hand-typed as numbers in the other repo. */}
       <Sec>routes</Sec>
       <Row
         icon="poly"
@@ -5286,15 +4311,7 @@ export default function App() {
           </label>
           {rnameSaid?.id === editingPath.id && <div className="anchwarn">{rnameSaid.why}</div>}
 
-          {/* WHAT TRAVELS IT, on the anchor form's kind row and not mixed in
-              with the two below it. Five chips do not fit on one 208px row and
-              wrapped with two-way hanging alone, and these are two different
-              questions anyway: what the line is, then how it runs.
-
-              Kind decides whether the warning under it applies at all. A line
-              over water is a defect for a body and the whole point for a boat,
-              and until this existed the tool could not tell those apart, so it
-              said nothing about either. */}
+          {/* what travels it, since a leg over water is a defect for a body and the whole point for a boat. */}
           <div className="anchkinds">
             {PATH_KINDS.map((k) => (
               <button
@@ -5323,11 +4340,7 @@ export default function App() {
               two-way
             </button>
           </div>
-          {/* THE GROUND UNDER THE LINE, said here rather than left to be found by
-              walking it. A waypoint drops wherever the pointer was, with no
-              floor test, so a walk route can run across the sea and read as
-              correct. Silent when the route is clean, and silent for a sail or
-              a camera, which have no floor to be wrong about. */}
+          {/* waypoints drop with no floor test, so a walk route can cross the sea and look correct; sails are exempt. */}
           {pathBad.length > 0 && (
             <div className="anchwarn">
               {pathBad.length} of {st?.pathLegs ?? 0} {(st?.pathLegs ?? 0) === 1 ? 'leg' : 'legs'}{' '}
@@ -5364,15 +4377,8 @@ export default function App() {
             </div>
           </div>
 
-          {/* TIMING MARKS, which are what stop a cutscene being retuned every
-              time a line of text changes. A mark names a waypoint index, so a
-              beat says "be at the doorway by the time this line ends" instead
-              of "walk for 2.4 seconds". The index is stepped rather than typed
-              because there are six of them, not six hundred. */}
-          {/* the label is short on purpose. This row is a fixed 52px caption
-              and one nowrap button inside a 228px form, so a sentence here does
-              not wrap, it widens the form and pushes the whole panel sideways.
-              What the control is for belongs in the tip. */}
+          {/* timing marks name a waypoint index, so a beat is not retuned every time a line of text changes length. */}
+          {/* short label on purpose: a 52px caption and a nowrap button in a 228px form widen rather than wrap. */}
           <div className="anchspot">
             <span>marks</span>
             <button
@@ -5384,11 +4390,7 @@ export default function App() {
               add a mark
             </button>
           </div>
-          {/* A MARK NOW CARRIES BOTH STRINGS, the same split every anchor makes.
-              Ash, 2026-08-29: humans see labels, waypoints get labels too. It
-              had `name` alone, so the canvas captioned a waypoint
-              `at_the_doorway` and this list said the same, which is the one
-              thing the two-field design was paid for to stop. */}
+          {/* a mark carries both strings; with name alone the canvas captioned a waypoint "at_the_doorway". */}
           {(editingPath.marks || []).map((m, i) => (
             <div className="markrow" key={i}>
               <input
@@ -5457,10 +4459,7 @@ export default function App() {
             <div
               key={p.id}
               className={'evrow' + (pathEdit === p.id ? ' sel' : '')}
-              /* what the route's KIND means, which decides whether a leg over
-                 water is a defect or the whole point, and is the one thing
-                 about the row not printed on it. Where the points ARE follows,
-                 because "3 pts" says how many and never says where. */
+              /* the kind decides whether a leg over water is a defect, and "3 pts" never says where the points are. */
               data-tip={
                 `${PATH_WHAT[p.kind]} · from ${p.points[0]?.join(', ')} to ${p.points[p.points.length - 1]?.join(', ')}`
               }
@@ -5510,10 +4509,7 @@ export default function App() {
         </div>
       )}
 
-      {/* SHOTS. Every "point the camera at the thing" beat needs one, and
-          without them every camera move in the game is hand-typed numbers
-          nobody can check without running it. Saving one is pan and zoom until
-          the screen shows what the shot should show, then press. */}
+      {/* shots, because without them every camera move is hand-typed numbers nobody can check without running it. */}
       <Sec>shots</Sec>
       <Row
         icon="eye"
@@ -5559,10 +4555,7 @@ export default function App() {
           </label>
           {snameSaid?.id === editingShot.id && <div className="anchwarn">{snameSaid.why}</div>}
 
-          {/* WHAT IT HANGS ON. An anchor by preference: raw numbers re-break
-              every time a painting is re-cut, and every map gets re-cut. The
-              point option is the honest fallback for a shot of somewhere
-              nobody has named. */}
+          {/* an anchor by preference, because raw numbers re-break on every re-cut and every map gets re-cut. */}
           <label className="anchfield">
             <span>hung on · the anchor it follows</span>
             <select
@@ -5723,15 +4716,7 @@ export default function App() {
           ))}
         </div>
       )}
-      {/* SETS. `steles` meaning those five and `the_berths` meaning all of them
-          on this map, so python iterates a collection instead of hard-coding
-          five strings, and this tool can be asked whether the set is complete
-          rather than one name at a time.
-
-          WHAT "SELECTED" MEANS HERE. Nothing on this map selects several
-          anchors at once, so the selection a set can be filled from is the
-          anchor whose form is open above. It is the shape the shots row already
-          uses, down to saying so when no anchor is open. */}
+      {/* sets, so python iterates instead of hard-coding names; filled from the anchor whose form is open above. */}
       <Sec>sets</Sec>
       <Row
         icon="flag"
@@ -5857,15 +4842,7 @@ export default function App() {
         </div>
       )}
 
-      {/* RACKS. The same anchors given stable positions: the trophy wall, the
-          banner wall, the three season tokens, the graduation front row, where
-          the third hook has to be the third hook every run.
-
-          THE NUMBER IS READ-ONLY AND IT NEVER RENUMBERS. That is the whole
-          guarantee: dragging the fourth banner to the front means it is hung
-          first and it is still banner 4, and deleting the second hook leaves
-          1, 3, 4, 5. So the row can be dragged and the number cannot be
-          typed. */}
+      {/* racks; the number never renumbers, so deleting the second hook leaves 1, 3, 4, 5 and only the row drags. */}
       <Sec>racks</Sec>
       <Row
         icon="mark"
@@ -6000,15 +4977,7 @@ export default function App() {
         </div>
       )}
 
-      {/* VARIANT SETS. One name resolving to one of several PLACEMENTS with at
-          most one of them showing: five docks, one per island state, a hearth
-          lit and unlit, a ship and the empty berth it is not in.
-
-          It is not a face. A face is one placement wearing another picture, and
-          drawing a ship and empty water as two frames of one sprite gives the
-          empty berth the ship's collision. Two silhouettes, two footprints, one
-          name. It hangs off an anchor, so a set is made from the anchor whose
-          form is open above the same way a shot is. */}
+      {/* variant sets are placements, not faces; two frames of one sprite give empty water the ship's collision. */}
       <Sec>variant sets</Sec>
       <Row
         icon="wand"
@@ -6185,10 +5154,7 @@ export default function App() {
   // the condition a layer carries. A group only gets a row in the document once
   // it says something, so most maps answer '' here and grow no field.
   const whenOfGroup = (name: string) => (st?.groups ?? []).find((g) => g.name === name)?.when ?? ''
-  /* WHICH VARIANT SET THIS PLACEMENT IS ONE OF, so somebody looking at
-   * `the_ship` can see it is one of two that trade places rather than scenery.
-   * Read off the sets, because the membership lives there: a placement has no
-   * idea it is in one. */
+  /* read off the sets, because membership lives there and a placement has no idea it is in one. */
   const selVariant = (() => {
     if (!selA?.name) return null
     for (const v of variants) {
@@ -6207,10 +5173,7 @@ export default function App() {
   // one picture off any library item, whichever of the three shapes it is: a
   // png, a folder of frames, or a set of headings
   const shotOf = (a: api.LibItem) => a.src || a.frames?.[0] || a.dirs?.south?.[0] || ''
-  /* The movement ask. One value, rendered against one placement or against a
-   * whole picked set, because the question is identical either way: say how it
-   * moves, then draw where. runLife reads the live selection, so a set gets the
-   * one answer applied to all of it. */
+  /* one movement value for a placement or a whole set, since runLife reads the live selection either way. */
   const lifeBoxFor = (id: string) => (
     <div className="lifebox">
       <div className="boxwhat">say what it does · free</div>
@@ -6252,17 +5215,7 @@ export default function App() {
     </div>
   )
 
-  /* The real price of the armed click, per take.
-   *
-   * An animated object is two generations, a base sprite then its animation. A
-   * sprite is one for the body plus ONE PER DIRECTION for its motion, so eight
-   * ways moving is nine. It assumes standard mode, which is the only mode this
-   * client ever sends; pro is twenty to forty and this line would be a lie
-   * about it.
-   *
-   * Once the plan exists it is the truth. A sprite the router decided not to
-   * animate costs one whatever the still/moving segment says, so the number on
-   * the button at the moment of spending is the number that gets bought. */
+  /* the price per take: an animated object is two, a moving sprite is nine, and standard mode is assumed. */
   const spriteDirs = genPlan?.sprite
     ? genPlan.sprite.anim.how === 'none'
       ? 0
@@ -6270,10 +5223,7 @@ export default function App() {
     : genType === 'animated'
       ? CHAR_DIRS
       : 0
-  /* Every face the router split out of the ask is one more generation, and the
-   * button has to say so BEFORE it is pressed. The whole point of doing the
-   * body, the faces and the round off one press is that nobody has to count
-   * them, which only holds if the number they see is the number they buy. */
+  /* each split-out face is another generation, so the button says the total before it is pressed. */
   const spriteFaces = makeWhat === 'sprite' ? (genPlan?.faces || []).length : 0
   // a body drawn in the game's style is a pro body, and a pro body is twenty
   const styled = makeWhat === 'sprite' && styleOn && !!styleId
@@ -6290,18 +5240,10 @@ export default function App() {
   // pixel edit would change
   const sameCount = selA ? assets.filter((q) => assetLabel(q) === assetLabel(selA)).length : 0
   const selIsFx = !!(selItem && selItem.kind === 'animated' && selItem.effect)
-  /* Animating is about the LIBRARY ROW, never about one copy on the map: it
-   * rewrites the art in place under its own name, so every placement of it
-   * changes at once. Asking for a placement first was backwards, and it meant
-   * clicking a thing in the library and finding nothing there. */
+  /* animating is the library row, not one copy: it rewrites the art in place under the row's own name. */
   const libItem = st?.placing ? (lib || []).find((it) => it.name === st.placing) : undefined
   const animItem = selItem || libItem
-  /* Does the selected thing MOVE today.
-   *
-   * kind cannot answer it. A set of headings is kind 'static' whether each
-   * heading holds one frame or a whole walk cycle, so the only honest test is
-   * how many frames a heading has. Getting this wrong would put "replaces what
-   * it does now" on a still and hide it from a walker. */
+  /* kind cannot answer this: a set of headings is 'static' either way, so count the frames in a heading. */
   const selWays = animItem?.dirs ? Object.keys(animItem.dirs).length : 0
   const selMoves = !!(
     animItem &&
@@ -6309,12 +5251,7 @@ export default function App() {
       ? (animItem.frames?.length ?? 0) > 1
       : (Object.values(animItem.dirs ?? {})[0]?.length ?? 0) > 1)
   )
-  /* The price, before the read as well as on the button after it.
-   *
-   * The read is free and it can come back free, so the line before it is a
-   * CEILING, not a promise: eight headings is at most eight and a written
-   * recipe is none. Said up front because by the time the plan is on screen he
-   * has already decided whether this was worth asking for. */
+  /* a ceiling and not a promise: eight headings is at most eight and a written recipe costs none. */
   const animMost = selWays || 1
   // said the same way everywhere: an eight-heading job is minutes, and a label
   // that never changes for five of them is indistinguishable from a hang
@@ -6348,14 +5285,7 @@ export default function App() {
       : animPlan
         ? `${animPlan.note || animPlan.motion} · ${animPlan.frames} frames · ${animWait}`
         : `${selWays ? `${selWays} headings` : 'one picture'} · at most ${animMost} generation${animMost === 1 ? '' : 's'}, none if the words need it to travel${selMoves ? ' · replaces what it does now' : ''}${usd ? ` · ${usd} left` : ''}`
-  /* The ask, in the make strip's own language: one free-text line, the honest
-   * cost under it, and one armed button. Nothing here enumerates what an
-   * animation can be. Whatever is typed is what the router has to find a way to
-   * draw, the same way the sprite box works.
-   *
-   * Held as one value because it belongs in two places: beside the other edits
-   * to the art when a placement is selected, and under the library grid when a
-   * row is, which is where a person actually looks for it. */
+  /* nothing here enumerates what an animation can be, and one value serves both places the box appears. */
   const animBox = animOpen && animItem && (
     <div className="animbox">
       <label className="field">
@@ -6481,21 +5411,12 @@ export default function App() {
         <span className={'badge' + (selA.kind === 'animated' ? ' anim' : '')}>
           {selA.kind === 'animated' ? 'anim' : 'static'}
         </span>
-        {/* THE TWO THINGS YOU CAN DO TO A PLACED THING, and they say which is
-            which in words. They were a sparkle and a wand, two round buttons of
-            the same size side by side, and the first question anyone asked on
-            seeing them was what the difference was. One is behaviour and free,
-            the other draws a picture and spends, and no pair of icons carries
-            that. */}
+        {/* words, not icons: one is free behaviour and the other spends, and two round buttons could not say which. */}
         <span className="insp-acts">
         <button
           className={'actpill' + (lifeOpen ? ' on' : '') + (selA.life ? ' has' : '')}
           data-tip={selA.life ? 'change how it moves · free' : 'give it a way of moving · free'}
-          /* Opening one closes the other. They are two different jobs on the
-           * same thing and never both at once, but the panel let both boxes
-           * stand open, stacked, each with its own greyed example and its own
-           * send button, which reads as though the same thing has to be typed into
-           * both. That is the only thing it could have looked like. */
+          /* opening one closes the other: two boxes stacked open read as though the same words go in both. */
           onClick={() => {
             setLifeOpen((v) => !v)
             setFaceOpen(false)
@@ -6505,14 +5426,7 @@ export default function App() {
           <Icon name="sparkle" />
           moves
         </button>
-        {/* ANOTHER FACE. One generation, and the only way a thing gets a second
-            picture that actually matches it: the endpoint edits the art already
-            on the account rather than drawing something new, and for a
-            character it edits every heading in one job.
-
-            It is off for a row with nothing on record about what drew it —
-            imported off the account, hand-edited, made before origin.json — and
-            it says which rather than failing at spend time. */}
+        {/* one generation editing the art already on the account; off with no origin on record, and it says so. */}
         {selItem && (
           <button
             className={'actpill spends' + (faceOpen ? ' on' : '') + (selItem.states?.length ? ' has' : '')}
@@ -6595,17 +5509,7 @@ export default function App() {
           </button>
         </div>
       )}
-      {/* WHAT EACH FACE IS CALLED, which is the whole of `show(placement,
-          state)` having a vocabulary to select from.
-          *
-          * The number beside each one is the index `art` actually stores, and
-          * it is shown because that is what a round switches on. The name is
-          * kept beside the index and never instead of it, so anything reading
-          * by number cannot tell the difference.
-          *
-          * Only when there is more than one face: a placement with a single
-          * picture has nothing to switch between, and a name on it would be a
-          * field asking to be filled for no reason. */}
+      {/* face names, with the index `art` stores kept beside them so anything reading by number is unaffected. */}
       {selFaces.length > 1 && (
         <div className="lookrows">
           <span className="grainlab">faces · what code shows by name</span>
@@ -6627,17 +5531,7 @@ export default function App() {
           })}
         </div>
       )}
-      {/* THE ADDRESS, and it sits above the group because it is the identity
-          and the group is only the set it belongs to. It wears the anchor
-          form's shape rather than the property rows below it, because it is
-          the same kind of thing as an anchor's name and the label has to have
-          room to say so.
-
-          Blank on purpose for almost everything: nineteen palms are scenery,
-          and a name on each of them would bury the six a member's python
-          actually talks to. The id underneath is machine-made and does not
-          survive being placed again, so this is the only string anything
-          outside the map can hold on to. */}
+      {/* the address, usually blank. the machine id does not survive re-placing, so this is the only stable name. */}
       <label className="anchfield">
         <span>name · what code calls it</span>
         <input
@@ -6805,12 +5699,7 @@ export default function App() {
           delete
         </button>
       </div>
-      {/* WHO A PIXEL EDIT LANDS ON, said before it happens rather than after.
-          These edits rewrite one library row and every placement draws from it,
-          so the tool used to change all of them and never mentioned it. Off by
-          default: selecting one tree and cropping nineteen is not what anybody
-          means. It only appears when there is more than one, because with a
-          single copy the two answers are the same thing. */}
+      {/* who a pixel edit lands on, said before it happens. off by default, as one row drives every placement. */}
       {selItem && sameCount > 1 && (
         <label className="editall" data-tip="these edits rewrite the picture every copy shares">
           <input type="checkbox" checked={editAll} onChange={(ev) => setEditAll(ev.target.checked)} />
@@ -6825,11 +5714,7 @@ export default function App() {
     </div>
   )
 
-  // The compare: what came back on one side, the map's colours on the other,
-  // one slider between them. Two cells have to sit inside a 272px panel, so 2x
-  // is the target and the largest whole multiple that still fits is what
-  // shows; a fraction would blur pixel art, and blurred pixels are the wrong
-  // thing to judge a colour on.
+  // two cells in a 272px panel, so the largest whole multiple shows; a fraction blurs the pixels being judged
   const plW = pl && pl.items[0] && pl.items[0].raw[0] ? pl.items[0].raw[0].width : 64
   const plZoom = [2, 1].find((z) => plW * z * 2 + 16 <= 218) ?? 1
   const matchPanel = pl && (
@@ -6840,14 +5725,7 @@ export default function App() {
           {pl.mode === 'gen' ? 'what came back, and the same thing on this map' : "the same art on this map's colours"}
         </span>
       </div>
-      {/* looked at before he is asked to choose: the chosen one is outlined
-          with the reason under it, all of them stay on screen, and one click
-          on any other row overrules it.
-
-          A look that says NONE of them are it chooses nothing and says so up
-          here instead, because a reason printed under a preselected row is a
-          recommendation and this is the opposite of one. Every row is still
-          keepable: the pictures are paid for and this is advice. */}
+      {/* "none of them" says so up here rather than under a row, where a reason would read as a recommendation. */}
       {looking ? (
         <div className="fxlooking pllook">looking at them…</div>
       ) : said && said.verdict === 'revise' ? (
@@ -6856,10 +5734,7 @@ export default function App() {
       <div className="plrows">
         {pl.items.map((it, i) => {
           const chosen = pl.pick === i
-          /* clickable as soon as the look is over, whatever it said. It used to
-             need the tool to have chosen one first, so a look that came back
-             "none of these" left three candidates on screen and no way to keep
-             just one of them. */
+          /* clickable whatever the look said: needing a chosen one left "none of these" with no way to keep any. */
           const pickable = !looking && pl.items.length > 1
           return (
             <div key={it.name}>
@@ -6926,10 +5801,7 @@ export default function App() {
     </div>
   )
 
-  // The objects already on the account, browsable. Thumbnails come straight
-  // off pixellab's own cdn, the search runs over every one of them, and a
-  // click copies the png in. Nothing in here can spend anything, and the foot
-  // of the panel says so.
+  // the account's objects, browsable; nothing on this path can spend anything and the panel foot says so
   const charList = chars
     ? chars.items.filter((c) => !acc.q.trim() || c.name.toLowerCase().includes(acc.q.trim().toLowerCase()))
     : []
@@ -7039,16 +5911,7 @@ export default function App() {
     </div>
   )
 
-  /* Many at once.
-   *
-   * When more than one placement is picked the single-asset numbers are the
-   * wrong thing to show — there is no one x to type. What IS useful on a set is
-   * the arranging: line them up, space them evenly, mirror them, put them in
-   * front of or behind everything else. Same verbs a slide editor has.
-   *
-   * Stacking is worth a word: the game y-sorts, so "in front" means standing
-   * lower down the map, and the button says so rather than implying a z-index
-   * the exported bundle does not have. */
+  /* many at once: the game y-sorts, so "in front" means standing lower down and there is no z-index to set. */
   /* the group every picked placement is already in, or blank when they differ,
      so the select never claims a crowd is somewhere only one of them is */
   const manyPicked = assets.filter((a) => selAll.includes(a.id))
@@ -7159,10 +6022,7 @@ export default function App() {
     </div>
   )
 
-  /* Groups, as one line of chips instead of a stacked list with a nested row
-   * of every placement inside it. The list was the single tallest thing in the
-   * column after the tuner, and what it is actually for is showing counts and
-   * turning a layer off while you work under it. */
+  /* chips and not a stacked list, which was the tallest thing in the column after the tuner. */
   const groupStrip = (
     <>
       <div className="grpstrip">
@@ -7172,12 +6032,7 @@ export default function App() {
           .map(({ g, n }) => {
             const hidden = hiddenSet.has(g)
             return (
-              /* TWO THINGS TO DO TO A LAYER AND THEY ARE NOT THE SAME THING.
-                 The eye is a thing you do while you work and the map forgets
-                 it; the condition is authored and ships in the bundle. So the
-                 chip keeps the eye and grows a second target beside it, the
-                 way a library tile carries its own delete, rather than every
-                 layer standing a permanent input in a 272px column. */
+              /* the eye is forgotten, the condition ships in the bundle, so the chip grows a target instead of an input. */
               <span className="grpwrap" key={g}>
                 <button
                   className={'grpchip' + (hidden ? ' off' : '')}
@@ -7188,12 +6043,7 @@ export default function App() {
                   {g}
                   <span className="grp-n">{n}</span>
                 </button>
-                {/* THE WORD AND NOT A PICTOGRAM. Nothing in the drawn set means
-                    "a condition": `trigger` is a point with a ripple, which is
-                    an anchor kind and already means something else two steps
-                    away, and a tick means confirmed. The two pills in the
-                    placement inspector say `moves` and `becomes` in words for
-                    the same reason. */}
+                {/* a word, not a pictogram: nothing drawn means "a condition" and trigger already means an anchor kind. */}
                 <button
                   className={
                     'grpwhen' + (grpWhen === g ? ' on' : '') + (whenOfGroup(g) ? ' has' : '')
@@ -7210,10 +6060,7 @@ export default function App() {
           })}
         {!assets.length && <span className="grpnone">nothing placed yet</span>}
       </div>
-      {/* one layer's condition at a time, under the strip. A dozen placements
-          that are the same year's dressing share one condition, and copying the
-          string onto each of them means the thirteenth is placed without it and
-          nothing anywhere says so. */}
+      {/* one condition per layer, because copying the string onto each placement loses it on the thirteenth. */}
       {grpWhen && (
         <div className="doorform">
           <WhenField
@@ -7334,11 +6181,7 @@ export default function App() {
   }, [makeWhat, scene, armFx, runMany, doScenePlan, doGen])
 
   const wantedInScene = scene ? scene.items.length - sceneOff.size : 0
-  /* The real total behind an armed set, and it is the multiplication nobody
-   * does in their head: an animated thing is a base plus its frames, so nine
-   * of them is eighteen. Same arithmetic whether the set came from a fill or
-   * from an ask that turned out to be more than one thing, because past the
-   * plan they are the same run. */
+  /* the total behind an armed set: an animated thing is a base plus frames, so nine of them is eighteen. */
   const manyGens = wantedInScene * perTake
   const makeArmed = makeWhat === 'effect' ? fxPick : !!scene || (makeWhat !== 'fill' && !!genPlan)
   const makeOff =
@@ -7350,10 +6193,7 @@ export default function App() {
       ? !fxAsk.trim() || fxBusy || !!fx
       : makeWhat === 'fill'
         ? // the same rest state the other three have. It used to sit lit and
-          // pressable while its own label said "box the area first", which is a
-          // button telling you not to press it in the one colour that says
-          // press me. No box is nothing to read and nowhere to draw, and it is
-          // the only thing fill needs before it can do either.
+          // disabled with no box, because a button reading "box the area first" was still lit in the press-me colour
           !genBox
         : !genPrompt.trim() || (makeWhat === 'object' && genPick))
   // the sprite plan's own words for what it decided to make move, so the busy
@@ -7395,15 +6235,9 @@ export default function App() {
                     : genPlan
                       ? `${genCost} generation${genCost === 1 ? '' : 's'} · ${genCount > 1 ? 'draw them' : 'draw it'}`
                       : 'read the map · free'
-  /* The multiplication is the part nobody does in their head: four takes of a
-   * moving sprite is thirty-six generations. Said before the read as well as
-   * on the button after it, because the read is where he decides whether four
-   * was a sensible number and by then it is too late to be told. */
+  /* four takes of a moving sprite is thirty-six generations, said before the read and not only after it. */
   const takeWord = genCount === 1 ? '' : `, ${genCount} takes · ${genCost} generations`
-  /* Fill's own multiplication, and it is the biggest one in the panel: an
-   * animated thing is a base plus its frames, so twenty-four of them is
-   * forty-eight generations. It was the one mode that named no number before it
-   * read, which put the largest spend here behind the least warning. */
+  /* fill's total: twenty-four animated things is forty-eight generations, and it named no number before. */
   const fillGens = fillCount * (genType === 'animated' ? 2 : 1)
   const fillWord = `${fillCount} different thing${fillCount === 1 ? '' : 's'} · ${fillGens} generation${fillGens === 1 ? '' : 's'}`
   const makeDesc =
@@ -7428,17 +6262,7 @@ export default function App() {
             ? `${wantedInScene} thing${wantedInScene === 1 ? '' : 's'} · ${manyGens} generation${manyGens === 1 ? '' : 's'} · into the library${usd ? ` · ${usd} left` : ''}`
             : `${genBox ? `reads the boxed ${genBox.w}×${genBox.h}` : 'reads the whole map'} · ${genType === 'animated' ? 'sprite + 8 frames' : 'one png'}${takeWord}${usd ? ` · ${usd} left` : ''}`
 
-  /* ---- the make strip -------------------------------------------------
-   *
-   * ONE ask box. There used to be two stacked here, an object one and an
-   * effect one, running the identical gesture: type what you want, point at
-   * the map, get a thing placed. Two of everything for one idea. The three-way
-   * says which kind, the box says where, and the same words go to whichever
-   * planner is right for it.
-   *
-   * fill is the third: the boxed area gets read once and a whole set of things
-   * is planned into it at once, which is the same job as placing forty sprites
-   * by hand, done by looking at the painting instead. */
+  /* ---- the make strip: one ask box and a three-way, where two stacked boxes ran the identical gesture ---- */
   const makeStrip = (
     <div className="make">
       <div className="seg makewhat" role="radiogroup" aria-label="what to make">
@@ -7464,10 +6288,7 @@ export default function App() {
               // the line about the last thing that came back belongs to the
               // mode that drew it, so it goes with the mode
               setSaid(null)
-              // the takes go back to one with the plan. Eight of them set
-              // against a thing, which is eight generations, is seventy-two the
-              // moment the mode says sprite, and a number chosen for one price
-              // is not a number he agreed to at the other.
+              // takes reset to one on a mode change: eight is seventy-two generations the moment the mode says sprite
               setGenCount(1)
               // an arm does not survive a change of mind about what is being
               // made, or the next press spends on the new thing
@@ -7491,18 +6312,9 @@ export default function App() {
               : makeWhat === 'fill'
                 ? 'anything to steer it, or leave empty'
                 : makeWhat === 'sprite'
-                  ? /* Deliberately not a person and not an animal: whatever is
-                       typed here is what the router has to find a rig for.
-                       It also names what it TURNS INTO, because one ask can
-                       carry the body, the pictures it changes between and the
-                       whole round, and this hint is the only place anybody
-                       finds that out. A troll fits the box; a fisherman with a
-                       lantern does not say the second half is allowed. */
+                  ? /* the only place anybody learns one ask can name what it turns into as well as the body, so it has to fit the box */
                     'e.g. a troll that curls into a boulder and rolls'
-                  : /* one thing or several, in the same box. This hint is the
-                       only place anybody finds out that a plural ask is allowed,
-                       and like the effect one it has to fit the box rather than
-                       be clipped halfway through the second half. */
+                  : /* the only place anybody finds out a plural ask is allowed, and it has to fit the box rather than be clipped */
                     genType === 'animated'
                     ? 'e.g. a campfire · or three of them'
                     : 'e.g. a stone well · or a few crates'
@@ -7529,10 +6341,7 @@ export default function App() {
         />
         <span className="field-desc">{makeDesc}</span>
       </label>
-      {/* still or moving, and it means the same thing in all three modes that
-          have it. For a sprite it does not mean a walk cycle: it means the
-          router decides what moving IS for that thing, which is one foot in
-          front of the other for a fisherman and wings beating for a dragon. */}
+      {/* still or moving; for a sprite the router decides what moving is, which is not always a walk cycle. */}
       {makeWhat !== 'effect' && (
         <div className="segrow">
           <div className="seg" role="radiogroup" aria-label="still or moving">
@@ -7557,10 +6366,7 @@ export default function App() {
           </div>
         </div>
       )}
-      {/* Two sliders, same rail, and they do not mean the same thing. Fill's
-          count is a set of DIFFERENT things planned into one area. This one is
-          takes on ONE thing, the same core asset drawn again from another seed,
-          which is why the words under it say so. */}
+      {/* takes of one thing, where fill's identical-looking slider counts a set of different ones. */}
       {makeWhat === 'fill' ? (
         <label className="fillnum">
           <span>how many</span>
@@ -7629,12 +6435,7 @@ export default function App() {
           </button>
         )}
       </div>
-      {/* WHAT THE TOOL SAW, under the button that drew it.
-          Free, and it is advice: whatever it says, the thing is in the library
-          and stays there. An object run opens the compare and the same words go
-          in its head, so this is the line for the runs that open no panel at
-          all: a sprite, a whole planned set, and any run where the compare could
-          not open because the painting had no colours to lock onto yet. */}
+      {/* the look, for runs that open no compare panel: a sprite, a set, or a painting with no colours yet. */}
       {!pl && (looking || said) && (
         <div className="saidline">
           {looking ? (
@@ -7656,16 +6457,7 @@ export default function App() {
     </div>
   )
 
-  /* ---- the plan cards -------------------------------------------------
-   * What the model decided, before anything is bought. One for a single thing,
-   * one for a whole area; the area's is a list you can strike items out of, so
-   * a plan that is nine-tenths right costs one click rather than a re-read.
-   *
-   * A sprite's card carries the routing as well as the words, because that is
-   * where the decisions that used to be dropdowns now live: which rig, which
-   * angle, how big, and what moving means for this particular thing. He should
-   * be able to read "lion rig · hovering, wings beating slowly" and know the
-   * dragon is not about to try walking. */
+  /* ---- the plan cards: what the model decided before anything is bought, with the set's rows strikeable ---- */
   const spriteRoute = genPlan?.sprite
   const planCard = genPlan && (
     <div className="planbox">
@@ -7677,11 +6469,7 @@ export default function App() {
               ? `pro · ${styleView || spriteRoute.view} · ${STYLE_SIZE}px · ${CHAR_DIRS} ways · ${PRO_BODY} for the body`
               : `${spriteRoute.skeleton} rig · ${spriteRoute.view} · ${spriteRoute.size}px · ${CHAR_DIRS} ways`}
           </div>
-          {/* IN THE GAME'S STYLE. The template rig cannot be made to match a
-              character that already exists, whatever the description says; a
-              reference's eight rotations can. One switch, because the
-              reference is the map's business and not this ask's: it is named
-              once in the bag and every styled sprite after that matches it. */}
+          {/* the template rig cannot match an existing character whatever the words say; a reference's rotations can. */}
           <Row
             icon="rect"
             label={styleOn ? "in the game's style" : 'in the template style'}
@@ -7735,11 +6523,7 @@ export default function App() {
           {spriteRoute.why && <div className="plannote">{spriteRoute.why}</div>}
         </>
       )}
-      {/* WHAT ELSE IT HEARD IN THE ASK, shown before anything is bought.
-           One sentence can carry a body, the pictures it changes between and a
-           whole round, and without this the only sign the second half was
-           understood is a bigger number on the button. Each face is a
-           generation, so each one is named. */}
+      {/* what else it heard, since otherwise the only sign of a second half is a bigger number on the button. */}
       {!!genPlan.faces?.length && (
         <div className="planmeta">
           also draws {genPlan.faces.map((f) => f.name).join(', ')} · {genPlan.faces.length} more
@@ -7749,10 +6533,7 @@ export default function App() {
       {genPlan.does && <div className="plannote">then: {genPlan.does}</div>}
       {genPlan.crossing && <div className="planmeta">{genPlan.crossing}</div>}
       <div className="planmeta">
-        {/* w and h are the PROP path's size and only the prop path sends them.
-            A sprite posts route.size and nothing else, so printing w×h here put
-            two different numbers on screen for one thing. The rig line above
-            already carries the size a sprite actually gets drawn at. */}
+        {/* w and h are the prop path's; a sprite posts route.size, so printing both put two numbers on one thing. */}
         {spriteRoute ? '' : `${genPlan.w}×${genPlan.h}${genPlan.motion ? ` · ${genPlan.motion}` : ''}`}
         <button className="planshow" onClick={() => setGenShow((v) => !v)}>
           {genShow ? 'hide the words' : 'the words'}
@@ -7762,18 +6543,10 @@ export default function App() {
     </div>
   )
 
-  /* The first take, on screen, with the run held. Continue or stop.
-   *
-   * Nothing here undoes anything: what is in the picture is already paid for
-   * and already in the library. The only question is whether the REST gets
-   * bought, and it is asked at the one moment where the answer is still worth
-   * money. */
+  /* the first take with the run held; it is already paid for, so the only question is buying the rest. */
   const gateCard = gate && (
     <div className="planbox gatebox">
-      {/* a run of takes is the same thing drawn again, a planned set is several
-          different things, and calling the second one a take would be a lie
-          about what the picture below is. fillRun is what tells them apart:
-          only a set has one. */}
+      {/* fillRun tells a planned set from a run of takes, and only a set has one. */}
       <div className="plannote">
         {fillRun
           ? `${gate.done} of ${gate.total} drawn · keep going?`
@@ -8003,10 +6776,7 @@ export default function App() {
         </div>
   )
 
-  /* Every ask this map has been given, worded as it was typed, behind one
-     small toggle. The library only kept a four-word slug of them, so the
-     wording that produced a good tree was gone the moment the box cleared. It stays shut
-     until asked for. */
+  /* every ask as it was typed, because the library kept only a four-word slug of it. */
   const askLog = asks.length > 0 && (
     <div className="askwrap">
       <button className="asktoggle" aria-expanded={asksOpen} onClick={() => setAsksOpen((v) => !v)}>
@@ -8018,10 +6788,7 @@ export default function App() {
             <button
               key={a.at + i}
               className="askrow"
-              /* WHAT PRESSING IT DOES. It said `made <name>` and the name is
-                 already printed on the row's second line, which is the same
-                 tooltip disease the anchor list had: a box under the pointer
-                 repeating the words the pointer is sitting on. */
+              /* what pressing it does: it said "made <name>", repeating the words already under the pointer. */
               data-tip="puts this ask back in the box, to edit and run again"
               onClick={() => {
                 if (a.kind === 'effect') {
@@ -8052,17 +6819,7 @@ export default function App() {
     needPainting
   ) : (
     <>
-      {/* The make strip is always here, at the top, because making something is
-          why you opened this step. Everything else is one context zone below
-          it, showing exactly ONE thing chosen by what you are doing.
-
-          The old shape was two tabs, place and create, with an inspector, a
-          multi-select panel, a clipboard line, a compare, a 677px effect tuner
-          and a library all stacked inside whichever tab you were on. Six
-          things competing for a 272px column, each squeezed to a slice. The
-          rule now is one at a time and it gets the whole column, so the tuner
-          is readable, the library is not three thumbnails tall, and adding
-          fill cost no vertical space at all. */}
+      {/* the make strip on top, then one context zone: six things competing for a 272px column each got a slice. */}
       {makeStrip}
       <div className="zone">
         {/* the gate goes first. Nothing else can be open while a run is held,
@@ -8097,11 +6854,7 @@ export default function App() {
         </div>
       )}
       {groupStrip}
-      {/* THE ZONES ARE ON THIS STEP AND SO IS THEIR SWITCH. Art is aimed at
-          anchors, so this is the step where seeing them matters most and also the
-          step where a map with thirty of them can be the one thing you cannot
-          work over. The row is here rather than only in the anchors panel because
-          reaching a toggle should not cost a step change and back. */}
+      {/* the zone switch is here too, because reaching it should not cost a step change and back. */}
       <AnchorsShown ed={ed} on={!!st?.eventsVisible} />
       {anchorForm}
       {askLog}
@@ -8125,18 +6878,7 @@ export default function App() {
   ) : (
     <>
       <div className="panel-cap">write the bundle the game loads</div>
-      {/* WHAT THIS MAP IS, and it lives here because these are bundle fields
-          rather than drawing tools.
-          *
-          * `title` is a real database column that has been machine-filled with
-          * the slug since the day it was made, shown on the dashboard, and
-          * dropped before the export, so every named place a student reads is
-          * either a slug or a string typed into the game's own source. `class`
-          * was known here and never written down, so the engine guesses it from
-          * whether the border is transparent, on every map. `island` is the
-          * join to the school offering, which currently lives in a hardcoded
-          * Set in the other repo, so shipping a member's map is a source edit
-          * and a deploy. */}
+      {/* bundle fields. title was machine-filled with the slug, and class unwritten leaves the engine guessing. */}
       <Sec>this map</Sec>
       <label className="anchfield">
         <span>name · what a player reads</span>
@@ -8161,11 +6903,7 @@ export default function App() {
           </button>
         ))}
       </div>
-      {/* THE ID, which everything else addresses, and which came from whatever
-          the dropped file was called. It is the publish slug, every door's
-          target, the objective's map field, the roster key and the save key at
-          once, and there has never been a way to change it. Renaming carries
-          the doors that point here along with it and says how many moved. */}
+      {/* the id is the publish slug, every door's target and the save key at once; renaming carries the doors. */}
       <label className="anchfield">
         <span>id · what code and every door calls it</span>
         <input
@@ -8196,11 +6934,7 @@ export default function App() {
           spellCheck={false}
         />
       </label>
-      {/* THE MAP'S OWN BAG. There was no map-level one anywhere, so the only
-          place to hang map-scoped author data was a meta on some arbitrarily
-          chosen anchor, which is a convention nothing enforces. One row per key
-          and a blank pair at the end, so adding one is typing rather than
-          pressing add first. */}
+      {/* the map's own bag; without one, map-scoped data hung on a meta of some arbitrarily chosen anchor. */}
       <div className="metarows">
         {[...Object.entries(st?.props.meta ?? {}), ['', '']].map(([k, v], i) => (
           <div className="metarow" key={k || 'new' + i}>
@@ -8232,11 +6966,7 @@ export default function App() {
           </div>
         ))}
       </div>
-      {/* WHERE THE PAINT IS INSIDE THE CANVAS. Measured off the bytes that ship,
-          on both sides, and that is nearly always right. This is the correction
-          for a painting whose edge is a faint alpha halo the scan reads as
-          picture, which makes the island's footprint too big and its centre
-          wrong. Blank goes back to measured. */}
+      {/* measured off the shipped bytes; type here only when an alpha halo makes the footprint too big. */}
       <label className="anchfield">
         <span>painting · w, h, ox, oy inside the canvas</span>
         <input
@@ -8259,11 +6989,7 @@ export default function App() {
           spellCheck={false}
         />
       </label>
-      {/* THE STAIRS THE PAINT ALREADY DESCRIBES, and the one thing about them a
-          person could not do, which is name one. map.json.stairs is machine
-          made and stays that way; pressing a row puts a named region over it so
-          a grape has something to address. Behind a press because it is three
-          flood fills over the whole plane. */}
+      {/* stairs stay machine made; a press lays a named region over one, and it costs three flood fills. */}
       <Sec>stairs</Sec>
       <div className="manyrow">
         <button className="abtn tiny" onClick={() => setStairs(ed?.stairList() ?? [])}>
@@ -8386,10 +7112,7 @@ export default function App() {
           {panels[step]}
         </aside>
 
-        {/* the step rides on the stage so the cursor can say what this canvas
-            is for. On export it is a picture of what is about to be written and
-            nothing on it answers a click, and it was still wearing the
-            crosshair that means "draw here". */}
+        {/* the step rides on the stage for the cursor: export answers no clicks and still wore the crosshair. */}
         <div className="stage" data-step={step} onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
           <canvas ref={canvasRef} />
           {!has && <p className="empty">drop a png here, or generate one in load</p>}
