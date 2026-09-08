@@ -8,7 +8,7 @@
 // the whole vine-and-grape plan sits on has to fail closed.
 import http from 'node:http'
 import { api } from '../api.mjs'
-import { closeDb } from './pool.mjs'
+import { closeDb, one } from './pool.mjs'
 
 const slug = process.argv[2] || 'hub'
 const PORT = 5398
@@ -81,8 +81,16 @@ try {
     [`/api/v1/maps/${slug}/file/99/scene.png`, 'a version that does not exist'],
     [`/api/v1/maps/${slug}/file/1/`, 'an empty file name'],
     ['/api/v1/maps/nope-not-a-map', 'a map that does not exist'],
-    ['/api/v1/maps/panther-maw', 'a map that exists nowhere yet'],
   ]
+  /* A ROW THAT EXISTS AND HAS NEVER BEEN PUBLISHED, found rather than named.
+   * This was hardcoded to panther-maw, which was true when it was written and
+   * stopped being true the day Ash published it, so the suite failed on a map
+   * that had simply been finished. */
+  const unpublished = await one(
+    `select slug from maps m where not exists (select 1 from publishes p where p.map_id = m.id) limit 1`,
+  )
+  if (unpublished) refuse.push([`/api/v1/maps/${unpublished.slug}`, 'a map that exists nowhere yet'])
+  else console.log('  --    every map is published, so there is nothing to ask about an unpublished one')
   for (const [path, what] of refuse) {
     const r = await hit(path)
     r.status === 404 ? ok(`refused ${what}`) : no(`${what} came back ${r.status}, not 404`)
