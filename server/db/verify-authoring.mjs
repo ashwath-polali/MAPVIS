@@ -2447,10 +2447,7 @@ try {
       await q('delete from maps where id = $1', [id])
     }
   }
-  /* AND A PERSON CAN CORRECT THE SCAN. Measuring the bytes that ship is right
-   * nearly always; a painting whose edge is a faint alpha halo is the case it is
-   * wrong in, and before this there was no way to say so. paint_set is what keeps
-   * the next publish from scanning over the correction. */
+  /* AND A PERSON CAN CORRECT THE SCAN, for a painting whose edge is a faint halo; paint_set keeps the next publish from scanning over it */
   {
     const stated = [12, 9, 3, 2]
     await putDoc(map.id, JSON.stringify({ ...doc, props: { ...doc.props, paint: stated } }))
@@ -2477,10 +2474,7 @@ try {
     back3.props?.paint === undefined ? ok('clearing it goes back to measured') : no(`a cleared extent came back ${back3.props?.paint}`)
   }
 
-  /* AND A PERSON CAN CORRECT WHAT A PLACEMENT BLOCKS. publish scans the png's
-   * own alpha at the base band, which is right nearly always; a sprite with a
-   * faint halo or a shadow painted into the frame is the case it is wrong in,
-   * and there was no way to say so. */
+  /* AND A PERSON CAN CORRECT WHAT A PLACEMENT BLOCKS, for a sprite with a halo or a shadow painted into the frame */
   {
     const hand = [1, -2, 3, 4]
     const withFoot = { ...pubAssets, assets: pubAssets.assets.map((a) => (a.id === 'a3' ? { ...a, foot: hand } : a)) }

@@ -45,10 +45,7 @@ for (const d of [60, 214]) {
   got <= 36 ? ok(`${d}px behind comes back ${got}px away`) : no(`${d}px behind stayed ${got}px away`)
 }
 
-/* THE PROMISE, SWEPT. Nothing lands past the reach at any angle or distance, and
- * a point that was already legal is not shoved. The rounding is what breaks this
- * if it is done in the wrong order: rounding after measuring let a point at 35.9
- * come back at 36.4 against a reach of 36. */
+/* THE PROMISE, SWEPT: nothing lands past the reach and a legal point is not shoved. Rounding after measuring let a point at 35.9 come back at 36.4 against a reach of 36. */
 let worst = 0
 let shoved = 0
 for (let deg = 0; deg < 360; deg++) {
