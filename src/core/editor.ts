@@ -4351,10 +4351,7 @@ export class Editor {
       if (patch.label && patch.label.trim()) v.label = patch.label
       else delete v.label
     }
-    /* A STATE NAME NOTHING IS CALLED MEANS NOTHING IS SHOWING, and that is on
-     * purpose rather than a fallback to the first member. Showing an arbitrary
-     * placement because the initial was misspelt is a map that looks authored
-     * and is not; showing nothing is a mistake an author can see. */
+    /* A STATE NAME NOTHING IS CALLED MEANS NOTHING IS SHOWING, on purpose rather than a fallback to the first member: showing an arbitrary placement because the initial was misspelt is a map that looks authored and is not, and showing nothing is a mistake an author can see. */
     if (patch.initial !== undefined) v.initial = v.members.some((m) => m.name === patch.initial) ? patch.initial : ''
     this.touched()
   }
@@ -4426,16 +4423,7 @@ export class Editor {
     this.emit()
   }
 
-  /* THE CONDITION ON A GROUP, WHICH IS WHY A GROUP NOW HAS A ROW AT ALL.
-   *
-   * A dozen placements that are the same year's dressing share one condition,
-   * and copying the string onto each of them means the thirteenth is placed
-   * without it and nothing anywhere says so. The row is created on demand and
-   * removed again when it says nothing, so a map where nobody has typed a
-   * condition carries no group rows and exports byte for byte what it did.
-   *
-   * CONTROL NEEDED: a `when` field on the group header row in the layers list in
-   * App.tsx, beside the eye that hides a group, calling this. */
+  /* THE CONDITION ON A GROUP, which is why a group has a row at all: a dozen placements sharing one condition means the thirteenth is placed without it and nothing says so. The row is created on demand and removed when it says nothing, so a map where nobody typed a condition exports byte for byte what it did. */
   setGroupWhen(name: string, when: string) {
     if (!name) return
     const clean = String(when || '').trim().slice(0, 240)
@@ -4459,14 +4447,7 @@ export class Editor {
     return this.doc.stairRegions()
   }
 
-  /* A STAIR MADE ADDRESSABLE, by putting a named region over it.
-   *
-   * map.json.stairs is a machine fact: the ramp pixels say where a stair is and
-   * nobody types that. What nobody could do was NAME one, so a grape had no way
-   * to say which stair it meant. Rather than invent a second naming scheme keyed
-   * to a rectangle that moves when the paint moves, this makes the thing the
-   * tool already knows how to name, and the author names it in the form they
-   * already use. */
+  /* A STAIR MADE ADDRESSABLE, by putting a named region over it. map.json.stairs is a machine fact and nobody types it; what nobody could do was NAME one, so a grape had no way to say which stair it meant. Rather than invent a second naming scheme keyed to a rectangle that moves when the paint moves, this makes the thing the tool already knows how to name. */
   markStair(r: StairRegion): number {
     const [x0, y0, x1, y1] = r.rect
     const id = this.addAnchor('region', Math.round((x0 + x1) / 2), Math.round((y0 + y1) / 2))
@@ -4523,14 +4504,7 @@ export class Editor {
     return picked.length
   }
 
-  /* ONE KEY ON ONE ANCHOR'S BAG, which is the stated extension point and had
-   * only machine writers, so the bag a grape reads carried MAPVIS bookkeeping
-   * and nothing an author chose. null removes the key and '' keeps it holding
-   * nothing, the same split setMapMeta makes and for the same reason.
-   *
-   * The keys MAPVIS writes itself are refused, because an author overwriting
-   * `derived` or `shape` would be editing the tool's own record through a box
-   * that looks like their own. */
+  /* ONE KEY ON ONE ANCHOR'S BAG, the stated extension point, which had only machine writers so the bag a grape reads carried MAPVIS bookkeeping and nothing an author chose. null removes the key and '' keeps it holding nothing. The keys MAPVIS writes itself are refused, or an author would be editing the tool's own record through a box that looks like theirs. */
   setAnchorMeta(id: number, key: string, value: string | null) {
     const e = this.doc.events.find((q) => q.id === id)
     if (!e) return false
@@ -4559,11 +4533,7 @@ export class Editor {
     this.touched()
   }
 
-  /* WHAT A FACE IS CALLED, which is the whole of `show(placement, state)` having
-   * a vocabulary. Index 0 is the picture the placement was placed with and is
-   * named on the placement itself, because look 0 is not an AssetLook.
-   * CONTROL NEEDED: a name field per face in the life panel's picture list in
-   * App.tsx, pre-filled with what nameLooks derived. */
+  /* WHAT A FACE IS CALLED, which is the whole of show(placement, state) having a vocabulary. Index 0 is the picture the placement was placed with and is named on the placement itself, because look 0 is not an AssetLook. */
   setLookName(id: string, index: number, name: string): boolean {
     const a = this.doc.assets.find((q) => q.id === id)
     if (!a) return false
@@ -4631,16 +4601,7 @@ export class Editor {
     if (!this.painting) return null
     return this.buildCutApplied().toDataURL('image/png')
   }
-  /* A rectangle of the painting, on its own, as a png.
-   *
-   * Two callers want the same pixels at different sizes. The model reads it
-   * enlarged, because a 40px strip of pixel art is easier to judge at 2x and
-   * nothing downstream cares how big it is. PixelLab takes it as the background
-   * to draw into and will not accept more than 192 per side, so that one passes
-   * a cap and gets the biggest whole-number scale that fits under it.
-   *
-   * Whole multiples only, and smoothing off: a resampled pixel is a lie about
-   * what is on the map. */
+  /* A rectangle of the painting on its own, as a png. Two callers want the same pixels at different sizes: the model reads it enlarged because a 40px strip is easier to judge at 2x, and PixelLab will not accept more than 192 per side so that one passes a cap. Whole multiples only and smoothing off, because a resampled pixel is a lie about what is on the map. */
   areaDataURL(r: { x: number; y: number; w: number; h: number }, scale = 1, cap = 0): string {
     const src = this.buildCutApplied()
     const w = Math.max(1, Math.round(r.w))
@@ -4679,20 +4640,8 @@ export class Editor {
       levels: this.doc.levelsCanvas(hasCut ? this.doc.cut : undefined).toDataURL('image/png'),
       cut: hasCut ? this.doc.cutCanvas().toDataURL('image/png') : null,
       occluders: this.doc.occludersCanvas().toDataURL('image/png'),
-      /* the placements as the editor holds them, MINUS anything in a hidden
-       * group. The server rewrites the /library/ urls into the bundle's own
-       * assets/ folder and copies the pngs.
-       *
-       * Hidden used to mean hidden IN THE EDITOR ONLY: a group with its eye
-       * closed still shipped, at full opacity, with nothing anywhere saying so.
-       * Turning a thing off and then finding it in the game is the worst kind
-       * of surprise, because it reads as the tool ignoring you. */
-      /* THE CONDITION IS RESOLVED HERE, where the group table is. A placement's
-       * own `when` wins and otherwise it inherits its group's. The group row
-       * stays in map.json as the authoring record, and the resolved string rides
-       * the placement because the game's assets loop has a placement in hand and
-       * no group table beside it, and handing it one would be a second lookup
-       * for a value that cannot change after the export. */
+      /* the placements as the editor holds them, MINUS anything in a hidden group. Hidden used to mean hidden IN THE EDITOR ONLY: a group with its eye closed still shipped at full opacity with nothing saying so, and turning a thing off and then finding it in the game reads as the tool ignoring you. */
+      /* THE CONDITION IS RESOLVED HERE, where the group table is: a placement's own `when` wins and otherwise it inherits its group's. The group row stays as the authoring record, and the resolved string rides the placement because the game's assets loop has a placement in hand and no group table beside it. */
       assets: this.doc.assets
         .filter((a) => !this.hiddenGroups.has(a.group))
         .map((a) => {
@@ -4703,31 +4652,13 @@ export class Editor {
         id: this.sceneId,
         w: this.doc.W,
         h: this.doc.H,
-        /* THE PAINTING, AS OPPOSED TO THE CANVAS IT SITS IN, AND IT WAS NEITHER.
-         *
-         * This said doc.bw/bh/ox/oy, which is where the DROPPED FILE sits. Those
-         * only move under growCanvas and know nothing about the cut, and the cut
-         * is the thing that makes the sea transparent. The hub's picture was
-         * dropped at 688x640 with its margin already baked in, so the manifest
-         * said 688x640 at 0,0 under a comment claiming it was the painting, while
-         * the scene.png beside it is opaque only in x 7..675, y 194..570.
-         *
-         * The consumer refused the field in writing and hand-copied the real
-         * numbers into a fallback instead, and worse: 688*640 is past the pixel
-         * ceiling one generation can hold, so the composition built off it was
-         * thrown away whole. Measured off the bytes that ship, which is the only
-         * thing that can be right, and the server measures the same bytes the
-         * same way at publish so both exporters say one thing. */
+        /* THE PAINTING, AS OPPOSED TO THE CANVAS IT SITS IN, AND IT WAS NEITHER. This said doc.bw/bh/ox/oy, which is where the DROPPED FILE sits and knows nothing about the cut: the hub's manifest said 688x640 at 0,0 while the scene.png beside it is opaque only in x 7..675, y 194..570. The consumer hand-copied the real numbers into a fallback, and worse, 688*640 is past the pixel ceiling one generation can hold, so the composition built off it was thrown away whole. Measured off the bytes that ship, the same way the server measures them at publish. */
         /* stated when an author has stated it, measured otherwise, which is
          * every map so far. See MapProps.paint. */
         base: this.doc.props.paint
           ? { w: this.doc.props.paint[0], h: this.doc.props.paint[1], ox: this.doc.props.paint[2], oy: this.doc.props.paint[3] }
           : paintedBoxOf(scene),
-        /* WHAT THIS MAP IS AND WHAT IT CALLS ITSELF. The engine guessed `class`
-         * from whether the border was transparent, on every map, while this
-         * tool knew the answer the whole time; `title` never left the database.
-         * Written only when set, so a bundle from before this stays byte for
-         * byte what it was and the game's guess stays the fallback. */
+        /* WHAT THIS MAP IS AND WHAT IT CALLS ITSELF. The engine guessed `class` from whether the border was transparent while this tool knew the answer, and `title` never left the database. Written only when set, so a bundle from before this stays byte for byte what it was. */
         class: this.doc.props.class,
         ...(this.doc.props.title ? { title: this.doc.props.title } : {}),
         ...(this.doc.props.islandId ? { islandId: this.doc.props.islandId } : {}),
@@ -4749,35 +4680,14 @@ export class Editor {
         yScale: this.cfg.yScale,
         stairs: this.doc.stairRegions(),
         occluders: this.doc.occs.map((o) => ({ id: o.id, baseline: o.baseline })),
-        // the events contract: a spot plus an action. A reader that does not
-        // know a type skips it; a bundle without the field means none.
-        // BOTH shapes ship. anchors[] is the contract the api and python read;
-        // events[] is what the game reads today and stays door-only in the
-        // exact shape it already parses, so nothing that works stops working.
+        // the events contract: a spot plus an action, and a reader that does not know a type skips it. BOTH shapes ship: anchors[] is what the api and python read, events[] is what the game reads today and stays door-only in the exact shape it already parses.
         anchors: this.doc.events.map((e) => ({
           name: e.name,
           kind: e.kind,
           x: e.x,
           y: e.y,
           r: e.r,
-          /* THE AREA, AS BOTH SHAPES WHEN IT WAS DRAWN.
-           *
-           * `poly` is what the author actually marked and `rect` is its
-           * bounding box. Both, because the running game tests a region by its
-           * rect and has no polygon test at all
-           * (AdventureGame src/game/pmap/anchors.ts:224), so shipping only the
-           * points would be an area no player is ever inside and every grape
-           * hung on it would go quiet. The box is the honest reading today; an
-           * L-shaped plaza tests as the box it sits in until the game learns
-           * the points. A rect an author drew by hand ships alone, because
-           * then there are no points to be more exact than it.
-           *
-           * ONLY THE LIVE SHAPE SHIPS. An anchor can now hold a drawing and a
-           * box at once, since switching mode is not allowed to throw either of
-           * them away, and the game's contains() tests a rect before it tests a
-           * radius. So shipping a dormant rect beside a circle would hand the
-           * game an area the author had switched off. anchorShape is the one
-           * answer to which is which, asked here and in publish.mjs. */
+          /* THE AREA, AS BOTH SHAPES WHEN IT WAS DRAWN: `poly` is what the author marked and `rect` is its bounding box, both because the running game tests a region by its rect and has no polygon test, so points alone would be an area no player is ever inside. An L-shaped plaza tests as its box until the game learns the points. ONLY THE LIVE SHAPE SHIPS: an anchor can hold a drawing and a box at once and the game's contains() tests a rect before a radius, so a dormant rect beside a circle would hand the game an area the author had switched off. */
           ...(() => {
             const shape = anchorShape(e)
             if (shape === 'poly' && e.poly) return { poly: e.poly, rect: polyBounds(e.poly) }
@@ -4787,20 +4697,11 @@ export class Editor {
           ...(e.stand ? { stand: e.stand } : {}),
           ...(e.to ? { to: e.to } : {}),
           ...(e.toAnchor ? { toAnchor: e.toAnchor } : {}),
-          /* the placement this name is on. Dropped here for as long as the
-           * field existed, which is why `show` had never fired on any bundle
-           * this tool could produce. The published bundle takes its anchors
-           * from the database rather than from this array, so both exporters
-           * had to learn it and this one is half of that. */
+          /* the placement this name is on, dropped here for as long as the field existed, which is why `show` had never fired on any bundle this tool could produce. The published bundle takes its anchors from the database, so both exporters had to learn it. */
           ...(e.placement ? { placement: e.placement } : {}),
           ...(e.facing ? { facing: e.facing } : {}),
           ...(e.label ? { label: e.label } : {}),
-          /* the bag, with every shot AND every variant set hung on this name
-           * folded into it. See shotsOntoMeta and variantsOntoMeta in mask.ts:
-           * readAnchors in the game builds its anchor from a fixed list of
-           * top-level fields and then copies meta whole, so the bag is the only
-           * thing a new field can cross in. `when` is already inside it, put
-           * there by migrateEvent for the same reason. */
+          /* the bag, with every shot AND every variant set hung on this name folded into it: readAnchors in the game builds its anchor from a fixed list of top-level fields and then copies meta whole, so the bag is the only thing a new field can cross in. */
           ...(() => {
             const m = variantsOntoMeta(this.doc.variants, e.name, shotsOntoMeta(this.doc.framings, e.name, e.meta))
             return m ? { meta: m } : {}
@@ -4809,32 +4710,13 @@ export class Editor {
         events: this.doc.events
           .filter((e) => e.kind === 'door')
           .map((e) => ({ id: e.id, type: 'door', x: e.x, y: e.y, r: e.r, label: e.label || e.name, to: e.to })),
-        /* ROUTES AND SHOTS, both keyed by name and both absent when none were
-         * drawn, so a bundle from before they existed stays byte for byte what
-         * it was. The id is deliberately not shipped: across the bundle
-         * boundary a name is the only identity there is, and shipping a counter
-         * beside it invites something to hold the counter. */
-        /* NOTHING IN THE GAME READS `paths` YET, and this is written down so the
-         * next session does not guess at a shape and then have to unpick it.
-         *
-         * The nearest running shape over there is the one findPath returns:
-         * `Pt = { x: number; y: number }` in painting pixels, walked forward by
-         * index from 0, addressed by `.x` and `.y` (AdventureGame's
-         * src/game/pmap/path.ts:32 and the walk loop in PmapScene). The pairs
-         * below would have to become objects for a reader to drop this straight
-         * into a route with no adapter. That conversion is NOT made here,
-         * because there is no reader to be right for and no intent that takes a
-         * route: movement in src/vine/intents.ts names an anchor and nothing
-         * else, so a grape cannot say the word for a path today. Convert on the
-         * day something reads it, against what that reader actually wants. */
+        /* ROUTES AND SHOTS, keyed by name and absent when none were drawn, so a bundle from before they existed stays byte for byte what it was. The id is deliberately not shipped: across the bundle boundary a name is the only identity there is. */
+        /* NOTHING IN THE GAME READS `paths` YET, written down so the next session does not guess a shape and have to unpick it. The nearest running shape is findPath's `{x, y}` in painting pixels walked forward by index, so these pairs would have to become objects for a reader to take them with no adapter. Not converted here, because there is no reader to be right for and no intent that takes a route. */
         ...(this.doc.paths.length
           ? {
               paths: this.doc.paths.map((p) => ({
                 name: p.name,
-                /* always written, never omitted when it is walk. The reader on
-                 * the game side has to be able to tell a boat from a body
-                 * without knowing which version of this tool wrote the file,
-                 * and an absent field would make it guess. */
+                /* always written, never omitted when it is walk: the reader on the game side has to tell a boat from a body without knowing which version of this tool wrote the file, and an absent field would make it guess. */
                 kind: p.kind,
                 points: p.points,
                 closed: p.closed,
@@ -4845,17 +4727,7 @@ export class Editor {
               })),
             }
           : {}),
-        /* THE SHOT LIST IS THE AUTHORING RECORD AND NOT THE CAMERA.
-         *
-         * Every shot that hangs on an anchor is also written into that anchor's
-         * meta bag above, which is the only place the game looks. This array
-         * stays because it is what the panel edits, what the api hands python
-         * and what reloads, and because a shot on raw coordinates has nowhere
-         * else to live: the game's framing is an offset from an anchor and has
-         * no position of its own, so a point shot appears here and in no meta
-         * bag anywhere. `entry` is in the same position, honestly: the game's
-         * arrival path returns a position and a facing and never touches zoom,
-         * so nothing reads it yet and it is here waiting for a reader. */
+        /* THE SHOT LIST IS THE AUTHORING RECORD AND NOT THE CAMERA. Every shot hanging on an anchor is also written into that anchor's meta bag, which is the only place the game looks. This array stays because it is what the panel edits and what reloads, and because a shot on raw coordinates has nowhere else to live. `entry` is here honestly: the game's arrival path returns a position and a facing and never touches zoom. */
         ...(this.doc.framings.length
           ? {
               framings: this.doc.framings.map((f) => ({
@@ -4874,30 +4746,7 @@ export class Editor {
               })),
             }
           : {}),
-        /* SETS AND RACKS, keyed by name and absent when nobody made one.
-         *
-         * NOTHING IN THE GAME READS EITHER YET, and that is written down here the
-         * way it is written down for `paths`, so the next session does not guess
-         * a shape and then have to unpick it. What is over there today, read
-         * before this was designed rather than assumed: AdventureGame's
-         * src/game/pmap/anchors.ts holds anchors in one flat map keyed by name and
-         * the only many-at-once question it can answer is `ofKind`; nothing groups
-         * anchors, nothing iterates a named collection, nothing indexes a slot;
-         * and every anchor-taking intent in src/vine/intents.ts takes a single
-         * `anchor: string`. `PlacedAsset.group` is declared at PmapScene.tsx:1119
-         * and never read, which is the shape of the same need on placements.
-         *
-         * So there was no running shape to match and these are the minimum that
-         * says the thing. The reader, when it is built, belongs in that same
-         * anchors.ts beside `get` and `ofKind`, because it is one more question
-         * about a map's anchors and that file is the one place that knows the
-         * anchor contract.
-         *
-         * The rack's `slot` number ships and the id does not, which is the
-         * opposite of what a route or a shot does with its counter. `slot` is the
-         * address: it is what hook[3] means, it is stable for the life of the map,
-         * and a save that says slot 3 is filled has to mean the same hook the next
-         * time the map is opened. See mask.ts for the whole of it. */
+        /* SETS AND RACKS, keyed by name and absent when nobody made one. NOTHING IN THE GAME READS EITHER YET, written down the way it is for `paths`: anchors.ts holds anchors in one flat map and its only many-at-once question is `ofKind`, nothing iterates a named collection, and every anchor-taking intent takes a single string. So there was no running shape to match and these are the minimum that says the thing. The rack's `slot` ships and the id does not, the opposite of a route's counter, because slot is the address: it is what hook[3] means and it is stable for the life of the map. */
         ...(this.doc.sets.length
           ? {
               sets: this.doc.sets.map((s) => ({
@@ -4923,15 +4772,7 @@ export class Editor {
               })),
             }
           : {}),
-        /* THE VARIANT SET LIST IS THE AUTHORING RECORD AND NOT THE SWITCH.
-         *
-         * Every set is also folded into its anchor's meta bag above, which is
-         * the only place the game can read one: readAnchors copies a fixed list
-         * of top-level fields plus the whole bag, so an array up here is dropped
-         * by the reader that already ships. This stays for the same reasons the
-         * shot list does, which is that it is what the panel edits, what reloads
-         * and what the api hands python, and because the anchor projection drops
-         * the labels a person reads. */
+        /* THE VARIANT SET LIST IS THE AUTHORING RECORD AND NOT THE SWITCH. Every set is also folded into its anchor's meta bag, which is the only place the game can read one, since readAnchors copies a fixed list plus the whole bag and drops an array up here. This stays because it is what the panel edits and because the anchor projection drops the labels a person reads. */
         ...(this.doc.variants.length
           ? {
               variants: this.doc.variants.map((v) => ({
@@ -4944,12 +4785,7 @@ export class Editor {
               })),
             }
           : {}),
-        /* THE GROUP ROWS, which are the one place a condition shared by a dozen
-         * placements is written once. Every placement in assets.json already
-         * carries the resolved string, so a reader needs nothing from here; this
-         * is what an author edits and what a re-open reads back, and without it a
-         * reopened map would show a dozen placements each carrying a condition
-         * and no group that owns any of them. */
+        /* THE GROUP ROWS, the one place a condition shared by a dozen placements is written once. Every placement in assets.json already carries the resolved string, so a reader needs nothing from here; without it a reopened map would show a dozen placements each carrying a condition and no group that owns any of them. */
         ...(this.doc.groups.length ? { groups: this.doc.groups } : {}),
       },
     }
@@ -4960,11 +4796,7 @@ export class Editor {
     this.dirty = true
     this.changed = true
     this.cutApplied = null
-    /* A BOUND ANCHOR FOLLOWS THE THING IT IS BOUND TO, and this is the one hook
-     * every edit already runs through, so no gesture has to remember to drag
-     * the name along with the sprite. Dragging the coach takes coach_post with
-     * him; typing a new x does too. Cheap: almost no anchor carries a binding,
-     * and the loop stops on the first field of each one that does not. */
+    /* A BOUND ANCHOR FOLLOWS THE THING IT IS BOUND TO, and this is the one hook every edit already runs through, so no gesture has to remember to drag the name along with the sprite. Cheap: almost no anchor carries a binding. */
     this.syncBoundAnchors()
     // whether a walker can reach a standing placement is a question about the
     // floor and about where the thing was put, and this is the one hook both a
@@ -4973,12 +4805,7 @@ export class Editor {
     this.emit()
   }
 
-  // ---- expand the map boundary ------------------------------------------
-  // Transparent margin growth, one side per press: the painting re-composites
-  // onto a larger canvas at the right offset, and every plane, the spawn, the
-  // occluder baselines, the placed assets and the walker shift by the same
-  // offset. One undo per press. Hard cap 2048x2048, and nothing is ever
-  // resampled: the art moves by one integer-offset drawImage.
+  // ---- expand the map boundary. Transparent margin growth, one side per press: the painting re-composites onto a larger canvas and every plane, the spawn, the baselines, the placements and the walker shift by the same offset. Hard cap 2048x2048, and nothing is ever resampled.
   growCanvas(side: 'top' | 'bottom' | 'left' | 'right', px: number) {
     if (!this.painting) return
     const n = Math.round(px)
@@ -5014,17 +4841,7 @@ export class Editor {
   }
   // undo, size-aware: a growth press snapshots the pre-grow document, so one
   // z re-lays the painting from the base art at the restored size and offset
-  /* THE PANEL'S CHANCE TO UNDO WHAT THE DOCUMENT CANNOT.
-   *
-   * A crop is two changes: pixels on disk and anchors in the document. z only
-   * ever knew about the second, so undoing one put every placement back around
-   * art that was still cropped and the map read as though it had slid, which
-   * cost nineteen trees once.
-   *
-   * The hook is asked first and told how deep the stack is, so it can tell its
-   * own edit apart from three moves that happened after it. It answers nothing;
-   * the document undo runs either way, because the anchors always have to come
-   * back whether or not there were pixels to restore with them. */
+  /* THE PANEL'S CHANCE TO UNDO WHAT THE DOCUMENT CANNOT. A crop is two changes, pixels on disk and anchors in the document, and z only knew about the second, so undoing one put every placement back around art that was still cropped and the map read as though it had slid, which cost nineteen trees once. The hook is asked first and told how deep the stack is, so it can tell its own edit apart from three moves after it. */
   beforeUndo: ((histLen: number) => void) | null = null
 
   private undoDoc(): boolean {
@@ -5082,18 +4899,7 @@ export class Editor {
   private key() {
     return `mapvis:${this.sceneId}`
   }
-  /* THE SAVE, WAITED FOR. The four-second race, closed.
-   *
-   * The autosave beat writes the document to the platform every four seconds
-   * while it is dirty, and export posts the bundle without waiting for it. The
-   * published anchors come from postgres and the local map.json comes from the
-   * same request, so an anchor created, renamed or moved in the four seconds
-   * before pressing export publishes with its PREVIOUS values while the file
-   * beside it carries the new ones, and nothing says the two disagree. It lands
-   * hardest on exactly the edit somebody makes right before exporting.
-   *
-   * Awaited rather than fired: the whole point is that the row is up to date
-   * before the publisher reads it. */
+  /* THE SAVE, WAITED FOR: the four-second race, closed. Export posts the bundle without waiting for the autosave beat, and the published anchors come from postgres while the local map.json comes from the same request, so an anchor renamed in the four seconds before pressing export published with its PREVIOUS values while the file beside it carried the new ones. Awaited rather than fired, because the whole point is that the row is up to date before the publisher reads it. */
   async flush() {
     if (!this.changed) return
     const s = this.doc.serialize()
@@ -5134,10 +4940,7 @@ export class Editor {
         this.say('could not reach the platform · this browser is the only copy')
       })
   }
-  /* Unpack a saved string into this doc. A v3 envelope may describe a grown
-   * canvas, so match its base against the painting that just loaded, grow
-   * first, then unpack into the grown planes. Shared by every restore path
-   * because they only differ in where the string came from. */
+  /* Unpack a saved string into this doc. A v3 envelope may describe a grown canvas, so match its base against the painting that just loaded, grow first, then unpack into the grown planes. Shared by every restore path, which only differ in where the string came from. */
   private applyDoc(raw: string) {
     try {
       if (raw.startsWith('{')) {
@@ -5188,22 +4991,8 @@ export class Editor {
     return false
   }
 
-  /* The disk mirror, read when this browser has nothing. That is a new machine,
-   * a cleared browser, or the quota having eaten the local copy. Same string
-   * and the same grow-then-unpack order restoreLocal uses, because deserialize
-   * ignores the envelope's w/h and unpack refuses a length mismatch. */
-  /* Whichever copy is newer wins, and that is the whole difference between a
-   * tool and a platform.
-   *
-   * This used to try localStorage first and only reach for the server when the
-   * browser had nothing. On one machine that is right. The moment a map lives
-   * in a database it is wrong: opening it here would read this browser forever,
-   * a second browser would quietly diverge, and the map would still effectively
-   * live in one place.
-   *
-   * So both are asked, and the server's own clock decides. The browser copy is
-   * still what makes the tool work with no network, and it still wins when it
-   * is genuinely the newer one, which is what happens after editing offline. */
+  /* The disk mirror, read when this browser has nothing: a new machine, a cleared browser, or the quota having eaten the local copy. Same grow-then-unpack order restoreLocal uses, because deserialize ignores the envelope's w/h and unpack refuses a length mismatch. */
+  /* Whichever copy is newer wins, which is the whole difference between a tool and a platform. Trying localStorage first is right on one machine and wrong the moment a map lives in a database: opening it here would read this browser forever and a second browser would quietly diverge. Both are asked and the server's own clock decides; the browser copy still wins when it is genuinely newer, which is what happens after editing offline. */
   private async restoreDoc() {
     const localRaw = localStorage.getItem(this.key())
     const localAt = this.localAt()
@@ -5248,10 +5037,7 @@ export class Editor {
         if (s.occluders && s.map && s.map.occluders && s.map.occluders.length)
           this.doc.importOccluders(await loadImage(s.occluders), s.map.occluders)
         if (s.map && s.map.spawn) this.doc.spawn = s.map.spawn
-        /* The exported names come back too, so a reopened map keeps them.
-         * anchors[] first because it is the richer shape and carries the
-         * author-typed name; a bundle exported before anchors existed only has
-         * events[], and those migrate into doors with a derived name. */
+        /* The exported names come back too, so a reopened map keeps them. anchors[] first because it is the richer shape and carries the author-typed name; a bundle from before anchors existed only has events[], which migrate into doors with a derived name. */
         const exported =
           (s.map as
             | {
@@ -5272,12 +5058,7 @@ export class Editor {
           )
           this.doc.eventNext = this.doc.events.reduce((m, e) => Math.max(m, e.id), 0) + 1
         }
-        /* THE VARIANT SETS AND THE GROUP ROWS COME BACK TOO, or a reopen and a
-         * re-export deletes them: the placements would still carry their
-         * conditions and every set would be gone, which is the same silent loss
-         * `life` and `dirs` each shipped once. The id is not in the bundle
-         * because a name is the only identity across that boundary, so it is
-         * handed out again here the way an anchor's is. */
+        /* THE VARIANT SETS AND THE GROUP ROWS COME BACK TOO, or a reopen and a re-export deletes them: the placements would still carry their conditions and every set would be gone, the same silent loss `life` and `dirs` each shipped once. The id is not in the bundle, so it is handed out again here. */
         if (Array.isArray(exported.variants) && exported.variants.length) {
           this.doc.variants = (exported.variants as MapVariantSet[])
             .map((v, i) => migrateVariantSet({ ...(v as object), id: i + 1 } as MapVariantSet))
@@ -5288,26 +5069,7 @@ export class Editor {
           this.doc.groups = (exported.groups as MapGroup[])
             .map(migrateGroup)
             .filter((g): g is MapGroup => !!g)
-        /* AND THE OTHER FOUR, WHICH THE FIX ABOVE WAS APPLIED TO TWO OF.
-         *
-         * bundle() writes six arrays and this restored two, so a reopen dropped
-         * every route, every shot, every anchor set and every rack while the
-         * comment above described exactly that failure and claimed to have
-         * stopped it. It lands where there is no other copy: this only runs when
-         * the browser holds nothing, so it is the new-machine recovery path.
-         * Reopen the hub on a fresh machine, the panels come up empty, and the
-         * next four-second autosave writes that emptiness into postgres as the
-         * truth.
-         *
-         * WORSE FOR THE SHOTS THAN FOR THE REST. The anchors restored above
-         * carry the PROJECTED meta from the last export, so a lost shot list
-         * leaves a live `framings` bag on an anchor with nothing in the panel to
-         * edit or delete, and the game goes on pushing in on a camera that no
-         * longer exists anywhere an author can reach.
-         *
-         * Ids are not in the bundle by design, because a name is the only
-         * identity across that boundary, so they are handed out by index the way
-         * the variants above already do. */
+        /* AND THE OTHER FOUR, WHICH THE FIX ABOVE WAS APPLIED TO TWO OF. bundle() writes six arrays and this restored two, so a reopen dropped every route, shot, anchor set and rack while the comment above claimed to have stopped exactly that. This only runs when the browser holds nothing, so it is the new-machine recovery path: reopen the hub on a fresh machine, the panels come up empty, and the next autosave writes that emptiness into postgres as the truth. WORSE FOR THE SHOTS: the restored anchors carry the PROJECTED meta from the last export, so a lost shot list leaves a live framings bag with nothing in the panel to edit or delete. */
         if (Array.isArray(exported.paths) && exported.paths.length) {
           this.doc.paths = (exported.paths as MapPath[])
             .map((p, i) => migratePath({ ...(p as object), id: i + 1 } as MapPath))
@@ -5351,16 +5113,7 @@ export class Editor {
             .replace(/^\//, '')
           return rel ? `/work/${this.sceneId}/assets/${rel}` : ''
         }
-        /* ONE APPEARANCE, read back: views, then frames, then a bare src, in
-         * exactly the order the exporter packs them (server/api.mjs, packLook)
-         * and the game loads them. A set of views carries a src as well,
-         * pointing at whichever heading came first, so views have to be taken
-         * before the src branch claims it and loses the other seven.
-         *
-         * It runs for the placement itself and again for each extra picture a
-         * sequence switches to, so a look comes back exactly the way the
-         * placement does. There used to be two copies of this precedence, one
-         * for look 0 and one for the rest, and only one of them was right. */
+        /* ONE APPEARANCE, read back: views, then frames, then a bare src, in the order the exporter packs them and the game loads them. A set of views carries a src as well, pointing at whichever heading came first, so views have to be taken before the src branch claims it and loses the other seven. There used to be two copies of this precedence and only one was right. */
         type LookRec = { src?: string; frames?: string[]; fps?: number; facing?: string; dirs?: Record<string, string[]> }
         const readLook = (s: LookRec | null | undefined): AssetLook | null => {
           if (!s || typeof s !== 'object') return null
@@ -5375,24 +5128,7 @@ export class Editor {
               if (set.length) views[k] = set
             }
             const keys = Object.keys(views)
-            /* THE HEADING THE AUTHOR PICKED SURVIVES THE REOPEN, and it did not
-             * used to. This line took views.south whenever a south set existed,
-             * which threw away the one field the exporter writes to carry the
-             * choice, and the resting heading is only ever held on src (see
-             * faceAsset above). So a reopen turned every hand-turned figure back
-             * to front and the next export wrote that down as the truth:
-             * measured on work/hub/assets.json, 21 south, 8 south-west and 9
-             * south-east go in and 38 south come out.
-             *
-             * The exporter documents the same contract from its side and calls
-             * out this file by name (server/api.mjs, packLook), which is what
-             * makes the pair worth reading together. restoreFromDisk only runs
-             * when the browser holds nothing, so this is the new-machine
-             * recovery path and the bug landed exactly where it hurt most.
-             *
-             * A bundle from before facing existed has none, and south is still
-             * the right guess for those. A facing naming a heading whose files
-             * did not resolve falls through the same way. */
+            /* THE HEADING THE AUTHOR PICKED SURVIVES THE REOPEN, and it did not used to: this took views.south whenever a south set existed, throwing away the one field the exporter writes to carry the choice, and the resting heading is only ever held on src. A reopen turned every hand-turned figure back to front and the next export wrote that down as the truth: measured on work/hub/assets.json, 21 south, 8 south-west and 9 south-east go in and 38 south come out. restoreFromDisk only runs when the browser holds nothing, so the bug landed on the new-machine path. */
             if (keys.length) {
               const rest = (s.facing && views[s.facing]) || views.south || views[keys[0]]
               return { kind: 'static', dirs: views, src: rest[0], ...(fps ? { fps } : {}) }
@@ -5427,11 +5163,7 @@ export class Editor {
           if (!look0) continue
           const base: PlacedAsset = {
             id,
-            /* THE AUTHOR'S OWN NAME FOR THIS THING, which this path dropped. It
-             * is the only address anything outside the map can hold: an anchor
-             * binds to it, a variant member names it, and the game keys its
-             * sprites by it. A reopen that loses it and re-exports turns every
-             * binding on the map into a name pointing at nothing. */
+            /* THE AUTHOR'S OWN NAME FOR THIS THING, which this path dropped. It is the only address anything outside the map can hold: an anchor binds to it, a variant member names it, and the game keys its sprites by it, so a reopen that loses it and re-exports turns every binding into a name pointing at nothing. */
             ...(isPlacementName(d.name) ? { name: String(d.name) } : {}),
             group: typeof d.group === 'string' && d.group ? d.group : 'props',
             ...look0,
@@ -5453,29 +5185,11 @@ export class Editor {
           // on a reopen-and-re-export.
           const life = cleanLife(d.life)
           if (life) base.life = life
-          /* and the extra pictures a sequence switches to.
-           *
-           * A look that resolves to NOTHING KEEPS ITS SLOT, holding look 0.
-           * art is an index, so dropping one here shifts every later look down
-           * and the placement then draws the wrong picture rather than a
-           * missing one: a troll whose looks were [gone, boulder] with states
-           * at art 1 and 2 comes back with the boulder at index 1 and art 2
-           * falling off the end, so both states draw something nobody asked
-           * for. The exporter holds the slot this way (server/api.mjs) and so
-           * does the game reader (PmapScene), so all three sides agree that a
-           * look that did not arrive shows the thing the way it started.
-           *
-           * Dropping the list entirely would delete every look on a
-           * reopen-and-re-export and turn the troll back into one boulder
-           * forever, which is the same bug life and dirs already shipped once. */
+          /* and the extra pictures a sequence switches to. A look that resolves to NOTHING KEEPS ITS SLOT, holding look 0: art is an index, so dropping one shifts every later look down and the placement draws the wrong picture rather than a missing one. The exporter and the game reader hold the slot the same way, so all three sides agree that a look that did not arrive shows the thing as it started. Dropping the list entirely would delete every look on a reopen-and-re-export. */
           const looks: AssetLook[] = []
           for (const L of Array.isArray(d.looks) ? d.looks.slice(0, LOOKS_MAX) : []) looks.push(readLook(L) || look0)
           if (looks.length) base.looks = looks
-          /* AND WHAT EACH FACE IS CALLED. One array indexed exactly the way art
-           * is, slot 0 being the placement's own picture, so the off-by-one is
-           * read here the same way it is written. An empty string is a face
-           * nobody named and holds its slot for the same reason a look that
-           * would not load holds its. */
+          /* AND WHAT EACH FACE IS CALLED, one array indexed the way art is with slot 0 the placement's own picture, so the off-by-one is read here the same way it is written. An empty string is a face nobody named and holds its slot. */
           const names = Array.isArray(d.lookNames) ? (d.lookNames as unknown[]) : []
           if (isLookName(names[0])) base.lookName = names[0] as string
           for (let i = 0; i < looks.length; i++) if (isLookName(names[i + 1])) looks[i].name = names[i + 1] as string
@@ -5500,25 +5214,7 @@ export class Editor {
     const gm = (this.natMask as HTMLCanvasElement).getContext('2d') as CanvasRenderingContext2D
     const d = gm.createImageData(W, H)
     const p = d.data
-    /* PAINTED IS NOT STANDABLE, AND THIS OVERLAY USED TO SAY IT WAS.
-     *
-     * It coloured every pixel that had a level and called that walkable. The
-     * step test asks for more: a body has width, so canStand also needs both
-     * hip pixels, two across and one up, to exist and to sit within
-     * stepTolerance. Measured on the hub, 23,861 pixels are painted and 21,050
-     * can be stood on. So 2,811 of them, 11.8 percent of everything drawn here,
-     * were shown as floor no character can occupy.
-     *
-     * They are not a blob: 99.9 percent are within two pixels of real floor, a
-     * one to two pixel rim along every path edge, and the harbour stair narrows
-     * to a single standable pixel while looking comfortably wide. That rim is
-     * why walking felt wrong in places the editor promised ground, and why the
-     * complaint survived fixing the walk page twice. The canvas the map is
-     * authored on was the thing telling the lie.
-     *
-     * Drawn dim rather than hidden, because painting it was not a mistake. It
-     * is the edge of the path, and seeing where usable floor actually stops is
-     * the entire point of the overlay. */
+    /* PAINTED IS NOT STANDABLE, AND THIS OVERLAY USED TO SAY IT WAS: it coloured every pixel that had a level, while the step test also needs both hip pixels to exist and sit within stepTolerance. Measured on the hub, 23,861 pixels are painted and 21,050 can be stood on, so 2,811 of them, 11.8 percent, were shown as floor no character can occupy. They are a one to two pixel rim along every path edge, and the harbour stair narrows to a single standable pixel while looking comfortably wide. Drawn dim rather than hidden, because seeing where usable floor stops is the point of the overlay. */
     for (let i = 0; i < this.doc.lvl.length; i++) {
       const v = this.doc.lvl[i]
       if (v === 0) {
@@ -5763,21 +5459,8 @@ export class Editor {
     if (this.eventsVisible && this.doc.events.length) this.drawEvents(g, z)
     if (this.eventsVisible && this.doc.paths.length) this.drawPaths(g, z)
     if (this.eventsVisible && this.doc.framings.length) this.drawFramings(g, z)
-    /* THE ROUTE BEING LAID, drawn as it grows with the next leg trailing the
-     * cursor. It draws whatever the overlay toggle says, because it only exists
-     * while somebody is holding the gesture, and an author correcting a line
-     * they cannot see is an author guessing. Same shape as the mask polygon
-     * above and deliberately so. It borrows the selected colour, because the
-     * line being laid is by definition the one being worked on. */
-    /* THE AREA BEING DRAWN, in the region's own ink so what is under the hand
-     * looks like what it is about to become.
-     *
-     * The two halves of the gesture look different on purpose. While the button
-     * is down it is an open line following the pointer, because the author is
-     * still deciding where the edge goes. The moment they let go it closes and
-     * fills, because that fill is the answer to the only question they have:
-     * exactly which pixels did I just mark. It is brighter than a stored area,
-     * since it is the one thing on the map that is not saved yet. */
+    /* THE ROUTE BEING LAID, drawn as it grows with the next leg trailing the cursor. It ignores the overlay toggle, because it only exists while somebody is holding the gesture and an author correcting a line they cannot see is an author guessing. It borrows the selected colour, since the line being laid is by definition the one being worked on. */
+    /* THE AREA BEING DRAWN, in the region's own ink so what is under the hand looks like what it is about to become. The two halves look different on purpose: while the button is down it is an open line following the pointer, and the moment they let go it closes and fills, because that fill answers the only question they have. Brighter than a stored area, since it is the one thing on the map not saved yet. */
     if (this.newPoly && this.newPoly.pts.length) {
       const ink = inkFor(ANCHOR_INK, 'region')
       const pts = this.newPoly.pts.map(([px, py]) => [(px + 0.5) * z, (py + 0.5) * z] as Pt)
@@ -5814,24 +5497,7 @@ export class Editor {
     }
     g.restore()
 
-    /* THE BOARD, and the reason it is a board and not a hairline.
-     *
-     * It was one 1px white-at-14 per cent rectangle round the document, floating
-     * in flat black. On the hub that rectangle enclosed about 190px of dead
-     * black above the picture, because growCanvas adds transparent margin and
-     * never adds picture: only rows 194 to 570 of a 688x640 scene hold an opaque
-     * pixel. So the rule said "the map is this tall" while the eye said "the top
-     * third failed to load".
-     *
-     * Two marks now and they answer two different questions. The board is a lit
-     * surface with a shadow under it, and it is the DOCUMENT: it says how much
-     * canvas there is to work on and it makes the empty margin read as spare
-     * board rather than as a hole. The brighter rule is the PICTURE: it says
-     * where the paint actually reaches. When the two agree, which is every map
-     * that was never grown, only one line is drawn.
-     *
-     * The board is filled before the painting, so this pass draws the shadow and
-     * the outline only; the fill happens up at the top of draw(). */
+    /* THE BOARD, and the reason it is a board and not a hairline. One 1px rule round the document enclosed about 190px of dead black above the hub's picture, because growCanvas adds transparent margin and never adds picture: only rows 194 to 570 of a 688x640 scene hold an opaque pixel. So the rule said "the map is this tall" while the eye said "the top third failed to load". Two marks now: the board is the DOCUMENT and makes empty margin read as spare board, the brighter rule is the PICTURE. When they agree, which is every map never grown, only one line is drawn. */
     const box = this.paintExtent()
     g.save()
     g.strokeStyle = 'rgba(230,233,238,0.10)'
@@ -5889,45 +5555,19 @@ export class Editor {
     return this.paintBox
   }
 
-  // The placements, y-sorted among themselves and layered over the painting,
-  // exactly how the game will draw them: anchor 0.5,1 at x,y, axis scales
-  // with flips as negative scale, rotation about the feet. The selection's
-  // transform box rides over everything; the armed item ghosts under the
-  // cursor.
+  // The placements, y-sorted among themselves and layered over the painting exactly how the game will draw them: anchor 0.5,1 at x,y, axis scales with flips as negative scale, rotation about the feet.
   private drawAssets(g: CanvasRenderingContext2D, z: number) {
     const now = performance.now() / 1000
-    /* Everyone resolved first, then pushed apart, then drawn.
-     *
-     * Two figures wandering one quay used to walk through each other. Avoidance
-     * needs to know where the others are, and it can: every position here is a
-     * pure function of the clock, so the whole set is knowable at once. Resolve,
-     * separate, draw. The game runs the identical three passes.
-     *
-     * A placement that never moves was put on its spot on purpose and must never
-     * be shoved off it. Keeping it out of the push altogether is how that was
-     * done, and it is half right: out of the SET, it is also nothing to push off,
-     * so a walker went straight through it. It takes part now and its own answer
-     * is thrown away, so it pushes and never moves. */
+    /* Everyone resolved first, then pushed apart, then drawn, the identical three passes the game runs: every position is a pure function of the clock, so the whole set is knowable at once. A placement that never moves was put on its spot on purpose, and keeping it out of the SET altogether also made it nothing to push off, so a walker went straight through it. It takes part now and its own answer is thrown away, so it pushes and never moves. */
     const t = this.lifeNow()
     const movers = this.doc.assets.filter((a) => this.lifePlay && a.life && !this.hiddenGroups.has(a.group))
     const at = new Map<string, LifeAt>()
-    /* the picker reads this very map, so the box you can click is the sprite you
-     * can see. Handed over before a single pixel is drawn, because the chrome
-     * further down (the outline, the handles, the group frame) reads it too, and
-     * rebuilt empty every frame so a paused preview or a hidden group leaves
-     * nothing behind for a click to trip over. */
+    /* the picker reads this very map, so the box you can click is the sprite you can see. Handed over before a pixel is drawn, because the outline, the handles and the group frame read it too, and rebuilt empty every frame so a paused preview leaves nothing behind for a click to trip over. */
     this.liveAt = at
     this.liveT = t
     if (movers.length) {
       const res = movers.map((a) => lifeAt(a.life as Life, t, { x: a.x, y: a.y }, this.standsAt))
-      /* the things a mover has to go round: the ones something can get close
-       * enough to touch, which is the fences already in the document rather than
-       * a list of names, and the same fences the behaviours are held by.
-       * Somewhere nothing can ever reach is somewhere the fences are already
-       * keeping them apart, and a keep-out circle there would only shove people
-       * for a reason nobody on screen can see. See walkerCanReach and freeReach
-       * at the top of this file for why it is a reach and not the feet, and for
-       * what the pair keeps on the hub. */
+      /* the things a mover has to go round: the ones something can get close enough to touch, read off the fences already in the document rather than a list of names. Somewhere nothing can reach is somewhere the fences already keep them apart, and a keep-out circle there would shove people for a reason nobody on screen can see. */
       const free = movers.filter((a) => !(a.life as Life).walkOnly).map((a) => (a.life as Life).bounds)
       const fixed = this.doc.assets
         .filter((a) => !a.life && !this.hiddenGroups.has(a.group) && this.moverCanTouch(a, free))
@@ -5942,22 +5582,11 @@ export class Editor {
           y: a.y + res[i].dy,
           r: this.bodyR(a),
         })),
-        /* LISTED TWICE. separate() splits a pair's correction down the middle,
-         * so a side that throws its half away leaves the walker half inside it.
-         * It is not an approximation of a fixed flag inside separate(); a pair
-         * splits evenly, so paying the discarded half a second time IS the whole
-         * correction. Verified over 180000 push vectors against a separate()
-         * carrying a real fixed flag: worst difference 1.8e-15px. */
+        /* LISTED TWICE. separate() splits a pair's correction down the middle, so a side that throws its half away leaves the walker half inside it, and paying the discarded half a second time IS the whole correction. Verified over 180000 push vectors against a separate() carrying a real fixed flag: worst difference 1.8e-15px. */
         ...fixed,
         ...fixed,
       ]
-      /* the floor guard runs in the caller, not inside separate(), so that the
-       * slide it does with a push it cannot deliver whole is the same rule here
-       * and in the game. See floorPush at the top of this file.
-       *
-       * Each row says whether the floor is its fence at all, which is the same
-       * answer lifeAt gives it: walkOnly and nothing else. An immovable row is
-       * false because its push is discarded, so no test on it can move a pixel. */
+      /* the floor guard runs in the caller, not inside separate(), so the slide it does with a push it cannot deliver whole is the same rule here and in the game. Each row says whether the floor is its fence at all, the same answer lifeAt gives it; an immovable row is false because its push is discarded. */
       const fenced = [
         ...movers.map((a) => !!(a.life as Life).walkOnly),
         ...fixed.map(() => false),
@@ -5971,11 +5600,7 @@ export class Editor {
       // now, off the same maths the game runs, so what is on screen here is
       // what will be on screen there
       const L = at.get(a.id) || null
-      /* A walk cycle is a GAIT. A wander is mostly pauses, and running the cycle
-       * off the clock alone made a figure stood at the end of a leg march on the
-       * spot. Frozen on its first frame while it waits, which is the standing
-       * pose the cycle was drawn from. Which picture, and whether the gait runs,
-       * both come off the behaviour; assetFrame holds the rest. */
+      /* A walk cycle is a GAIT. Running it off the clock alone made a figure stood at the end of a leg march on the spot, so it freezes on its first frame while it waits, which is the standing pose the cycle was drawn from. */
       const img = this.assetFrame(a, now, L ? L.facing : undefined, L ? L.art : 0, !L || L.moving)
       // an unaccepted sparkle group rides ghosted until the check keeps it
       const ghost = this.proposedGroups.has(a.group)
@@ -5988,18 +5613,9 @@ export class Editor {
       if (img) {
         g.save()
         g.translate((a.x + (L ? L.dx : 0)) * z, (a.y + (L ? L.dy : 0)) * z)
-        // the placement's own rotation, plus whatever tilt its behaviour is
-        // leaning through right now. Rotating about the feet, which is where the
-        // transform is already centred, so a boat leans on its waterline rather
-        // than swinging around its mast.
+        // the placement's own rotation plus whatever tilt its behaviour is leaning through, about the feet where the transform is already centred, so a boat leans on its waterline rather than swinging around its mast.
         g.rotate(a.rot + (L ? L.rot : 0))
-        /* The mirror is suppressed for a thing that has its own views, because a
-         * west view is already drawn facing west and flipping it points it back
-         * east. That is a fact about the picture ON SCREEN RIGHT NOW, not about
-         * the placement: a troll drawn with eight headings that turns into a
-         * single boulder png has to start flipping again the second the boulder
-         * is live. Reading a.dirs asked look 0 forever, so the boulder faced one
-         * way here and the other way in the game, which is the preview lying. */
+        /* The mirror is suppressed for a thing with its own views, because a west view is already drawn facing west and flipping it points it back east. That is a fact about the picture ON SCREEN RIGHT NOW: a troll with eight headings that turns into a single boulder png has to start flipping again the second the boulder is live, and reading a.dirs asked look 0 forever. */
         const noFlip = !!(L && L.flip && !lookOf(a, L.art).dirs)
         g.scale(a.sx * (a.fx !== noFlip ? -1 : 1) * z, a.sy * (a.fy ? -1 : 1) * z)
         g.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight)
@@ -6068,10 +5684,7 @@ export class Editor {
     }
   }
 
-  // The selection's transform box: the rotated outline, four corner handles
-  // (uniform scale), four edge handles (one-axis stretch), and the rotate
-  // handle floating off the top edge. Handle sizes are screen px, so they
-  // stay grabbable at every zoom.
+  // The selection's transform box: the rotated outline, four corner handles for uniform scale, four edge handles for one-axis stretch, and the rotate handle off the top edge. Handle sizes are screen px, so they stay grabbable at every zoom.
   private drawTransformBox(g: CanvasRenderingContext2D, z: number, a: PlacedAsset) {
     const { w, h } = this.assetNat(a)
     const c4 = this.assetCorners(a)
@@ -6162,15 +5775,7 @@ export class Editor {
     }
     g.restore()
   }
-  /* The roaming box of whatever is picked, and the ground it may actually use.
-   *
-   * A wander is a box plus, when the box is mostly walkable, the floor inside it.
-   * Neither was ever drawn, so the area a figure would pace was invisible and
-   * the only way to find out was to press play and watch. Faint on purpose: this
-   * is a thing being explained, not a thing being edited.
-   *
-   * The walkable wash uses the same standsAt the preview and the game run, so
-   * the highlighted pixels are exactly the ones a leg can end on. */
+  /* The roaming box of whatever is picked, and the ground it may actually use. Neither was ever drawn, so the area a figure would pace was invisible and the only way to find out was to press play and watch. Faint on purpose: this is a thing being explained, not edited. The wash uses the same standsAt the preview and the game run, so the highlighted pixels are exactly the ones a leg can end on. */
   private drawLifeBounds(g: CanvasRenderingContext2D, z: number) {
     // the box a sequence fences with is the LIVE state's, so what is drawn is
     // the fence actually in force this second rather than the first state's
@@ -6182,10 +5787,7 @@ export class Editor {
     for (const l of picked) {
       const b = l.bounds!
       if (l.walkOnly) {
-        /* only where it can stand, at one dot per pixel. Stepped by whole map
-         * pixels so the wash lines up with the mask rather than blurring across
-         * it, and skipped entirely when zoomed out far enough that it would
-         * read as a solid block. */
+        /* only where it can stand, at one dot per pixel, stepped by whole map pixels so the wash lines up with the mask rather than blurring across it, and skipped when zoomed out far enough that it would read as a solid block. */
         if (z >= 1) {
           g.fillStyle = 'rgba(120,220,170,0.20)'
           for (let y = b.y; y < b.y + b.h; y++)
@@ -6247,11 +5849,7 @@ export class Editor {
       const y = Math.min(c.a[1], c.b[1]) * z
       const w = Math.abs(c.b[0] - c.a[0]) * z
       const h = Math.abs(c.b[1] - c.a[1]) * z
-      /* A CROP DOES NOT LOOK LIKE A SELECTION, on purpose. Selection is the
-       * accent iris everywhere else in this tool, so a crop borrowing it is a
-       * second meaning on one colour and the only way to tell them apart is to
-       * remember which mode you are in. Black frame, eight handles, and what is
-       * about to be thrown away goes grey. */
+      /* A CROP DOES NOT LOOK LIKE A SELECTION, on purpose: selection is the accent iris everywhere else, so a crop borrowing it is a second meaning on one colour. Black frame, eight handles, and what is about to be thrown away goes grey. */
       const crop = !!c.id
       g.fillStyle = crop ? '#0a0b0dcc' : '#05060899'
       g.fillRect(0, 0, this.doc.W * z, y)
@@ -6298,23 +5896,7 @@ export class Editor {
     g.restore()
   }
 
-  /* EVERY CAPTION ON THE CANVAS IS PLACED HERE, and it exists because of a
-   * measured pile. On the hub's test step the anchor plate for Panther's Maw,
-   * the shot plate for the_maw_mouth and the route plate for the_dock_walk all
-   * landed inside a 140 by 40 box around (840, 435) and drew straight over each
-   * other, so two of the three were unreadable and nothing on screen said which
-   * mark owned which words. Each of the three drawers worked its own y out from
-   * its own mark, and none of them could see the other two.
-   *
-   * THE RULE: a plate claims a rectangle, and a plate that would land on a
-   * claimed one steps away from its mark until it is clear. Once it has stepped
-   * far enough to stop touching its mark, a leader is drawn back down to it,
-   * because a caption floating 40px above a dot is a caption belonging to
-   * nothing. The claim list is emptied once per frame in draw().
-   *
-   * ONE FACE AND ONE SIZE, too. Anchors were 11px monospace and routes and
-   * shots were 10px, which is three decisions for one job. These are labels a
-   * person reads, not identifiers, so they take the label face the panels use. */
+  /* EVERY CAPTION ON THE CANVAS IS PLACED HERE, and it exists because of a measured pile: on the hub's test step three plates all landed inside a 140 by 40 box and drew over each other, so two were unreadable and nothing said which mark owned which words. THE RULE: a plate claims a rectangle, and one that would land on a claimed one steps away from its mark until it is clear, with a leader drawn back down once it has stopped touching. The claim list is emptied once per frame. One face and one size, because these are labels a person reads and not identifiers. */
   private plateRects: [number, number, number, number][] = []
 
   private static readonly PLATE_FONT = '11px "Archivo Narrow", "Segoe UI", system-ui, sans-serif'
@@ -6361,21 +5943,7 @@ export class Editor {
   // The events, drawn in the tool's own chrome (accent iris over panel dark,
   // never a colour the art uses): the activation ring at its real radius, a
   // dot on the anchor, the name on a small plate above.
-  /* EVERYTHING AN ANCHOR SAYS ABOUT ITSELF IS ON THE MAP, and none of it waits
-   * for a form to be opened.
-   *
-   * What was here drew the zone and the stand dot and stopped. The heading a
-   * body holds, and which painted thing an anchor is tied to, were both readable
-   * only by opening the form and reading a compass grid and a dropdown, so an
-   * author aiming a post at a table had to alternate between a picture and a
-   * panel to answer one question. Ash, 2026-08-31: "you place art blind against
-   * reaches you can't see", and "confirm a binding by opening a form and reading
-   * a dropdown."
-   *
-   * SO THE SELECTED ONE IS LOUD AND THE REST ARE QUIET. Thirty anchors all drawn
-   * at full strength is a painting nobody can see, and the answer to that is not
-   * to draw fewer of them: the one being worked on takes a wider line and a full
-   * fill, and every other zone drops to a hairline and a wash. */
+  /* EVERYTHING AN ANCHOR SAYS ABOUT ITSELF IS ON THE MAP, and none of it waits for a form to be opened: the heading a body holds and which painted thing an anchor is tied to were readable only by opening a compass grid and a dropdown, so an author aiming a post at a table alternated between a picture and a panel to answer one question. THE SELECTED ONE IS LOUD AND THE REST ARE QUIET, because thirty anchors at full strength is a painting nobody can see. */
   private drawEvents(g: CanvasRenderingContext2D, z: number) {
     g.save()
     /* THE SELECTED ONE IS DRAWN LAST, so its plate, its arrow and its tie sit
@@ -6386,21 +5954,12 @@ export class Editor {
     )
     for (const ev of order) {
       const sel = ev.id === this.anchorSel
-      /* an anchor bound to something that MOVES is drawn where that thing is
-       * right now, so the binding is a thing you can watch working rather than
-       * a field you have to take on trust. Read-only: the document still holds
-       * the home position, which is what the bundle carries. */
+      /* an anchor bound to something that MOVES is drawn where that thing is right now, so the binding is a thing you can watch working rather than a field you take on trust. Read-only: the document still holds the home position, which is what the bundle carries. */
       const home = ev.placement ? this.placementRef(ev.placement) : undefined
       const spot = home ? this.lifeSpot(home) : { x: ev.x, y: ev.y }
       const px = spot.x * z
       const py = spot.y * z
-      /* THE INK COMES FROM THE KIND, and it is the ocean chart's table.
-       * Every anchor was drawn in one iris here whatever it was, while /world
-       * drew a door in salmon and a spawn in blue off its own list, so the same
-       * mark changed colour when an author walked from the tool that made it to
-       * the chart that places it. src/core/ink.ts is the one table now. This
-       * also buys the thing the single hue could not: nine marks on the hub and
-       * you can see which of them are doors without reading nine plates. */
+      /* THE INK COMES FROM THE KIND, off the ocean chart's own table. Every anchor was drawn in one iris here while /world drew a door in salmon and a spawn in blue, so the same mark changed colour between the tool that made it and the chart that places it. It also buys what a single hue could not: nine marks on the hub and you can see which are doors without reading nine plates. */
       const ink = inkFor(ANCHOR_INK, ev.kind)
       /* THE TWO STRENGTHS, and they are one number each rather than two colour
        * tables, so a kind's hue never changes with the selection. */
@@ -6410,33 +5969,13 @@ export class Editor {
       g.strokeStyle = ink
       g.lineWidth = line
       g.globalAlpha = quiet
-      /* ONE SHAPE IS DRAWN AND IT IS THE LIVE ONE.
-       *
-       * Every shape this anchor holds used to be drawn at once, so a plaza an
-       * author had walked round came up with a radius ring sitting in the middle
-       * of it: two marks on the map, one of them describing an area the game is
-       * not going to test, and no way to tell which was which. The mode says
-       * which shape is authoritative and only that one appears. The others keep
-       * their data and are simply not on screen.
-       *
-       * While this anchor's area is being redrawn its stored shape is hidden
-       * too, so the draft is the only area under the cursor. */
+      /* ONE SHAPE IS DRAWN AND IT IS THE LIVE ONE. Every shape an anchor holds used to be drawn at once, so a plaza an author had walked round came up with a radius ring in the middle of it: two marks, one describing an area the game will not test, and no way to tell which was which. The others keep their data and are simply not on screen, and a stored shape is hidden while its area is being redrawn. */
       const shape = this.newPoly?.id === ev.id ? 'none' : anchorShape(ev)
       let top = py - ev.r * z
       // where the ring actually landed, so the handle below can be put on it
       let cx = px
       let cy = py
-      /* ONE PATH FOR ALL THREE SHAPES, so a box, a ring and a walked outline are
-       * filled, cased and stroked by the same three lines and cannot drift into
-       * three different weights.
-       *
-       * THE FILL AND THE CASING ARE BOTH LOAD-BEARING, measured on this painting
-       * at 3x. A 1px dashed outline in a mid-tone hue over pixel art of roughly
-       * that tone is not faint, it is gone: the quay's outline sat on sand the
-       * same value as itself and could not be found. The fill says which side is
-       * inside and the dark casing under the line is what separates the line from
-       * whatever it happens to be lying on, which is the same job the caption
-       * plate's dark card already does for text. */
+      /* ONE PATH FOR ALL THREE SHAPES, so a box, a ring and a walked outline cannot drift into three different weights. THE FILL AND THE CASING ARE BOTH LOAD-BEARING, measured at 3x: a 1px dashed outline in a mid-tone hue over pixel art of that tone is gone, and the quay's outline sat on sand the same value as itself. The fill says which side is inside and the dark casing separates the line from whatever it lies on. */
       let path: Path2D | null = null
       if (shape === 'rect' && ev.rect) {
         const [x0, y0, x1, y1] = ev.rect
@@ -6453,11 +5992,7 @@ export class Editor {
         path.closePath()
         top = polyBounds(ev.poly)[1] * z
       } else if (shape === 'circle') {
-        /* THE RING IS DRAWN WHERE THE AUTHOR PUT IT, not on the anchor's own
-         * pixel. For a bound anchor that pixel is the placement's origin, which
-         * in this projection is the bottom middle of the art, so an untouched
-         * ring on a table sits under its front legs. The offset rides on top of
-         * `spot`, so a ring on somebody who paces still travels with her. */
+        /* THE RING IS DRAWN WHERE THE AUTHOR PUT IT, not on the anchor's own pixel: for a bound anchor that is the placement's origin, the bottom middle of the art, so an untouched ring on a table sits under its front legs. The offset rides on top of `spot`, so a ring on somebody who paces travels with her. */
         const [rx, ry] = ev.ring ?? [0, 0]
         cx = px + rx * z
         cy = py + ry * z
@@ -6480,11 +6015,7 @@ export class Editor {
         g.stroke(path)
         g.setLineDash([])
       }
-      /* THE RING'S OWN HANDLE, on the selected anchor only, for the same reason
-       * a drawn outline's corners are handles: a shape you can correct should
-       * look correctable. It is a square so it cannot be mistaken for the round
-       * dot that marks the anchor itself, and the two are only in the same place
-       * while the offset is still zero. */
+      /* THE RING'S OWN HANDLE, on the selected anchor only, for the reason a drawn outline's corners are handles: a shape you can correct should look correctable. Square so it cannot be mistaken for the round dot marking the anchor, which it only sits on while the offset is zero. */
       if (sel && shape === 'circle') {
         g.globalAlpha = 1
         g.fillStyle = CASE_INK
@@ -6492,16 +6023,7 @@ export class Editor {
         g.fillStyle = ink
         g.fillRect(cx - 3, cy - 3, 6, 6)
       }
-      /* THE CORNERS ARE HANDLES AND ARE DRAWN AS SUCH: a shape you can correct
-       * looks correctable, and a point in the water costs one drag rather than
-       * the whole outline. They shrink once a freehand shape has enough points
-       * that full-size squares would bury the line they sit on.
-       *
-       * THEY BELONG TO THE SELECTED ONE ALONE, now that every zone is on screen
-       * at once. Thirty drawn shapes wearing every corner they have is a field of
-       * squares over the painting, and only one of them can be dragged anyway:
-       * the corner grab tests the whole list, but an author is correcting the
-       * shape they have open. */
+      /* THE CORNERS ARE HANDLES AND ARE DRAWN AS SUCH, so a point in the water costs one drag rather than the whole outline. They shrink once a shape has enough points that full-size squares would bury the line. THEY BELONG TO THE SELECTED ONE ALONE, because thirty drawn shapes wearing every corner is a field of squares over the painting and only one can be dragged anyway. */
       if (sel && shape === 'poly' && ev.poly) {
         g.globalAlpha = 1
         g.fillStyle = ink
@@ -6509,15 +6031,7 @@ export class Editor {
         for (const [qx, qy] of ev.poly) g.fillRect((qx + 0.5) * z - hs, (qy + 0.5) * z - hs, hs * 2, hs * 2)
         g.globalAlpha = quiet
       }
-      /* WHICH PAINTED THING THIS NAME IS ON, drawn rather than filed.
-       *
-       * A binding was confirmable only by opening the form and reading a
-       * dropdown, so an author looking at nineteen people on the hub could not
-       * tell which of them carried a name at all. A bound anchor is already drawn
-       * at the placement's live spot, which puts the mark on the thing's feet and
-       * says nothing about which sprite those feet belong to. The bracket is what
-       * says it: the art's own drawn bounds, in the anchor's ink, with a tie up
-       * to it from the mark. */
+      /* WHICH PAINTED THING THIS NAME IS ON, drawn rather than filed: a binding was confirmable only by opening the form and reading a dropdown, so an author looking at nineteen people on the hub could not tell which carried a name at all. The bracket is the art's own drawn bounds in the anchor's ink, with a tie up to the mark. */
       if (home) {
         const b = this.drawnBox(home)
         const dx = spot.x - home.x
@@ -6551,15 +6065,7 @@ export class Editor {
       g.fillStyle = ink
       g.fillRect(Math.round(px) - 1.5, Math.round(py) - 1.5, 4, 4)
       g.globalAlpha = quiet
-      /* WHERE A BODY ENDS UP, joined to the thing it is standing at by a line,
-       * because two loose dots near each other say nothing about which one is
-       * the table and which one is the floor beside it.
-       *
-       * IT IS FILLED NOW, not a hollow ring. Hollow, at a quiet alpha, over a
-       * painting, the floor spot was the one mark on this overlay that genuinely
-       * could not be found without knowing where to look, and it is the mark that
-       * answers the question the zone is drawn for: the zone says what you can
-       * reach from, this says the pixel your feet end on. */
+      /* WHERE A BODY ENDS UP, joined to the thing it stands at by a line, because two loose dots say nothing about which is the table and which is the floor beside it. IT IS FILLED NOW: hollow at a quiet alpha over a painting, the floor spot was the one mark that genuinely could not be found, and it answers the question the zone is drawn for. */
       if (ev.stand) {
         const sx = ev.stand[0] * z
         const sy = ev.stand[1] * z
@@ -6589,19 +6095,10 @@ export class Editor {
         g.lineWidth = line
         g.globalAlpha = quiet
       } else {
-        /* NO FLOOR MARKED, so the heading is drawn off the anchor itself, which
-         * is where the game aims a body that has no stand-at. An arrow that only
-         * appeared once somebody had marked a floor would hide the field on
-         * exactly the anchors where it is the only thing set. */
+        /* NO FLOOR MARKED, so the heading is drawn off the anchor itself, which is where the game aims a body with no stand-at. An arrow that only appeared once somebody had marked a floor would hide the field on exactly the anchors where it is the only thing set. */
         this.facingArrow(g, px, py, ev.facing, sel)
       }
-      /* WHAT A PERSON READS, never the identifier. It was `ev.label || ev.name`,
-       * which prints `panthers_maw` onto the painting the moment nobody has
-       * typed a label yet. displayName unpacks it into words instead.
-       *
-       * It hangs off the top of whatever shape is live rather than off the
-       * radius, because a region drawn as an area has no ring under the name and
-       * a 220px radius would float the caption most of a map away from it. */
+      /* WHAT A PERSON READS, never the identifier: `ev.label || ev.name` prints `panthers_maw` onto the painting the moment nobody has typed a label. It hangs off the top of whatever shape is live rather than off the radius, because a 220px radius would float the caption most of a map away from its region. */
       g.globalAlpha = sel ? 1 : 0.8
       this.plate(g, displayName(ev).text, px, top, ink, true)
       g.globalAlpha = 1
@@ -6609,18 +6106,7 @@ export class Editor {
     g.restore()
   }
 
-  /* WHICH WAY A BODY LOOKS WHEN IT GETS HERE, as an arrow on the floor spot.
-   *
-   * `facing` has been typed, tabled, exported and read by arrival() since anchors
-   * shipped, and the only place it was ever visible was a compass grid inside a
-   * form. So an author aiming a shopkeeper at the counter set a heading, closed
-   * the panel, and had nothing on screen to check it against.
-   *
-   * THE GROUND IS SQUASHED AND THE ARROW IS TOO. A heading is worked out from
-   * (dx, dy * yScale) in walk.ts, so north in painting pixels is not straight up
-   * by the same amount east is straight across. Dividing y by the squash puts the
-   * arrow along the line a body walking that heading actually takes, which is the
-   * whole point of drawing it over the painting rather than in a grid. */
+  /* WHICH WAY A BODY LOOKS WHEN IT GETS HERE, as an arrow on the floor spot. `facing` has been typed, tabled, exported and read by arrival() since anchors shipped, and the only place it was visible was a compass grid inside a form. THE GROUND IS SQUASHED AND THE ARROW IS TOO: a heading is worked out from (dx, dy * yScale), so dividing y by the squash puts the arrow along the line a body walking that heading actually takes. */
   private facingArrow(g: CanvasRenderingContext2D, x: number, y: number, facing: string | undefined, sel: boolean) {
     const v = facing ? FACE_VEC[facing] : undefined
     if (!v) return
@@ -6661,14 +6147,7 @@ export class Editor {
     g.fill()
   }
 
-  /* THE ROUTES. A line nobody can see is a line nobody can correct, and until
-   * this drew, a path was six numbers in a list.
-   *
-   * The arrowhead is most of why it is worth drawing at all: a route has a
-   * direction, and the direction is the thing that is wrong when a ship sails
-   * into a berth backwards. A two-way route is dashed and carries a head at
-   * both ends, so which lines can be walked back is readable off the map
-   * without opening one. */
+  /* THE ROUTES. A line nobody can see is a line nobody can correct, and until this drew, a path was six numbers in a list. The arrowhead is most of why it is worth drawing: a route has a direction, and the direction is what is wrong when a ship sails into a berth backwards. A two-way route is dashed with a head at both ends. */
   private drawPaths(g: CanvasRenderingContext2D, z: number) {
     g.save()
     g.lineJoin = 'round'
@@ -6689,10 +6168,7 @@ export class Editor {
       if (p.closed) g.closePath()
       g.stroke()
       g.setLineDash([])
-      /* A LEG THAT CROSSES GROUND NOTHING CAN STAND ON, drawn over the top of
-       * the route in the same red check reach gives stranded ground. Only the
-       * selected route is checked: an author is correcting one line, and
-       * reddening every bad leg on the map at once would paint the hub. */
+      /* A LEG THAT CROSSES GROUND NOTHING CAN STAND ON, drawn over the route in the same red check reach gives stranded ground. Only the selected route is checked: an author is correcting one line, and reddening every bad leg at once would paint the hub. */
       if (sel && p.kind === 'walk')
         for (const i of this.crossings(p)) {
           const a = pts[i]
@@ -6742,10 +6218,7 @@ export class Editor {
     g.restore()
   }
 
-  /* THE SHOTS. A camera body with a lens on it, and a dashed tie back to the
-   * anchor it hangs off, because a shot and the thing it is a shot OF are two
-   * marks in different parts of the map and nothing else on screen says which
-   * pairs with which. The lens points down the tie for the same reason. */
+  /* THE SHOTS: a camera body with a lens, and a dashed tie back to the anchor it hangs off, because a shot and the thing it is a shot OF are two marks in different parts of the map and nothing else says which pairs with which. */
   private drawFramings(g: CanvasRenderingContext2D, z: number) {
     g.save()
     g.font = '10px monospace'
@@ -6807,12 +6280,7 @@ export class Editor {
     if (thorState === 'idle') loadThor()
     const rig = thorState === 'ready' ? thorRig : null
     if (rig) {
-      // the real character, drawn the way PmapScene draws him: frames are
-      // pre-trimmed to their drawn feet so the bottom edge IS the feet, and
-      // the drawn height scales to the document's charH. Idle shows frame 0,
-      // walking cycles frames 1-5 on the walker's own clock. Drawn slightly
-      // smaller than the contract height (test-stage feel only);
-      // the exported heightPx and the collision probes stay untouched.
+      // the real character, drawn the way PmapScene draws him: frames are pre-trimmed to their drawn feet so the bottom edge IS the feet, and the drawn height scales to the document's charH. Drawn slightly smaller than the contract height for test-stage feel only; the exported heightPx and the collision probes stay untouched.
       const ts = (this.cfg.charH * 0.7) / rig.drawnH
       const { rise, stretch } = W.hop()
       const seq = rig.frames[W.facing] || rig.frames.south
@@ -6882,14 +6350,7 @@ export function loadImage(src: string): Promise<HTMLImageElement> {
   })
 }
 
-/* ---- Thor, the walk-test sprite ----------------------------------------
- * The same 48 walk frames the game loads (public/thor/<dir>/<i>.png, copied
- * from the game repo's /art/characters/thor/walk), with PmapScene's anchor
- * convention: each frame is alpha-scanned and cropped to its drawn feet, so
- * drawing it bottom-anchored puts the feet exactly on the collision pixel,
- * and the drawn height of the standing south frame is what charH scales
- * against. Any load failure leaves the capsule in place; the walk test never
- * goes blind over a missing PNG. */
+/* ---- Thor, the walk-test sprite: the same 48 walk frames the game loads, with PmapScene's anchor convention, each frame alpha-scanned and cropped to its drawn feet so bottom-anchoring puts the feet exactly on the collision pixel. Any load failure leaves the capsule in place, so the walk test never goes blind over a missing PNG. */
 /* when a heading has no view, the next best one it might have. An object drawn
  * four ways still faces roughly right instead of falling back to south. */
 const NEAREST_DIR: Record<string, string> = {
