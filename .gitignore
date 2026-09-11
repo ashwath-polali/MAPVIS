@@ -1,82 +1,41 @@
-# --- the new tool ---
+# --- build output and local state ---
 node_modules/
 dist/
 dist-ssr/
 .vite/
 .vite-cache/
-.tmp-refute/
 *.local
-.env
-.env.local
 
-# Map bundles and PixelLab output the tool writes. Mostly regenerable, often large.
-# Written as work/** with re-includes below, not work/, because git cannot
-# re-include a file once its parent directory is excluded.
-work/**
+# --- maps you author ---
+# Everything the editor writes for a map: the source painting, the hand-drawn cut
+# and level masks, the generated asset library and the exported bundle. That is
+# the author's own work and it belongs to whoever drew it, so it stays on the
+# machine that made it. Back it up somewhere private; it is not in this history.
+work/
 public/work/
 
-# The parts of work/ that cost money or hours and cannot be regenerated: a map's
-# asset library is PixelLab output, asks.json is the prompt history that taught us
-# what works, style.json is the cached read of the painting.
-!work/*/
-!work/*/library/
-!work/*/library/**
-!work/*/asks.json
-!work/*/style.json
-!work/*/keeps.json
+# --- environment ---
+# Nothing secret is committed. The template, names only and no values, is the one
+# env file that ships.
+.env
+.env.*
+!.env.example
+.vercel
 
-# The exported bundle itself. This is the hand-drawn deliverable: the cut and
-# the levels are the thing a human spends hours on and a generator cannot make.
-# Leaving these ignored means a post-export commit saves map.json and drops the
-# mask, which is the whole point of committing.
-!work/*/map.json
-!work/*/assets.json
-# the map itself as the editor holds it: the cut, the levels, the occluders and
-# every placement. This is the hand-drawn work, and leaving it out was leaving
-# the one file that cannot be regenerated out of the history.
-!work/*/doc.json
-!work/*/scene.png
-!work/*/scene-cut.png
-!work/*/levels.png
-!work/*/occluders.png
-!work/*/cut.png
-!work/*/assets/
-!work/*/assets/**
-# .prev holds pre-edit bytes so an in-place edit can be undone. Scratch, not history.
-work/*/library/**/.prev/**
-
-# --- archive/: the dead 3D era, kept on disk, mostly out of git ---
-# Only its markdown and its python stay in history. Every render, .blend,
-# asset pack and cache is on disk only and is not worth 8 GB of history.
-archive/*
-!archive/docs/
-!archive/pipeline/
-archive/pipeline/*.png
-archive/pipeline/*.txt
-
-# --- notes ---
-# Working notes, plans and design documents stay on disk. Only the README ships.
+# --- working notes ---
+# Notes and design documents stay on disk. The README and the LICENSE are what
+# the repo explains itself with.
 *.md
 !README.md
 docs/
 
-# --- general ---
-# Anchored so a future src/assets/ or src/export/out/ is not swallowed by them.
+# --- scratch ---
+.tmp-*
 /out/
 /_out/
 /_tmp/
 /assets/
 __pycache__/
 *.pyc
-*.blend
-*.blend1
 .cache/
 .DS_Store
-
-.vercel
-.env*
-# the template, names only and no values, is the one env file that ships
-!.env.example
-
-# scratch probes
-.probe.mjs
