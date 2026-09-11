@@ -791,7 +791,7 @@ export function shotsOntoMeta(
   return { ...(meta || {}), framings: set, framing: { ...one(def), name: def.name } }
 }
 
-/* VARIANT SETS FOLDED ONTO THE ANCHOR THEY HANG ON, read off the running game before it was written: readAnchors copies meta whole and throws away new top-level fields, and PmapScene keys placements by both id and author name, so a set written as { state: placement-name } inside the bag needs only a loop. MERGED, never swapped in. MAPVIS PICKS NO DEFAULT here, unlike a shot: a missing shot leaves the camera dead, a missing state does not. */
+/* VARIANT SETS FOLDED ONTO THE ANCHOR THEY HANG ON, read off the running game before it was written: readAnchors copies meta whole and throws away new top-level fields, and the reading side keys placements by both id and author name, so a set written as { state: placement-name } inside the bag needs only a loop. MERGED, never swapped in. MAPVIS PICKS NO DEFAULT here, unlike a shot: a missing shot leaves the camera dead, a missing state does not. */
 export function variantsOntoMeta(
   variants: MapVariantSet[],
   anchor: string,

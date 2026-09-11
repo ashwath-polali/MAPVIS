@@ -220,7 +220,7 @@ export interface LifeAt {
   flip: boolean
   /* 0 to 1, for the fade at the ends of a pass */
   alpha: number
-  /* Which way it is heading, as one of the eight names Thor's frames use. A flip gives two apparent directions, which is all a crab needs; a person walking a plaza needs eight or they moon-walk across it. */
+  /* Which way it is heading, as one of the eight names the walk-test frames use. A flip gives two apparent directions, which is all a crab needs; a person walking a plaza needs eight or they moon-walk across it. */
   facing: LifeFacing
   /* Whether it is travelling right now. A walk cycle is a GAIT, and a wander is mostly pauses: run from the clock alone, a figure standing at the end of a leg marched on the spot until the next one. */
   moving: boolean
@@ -242,7 +242,7 @@ export type LifeFacing =
   | 'north'
   | 'north-east'
 
-/* the same mapping the walk test uses, so a walking figure and Thor pick the same frame. The deltas are painting pixels with the foreshortening already inside them, so squashing again here would pick a different frame for the same heading. */
+/* the same mapping the walk test uses, so a walking figure and the walk-test sprite pick the same frame. The deltas are painting pixels with the foreshortening already inside them, so squashing again here would pick a different frame for the same heading. */
 export function facingFrom(dx: number, dy: number, yScale = 1): LifeFacing {
   if (Math.abs(dx) < 0.001 && Math.abs(dy) < 0.001) return 'south'
   const a = (Math.atan2(dy * yScale, dx) * 180) / Math.PI
@@ -551,7 +551,7 @@ export function lifeAt(
               break
             }
           }
-          /* Blocked everywhere, so it stays put for that leg. Sliding along x then y, the rule Thor walks by, was tried and taken back out: on a 12px corridor and an L of two 20px arms it covered the same ground, left twice as many off-floor frames on the corridor and shrank the L's vertical coverage from 181px to 140px, while moving 19298 of 20000 frames of an ordinary fenced walk by up to 264.6px. */
+          /* Blocked everywhere, so it stays put for that leg. Sliding along x then y, the rule the walker moves by, was tried and taken back out: on a 12px corridor and an L of two 20px arms it covered the same ground, left twice as many off-floor frames on the corridor and shrank the L's vertical coverage from 181px to 140px, while moving 19298 of 20000 frames of an ordinary fenced walk by up to 264.6px. */
           if (!found) {
             tx = px
             ty = py

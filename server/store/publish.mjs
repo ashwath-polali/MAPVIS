@@ -97,7 +97,7 @@ const shotsOntoMeta = (framings, anchor, meta) => {
   for (const f of mine) set[f.name] = one(f)
   /* a default is always written, because look_at asks for a shot with no name and an unnamed miss falls back to the same slot */
   const def = mine.find((f) => f.entry) || mine.reduce((a, b) => ((a.id ?? 0) <= (b.id ?? 0) ? a : b))
-  /* MERGED, NEVER SWAPPED IN. panthers_maw on the real hub already carries docId
+  /* MERGED, NEVER SWAPPED IN. quarry_gate on the real hub already carries docId
    * and derived, and the game writes `derived` itself when it has to invent a
    * name, so replacing the bag would take both out. */
   return { ...(had || {}), framings: set, framing: { ...one(def), name: def.name } }

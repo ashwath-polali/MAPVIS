@@ -4,7 +4,7 @@
 # back to .gitignore, so an ignored file is not automatically an unshipped one.
 # The first deploy proved that the hard way: .env went up, MAPVIS_SOLO came
 # with it, and /api/me answered as the club account to a request carrying no
-# cookie at all. Every anonymous visitor would have been signed in as ATC.
+# cookie at all. Every anonymous visitor would have been signed in as the shared account.
 #
 # Real configuration lives in vercel's own environment variables. This file
 # exists so a local convenience can never become a hosted one.

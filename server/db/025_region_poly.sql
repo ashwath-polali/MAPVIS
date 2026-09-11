@@ -12,7 +12,7 @@
 --
 -- POLY AND RECT ARE EXCLUSIVE IN THIS TABLE. Both exporters write the poly's
 -- bounding box into the bundle's `rect` beside the points, because
--- AdventureGame's src/game/pmap/anchors.ts tests a region by its rect and has no
+-- the reading side tests a region by its rect and has no
 -- polygon test at all. Storing that derived box here as well would give a
 -- reopened map two shapes and no way to tell which one the author drew.
 alter table anchors add column if not exists poly jsonb;

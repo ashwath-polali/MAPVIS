@@ -7,7 +7,7 @@ import { UI_GATES, fitUi, fitSheet, SHEET_ONE_IMAGE } from '../pixellab.mjs'
 
 // ---- the vocabulary --------------------------------------------------------
 
-/* never call a region a slot: WorldSlot already means an island's berth and PmapScene reads it about thirty times */
+/* never call a region a slot: WorldSlot already means an island's berth and the reading side reads it about thirty times */
 export const REGION_KINDS = ['text', 'number', 'picture', 'fill', 'face', 'press']
 
 export const REGION_ALIGNS = ['left', 'center', 'right']
@@ -153,7 +153,7 @@ export const PIECE_TYPES = [
     // the label is an author's string from a MAPVIS anchor and can be anything
     // from "E - cast off" to a whole refusal sentence, so the ends are fixed
     caution:
-      'The press area is not optional. A grep for pointerdown|click|hitTest|interactive in PmapScene returns zero hits, so every interaction on a painted map is proximity plus E today, and input parity is the most load-bearing rule in the kit.',
+      'The press area is not optional. A grep for pointerdown|click|hitTest|interactive on the reading side returns zero hits, so every interaction on a painted map is proximity plus E today, and input parity is the most load-bearing rule in the kit.',
     regions: [
       { name: 'label', kind: 'text', required: true },
       { name: 'key_cap', kind: 'text', required: false },

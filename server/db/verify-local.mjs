@@ -85,7 +85,7 @@ try {
   const doc = JSON.stringify({
     v: 3,
     walk: { charH: 18, feet: 2, hip: 5, step: 1, tol: 10, slide: 1 },
-    events: [{ id: 'e1', kind: 'door', name: 'panthers_maw', x: 12, y: 34, stand: [14, 36] }],
+    events: [{ id: 'e1', kind: 'door', name: 'quarry_gate', x: 12, y: 34, stand: [14, 36] }],
     note: 'a string with a quote " a backslash \\ and a bullet ·',
   })
   const put = await call('/api/doc', { method: 'POST', body: { id: 'zz-local', doc } })

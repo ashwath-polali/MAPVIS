@@ -47,7 +47,7 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
   const [near, setNear] = useState('')
   const [why, setWhy] = useState('')
   const [where, setAt] = useState('')
-  /* the camera is a ref because restarting the draw effect reloads the atlas and respawns Thor. */
+  /* the camera is a ref because restarting the draw effect reloads the atlas and respawns the walker. */
   const [mode, setMode] = useState<'island' | 'pov'>('island')
   const modeRef = useRef(mode)
   modeRef.current = mode
@@ -128,7 +128,7 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
           if (v.still || v.frames.length || Object.keys(v.dirs).length) live.push(v)
         }
 
-        // ---- Thor ----------------------------------------------------------
+        // ---- the walker ----------------------------------------------------------
         /* 38 empty rows sit under his feet in a 144 frame, and one height scales every frame or he pulses. */
         const A_MIN = 40 // the repo-wide alpha threshold
         type Frame = { img: HTMLImageElement; feet: number; top: number }
@@ -155,22 +155,22 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
             return null
           }
         }
-        const thor: Record<string, Frame[]> = {}
+        const frames: Record<string, Frame[]> = {}
         await Promise.all(
           HEADINGS.map(async (h) => {
             const set: Frame[] = []
             for (let i = 0; i < 6; i++) {
-              const im = await load(`/thor/${h}/${i}.png`)
+              const im = await load(`/walker/${h}/${i}.png`)
               const t = im && trimToFeet(im)
               if (t) set.push(t)
             }
-            if (set.length) thor[h] = set
+            if (set.length) frames[h] = set
           }),
         )
         // the standing south frame is the one charH measures, exactly as the rig does
         // 1 is never used: with no frames at all the draw takes its capsule
         // fallback and never reaches the scale.
-        const stand = thor.south?.[0] || Object.values(thor)[0]?.[0]
+        const stand = frames.south?.[0] || Object.values(frames)[0]?.[0]
         const drawnH = stand ? stand.feet - stand.top + 1 : 1
 
         if (dead) return
@@ -190,7 +190,7 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
         const hip = meta.character?.hip ?? 2
         const charH = meta.character?.heightPx ?? 18
 
-        /* the hip band is tested at y + hipDY, not y, or Thor walks a pixel past a wall. */
+        /* the hip band is tested at y + hipDY, not y, or the walker steps a pixel past a wall. */
         const hipDY = meta.character?.hipDY ?? 0
 
         /* near is stepTolerance under its editor name, and what the bundle omits falls back to defaults. */
@@ -354,7 +354,7 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
           }
         })()
 
-        // Which way Thor faces is now Walker's own dirFrom, off the same squash,
+        // Which way the walker faces is now Walker's own dirFrom, off the same squash,
         // so the picked view matches the editor's walk test rather than a second
         // rounding of the same angle.
 
@@ -500,7 +500,7 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
           order.push({
             y: py,
             go: () => {
-              const set = thor[facing] || thor.south
+              const set = frames[facing] || frames.south
               if (!set?.length) {
                 g.fillStyle = '#ffd66e'
                 g.fillRect(ox + px * zoom - zoom, oy + py * zoom - charH * zoom, zoom * 2, charH * zoom)

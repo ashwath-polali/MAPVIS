@@ -82,7 +82,7 @@ export const isCutTool = (t: Tool) => t === 'cut' || t === 'cuterase' || t === '
 /* How many EXTRA pictures a placement can switch to, one per state, because a round is at most six states and none need to name look 0. life.ts and server/api.mjs work the same number out the same way; if that ceiling moves all three move together or a reopen drops the pictures the round points at. */
 const LOOKS_MAX = 6
 
-/* PERSONAL SPACE: the four numbers the push is made of, a verbatim copy of the same four in the game's PmapScene, because the preview has to work the answer out the way the game does or it is lying about the map. If one changes, copy it again; do not edit one side only. */
+/* PERSONAL SPACE: the four numbers the push is made of, a verbatim copy of the same four on the reading side, because the preview has to work the answer out the way the game does or it is lying about the map. If one changes, copy it again; do not edit one side only. */
 
 /* the smallest body anything gets, in painting pixels: a circle of no radius is nothing to push off. It is also the walker used by the reach test below, so the floor is one number in both places. */
 const BODY_MIN = 2
@@ -5576,7 +5576,7 @@ export class Editor {
       const fixed = this.doc.assets
         .filter((a) => !a.life && !this.hiddenGroups.has(a.group) && this.moverCanTouch(a, free))
         .map((a) => ({ x: a.x, y: a.y, r: this.bodyR(a) }))
-      // the walk test's walker is one too, because the game's Thor is. The hip
+      // the walk test's walker is one too, because a drawn character is. The hip
       // probe is the body half-width the walk already measures him by, and the
       // one number about the character map.json and MAPVIS both carry.
       if (this.walking) fixed.push({ x: this.walker.x, y: this.walker.y, r: Math.max(BODY_MIN, this.cfg.hip) })
@@ -6102,7 +6102,7 @@ export class Editor {
         /* NO FLOOR MARKED, so the heading is drawn off the anchor itself, which is where the game aims a body with no stand-at. An arrow that only appeared once somebody had marked a floor would hide the field on exactly the anchors where it is the only thing set. */
         this.facingArrow(g, px, py, ev.facing, sel)
       }
-      /* WHAT A PERSON READS, never the identifier: `ev.label || ev.name` prints `panthers_maw` onto the painting the moment nobody has typed a label. It hangs off the top of whatever shape is live rather than off the radius, because a 220px radius would float the caption most of a map away from its region. */
+      /* WHAT A PERSON READS, never the identifier: `ev.label || ev.name` prints `quarry_gate` onto the painting the moment nobody has typed a label. It hangs off the top of whatever shape is live rather than off the radius, because a 220px radius would float the caption most of a map away from its region. */
       g.globalAlpha = sel ? 1 : 0.8
       this.plate(g, displayName(ev).text, px, top, ink, true)
       g.globalAlpha = 1
@@ -6284,7 +6284,7 @@ export class Editor {
     if (thorState === 'idle') loadThor()
     const rig = thorState === 'ready' ? thorRig : null
     if (rig) {
-      // the real character, drawn the way PmapScene draws him: frames are pre-trimmed to their drawn feet so the bottom edge IS the feet, and the drawn height scales to the document's charH. Drawn slightly smaller than the contract height for test-stage feel only; the exported heightPx and the collision probes stay untouched.
+      // the real character, drawn the way the reading side draws it: frames are pre-trimmed to their drawn feet so the bottom edge IS the feet, and the drawn height scales to the document's charH. Drawn slightly smaller than the contract height for test-stage feel only; the exported heightPx and the collision probes stay untouched.
       const ts = (this.cfg.charH * 0.7) / rig.drawnH
       const { rise, stretch } = W.hop()
       const seq = rig.frames[W.facing] || rig.frames.south
@@ -6354,7 +6354,7 @@ export function loadImage(src: string): Promise<HTMLImageElement> {
   })
 }
 
-/* ---- Thor, the walk-test sprite: the same 48 walk frames the game loads, with PmapScene's anchor convention, each frame alpha-scanned and cropped to its drawn feet so bottom-anchoring puts the feet exactly on the collision pixel. Any load failure leaves the capsule in place, so the walk test never goes blind over a missing PNG. */
+/* ---- The walk-test sprite: the same 48 walk frames the game loads, with the reading side's anchor convention, each frame alpha-scanned and cropped to its drawn feet so bottom-anchoring puts the feet exactly on the collision pixel. Any load failure leaves the capsule in place, so the walk test never goes blind over a missing PNG. */
 /* when a heading has no view, the next best one it might have. An object drawn
  * four ways still faces roughly right instead of falling back to south. */
 const NEAREST_DIR: Record<string, string> = {
@@ -6367,8 +6367,8 @@ const NEAREST_DIR: Record<string, string> = {
   north: 'north-east',
   south: 'south-east',
 }
-const THOR_DIRS = ['south', 'north', 'east', 'west', 'south-east', 'north-east', 'north-west', 'south-west']
-const A_MIN = 40 // the repo-wide alpha threshold (PmapScene, objmap/measure.ts)
+const WALK_DIRS = ['south', 'north', 'east', 'west', 'south-east', 'north-east', 'north-west', 'south-west']
+const A_MIN = 40 // the repo-wide alpha threshold (shared with the reading side)
 
 interface ThorRig {
   frames: Record<string, HTMLCanvasElement[]>
@@ -6408,13 +6408,13 @@ function loadThor() {
   thorState = 'loading'
   ;(async () => {
     const frames: Record<string, HTMLCanvasElement[]> = {}
-    let drawnH = 67 // PmapScene's measured drawn height, the fallback
+    let drawnH = 67 // the reading side's measured drawn height, the fallback
     await Promise.all(
-      THOR_DIRS.map(async (dir) => {
-        const imgs = await Promise.all([0, 1, 2, 3, 4, 5].map((i) => loadImage(`/thor/${dir}/${i}.png`)))
+      WALK_DIRS.map(async (dir) => {
+        const imgs = await Promise.all([0, 1, 2, 3, 4, 5].map((i) => loadImage(`/walker/${dir}/${i}.png`)))
         frames[dir] = imgs.map((im, i) => {
           const t = trimToFeet(im)
-          if (!t) throw new Error(`empty thor frame ${dir}/${i}`)
+          if (!t) throw new Error(`empty walker frame ${dir}/${i}`)
           if (dir === 'south' && i === 0) drawnH = t.feet - t.top + 1
           return t.cv
         })

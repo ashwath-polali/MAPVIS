@@ -1,2 +1,3 @@
-2026-08-26 20:23 UTC  neon and b2 both answered
-2026-09-01 14:07 UTC  neon and b2 both answered
+This file exists so the scheduled workflow beside it keeps a commit in the
+repository's recent history. A scheduled workflow with no activity for sixty
+days is disabled, and one line a month is enough to prevent that.

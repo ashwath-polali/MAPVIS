@@ -1,4 +1,4 @@
-/* WHAT A HUMAN READS. The name/label split exists in the data and every surface ignored it, printing `the_hub` and `panthers_maw` at people. Returns a `derived` flag saying the words were guessed from an identifier rather than typed. */
+/* WHAT A HUMAN READS. The name/label split exists in the data and every surface ignored it, printing `the_hub` and `quarry_gate` at people. Returns a `derived` flag saying the words were guessed from an identifier rather than typed. */
 
 /* Acronyms that stay upper when a name is unpacked, because "Ap Room" reads as
  * a typo. Extend it for the vocabulary your own maps use. */

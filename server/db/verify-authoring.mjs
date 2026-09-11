@@ -131,9 +131,9 @@ const doc = {
     // an area, four numbers meaning two opposite corners
     { id: 2, name: 'the_yard', kind: 'region', x: 10, y: 10, r: 8, to: '', label: '', rect: [4, 4, 36, 30] },
     // a hall is a place you are inside of, so the gate insists on a way out
-    { id: 3, name: 'the_way_out', kind: 'door', x: 12, y: 12, r: 8, to: 'hub', toAnchor: 'panthers_maw', label: 'out' },
+    { id: 3, name: 'the_way_out', kind: 'door', x: 12, y: 12, r: 8, to: 'hub', toAnchor: 'quarry_gate', label: 'out' },
     /* a barred door with no placement, so the condition rides the meta bag every projection copies whole */
-    { id: 4, name: 'the_barred_way', kind: 'door', x: 16, y: 12, r: 8, to: 'hub', toAnchor: 'panthers_maw', label: 'the barred way', when: 'cord("service")' },
+    { id: 4, name: 'the_barred_way', kind: 'door', x: 16, y: 12, r: 8, to: 'hub', toAnchor: 'quarry_gate', label: 'the barred way', when: 'cord("service")' },
     // the anchor a variant set is addressed through, which is the only address
     // python has for one: every world-touching intent takes an anchor name
     { id: 5, name: 'the_berth', kind: 'point', x: 24, y: 22, r: 10, to: '', label: 'the berth' },
@@ -203,7 +203,7 @@ const doc = {
       y: 38,
       r: 9,
       to: 'hub',
-      toAnchor: 'panthers_maw',
+      toAnchor: 'quarry_gate',
       label: 'the shed',
       shape: 'poly',
       poly: [
@@ -549,7 +549,7 @@ try {
   eq('a second shot on the same anchor sits beside it', pa?.meta?.framings?.wide_on_the_coach, { zoom: 1, dx: 0, dy: 0 })
   /* look_at asks with no name and every miss falls here, so named shots without a default is a dead camera */
   eq('the entry shot is the anchor default', pa?.meta?.framing, { zoom: 2, dx: -12, dy: -20, name: 'over_the_coach' })
-  /* MERGED, NOT SWAPPED IN. The real hub's panthers_maw already carries docId
+  /* MERGED, NOT SWAPPED IN. The real hub's quarry_gate already carries docId
    * and derived, and the game writes derived itself, so a projection that
    * replaced the bag would take both out. */
   eq('the bag that was already there is still under it', pa?.meta?.docId, 1)
@@ -811,7 +811,7 @@ try {
     eq('and where it sits inside its canvas', slot?.origin, { x: PAINT.ox, y: PAINT.oy })
     eq('the canvas beside it', slot?.canvas, { w: W, h: H })
     eq('and what it really costs to hold', slot?.placements, doc.assets.length)
-    /* PmapScene reads slot.berth thirty times, so 019 changed where a point is authored, not what crosses */
+    /* the reading side reads slot.berth thirty times, so 019 changed where a point is authored, not what crosses */
     eq('the free-standing berth crosses as that slot"s berth', slot?.berth, {
       name: 'zz_verify_dock',
       x: 880,

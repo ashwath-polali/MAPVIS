@@ -4,7 +4,7 @@
 --
 -- 019 lifted every nested `approach` out of its place and appended it to `marks`
 -- as a free-standing berth named `<place>_approach`. Nothing then put it back on
--- the wire, so `slot.berth.approach` had no author, and PmapScene reads that
+-- the wire, so `slot.berth.approach` had no author, and the reading side reads that
 -- field and sail.ts runs a whole two-stage manoeuvre off it: aim at the run-in,
 -- carry on until it is astern, then swing onto the berth's own heading. Without
 -- it every arrival in the game is a straight-in nose.

@@ -1,4 +1,4 @@
-/* The effect engine: small animated effects built from the map's own colours. The generator draws objects, not effects, and twenty-odd attempts at smoke and sparkle came back garbage because an effect is a motion rule over colours rather than a picture. Ported from hubgen's flow.py, spray.py and build.py. Every effect is a seamless loop by construction and nothing is random at render time. */
+/* The effect engine: small animated effects built from the map's own colours. The generator draws objects, not effects, and twenty-odd attempts at smoke and sparkle came back garbage because an effect is a motion rule over colours rather than a picture. Every effect is a seamless loop by construction and nothing is random at render time. */
 import { mkCanvas } from './mask'
 import type { CustomControl } from './customfx'
 
@@ -206,7 +206,7 @@ export function toRGB(s: string): RGB {
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
 }
 
-// build.py's weighting: green carries most of the value, blue the least
+// green carries most of the value and blue the least, which is the luma split
 const lum = (c: RGB) => c[0] * 0.35 + c[1] * 0.4 + c[2] * 0.25
 
 const mix = (a: RGB, b: RGB, t: number): RGB => [
@@ -236,7 +236,7 @@ function ramp(colors: string[], n: number): RGB[] {
   return out
 }
 
-/* build.py's lift: straight off the art a puff reads as the rock it was cut from, because those pixels were painted against a bright sky. Each step is pulled most of the way to a pale tint of the palette's own hue, keeping the value structure. */
+/* the lift: straight off the art a puff reads as the rock it was cut from, because those pixels were painted against a bright sky. Each step is pulled most of the way to a pale tint of the palette's own hue, keeping the value structure. */
 function liftedRamp(colors: string[], n: number, k = 0.65): RGB[] {
   const base = ramp(colors, n)
   const avg: RGB = [0, 0, 0]
@@ -327,7 +327,7 @@ class Frame {
   ) {
     this.data = new Uint8ClampedArray(w * h * 4)
   }
-  // spray.py's px_put: the brighter of the two wins, so a droplet crossing
+  // where two particles land on one pixel the brighter wins, so a droplet crossing
   // mist still reads as a droplet
   put(x: number, y: number, c: RGB, a: number) {
     if (a <= 0.02) return
@@ -354,7 +354,7 @@ class Frame {
 
 // ---- the seven rules ------------------------------------------------------
 
-/* flow: scrolling streaks from flow.py. Every column's dash+gap span divides PERIOD, which is the one change from the reference, where hand-picked spans meant the loop only nearly closed. */
+/* flow: scrolling streaks. Every column's dash+gap span divides PERIOD, which is what makes the loop close exactly rather than nearly. */
 const PERIOD = 16
 const SPANS = [4, 8, 8, 16]
 
@@ -419,7 +419,7 @@ function flowFrames(p: EffectParams, colors: string[]): HTMLCanvasElement[] {
   return out
 }
 
-/* The lumpy puff silhouette from build.py: one body plus shoulders all the way round, because a circle reads mechanical and stacked circles were rejected. Box blur then a hard threshold, so the boundary stays one crisp pixel. */
+/* The lumpy puff silhouette: one body plus shoulders all the way round, because a circle reads mechanical and stacked circles were rejected. Box blur then a hard threshold, so the boundary stays one crisp pixel. */
 function puffMask(size: number, rnd: () => number): Uint8Array {
   const cov = new Float32Array(size * size)
   const c = size / 2
@@ -521,7 +521,7 @@ function blitBlob(
   }
 }
 
-/* rise: puffs climbing and evaporating, from build.py. One shape and n+1 slots, so over a cycle every puff advances one slot and the last frame lands on the first. The newborn starts half-clipped, because smoke fully inside the canvas reads as floating. */
+/* rise: puffs climbing and evaporating. One shape and n+1 slots, so over a cycle every puff advances one slot and the last frame lands on the first. The newborn starts half-clipped, because smoke fully inside the canvas reads as floating. */
 function riseFrames(p: EffectParams, colors: string[], patch?: Patch | null, own = false): HTMLCanvasElement[] {
   void patch
   const { width: W, height: H } = p
@@ -573,7 +573,7 @@ function riseFrames(p: EffectParams, colors: string[], patch?: Patch | null, own
   return out
 }
 
-/* spray: particles arcing from a source, from spray.py. Every particle's life is one full cycle and they are phase-shifted copies, so frame N wraps onto 0. The stagger is the golden ratio, which never clumps. */
+/* spray: particles arcing from a source. Every particle's life is one full cycle and they are phase-shifted copies, so frame N wraps onto 0. The stagger is the golden ratio, which never clumps. */
 function blob3(fr: Frame, cx: number, cy: number, size: number, col: RGB, a: number, lightest: RGB) {
   if (size <= 1) {
     fr.put(cx, cy, col, a)

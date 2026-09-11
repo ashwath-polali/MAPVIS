@@ -239,7 +239,7 @@ export async function composition(id = GAME_WORLD) {
         state: p.state,
         release: p.release,
         discover: p.discover,
-        /* the free-standing berth is folded back under the key PmapScene already reads, approach nested on the berth itself rather than taken off list order, and the heading narrowed to the four radOf can turn into an angle */
+        /* the free-standing berth is folded back under the key the reading side already reads, approach nested on the berth itself rather than taken off list order, and the heading narrowed to the four radOf can turn into an angle */
         ...(b
           ? {
               berth: {

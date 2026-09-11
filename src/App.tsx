@@ -414,7 +414,7 @@ function Sec({ children }: { children: ReactNode }) {
   return <div className="asec">{children}</div>
 }
 
-/* the pairs wrap: at 141px it clipped to "panthers_maw → pant…", one flex item each so a name never breaks. */
+/* the pairs wrap: at 141px it clipped to "quarry_gate → pant…", one flex item each so a name never breaks. */
 function Addr({ parts }: { parts: [string | null, string][] }) {
   return (
     <i>
@@ -4763,8 +4763,8 @@ export default function App() {
               }
             >
               {/* the name is not repeated in the already-in case: this row is
-                  one nowrap button in a 228px form, and `panthers_maw is
-                  already in` ellipsised to `panthers_maw is alread…` */}
+                  one nowrap button in a 228px form, and `quarry_gate is
+                  already in` ellipsised to `quarry_gate is alread…` */}
               {!editingDoor
                 ? 'open an anchor above first'
                 : editingSet.members.includes(editingDoor.name)

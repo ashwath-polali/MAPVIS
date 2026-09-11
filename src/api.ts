@@ -70,7 +70,7 @@ export interface SavedAssetEntry {
   src?: string
   frames?: string[]
   fps?: number
-  /* one view per heading, keyed by the eight names Thor's own frames use, each
+  /* one view per heading, keyed by the eight names the walk-test frames use, each
    * one a list of bundle-relative paths inside a single folder. Written for
    * anything that has to face where it is going. */
   dirs?: Record<string, string[]>
@@ -132,7 +132,7 @@ export interface LibItem {
   frames?: string[]
   fps?: number
   /* one view per heading, for something that has to face where it is going.
-   * Keys are the eight names Thor's own frames use. Absent on almost
+   * Keys are the eight names the walk-test frames use. Absent on almost
    * everything: a crab is two apparent directions and a flip covers it. */
   dirs?: Record<string, string[]>
   w: number
@@ -270,7 +270,7 @@ export const characterGen = (
     // standard is one generation. pro is twenty to forty and can never be a
     // default here, and the price on the button assumes standard.
     mode?: 'standard' | 'pro' | 'v3'
-    /* ONE OF YOUR OWN EIGHT-WAY CHARACTERS, whose rotations guide every direction of this one. Pro only, and how a new person comes back in Thor's build instead of the template rig's: four standard-mode principals were flat upright humanoids whatever the words said. */
+    /* ONE OF YOUR OWN EIGHT-WAY CHARACTERS, whose rotations guide every direction of this one. Pro only, and how a new person comes back built like your own character instead of like the template rig: four standard-mode principals were flat upright humanoids whatever the words said. */
     styleCharacterId?: string
   },
 ) => jpost<{ item: LibItem; note?: string }>('/api/character-gen', { id, ...o })
