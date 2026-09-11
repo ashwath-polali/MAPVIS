@@ -1,4 +1,4 @@
-/* SOUND, BEFORE THERE IS ANY SOUND. Not an audio system: the stored preference and the first-gesture unlock, because a browser holds sound until a click and code that finds that out on ship day finds it as a silent bug. Field named `mute` to match the game's own settings blob. */
+/* SOUND, BEFORE THERE IS ANY SOUND. Not an audio system: the stored preference and the first-gesture unlock. A browser holds sound until a click, and code that does not account for it fails silently rather than loudly. Field named `mute` to match the game's own settings blob. */
 
 /* WHETHER ANYTHING HERE CAN MAKE A NOISE. False, checked rather than assumed, and the one line to change when the first sound file lands. Typed boolean so a branch on it stays live code. */
 export const SOUND_EXISTS: boolean = false

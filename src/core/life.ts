@@ -302,10 +302,10 @@ export function separate(
   stands?: (x: number, y: number) => boolean,
 ): { dx: number; dy: number }[] {
   const out = pts.map(() => ({ dx: 0, dy: 0 }))
-  /* RELAXATION, not one shot. Measuring every pair against the ORIGINAL positions handed a figure caught between three others the sum of three full-depth corrections: worst single-frame shift 21.39px on bodies 11px across. Two passes at half strength, swept: 97 shifts over 4px against 171, worst 25.80px against 31.93, deepest overlap 12.45px against 15.69. Four and eight are worse. An improvement and NOT a fix; see the note under it. */
+  /* RELAXATION, not one shot. Measuring every pair against the ORIGINAL positions hands a figure caught between three others the sum of three full-depth corrections: worst single-frame shift 21.39px on bodies 11px across. Two passes at half strength measure 97 shifts over 4px against 171, worst 25.80px against 31.93, deepest overlap 12.45px against 15.69. Four passes and eight are worse. An improvement and NOT a fix; see the note under it. */
   const PASSES = 2
   const step = strength * 0.5
-  /* WHAT IS STILL WRONG HERE, so nobody spends another session tuning numbers. A walker crosses THROUGH a stander because nothing in the floor knows the stander is there, gets 87% inside, and the ejection direction flips as it passes the centre: -8.46px one frame and +11.20px the next. Three fixes were measured and all made it worse. The fix is putting standing figures in the FLOOR, and that has not been made. */
+  /* WHAT IS STILL WRONG HERE, so nobody spends time tuning these numbers. A walker crosses THROUGH a stander because nothing in the floor knows the stander is there, gets 87% inside, and the ejection direction flips as it passes the centre: -8.46px one frame and +11.20px the next. No constant in this function reaches it. The answer is putting standing figures in the FLOOR, and that is not built. */
   for (let pass = 0; pass < PASSES; pass++) {
     let moved = false
     for (let i = 0; i < pts.length; i++) {
@@ -527,7 +527,7 @@ export function lifeAt(
     let py = home.y
     let clock = 0
     let flip = false
-    /* THE CAP IS A ROUND, NOT A CLIFF. 512 legs bounds the cost, and the walk used to fall off the end and answer still, putting the thing back on its anchor for the rest of the session: measured on the beach crab, frozen from t=1932.92s, 32.2 minutes, inside an advisory session. Leg 512 walks back to the anchor, so the round closes. Costs a second walk past the end, 21.9us against 14.1us at t=3600s, flat from there. Legs 0 to 511 are untouched. */
+    /* THE CAP IS A ROUND, NOT A CLIFF. 512 legs bounds the cost. A cap that simply ends the walk answers still from then on, teleporting the thing back to its anchor to stand there visible: measured at 32.2 minutes in, from t=1932.92s, which is inside a single sitting. Leg 512 walks back to the anchor, so the round closes instead. Costs a second walk past the end, 21.9us against 14.1us at t=3600s, flat from there. Legs 0 to 511 are untouched. */
     let tw = t
     for (let pass = 0; pass < 2; pass++) {
       px = home.x

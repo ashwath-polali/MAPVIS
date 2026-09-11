@@ -127,7 +127,7 @@ const FACE_GRID = [
 const homeStep = (t: Tool): StepId =>
   isCutTool(t) ? 'cut' : 'levels'
 
-// the chips, in the brief's plain words; values and canvas colours stay PAL's
+// the chips, in plain words; values and canvas colours stay PAL's
 const CHIP_LABEL: Record<number, string> = {
   0: 'blocked',
   40: 'ground',
@@ -485,8 +485,8 @@ function NumField(props: {
   dp?: number
   step?: number
   /* what the field means, when its name does not already say it. On hover, not
-     under the block: six of these used to share one twenty-six word sentence
-     three lines tall that only restated the six labels. */
+     under the block: one shared sentence over six fields is three lines tall
+     and only restates the six labels. */
   tip?: string
   onCommit: (v: number) => void
 }) {
@@ -652,8 +652,8 @@ export default function App() {
   const [regionsBusy, setRegionsBusy] = useState(false)
   const [armed, arm, disarm] = useArm()
   const [lib, setLib] = useState<api.LibItem[] | null>(null)
-  // the words he typed, kept so "what did I write to get that tree" has an
-  // answer in the app instead of on disk
+  // the words the author typed, kept so "what did I write to get that tree"
+  // has an answer in the app instead of on disk
   const [asks, setAsks] = useState<api.Ask[]>([])
   const [asksOpen, setAsksOpen] = useState(false)
   /* ctrl+p grain, sprite pixels per map pixel. 1 is the strict match and too blocky, so this starts at 2. */
@@ -906,7 +906,7 @@ export default function App() {
     ed.attach(canvasRef.current as HTMLCanvasElement)
     setSt(ed.status())
 
-    /* ?id with no ?img fetches /work/<id>/scene.png; it used to say "no painting" and cut the dashboard off. */
+    /* ?id with no ?img fetches /work/<id>/scene.png, or a map opened from the dashboard answers "no painting". */
     const q = new URLSearchParams(location.search)
     const img = q.get('img')
     const id = q.get('id')
@@ -1232,9 +1232,9 @@ export default function App() {
       if (!made.length) return null
       setSaid(null)
       setLooking(true)
-      // one line rather than silence when the look cannot happen. It used to
-      // return having said nothing, which is indistinguishable from a look that
-      // ran and approved.
+      // one line rather than silence when the look cannot happen. Returning
+      // having said nothing is indistinguishable from a look that ran and
+      // approved.
       const quiet = (why: string) => {
         setLooking(false)
         setSaid({ why, verdict: 'good', fix: '' })
@@ -1499,8 +1499,8 @@ export default function App() {
           }
           const out = mkCanvas(c.width, c.height)
           const og = out.getContext('2d') as CanvasRenderingContext2D
-          // write through a fresh ImageData the context owns, so the buffer
-          // type is whatever this browser wants rather than whatever we made
+          // write through a fresh ImageData the context owns, so the buffer type
+          // is whatever this browser wants rather than whatever built it
           const dst = og.createImageData(c.width, c.height)
           dst.data.set(r.data)
           og.putImageData(dst, 0, 0)
@@ -1632,8 +1632,8 @@ export default function App() {
             dirKeys: partsOf(item).keys,
           })
           setLib((prev) => [...(prev || []).filter((x) => x.name !== res.item.name), res.item])
-          // the png kept its name, so the browser would answer from cache and
-          // the map would go on drawing the old pixels
+          // the png keeps its name, so without this the browser answers from
+          // cache and the map goes on drawing the replaced pixels
           e.bustAssets(folderOf(res.item))
           setBust((q) => ({ ...q, [res.item.name]: Date.now() }))
           // it shrank, so EVERY placement of it grows by the same amount to
@@ -2694,7 +2694,7 @@ export default function App() {
       if (made.length) {
         setGenPrompt('')
         // the box clears on success, so the words go on the list in the same
-        // breath: clearing them used to be the only place they existed
+        // breath: the box is otherwise the only place they exist
         api
           .asks(sid)
           .then((r) => setAsks(r.asks))
@@ -2721,16 +2721,16 @@ export default function App() {
     if (genBox) {
       setGenBox(null)
       setGenPlan(null)
-      // a fill's plan is a list of positions INSIDE the box, so it means
-      // nothing once the box is gone. It used to survive, which left the draw
-      // button lit over a plan that had nowhere to land.
+      // a fill's plan is a list of positions INSIDE the box, so it means nothing
+      // once the box is gone. Letting it survive leaves the draw button lit
+      // over a plan with nowhere to land.
       setScene(null)
       push('box cleared · it will read the whole map')
       return
     }
     e.markArea((r) => {
       setGenBox(r)
-      // a new area means the old reading is about a different place
+      // a new area means the reading in hand is about a different place
       setGenPlan(null)
       setScene(null)
       if (r) push(`boxed ${r.w}×${r.h} · now say what goes there`)
@@ -3082,8 +3082,8 @@ export default function App() {
           for (const pid of mine) anchors.set(pid, pid === id ? at : e.cropAnchor(pid, r))
           e.refreshPlacementsOf(res.item)
           // ONE undo step for every copy. Per-placement edits put one entry on
-          // the stack each, so z used to move a single tree back and leave the
-          // other eighteen where the crop had put them.
+          // the stack each, so z moves a single tree back and leaves the other
+          // eighteen where the crop put them.
           e.moveAll(anchors)
           // filed against the undo depth it now sits at, so z knows which press
           // is the one that should put the pixels back
@@ -3270,7 +3270,7 @@ export default function App() {
     }
   }, [])
 
-  /* flush first, or a late autosave writes under the old id; then re-enter by url so one thing knows the id. */
+  /* flush first, or a late autosave writes under the previous id; then re-enter by url so one thing knows the id. */
   const doRename = useCallback(async (want: string) => {
     const e = edRef.current
     const from = e?.status().sceneId
@@ -3570,7 +3570,7 @@ export default function App() {
           />
         </label>
       )}
-      {/* kept points: closing a polygon used to throw them away, so one shape had to be traced three times. */}
+      {/* kept points: the outline survives closing the polygon, so one shape is traced once rather than three times. */}
       {(st?.stencils.length ?? 0) > 0 && (
         <>
           <Sec>outlines you drew</Sec>
@@ -3986,9 +3986,9 @@ export default function App() {
               >
                 draw
               </button>
-              {/* THE ONLY THING THAT THROWS A SHAPE AWAY. Switching mode used
-                  to do it silently, which is how an author lost a drawing by
-                  touching the wrong button. Now it takes this. */}
+              {/* THE ONLY THING THAT THROWS A SHAPE AWAY, and it takes a press.
+                  A mode switch that does it silently loses an author's drawing
+                  to the wrong button. */}
               {((liveShape === 'poly' && editingDoor.poly) || (liveShape === 'rect' && editingDoor.rect)) && (
                 <button
                   className="arow-x"
@@ -4072,8 +4072,8 @@ export default function App() {
                   onBlur={(e) => {
                     const nk = e.target.value.trim()
                     if (nk === k) return
-                    // the new name takes the old one's value, and clearing the
-                    // name is how a key is removed
+                    // the new name takes the previous one's value, and clearing
+                    // the name is how a key is removed
                     if (nk) ed?.setAnchorMeta(editingDoor.id, nk, String(v ?? ''))
                     if (k) ed?.setAnchorMeta(editingDoor.id, k, null)
                   }}
@@ -4194,7 +4194,7 @@ export default function App() {
         desc="stranded ground turns red"
         onClick={() => ed?.check()}
       />
-      {/* six kinds are made here, not just doors, and the button and header both used to say door. */}
+      {/* six kinds are made here, not just doors, which is why neither the button nor the header says door. */}
       <Sec>anchors</Sec>
       <Row
         icon="door"
@@ -4211,7 +4211,7 @@ export default function App() {
             <div
               key={ev.id}
               className={'evrow' + (doorEdit === ev.id ? ' sel' : '')}
-              /* what this kind does and where it goes, since the old title just repeated the two lines under the pointer. */
+              /* what this kind does and where it goes, rather than a title repeating the two lines already under the pointer. */
               data-tip={
                 /* the reach is the radius only while the radius is the live
                    shape. On a region drawn as an area the ring is dormant data
@@ -4667,8 +4667,8 @@ export default function App() {
               key={f.id}
               className={'evrow' + (shotEdit === f.id ? ' sel' : '')}
               /* WHAT A SHOT IS, and what the word `arrival` on the line below
-                 means, which is exactly the question the old tooltip refused to
-                 answer by repeating the line instead */
+                 means, which is the question a tooltip repeating that line
+                 leaves unanswered */
               data-tip={
                 (f.entry
                   ? 'the view a player gets on arriving in this map'
@@ -6172,11 +6172,11 @@ export default function App() {
   const doMake = useCallback(() => {
     if (makeWhat === 'effect') return void armFx()
     // a planned set is the same second press whichever ask produced it: fill
-    // asked for an area, an asset ask turned out to be more than one thing
+    // asks for an area, an asset ask can resolve to more than one thing
     if (scene) return void runMany()
     if (makeWhat === 'fill') return void doScenePlan()
-    // a sprite runs the same two presses a thing does now. It used to be one
-    // armed press against a row of dropdowns, which is what the router replaced.
+    // a sprite runs the same two presses a thing does: the router answers the
+    // plan, and the second press buys it.
     return void doGen()
   }, [makeWhat, scene, armFx, runMany, doScenePlan, doGen])
 
@@ -6192,8 +6192,8 @@ export default function App() {
     (makeWhat === 'effect'
       ? !fxAsk.trim() || fxBusy || !!fx
       : makeWhat === 'fill'
-        ? // the same rest state the other three have. It used to sit lit and
-          // disabled with no box, because a button reading "box the area first" was still lit in the press-me colour
+        ? // the same rest state the other three have, rather than lit and
+          // disabled: "box the area first" in the press-me colour is a button asking to be pressed and refusing
           !genBox
         : !genPrompt.trim() || (makeWhat === 'object' && genPick))
   // the sprite plan's own words for what it decided to make move, so the busy
@@ -6255,7 +6255,7 @@ export default function App() {
             `${CHAR_DIRS} ways${genType === 'animated' ? ' + motion' : ''}${styled ? ` · in the game's style` : ''} · ${genType === 'animated' ? 'five to fifteen minutes' : 'two to five minutes'}${takeWord}${usd ? ` · ${usd} left` : ''}`
         : makeWhat === 'fill'
           ? `${genBox ? `the boxed ${genBox.w}×${genBox.h}` : 'box an area'} · ${fillWord}${usd ? ` · ${usd} left` : ''}`
-          : /* the ask turned out to be several. It says so here rather than
+          : /* the ask resolved to several things. It says so here rather than
                going on describing one png, and it says where they land, because
                that is the one thing this differs from a fill in. */
             scene
@@ -6395,7 +6395,7 @@ export default function App() {
             onChange={(ev) => {
               setGenCount(Number(ev.target.value))
               // the price on the button changes, so the confirm it was armed
-              // for is no longer the confirm he agreed to
+              // for is not the confirm that was agreed to
               setGenPlan(null)
             }}
           />

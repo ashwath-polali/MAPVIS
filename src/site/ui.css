@@ -19,7 +19,7 @@
  *
  * Scoped under .uikit, which /ui puts beside .app. Both pages are one .app, so
  * an unscoped rule here would follow a reader from /ui to /edit and stay for
- * the rest of the session: ui.css is loaded once and never unloaded. Metrics
+ * every page after it: ui.css is loaded once and never unloaded. Metrics
  * only. A colour under this selector would be the second look this whole file
  * is written to prevent. */
 

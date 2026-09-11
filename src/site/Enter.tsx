@@ -54,8 +54,8 @@ export default function Enter() {
 
         <div className="enter-sheet">
           <div className="sheet-head">
-            {/* the eyebrow used to repeat the heading word for word, which is
-                the shape of a template rather than a page saying something */}
+            {/* the eyebrow says something the heading does not: repeating it word
+                for word is the shape of a template rather than of a page */}
             <h1 className="d3">{isNew ? 'Create an account' : 'Sign in'}</h1>
             <p className="aside">
               {isNew

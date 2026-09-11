@@ -1,23 +1,23 @@
--- A world becomes a per-account document, and OUR world does not move.
+-- A world becomes a per-account document, and the published one does not move.
 --
--- 010 wrote `check (id = 1)` and an essay under it: a berth is a position
--- relative to every other island, so two compositions would be two worlds that
--- cannot both be sailed. That argument is right about ONE ocean and wrong about
--- one TABLE. It is the same conflation the maps table never made: everybody gets
--- maps, one account's maps are the game's, and the shared row was the reason
--- /api/world had to be walled off from every visitor with a 403 explaining that
--- the tool they just signed up for has a page they are not allowed to open.
+-- `check (id = 1)` is right about ONE ocean and wrong about one TABLE. A berth is
+-- a position relative to every other island, so two compositions are two worlds
+-- that cannot both be sailed; that says nothing about how many rows the table
+-- holds. It is the conflation the maps table never makes: everybody gets maps,
+-- and one account's maps are the ones the game reads. A single shared row is why
+-- /api/world otherwise has to be walled off from every visitor with a 403 saying
+-- the tool they just signed up for has a page they may not open.
 --
 -- So the check goes, an owner arrives, and a stranger gets an ocean of their own
 -- to place their own islands on and their own engine to read it.
 --
--- OUR WORLD IS ROW 1 AND STAYS ROW 1. Nothing about it changes: same integer id,
--- same version, same marks, same public read at /api/v1/world, byte for byte.
+-- THE PUBLISHED WORLD IS ROW 1 AND STAYS ROW 1. Nothing about it changes: same
+-- integer id, same version, same marks, same public read at /api/v1/world.
 -- The pin is deliberately the id rather than a flag, because a flag can be set
 -- on two rows and an id cannot, and the game's read has no account behind it and
 -- therefore nothing to resolve a flag against.
 --
--- WHY owner_id STAYS NULL ON IT HERE. Which account is ours is CONFIGURATION,
+-- WHY owner_id STAYS NULL ON IT HERE. Which account owns row 1 is CONFIGURATION,
 -- OCEAN_OWNER in .env falling back to BOOTSTRAP_EMAIL, and a migration cannot
 -- read it. So row 1 is claimed by the first request from that account, and until
 -- then it is the unowned world the game reads, which is exactly what it has

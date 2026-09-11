@@ -19,11 +19,11 @@
    * magenta, occluders are lilac. Nothing painted is this green, so an accent
    * stroke always means the tool talking and never map data.
    *
-   * SIX OF THESE ARE GONE and this file no longer decides them. --ink, --dim,
-   * --edge, --acc and both font stacks were declared here AND in site.css with
-   * different values, and this sheet loads last, so the editor silently won
-   * every disagreement. They are tokens now; what is left below is the tool's
-   * own surfaces, which the site genuinely does not share. */
+   * SIX THINGS THIS FILE DELIBERATELY DOES NOT DECIDE. --ink, --dim, --edge,
+   * --acc and both font stacks are tokens, declared once in tokens.css. Declared
+   * here as well they would silently win every disagreement with the site,
+   * because this sheet loads last. What is left below is the tool's own
+   * surfaces, which the site genuinely does not share. */
   --bg: #0a0c0f;
   --panel: #10141a;
   --raised: #161c24;
@@ -65,8 +65,9 @@
      inside steps in by the same amount, so the line lands at --pan-gut plus
      --pan-in, 16px from the panel edge. There are only two ways to sit on it:
      bare text starts its glyphs there, and a thing with a resting frame puts
-     its border there. Text used to arrive at 12, 16, 20 and 22 down one 272px
-     column and nothing read straight, so change these two, not a rule. */
+     its border there. Change these two rather than any single rule: per-rule
+     padding lands text at 12, 16, 20 and 22 down one 272px column and nothing
+     reads straight. */
   --pan-gut: 12px;
   --pan-in: 4px;
   /* a fold at the foot of a panel is bare text until the pointer arrives. Its
@@ -1006,12 +1007,11 @@ input[type='range']:disabled {
 /* grid children default to min-width auto, so an input refuses to shrink under
    its own content and the number gets clipped: every level of this needs the
    min-width 0 escape or the digits run under the next column */
-/* A FIELD'S NAME SITS ABOVE ITS INPUT. One decision, and it is the ocean's,
-   because two tools in one product cannot disagree about where a caption goes.
-   Measured before this: /world and /surfaces put the caption above the box in
-   mono micro, and the editor put it to the left of the box in the label face,
-   in a 38px column that clipped "hip out" to "hip o…" at every window width.
-   Above also gives the number the whole cell to be right-aligned in. */
+/* A FIELD'S NAME SITS ABOVE ITS INPUT, in mono micro, the way the ocean and the
+   surfaces pages set one. Two tools in one product cannot disagree about where
+   a caption goes, and a caption to the left of the box lives in a 38px column
+   that clips "hip out" to "hip o…" at every window width. Above also gives the
+   number the whole cell to be right-aligned in. */
 .numf {
   display: grid;
   gap: 3px;
@@ -1740,9 +1740,9 @@ input[type='range']:disabled {
   padding: 4px 0 0;
 }
 
-/* the record of what he typed, shut by default behind one small line. Open, it
-   scrolls rather than growing the panel: forty asks must cost the same height
-   as six. */
+/* the record of what the author typed, shut by default behind one small line.
+   Open, it scrolls rather than growing the panel: forty asks must cost the same
+   height as six. */
 .askwrap {
   display: grid;
   gap: 2px;
@@ -2527,12 +2527,11 @@ input[type='range']:disabled {
 /* A bare `display: grid` sizes its one column off the widest thing in it, so
    any row that cannot be squeezed drags the whole form past the panel edge.
    The route form's "add a mark on a waypoint" button is nowrap, so its
-   min-content is the whole sentence: it made the form 270px inside a 228px
-   box, shoved the panel content 26px left and cut "CHECK THE GROUND" down to
-   "HECK THE GROUND" with a sideways scrollbar under it. Both lines are needed
-   and they stop different things: the track can no longer grow past the form,
-   and a row can no longer grow past the track. Same fix .evrows already
-   carries below, for the same reason. */
+   min-content is the whole sentence: unchecked it makes the form 270px inside
+   a 228px box, shoves the panel content 26px left and cuts "CHECK THE GROUND"
+   down to "HECK THE GROUND" with a sideways scrollbar under it. Both lines are
+   needed and they stop different things: the track cannot grow past the form,
+   and a row cannot grow past the track. .evrows below carries the same pair. */
 .doorform {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -2936,10 +2935,10 @@ input[type='range']:disabled {
    opens it. They are different, so they are allowed to look different.
 
    What they are not allowed to do is start their words in two different places.
-   Measured on step 4 before this: an action row put its label at x=59 behind a
-   26px bordered tile, and a data row put its label at x=43 behind a bare
-   Unicode glyph with no tile at all, in a different face, down the same 272px
-   column. Two lists, one gutter. A data row wears the same tile, drawn quieter
+   Left alone they do: an action row puts its label at x=59 behind a 26px
+   bordered tile, and a data row puts its label at x=43 behind a bare Unicode
+   glyph with no tile at all, in a different face, down the same 272px column.
+   Two lists, one gutter. A data row wears the same tile, drawn quieter
    because it is describing rather than offering, and the text lands on the same
    line. */
 .evrow {
@@ -2987,8 +2986,8 @@ input[type='range']:disabled {
    TWO FACES, because the two lines say different kinds of thing. The top line
    is what the door is CALLED and it is set in the label face; the line under
    it is the python identifier and where the door goes, and those are
-   addresses, so they stay mono. The whole row used to be mono, which is what
-   made `the_maw_mouth` look like the door's name rather than its address. */
+   addresses, so they stay mono. A row that is mono throughout makes
+   `the_maw_mouth` look like the door's name rather than its address. */
 .ev-name {
   flex: 1;
   min-width: 0;
@@ -3636,7 +3635,7 @@ footer [data-tip]:hover::after {
 
 /* what an open box is for. A bare input carrying a greyed example looks like a
  * field on a form, and two of them stacked look like a form with two required
- * fields, which is exactly how the pair was read the first time it was used. */
+ * fields, which is not what either of them is. */
 .boxwhat {
   font-size: var(--fs-fine);
   line-height: var(--lh);
@@ -3794,19 +3793,19 @@ footer [data-tip]:hover::after {
   font-weight: 600;
   color: var(--ink);
 }
-/* ONE INK RULE FOR EVERY NAME IN EVERY LIST, and this rule is what broke it.
-   A door whose label nobody had typed came out gold and underlined while the
-   route and the shot two blocks down came out white, so three lists in one
-   column said three different things with colour, and the gold underline was
-   the only underline in the tool and read as a link to somewhere broken.
+/* ONE INK RULE FOR EVERY NAME IN EVERY LIST, which is what this rule holds to.
+   A door whose label nobody has typed drawn gold and underlined, against a
+   route and a shot two blocks down drawn white, is three lists in one column
+   saying three different things with colour. The gold underline would also be
+   the only underline in the tool, and it reads as a link to somewhere broken.
    Nothing here is broken: the name simply has not been confirmed.
 
    The mark stays, because a person has to be able to tell a name an author
-   typed from one this tool unpacked out of an identifier, and Ash asked for
-   that split to be honoured on every surface. It is the shared `.guessed` in
-   tokens.css now, which the ocean already draws: the words keep the list's own
-   ink and only the dotted rule under them is quiet. Not a colour, not a link,
-   and the same one mark on both screens. */
+   typed from one this tool unpacked out of an identifier, and that split is
+   honoured on every surface. It is the shared `.guessed` in tokens.css, which
+   the ocean draws too: the words keep the list's own ink and only the dotted
+   rule under them is quiet. Not a colour, not a link, and the same one mark on
+   both screens. */
 .evrow .ev-name b.guessed {
   color: var(--ink);
 }
@@ -3827,10 +3826,9 @@ footer [data-tip]:hover::after {
   column-gap: 8px;
   row-gap: 0;
   /* --lh-tight, which is the leading tokens.css names this size for: "an id, a
-     coordinate, a version, a unit". Wrapping costs the row the height the
-     ellipsis used to save, and at the body leading a shot row measured 75px
-     against an action row's 47. Tight gives most of it back and cuts nothing
-     off. */
+     coordinate, a version, a unit". Wrapping costs the row the height an
+     ellipsis would save: at the body leading a shot row measures 75px against
+     an action row's 47. Tight gives most of it back and cuts nothing off. */
   line-height: var(--lh-tight);
   font-style: normal;
   font-size: var(--fs-micro);
@@ -3863,10 +3861,9 @@ body[data-view='editor'] {
   letter-spacing: 0.005em;
 }
 
-/* THE STEPS. Six across the top, and the current one used to say so with a
-   filled circle and a coloured word, which is the shape of a wizard. It is a
-   route through a piece of work, so the live one carries a rule under it and
-   the rest are quiet. */
+/* THE STEPS. Six across the top. The live one carries a rule under it and the
+   rest are quiet: a filled circle and a coloured word is the shape of a wizard,
+   and this is a route through a piece of work you can walk back along. */
 .step {
   position: relative;
   letter-spacing: 0.02em;

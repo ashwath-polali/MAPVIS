@@ -517,8 +517,8 @@ function Card({ m, onDelete, org }: { m: MapRow; onDelete: () => void; org?: Org
       onDragStart={(e) => {
         if (!org) return
         e.dataTransfer.effectAllowed = 'move'
-        // a payload as well as our own state, because a drag carrying nothing
-        // is one some browsers refuse to start
+        // a payload as well as the component's own state, because a drag carrying
+        // nothing is one some browsers refuse to start
         e.dataTransfer.setData('text/plain', m.slug)
         org.onLift()
       }}
@@ -975,7 +975,7 @@ function RailRow({
       onDragOver={(e) => {
         if (!taking) return
         e.preventDefault()
-        /* this said 'copy', which against effectAllowed 'move' is no drag operation, so drop never fired. */
+        /* 'move' and not 'copy': against effectAllowed 'move' a copy is no drag operation at all, and drop never fires. */
         e.dataTransfer.dropEffect = 'move'
         onOver()
       }}

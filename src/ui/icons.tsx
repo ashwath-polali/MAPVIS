@@ -175,9 +175,9 @@ const D: Record<IconName, ReactNode> = {
       <path d="M2.4 12.5c1.4 0 1.4-1.3 2.8-1.3s1.4 1.3 2.7 1.3 1.4-1.3 2.8-1.3 1.4 1.3 2.7 1.3" />
     </>
   ),
-  /* A ROUTE: a line with its waypoints on it and a head where it ends. The list
-   * row used to wear a raw ⤳, which is a glyph from a font rather than a mark
-   * from this set, and it sat next to drawn pictograms. */
+  /* A ROUTE: a line with its waypoints on it and a head where it ends. Drawn
+   * rather than set as a raw ⤳, which is a glyph from a font and does not belong
+   * beside the pictograms in this set. */
   route: (
     <>
       <path d="M2.6 11.8c2.6 0 2.2-4.4 4.8-4.4s2.2 3 4.4 3" />

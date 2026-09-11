@@ -1,4 +1,4 @@
-# Keeps both free tiers awake, and tells us the moment either one breaks.
+# Keeps both free tiers awake, and reports the moment either one breaks.
 #
 # Neon does not pause the way Supabase does: its compute scales to zero after 5
 # minutes and wakes itself on the next query with no human involved. Backblaze

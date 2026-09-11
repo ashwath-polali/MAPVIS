@@ -180,7 +180,7 @@ ok(
   `worst step ${worst.toFixed(2)}px at t=${worstT.toFixed(2)}s, ${sjump} steps over 3px in ${((20000 * 0.016) / ROUND).toFixed(2)} rounds`,
 )
 
-/* THE TWO SEAMS, named and measured separately, because the sweep above can only say something jumped somewhere. Pre-fix the wraps measured 58.37 / 22.27 / 28.99 / 117.47 / 166.76px and re-entry 58.39 and 22.22px. Both are arithmetic, not luck, so half a pixel is generous. */
+/* THE TWO SEAMS, named and measured separately, because the pass above can only say something jumped somewhere. Left alone the wraps measure 58.37 / 22.27 / 28.99 / 117.47 / 166.76px and re-entry 58.39 and 22.22px. Both are arithmetic, not luck, so half a pixel is generous. */
 const d0 = 0.001
 const jumpAt = (t: number) => {
   const a = lifeAt(troll, t - d0, th)
@@ -427,7 +427,7 @@ const passFlat = cleanLife({
   states: [{ secs: 30 }, { secs: 30, art: 1 }],
 }) as Life
 ok('and a pass handed a round keeps the pass and loses the round', !passFlat.states, `states: ${passFlat.states ? passFlat.states.length : 'none'}`)
-/* and losing the round leaves the pass EXACTLY as it was, which is the point. A pass does leave the map and fades to alpha 0 while it is away, so nothing is drawn out there. What made the state version a bug is that a state is drawn the whole time. */
+/* and losing the round leaves the pass EXACTLY as it was, which is the point. A pass does leave the map and fades to alpha 0 while it is away, so nothing is drawn out there. A state cannot do the same, because a state is drawn the whole time. */
 const passAlone = cleanLife({ kind: 'cross', cycle: 30, travel: 20, fromX: 0, fromY: 300, toX: 700, toY: 300, swayAmp: 0, seed: 11 }) as Life
 let passSame = true
 let passAway = 0
@@ -477,7 +477,7 @@ for (const [name, l, h, want] of golden) {
   ok(`${name} with no states is unchanged from before sequences existed`, got === want, `${got} against ${want}, 20000 frames`)
 }
 
-/* THE 32 MINUTE FREEZE. The walk used to fall off the end of its legs and answer still, teleporting the thing home to stand there visible for the rest of the session: measured on this crab, moving at t=1800s and frozen from t=1932.92s, inside a 30 to 45 minute advisory session. A sample cannot prove it is alive, because a wander is mostly pauses, so the test is that it still COVERS GROUND across sixty seconds at each mark. */
+/* THE 32 MINUTE FREEZE. A walk that falls off the end of its legs answers still from then on, teleporting the thing home to stand there visible: measured on this crab, moving at t=1800s and frozen from t=1932.92s, well inside one sitting with the map open. A sample cannot prove it is alive, because a wander is mostly pauses, so the test is that it still COVERS GROUND across sixty seconds at each mark. */
 for (const t0 of [1800, 2400, 3600, 5400, 20000]) {
   let lo = Infinity
   let hi = -Infinity
@@ -613,7 +613,7 @@ ok(
   `${((100 * sameAsLast) / 20000).toFixed(1)}% of 20000 frames sat exactly on the last moving state, against 55.8% before`,
 )
 
-/* ---- WHAT A BOX MEANS INSIDE A ROUND: the box is the room the WHOLE ROUND has and the movers divide it. The live state decides everything watchable at full asking; a state that is not live decides only how far it has already carried the thing. Deliberately lopsided at 15 against 120 px/s and read from the corner as well as the middle, because the old share gave every state the same reach both ways and the sum overran the short side: 54.9% of 60000 frames held against the fence and 8.6% of moving frames covering no ground. After, 0.0% and 0.0%. Three sweep starts, because t=0 is where a fault of this kind hides. */
+/* ---- WHAT A BOX MEANS INSIDE A ROUND: the box is the room the WHOLE ROUND has and the movers divide it. The live state decides everything watchable at full asking; a state that is not live decides only how far it has already carried the thing. Deliberately lopsided at 15 against 120 px/s and read from the corner as well as the middle. Giving every state the same reach both ways lets the sum overrun the short side: 54.9% of 60000 frames held against the fence and 8.6% of moving frames covering no ground, against 0.0% and 0.0% when each state's reach is its own. Three starting times, because t=0 is where a fault of this kind hides. */
 const NBOX = { x: 100, y: 100, w: 100, h: 100 }
 const nRound = (slow: number) =>
   cleanLife({
@@ -899,7 +899,7 @@ ok(
   `${jumpySeeds}/600 seed sweeps step over 2.5px, worst ${jumpiest.toFixed(2)}px on seed ${jumpiestSeed} ${jumpiestWhere}`,
 )
 
-/* ---- AND IT DOES NOT GET WORSE THE LONGER THE SESSION RUNS, which is the gate the last round of work did not have: every sweep started at t=0 where the fault was 1.59px and looked like rounding. Worst step by sweep start before: 0.71px at t=0, 1.35 at 12000, 82.42 at 60000, 128.56 at 300000. After, flat at 0.71. A map left open in the editor is not a 45 minute session. */
+/* ---- AND IT DOES NOT GET WORSE THE LONGER IT RUNS, which is the one thing a pass starting at t=0 cannot see: at t=0 the fault measures 1.59px and reads as rounding. Worst step by starting time, unfenced: 0.71px at t=0, 1.35 at 12000, 82.42 at 60000, 128.56 at 300000. Fenced, flat at 0.71. A map left open in the editor runs far longer than one sitting with the game. */
 let worstLate = 0
 let worstLateT0 = 0
 const lateLine: string[] = []

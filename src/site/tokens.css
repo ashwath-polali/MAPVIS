@@ -14,7 +14,7 @@
  * idea of what grey means.
  *
  * LOAD ORDER: this is first in main.tsx, before site.css and before app.css.
- * Both of those used to declare --ink, --dim, --edge and the font stacks
+ * Neither of those declares --ink, --dim, --edge or the font stacks
  * themselves, and a later :root wins, so those declarations were removed and
  * now alias what is below. Adding a competing hex to either file quietly turns
  * this file off, which is the failure this whole layer is here to stop.
@@ -160,11 +160,11 @@
 
 /* ---- the sea, which is a whole page's palette ------------------------------
  *
- * /world draws an ocean with islands on it, and it had no hue of its own. The
- * water was #0b111a against a void of #070b11, four points apart, so nothing on
- * screen read as water at all; what was left carrying the page was a neutral
- * grey graticule, an amber leader, a teal one and five unrelated accent hues
- * for the states, the water kinds and the marks. Ash rejected it twice.
+ * /world draws an ocean with islands on it, and it needs a hue of its own. Water
+ * at #0b111a against a void of #070b11 is four points apart, so nothing on screen
+ * reads as water at all, and what is left carrying the page is a neutral grey
+ * graticule, an amber leader, a teal one and five unrelated accent hues for the
+ * states, the water kinds and the marks.
  *
  * A chart of an ocean is drawn in the ocean's colours. This is one hue family
  * ramped by DEPTH, and it does three jobs at once so the page stops needing

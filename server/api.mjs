@@ -5661,8 +5661,8 @@ async function reviewObjects({ file, map, ask, prompt, view, n, what, size, job,
     `Look at what a pixel-art generator just made and say whether it answers what was asked for.`,
     ``,
     /* two files means the two-file wording, not the one-file wording. A planner
-     * handed two images without ONCE EACH re-reads to check itself and burns
-     * the whole timeout: measured 300s down to 16s once the words were right. */
+     * handed two images without ONCE EACH re-reads them to check itself and
+     * burns the whole timeout: 300s against 16s with the wording in. */
     map
       ? `Read the two image files below ONCE EACH with the Read tool, then answer in your next ` +
         `message. Do not read them again to check yourself and do not open anything else.`

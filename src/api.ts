@@ -1,7 +1,7 @@
 /* Calls to the local node side. Nothing here knows a key. */
 import type { CustomControl } from './core/customfx'
 
-/* KEEPALIVE CANNOT CARRY AN EXPORT, and asking it to is why the hub would not publish. The fetch standard caps a keepalive body at 64 KiB and a browser refuses an over-quota one outright: measured in the browser, 60 KiB reaches the server and 64 KiB rejects with TypeError in four milliseconds. The hub's bundle is about half a megabyte, so five presses over three hours never put a byte on the wire. The flag is honoured only when the payload fits. */
+/* KEEPALIVE CANNOT CARRY AN EXPORT. The fetch standard caps a keepalive body at 64 KiB and a browser refuses an over-quota one outright: measured in the browser, 60 KiB reaches the server and 64 KiB rejects with TypeError in four milliseconds. A map's bundle is about half a megabyte, so with the flag set unconditionally no press ever puts a byte on the wire and nothing says why. It is honoured only when the payload fits. */
 const KEEPALIVE_MAX = 60 * 1024
 
 /* A REQUEST THAT NEVER ANSWERS HAS TO BECOME AN ERROR, because a promise that never settles is not a slow export, it is a dead button: doExport holds a flag while it waits, so one interrupted export left every later press returning without making a request. Publishing the hub takes about 23s, so the ceiling is generous; this catches never, not slow. */
@@ -224,7 +224,7 @@ export const assetGen = (
   },
 ) => jpost<{ item: LibItem }>('/api/asset-gen', { id, prompt, ...o })
 
-/* ---- characters: people and animals. Pixellab's own distinction and it matters: an OBJECT is a prop, a CHARACTER has a skeleton, 4 or 8 directions and walk cycles. Their docs say plainly not to use the eight-direction object endpoint for a person, and an earlier version of this file did exactly that. Both calls here are free. */
+/* ---- characters: people and animals. Pixellab's own distinction and it matters: an OBJECT is a prop, a CHARACTER has a skeleton, 4 or 8 directions and walk cycles. Their docs say plainly not to use the eight-direction object endpoint for a person, and it answers with a generic character rather than the one asked for. Both calls here are free. */
 export interface AccountCharacter {
   id: string
   name: string
@@ -404,7 +404,7 @@ export const assetGenHere = (
   },
 ) => jpost<{ item: LibItem; note?: string }>('/api/asset-gen-here', { id, prompt, ...o })
 
-// TWO pixellab generations behind one confirm: a transparent base sprite, then its 8-frame animation. The server's ask interpreter splits the one prompt into thing plus movement words, because scene words in the motion bleed objects into the sprite (the measured smoke-summoned-a-volcano failure). note carries a motion that did not happen, or the user gets a still where they asked for a moving one with nothing saying why.
+// TWO pixellab generations behind one confirm: a transparent base sprite, then its 8-frame animation. The server's ask interpreter splits the one prompt into thing plus movement words, because scene words in the motion bleed objects into the sprite: asking for smoke draws the volcano it belongs to. note carries a motion that did not happen, or the user gets a still where they asked for a moving one with nothing saying why.
 export const assetAnim = (
   id: string,
   prompt: string,
@@ -421,7 +421,7 @@ export const assetAnim = (
   },
 ) => jpost<{ item: LibItem; note?: string }>('/api/asset-anim', { id, prompt, motion, ...o })
 
-/* ---- making a thing that is already in the library MOVE. Five people were standing dead still on the hub with no way to ask for that without generating them again. The user types it and the server routes it, because a list of animations is always shorter than what somebody wants. Four paths, priced differently: `character` puts every heading through ONE coordinated job, because eight separate calls come back as eight rhythms and a figure would breathe faster facing north; `sprite` is one generation; `written` costs NOTHING and is named rather than run, because neither generator can carry a sprite anywhere; `blocked` refuses instead of selling a defect. Everything but written rewrites the item IN PLACE, staged under .stage with the old bytes going to work/<id>/.prev. ONE route, two presses: the free read answers the plan and the true price, and the price is re-derived server-side so a client cannot talk it down. */
+/* ---- making a thing that is already in the library MOVE, without paying to generate it a second time. The user types what it should do and the server routes it, because a list of animations is always shorter than what somebody wants. Four paths, priced differently: `character` puts every heading through ONE coordinated job, because eight separate calls come back as eight rhythms and a figure would breathe faster facing north; `sprite` is one generation; `written` costs NOTHING and is named rather than run, because neither generator can carry a sprite anywhere; `blocked` refuses instead of selling a defect. Everything but written rewrites the item IN PLACE, staged under .stage with the replaced bytes going to work/<id>/.prev. ONE route, two presses: the free read answers the plan and the true price, and the price is re-derived server-side so a client cannot talk it down. */
 export interface AnimPlan {
   path: 'character' | 'sprite' | 'written' | 'blocked'
   // exact, and the number the armed button shows. 0 on written and on blocked,
@@ -460,7 +460,7 @@ export const assetAnimate = (
     plan?: AnimPlan
     confirm?: true
     job?: string
-    /* collect frames an earlier press already paid for instead of drawing again: the host answers pending with the group it started when a generation outlives its function budget, and sending that group back finishes the job for free. */
+    /* collect frames a previous press already paid for instead of drawing again: the host answers pending with the group it started when a generation outlives its function budget, and sending that group back finishes the job for free. */
     recover?: true | string
   },
 ) =>
@@ -520,7 +520,7 @@ export interface ObjVerdict {
   /* Whether what came back ANSWERS THE ASK, which best on its own cannot say: best is clamped into 1..n, so a row of things that are all wrong still comes back with one praised. Absent reads as good, the same default the effect loop takes. */
   verdict?: 'good' | 'revise'
 }
-/* An options object, not a positional list: the five ordered arguments that were here meant counting out every call site the day the look is given something more to judge with. */
+/* An options object, not a positional list: five ordered arguments mean counting out every call site the day the look is given something more to judge with. */
 export const objReview = (o: {
   id: string
   ask: string
@@ -549,7 +549,7 @@ export const effectSave = (
 ) => jpost<{ item: LibItem }>('/api/effect-save', { id, name, frames, meta, overwrite, ask })
 
 // Every ask this map has been given, newest first. Free, read-only, and the
-// answer to "what did I type to get that". A record, not a feature to feed.
+// answer to "what did I type to get that". A record, not an input.
 export interface Ask {
   name: string
   // character is here so a past ask reopens in the mode that made it: without it a sprite came back in the object box, which draws a prop of a body. The on-disk word stays 'character' so old asks.json rows replay.
@@ -576,7 +576,7 @@ export interface EffectSaved {
 export const effectRead = (id: string, name: string) =>
   jpost<EffectSaved>('/api/effect-read', { id, name })
 
-/* Pixels the client already holds, written back to the item IN PLACE. Every edit used to land as a second row, palm then palm-trimmed then palm-matched, and a library of near-identical rows is worse than whatever each edit fixed. The old bytes go to work/<id>/.prev, which is never listed, because these files cost generations. keepCopy asks for the old behaviour and only the compare panel uses it. */
+/* Pixels the client already holds, written back to the item IN PLACE. An edit that lands as a second row leaves palm, then palm-trimmed, then palm-matched, and a library of near-identical rows is worse than whatever each edit corrected. The replaced bytes go to work/<id>/.prev, which is never listed, because these files cost generations. keepCopy asks for a second row instead, and only the compare panel uses it. */
 export const assetCrop = (
   id: string,
   name: string,

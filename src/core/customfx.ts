@@ -127,7 +127,7 @@ function mkApi(buf, W, H, f, N, seed, ramp, colors, SPR) {
     return got
   }
   // one pixel, already whole and already inside. Source over, so a later draw
-  // sits on top of an earlier one the way a person would expect.
+  // sits on top of the one below it the way a person would expect.
   var raw = function (xi, yi, col, a) {
     var sa = a > 1 ? 1 : a
     var i = (yi * W + xi) * 4

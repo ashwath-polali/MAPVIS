@@ -1335,12 +1335,12 @@ export default function World() {
         kind: 'berth',
         x: sea(x, d.w),
         y: sea(y, d.h),
-        // a label from the start, so a berth never reaches a player as
-        // `berth_1`. Ash, 2026-08-29: points get labels too.
+        // a label from the start, so a berth never reaches a player as `berth_1`.
+        // Every point carries one, not just the islands.
         label: displayName({ name }).text,
         // how close counts as arrived, because a hull moves in floats and an
         // exact-pixel test on one never fires. The order of size a dock sits at
-        // off a jetty, which is what 019 found on the hub.
+        // off a jetty.
         r: 40,
         ...(to ? { island: to.island } : {}),
         ...(to?.at ? { at: to.at } : {}),
@@ -1834,7 +1834,7 @@ export default function World() {
     )
   if (!doc || mine === null) return <div className="world" />
 
-  /* a multiplier throughout: a multiplier and a ratio swapped in one slot with nothing saying so. */
+  /* a multiplier throughout, never a ratio: the two are indistinguishable in one slot and nothing catches a swap. */
   const scale = `${fit.s >= 10 ? Math.round(fit.s) : fit.s >= 1 ? Number(fit.s.toFixed(1)) : Number(fit.s.toFixed(2))}×`
   /* the span sits beside the zoom: the header says 4096 and the opening view is half a per cent. */
   const span = size.w && fit.s ? Math.round(size.w / fit.s) : 0
@@ -1980,9 +1980,9 @@ export default function World() {
           )}
           {!loading && !user && <p className="world-note">saving needs an account</p>}
 
-          {/* nothing selected used to be answered with a paragraph explaining
-              what an island is to somebody looking at a chart of them. The
-              roster below is the answer. */}
+          {/* nothing selected is answered with the roster below, not with a
+              paragraph explaining what an island is to somebody already looking
+              at a chart of them. */}
           {place && sel?.kind === 'place' ? (
             <Inspector
               p={place}

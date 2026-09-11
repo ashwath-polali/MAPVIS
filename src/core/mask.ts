@@ -193,7 +193,7 @@ export interface MapAnchor {
   r: number
   /* WHERE A BODY ENDS UP WHEN IT USES THIS PLACE, a different pixel from x,y: x,y is the middle of the thing, and a chart table's middle is the tabletop. Absolute painting pixels because that is what an author clicks. Absent means the body aims at x,y. */
   stand?: [number, number]
-  /* WHICH OF THE THREE SHAPES THE AUTHOR MEANS. Exclusivity used to be enforced by deletion, so touching the circle button lost a drawn area outright with no undo across a reload. Absent means work it out from the data. Rides in the meta bag, because a new top-level field is dropped by three copiers. */
+  /* WHICH OF THE THREE SHAPES THE AUTHOR MEANS. Exclusivity enforced by deletion loses a drawn area outright the moment somebody touches the circle button, with no undo across a reload. Absent means work it out from the data. Rides in the meta bag, because a new top-level field is dropped by three copiers. */
   shape?: AnchorShape
   /* THE FOUR NUMBERS ARE [x0, y0, x1, y1], two opposite corners, not [x, y, w, h]. The schema comment said one thing and the game's box test the other; the game had running code, so the game wins. Both readers take min and max. */
   rect?: [number, number, number, number]
@@ -434,7 +434,7 @@ export function migrateEvent(e: MapAnchor & { type?: string }, charH = defaultCf
     .map((q) => [Math.round(Number(q[0])), Math.round(Number(q[1]))] as [number, number])
   if (poly.length >= 3) e.poly = poly
   else delete e.poly
-  /* THE MODE, FOLDED INTO THE BAG AND LIFTED BACK OUT. Both shapes are kept now and the mode says which is authoritative, so touching a mode button no longer costs an author their drawing. Written only when there is an area to be authoritative over. THE KIND IS NOT ASKED: a zone drawn on a door used to survive until the next save and read back as a circle. */
+  /* THE MODE, FOLDED INTO THE BAG AND LIFTED BACK OUT. Both shapes are kept and the mode says which is authoritative, so touching a mode button costs an author nothing. Written only when there is an area to be authoritative over. THE KIND IS NOT ASKED: gating on it means a zone drawn on a door survives until the next save and reads back as a circle. */
   /* THE RING OFFSET, validated and folded like `shape` and `when` and in the bag for the same reason. Two finite numbers or nothing, and a zero offset stores as nothing so an untouched ring grows no field. */
   const bagRing = e.meta && Array.isArray((e.meta as { ring?: unknown }).ring)
     ? ((e.meta as { ring?: unknown[] }).ring as unknown[])
@@ -1373,7 +1373,7 @@ export class MaskDoc {
       assetNext: this.assetNext,
       events: this.events,
       eventNext: this.eventNext,
-      /* THE OCCLUDER BASELINES, WHICH USED TO BE THROWN AWAY HERE. A baseline is the one hand-set number in the depth system, and omitting `occs` meant unpack() rebuilt every one from the polygon's bottom edge on the next open. The author watched the field take the number. */
+      /* THE OCCLUDER BASELINES, AND THEY MUST NOT BE DROPPED HERE. A baseline is the one hand-set number in the depth system, and omitting `occs` leaves unpack() rebuilding every one from the polygon's bottom edge on the next open, in front of whoever typed it. */
       occs: this.occs,
       occNext: this.occNext,
       stencils: this.stencils,

@@ -5,7 +5,7 @@ import { useScrollProgress, installGrain } from './motion'
 import { useSession } from './session'
 import Landing from './Landing'
 
-/* A DEPLOY IS NOT A BROKEN PANEL, AND IT USED TO LOOK LIKE ONE: a tab left open across a deploy still holds the old index.html, asks for a chunk that no longer exists, and the boundary renders an error page in the old build's UI. */
+/* A DEPLOY IS NOT A BROKEN PANEL, and without this it looks like one: a tab left open across a deploy still holds the previous index.html, asks for a chunk that no longer exists, and the boundary renders an error page in that build's UI. */
 const RELOADED = 'mapvis:stale-chunk-reloaded'
 const STALE = /failed to fetch dynamically imported module|error loading dynamically imported module|importing a module script failed/i
 

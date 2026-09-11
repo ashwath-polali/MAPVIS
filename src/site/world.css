@@ -158,7 +158,7 @@
  * The editor's own footer, restated with the tokens this route has loaded:
  * --panel, a hairline over it, mono numbers and dim words. What is IN it is the
  * same class of fact the editor puts there, the scale and the size and the
- * counts, and every one of those used to be somewhere else on this page. */
+ * counts, and each of those has one place on this page rather than several. */
 .world-foot {
   display: flex;
   align-items: center;
@@ -469,11 +469,11 @@
 
 /* WHAT THIS PANEL IS ABOUT, IN WORDS, WITH THE ADDRESS UNDER IT.
  *
- * The heading was the literal word "island" on every island, so the panel never
- * said which one, and the only place the name appeared was inside the name
- * field where it is the ADDRESS. Ash, 2026-08-29: humans see labels. So the
- * words go up top and the identifier goes under them in mono, marked as the
- * code name, because the author writing a grape still has to type it. */
+ * A heading that is the literal word "island" on every island never says which
+ * one, and leaves the name appearing only inside the name field, where it is the
+ * ADDRESS. People read labels, so the words go up top and the identifier goes
+ * under them in mono, marked as the code name, because whoever is writing code
+ * against it still has to type it. */
 .world-head {
   display: grid;
   gap: 2px;
@@ -533,7 +533,7 @@
 }
 /* THE GROUPS THAT FOLD, and only the ones nobody opens twice.
    The painting and the radii are things an author sets once and then leaves,
-   and both sitting open is most of the 856 px this panel used to run to. What
+   and both sitting open is most of the 856 px this panel can run to. What
    is open by default is what is unfinished: a slot with no map opens the
    painting. The caret is the editor's, drawn as two borders rotated, so a fold
    here and a fold in the tool are the same mark. */
