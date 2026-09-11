@@ -1,14 +1,13 @@
 -- Routes, shots, and the water between the islands.
 --
--- 008 closed the fields that had a type and no control. These three are the
--- other shape: things the authoring sweep found MISSING ENTIRELY, where there
--- was no type, no column and no way to say the thing at all.
+-- Three things a map cannot say about itself, each needing a type, a column and
+-- a control rather than just one of the three.
 --
---   paths     a named polyline. §2, and the sweep's largest single gap.
---   framings  a named shot. §5, missing entirely.
---   world     the one ocean every crossing happens on. §12, and structurally
---             absent: a MAPVIS document cannot exist without a painting, and
---             the water is the one surface with no painting under it.
+--   paths     a named polyline: a route walked or sailed, marked once.
+--   framings  a named shot: where the camera sits and how close.
+--   world     the one ocean every crossing happens on. It has no map of its
+--             own, because a MAPVIS document cannot exist without a painting
+--             and the water is the one surface with no painting under it.
 --
 -- paths and framings are jsonb on the map for the same reason `assets` is:
 -- genuinely nested, small, always read with the map, so one row stays one

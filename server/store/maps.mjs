@@ -1,4 +1,4 @@
-// each half is written only when its own content changed, because a 4 second autosave of the whole document is 1.6 GB an hour against a 0.5 GB tier
+// each half is written only when its own content changes, because a 4 second autosave of the whole document is 1.6 GB an hour against a 0.5 GB tier
 import crypto from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -177,7 +177,8 @@ export async function putDoc(mapId, docString) {
 
   // Everything the row holds, hashed as one thing. Compared against the stored
   // hash rather than against md5(assets::text) in the query, because jsonb
-  // renormalises key order on the way in and would never match what we hold.
+  // renormalises key order on the way in and never matches the string the
+  // server holds.
   /* the map's own properties ride the document so there is one save beat, and the defaults are walk.ts defaultCfg() so an older tab writes back what it already had */
   const wk = d.walk && typeof d.walk === 'object' ? d.walk : {}
   const pr = d.props && typeof d.props === 'object' ? d.props : {}
@@ -376,7 +377,7 @@ export async function getDoc(mapId) {
   let mm = ''
 
   /* the mask cannot be redrawn, so an unreachable blob falls back to the local file rather than failing to open */
-  /* but the local file is only a fallback and never the source: doc.json is not written by the same save, and preferring it discarded fourteen hours of mask edits */
+  /* but the local file is only a fallback and never the source: doc.json is not written by the same save, so preferring it can discard a day of mask edits */
   const local = localDoc(m.slug)
   const localNewer = local && localDocAt(m.slug) > +new Date(m.updated_at || 0)
   if (local && typeof local.m === 'string' && local.m.length && (!blob || localNewer)) {

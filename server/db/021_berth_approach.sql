@@ -24,13 +24,13 @@
 -- WHAT IS FOLDED. Every mark named `<something>_approach` bound to an island
 -- that has a berth becomes that berth's nested approach, and the lifted mark is
 -- deleted. Its own name, facing and label die with it, which is correct: they
--- were invented by 019 out of the place's title and nothing ever read them.
+-- are derived from the place's title and nothing reads them.
 --
 -- 2. AND THE TEST BUOY IS DELETED.
 --
--- `sunken_bell_buoy`, labelled "Bell of the Deep", is residue from a verify run
--- that did not clean up after itself. Ash does not recognise it and has said to
--- remove it. Named exactly, so `the_hub` and `the_hub_berth` are untouched.
+-- `sunken_bell_buoy`, labelled "Bell of the Deep", is residue left behind by a
+-- verify run that did not clean up after itself. Named exactly, so `the_hub`
+-- and `the_hub_berth` are untouched.
 --
 -- THE VERSION IS NOT COUNTED UP. The game stamps a saved position with it and
 -- refuses to resume a run when it has moved, so bumping it throws away the

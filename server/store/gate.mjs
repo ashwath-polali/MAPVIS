@@ -153,9 +153,8 @@ export function gateMap({ mapJson, anchors, levels, slugs }) {
   }
   const t = standTest(levels, mapJson)
 
-  /* WHERE THE PLAYER BEGINS, tested at all for the first time. A spawn anchor
-   * silently wins over map.spawn in the game's own arrival(), so that is the
-   * order it is resolved in here too. */
+  /* WHERE THE PLAYER BEGINS. A spawn anchor silently wins over map.spawn in the
+   * game's own arrival(), so that is the order it is resolved in here too. */
   const spawnAnchor = anchors.find((a) => a.kind === 'spawn')
   const sx = spawnAnchor ? spawnAnchor.x : mapJson.spawn?.[0]
   const sy = spawnAnchor ? spawnAnchor.y : mapJson.spawn?.[1]

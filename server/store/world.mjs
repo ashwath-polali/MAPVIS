@@ -373,7 +373,7 @@ export async function saveWorld(input, client, id = GAME_WORLD) {
   /* the read and the write are one locked unit, because an unserialised read-modify-write destroyed the ocean and drove the version counter backwards */
   if (!client) return withWorld((c) => saveWorld(input, c, id), id)
   const run = (t, p) => client.query(t, p)
-  /* an absent key keeps the row and only a real array replaces it, on every field, because the route posts the raw body and a subset used to wipe every island and return 200 */
+  /* an absent key keeps the row and only a real array replaces it, on every field, because the route posts the raw body and a subset would wipe every island and return 200 */
   const stated = Array.isArray(input?.marks)
   const was = await getWorld(client, id)
   const doc = {
@@ -420,7 +420,7 @@ export async function saveWorld(input, client, id = GAME_WORLD) {
   const version = shape(doc) === shape(was) ? was.version : (was.version || 1) + 1
   /* every write to this row is logged, because the row was destroyed once by a runner nobody was watching */
   console.log()
-  /* every write to this row is logged, because an unexplained writer is indistinguishable from a test session without a line in a log */
+  /* every write to this row is logged, because an unexplained writer is indistinguishable from a test run without a line in a log */
   console.log('[world] row ' + id + ' written · ' + doc.places.length + ' place(s), ' + (doc.marks || []).length + ' berth(s), version ' + version)
   const wrote = await run(
     `insert into world (id, w, h, places, regions, marks, home, version, updated_at)

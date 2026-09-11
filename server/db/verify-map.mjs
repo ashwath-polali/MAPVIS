@@ -121,9 +121,9 @@ await putDoc(map.id, JSON.stringify(again1))
     const back = await store().get(keys.libStill(map.id, name))
     Buffer.compare(back, png) === 0 ? ok('its bytes round-tripped through object storage') : no('its bytes came back different')
 
-    // an in-place edit keeps the old pixels, and putting them back must work on
-    // a machine that never saw the edit, which is the whole reason .prev alone
-    // was not enough
+    // an in-place edit keeps the replaced pixels, and putting them back must work
+    // on a machine that never saw the edit, which is more than .prev on one disk
+    // can do
     const { snapshotVersion, restoreVersion, versionsOf } = await import('../store/platform.mjs')
     const snap = await snapshotVersion(slug, name)
     snap ? ok(`kept version ${snap.seq} of it (${snap.files} file)`) : no('nothing was kept')

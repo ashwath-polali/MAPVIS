@@ -292,7 +292,7 @@ export async function serveFromStore(res, rel, req) {
   res.setHeader('ETag', etag)
   res.setHeader('Cache-Control', 'private, no-cache')
 
-  /* the tag is backfilled on first read, because an object written before this table existed has no row and a migration would have to walk the whole bucket */
+  /* the tag is backfilled on first read, because an object stored before this table has no row and a migration would have to walk the whole bucket to make one */
   if (platformOn()) {
     q(
       `insert into blob_shas (key, sha, bytes, updated_at) values ($1,$2,$3, now())

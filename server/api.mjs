@@ -441,8 +441,8 @@ async function route(req, res, p, url) {
   }
 
   // The asset library is PER MAP: only what was generated for this scene id,
-  // in work/<id>/library. The old shared folder in public/library stays on
-  // disk untouched but is no longer listed anywhere.
+  // in work/<id>/library. The shared folder in public/library is a starter set
+  // served by path and is deliberately not listed here.
   if (p.startsWith('/api/library/')) {
     const id = safeId(decodeURIComponent(p.slice('/api/library/'.length)))
     // one select against library_items, where the disk version walked the
@@ -729,8 +729,8 @@ async function route(req, res, p, url) {
             `for a while, it rolls again. Everything you already wrote above stays, because the ` +
             `first state uses it.`,
           // the count comes off STATES_MAX so the words and the guard below can
-          // never drift apart. Asking for seven and keeping six is how a state
-          // used to vanish without a word.
+          // never drift apart. Asking for seven and keeping six drops a state
+          // without a word.
           `Each state is a length in seconds, optionally the name of a picture to draw, and ` +
             `optionally a behaviour of its own. Two to ${STATES_MAX} states, and a longer list is ` +
             `cut to ${STATES_MAX}. The list is a ROUND: after the last one it starts again at the ` +
@@ -779,7 +779,7 @@ async function route(req, res, p, url) {
             `"range":40,"speedMin":14,"speedMax":26,"pauseMin":1.2,"pauseMax":4.7,"bob":1.5,` +
             `"bobRate":3.5,"faceMotion":true}`,
           `Or, when it changes, the same object with a states list on the end:`,
-          /* an example that named "mossy boulder" taught it to invent whatever the words said, so with no library to draw from it names nothing */
+          /* the example names no picture: one that names "mossy boulder" is copied, and with no library to draw from that is a name for something nobody made */
           `{"kind":"wander","note":"rolls the rocks, goes still as a boulder, then rolls off",` +
             `"seed":1,"range":70,"speedMin":10,"speedMax":22,"pauseMin":0.8,"pauseMax":3,"bob":1,` +
             `"bobRate":3,"faceMotion":true,` +
@@ -841,7 +841,7 @@ async function route(req, res, p, url) {
         : ''
       /* and what was cut, for the same reason: a round one state short and a
        * library three pictures short both read on screen as the tool ignoring
-       * the ask. Neither used to say anything at all. */
+       * the ask, unless the answer says so. */
       const cutSt = overStates ? ` · a round holds ${STATES_MAX} states, so the last ${overStates} went` : ''
       const cutNm = namesCut
         ? ` · ${pool.length} pictures here, too many to list, so the last ${namesCut} could not be named`
@@ -1337,11 +1337,11 @@ async function route(req, res, p, url) {
     const { gate, halt, done } = gateFor(job)
     try {
       if (plan.path === 'character') {
-        /* frames an earlier attempt bought but could not read back: recovery is offered before the spend rather than as a repair after it */
+        /* frames a previous attempt paid for but could not read back: recovery is offered before the spend rather than as a repair after it */
         let byDir = null
         if (b.recover) {
           // a named group is one this client started and is waiting on; a bare
-          // true is the old repair, whatever complete motion is on the account
+          // true takes whatever complete motion is on the account
           const found = await recoverCharacterMotion(plan, typeof b.recover === 'string' ? b.recover : '')
           if (!found) return send(res, 409, { error: 'nothing already paid for was found on this one' })
           byDir = found.byDir
@@ -1422,9 +1422,9 @@ async function route(req, res, p, url) {
     }
   }
 
-  // What he typed, back to him. The library only ever kept a four-word slug of
-  // the ask, so "what did I write to get that tree?" had no answer anywhere in
-  // the app. Newest first.
+  // What the author typed, back to them, newest first. The library keeps only a
+  // four-word slug of each ask, which cannot answer "what did I write to get
+  // that tree?".
   if (p.startsWith('/api/asks/')) {
     return send(res, 200, { asks: readAsks(decodeURIComponent(p.slice('/api/asks/'.length))) })
   }
@@ -1452,8 +1452,8 @@ async function route(req, res, p, url) {
     const id = safeId(b.id)
     const frames = Array.isArray(b.frames) ? b.frames : []
     if (!frames.length) return send(res, 400, { error: 'no frames' })
-    // 8 headings of 8 frames is 64, exactly the old cap, so a walking sprite
-    // sat on the edge of being refused outright
+    // 8 headings of 8 frames is 64, so a cap of 64 sits exactly on the edge of
+    // refusing an ordinary walking sprite
     if (frames.length > 256) return send(res, 400, { error: 'too many frames' })
     const dir = libDirOf(id)
     fs.mkdirSync(dir, { recursive: true })
@@ -1514,8 +1514,8 @@ async function route(req, res, p, url) {
     }
     fs.writeFileSync(path.join(fdir, 'effect.json'), JSON.stringify(rec, null, 2))
     const size = pngSize(path.join(fdir, '0.png'))
-    // effects record on KEEP, not on every attempt, or one tuning session would
-    // bury a week of asset asks under thirty near-identical lines
+    // effects record on KEEP, not on every attempt, or one round of tuning
+    // buries a week of asset asks under thirty near-identical lines
     if (b.ask && !b.overwrite) noteAsk(id, name, b.ask, rec.type === 'custom' ? 'written' : rec.type, 'effect')
     // a kept effect ending at disk was gone with the request on a host; pushItem carries effect.json across with the frames
     await pushLibrary(id, name)
@@ -1601,7 +1601,7 @@ async function route(req, res, p, url) {
     } catch (e) {
       return send(res, 500, { error: 'the sheet did not write · ' + String(e.message || e).slice(0, 160) })
     }
-    /* the painting the plan already wrote, never box.png: that one is only written when a box was drawn, so it goes stale. missing is fine */
+    /* the painting the plan already wrote, never box.png: that one is written only when a box is drawn, so it goes stale. missing is fine */
     const mapFile = path.join(WORK, id, '.ask', 'map.png')
     const hasMap = fs.existsSync(mapFile)
     const v = await reviewObjects({
@@ -1643,7 +1643,7 @@ async function route(req, res, p, url) {
   }
 
   // a crop lands as a new <name>-<suffix> item, so the original is never touched, and every frame arrives at the same rect so the loop stays in register
-  /* put the old pixels back from .prev, newest first: undoing only the placement half left nineteen trees looking like they had slid down the map */
+  /* put the previous pixels back from .prev, newest first, and the placement half with them: undoing one without the other slides every affected thing down the map */
   if (p === '/api/asset-revert' && req.method === 'POST') {
     const b = await body(req)
     const id = safeId(b.id)
@@ -1712,8 +1712,8 @@ async function route(req, res, p, url) {
     const id = safeId(b.id)
     const frames = Array.isArray(b.frames) ? b.frames : []
     if (!frames.length) return send(res, 400, { error: 'no pixels' })
-    // 8 headings of 8 frames is 64, exactly the old cap, so a walking sprite
-    // sat on the edge of being refused outright
+    // 8 headings of 8 frames is 64, so a cap of 64 sits exactly on the edge of
+    // refusing an ordinary walking sprite
     if (frames.length > 256) return send(res, 400, { error: 'too many frames' })
     const src = String(b.name || '').trim()
     if (!src) return send(res, 400, { error: 'no name' })
@@ -1727,7 +1727,7 @@ async function route(req, res, p, url) {
     }
     await ensureSidecars(id, cleanName(src))
     const taken = (n) => fs.existsSync(path.join(dir, n)) || fs.existsSync(path.join(dir, n + '.png'))
-    /* in place by default: an edit that leaves palm, palm-trimmed, palm-trimmed-bit2 is worse than the problem it solved, and the old bytes go to .prev, never listed */
+    /* in place by default: an edit that leaves palm, palm-trimmed, palm-trimmed-bit2 behind is worse than whatever it corrected, and the replaced bytes go to .prev, never listed */
     const keep = !!b.keepCopy
     let name = cleanName(src)
     if (keep) {
@@ -2107,8 +2107,8 @@ async function route(req, res, p, url) {
         prompt: plan.description,
         note: plan.note,
         // which levers actually went out, on every answer. A dropped element
-        // list is invisible in a returned picture until somebody has spent
-        // enough of them to see the pattern, which is what 2026-08-30 was.
+        // list is invisible in a returned picture until enough generations have
+        // been spent for the pattern to show.
         ...levers,
         ...(plan.routed ? {} : { degraded: plan.degraded, why: plan.why }),
       })
@@ -2263,7 +2263,7 @@ async function route(req, res, p, url) {
   }
 
   if (p === '/api/export' && req.method === 'POST') {
-    /* an export that takes minutes has to say where it is: it said nothing until it finished, and three hours went on narrowing down a stall by hand */
+    /* an export takes minutes, so it says where it is as it goes: silence until it finishes leaves a stall with nothing to narrow it down by */
     const t0 = Date.now()
     const step = (what) => console.log(`[export] ${what} · ${((Date.now() - t0) / 1000).toFixed(1)}s`)
     const b = await body(req)
@@ -2623,7 +2623,7 @@ async function route(req, res, p, url) {
       try {
         const r = await loadDocument(id)
         if (r?.doc) {
-          /* opening a map counts as working on it: the dashboard orders by updated_at, which only a save used to touch */
+          /* opening a map counts as working on it: the dashboard orders by updated_at, and a save alone leaves a map you reopened all week sitting at the bottom */
           q('update maps set updated_at = now() where slug = $1', [id]).catch(() => {})
           return send(res, 200, { doc: r.doc, savedAt: r.savedAt, from: 'platform' })
         }
@@ -3093,7 +3093,7 @@ async function readApi(req, res, p, url) {
 }
 
 // where the bytes come from moved and the address did not, which is why 17,000 lines of client did not have to change
-/* disk first: bucket first spent 3,244 downloads in a day against a free allowance of 2,500 to read files already on the drive, and a host has no work dir anyway */
+/* disk first: asking the bucket first spends 3,244 downloads in a day against a free allowance of 2,500 to read files already on the drive, and a host has no work dir anyway */
 async function serveWork(res, rel, req) {
   const f = path.join(WORK, rel.split('/').map(decodeURIComponent).join(path.sep))
   const onDisk = diskAllowed() && f.startsWith(WORK) && fs.existsSync(f) && !fs.statSync(f).isDirectory()
@@ -3341,7 +3341,7 @@ function resolveAssetFile(u, sceneDir) {
   return fs.existsSync(abs) && fs.statSync(abs).isFile() ? abs : null
 }
 
-/* what the person actually typed, kept beside the map: the raw ask used to become a four-word slug and be thrown away. newest first, last 40 */
+/* what the person actually typed, kept beside the map, newest first, last 40. The library keeps a four-word slug of it and nothing else */
 /* rotations as one folder keyed by heading, shared by the import and the eight-direction generation because both land the same set of views */
 async function saveRotations(id, detail, wantName) {
   const rot = detail && detail.rotation_urls && typeof detail.rotation_urls === 'object' ? detail.rotation_urls : null
@@ -3703,7 +3703,7 @@ const frameSet = (d) => {
   return out
 }
 
-/* the read before the spend is what makes a replacement safe: without it a second re-animate reads back the old walk and overwrites the item with it */
+/* the read before the spend is what makes a replacement safe: without it a second re-animate reads back the previous walk and overwrites the item with it */
 async function runCharacterMotion(plan, seed, gate, halt) {
   halt()
   let d = await raceStop(gate, pixellab.characterDetail(plan.characterId))
@@ -3711,7 +3711,7 @@ async function runCharacterMotion(plan, seed, gate, halt) {
   const rot = d.rotation_urls && typeof d.rotation_urls === 'object' ? d.rotation_urls : {}
   // only headings the character actually has: naming one it does not is a
   // generation asked for and thrown away
-  /* usable and how many to animate are different questions: asking for three headings used to trip the four-rotation guard and fail the whole job */
+  /* usable and how many to animate are different questions: asking for three headings trips the four-rotation guard and fails the whole job */
   const has = Object.keys(rot).filter((k) => typeof rot[k] === 'string' && rot[k])
   if (has.length < 4) throw new Error('the character on the account has fewer than four headings, so nothing was asked for')
   // only headings it actually has: naming one it does not is a generation asked
@@ -3757,8 +3757,8 @@ async function runCharacterMotion(plan, seed, gate, halt) {
     const found = await recoverCharacterMotion(plan)
     if (found) return found.byDir
   }
-  // refusing here costs the generations and keeps the item. Guessing would
-  // write the OLD motion over it and call the result the new one.
+  // refusing here costs the generations and keeps the item. Guessing writes the
+  // PREVIOUS motion over it and calls the result the new one.
   if (!byDir) throw new Error('the frames that came back could not be told from the motion it already had, so nothing was replaced')
   return withStills(byDir, rot)
 }
@@ -3819,8 +3819,8 @@ function newGroupDirs(detail, group, before, heads, rot) {
   /* nothing new anywhere means the motion never landed: falling through to the rotations would write statues over a walk cycle and call it a success */
   if (!Object.keys(byDir).length) return null
   // a heading the motion missed keeps its still rotation rather than vanishing.
-  // It stands there facing the right way while the others move, which is what
-  // the whole library looked like an hour ago.
+  // It stands facing the right way while the others move, which is a smaller
+  // fault than a heading that is simply gone.
   for (const k of heads) if (!byDir[k] && rot[k]) byDir[k] = [rot[k]]
   return Object.keys(byDir).length >= 4 ? byDir : null
 }
@@ -3941,7 +3941,7 @@ async function keepPrevDir(id, from, as) {
 /* one row either way: the item keeps its name so placements pick the new pixels up, and unused files go or a shorter motion leaves a longer one's tail */
 async function swapFolder(id, name, stage, meta) {
   const folder = path.join(libDirOf(id), name)
-  /* this used to rmSync .prev before refilling it, so re-animating a figure twice deleted the original eight headings outright */
+  /* .prev is added to and never emptied first: clearing it before refilling means re-animating a figure twice deletes the original eight headings outright */
   await keepPrevDir(id, folder, name)
   fs.mkdirSync(folder, { recursive: true })
   const keep = new Set()
@@ -3958,7 +3958,7 @@ async function swapFolder(id, name, stage, meta) {
   await pushLibrary(id, name)
 }
 
-// what he typed, on this map, newest first
+// what the author typed, on this map, newest first
 function readAsks(id) {
   try {
     const j = JSON.parse(fs.readFileSync(path.join(WORK, safeId(id), 'asks.json'), 'utf8'))
@@ -4084,7 +4084,7 @@ function noteOrigin(id, name, patch) {
 /* a face lives outside the library folder on purpose: one stray listing fills it with boulder, boulder-2, rows that mean nothing on their own */
 const stateDirOf = (id, owner) => path.join(WORK, id, 'states', cleanName(owner))
 
-/* an older client still posts bodyType, template and walk; legacySkeleton answers '' for the one case the old route refused, quadruped with no body */
+/* an older client still posts bodyType, template and walk; legacySkeleton answers '' for the one case that route cannot express, quadruped with no body */
 function legacySkeleton(b) {
   if (String(b.bodyType) !== 'quadruped') return 'mannequin'
   return QUADRUPEDS.includes(String(b.template)) ? String(b.template) : ''
@@ -4224,7 +4224,7 @@ const ASK_MAX = 1200
 // the measurement that moved it off 240 is written down.
 const NOTE_MAX = 400
 
-/* cleanLife owns the ceiling and this matches it: four numbers used to disagree, so a seventh state vanished on the way into the editor with nobody told */
+/* cleanLife owns the ceiling and this matches it: four numbers that disagree drop a seventh state on the way into the editor with nobody told */
 const STATES_MAX = 6
 
 /* characters, not names: a count of 60 against a 63-item library left three unnameable in directory order, and names run 1 to 41 characters. the tail is said out loud */
@@ -4337,8 +4337,6 @@ function groundless(s) {
     .filter((c) => c && !GROUND.test(c))
     .join(', ')
 }
-
-/* the subject is left alone: a regex on it turned "a beach umbrella" into "a umbrella" and still missed the buried word, so it was thrown away the same hour */
 
 /* a fence on the style half only: the mechanism is that code owns the join, and measured over 24 reads this caught 0, which is the state it should be in */
 const PROJECTION =
@@ -4837,9 +4835,9 @@ async function translateAsk(ask, kind, styleClause, id, job) {
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 160)
-  // no interpreter means no judgement either, and the old behaviour was to
-  // always match the map, so a fall-back belongs. The DNA still goes on: a
-  // dead interpreter is not a reason to send a prompt that invents a plinth.
+  // no interpreter means no judgement either, so this falls back to matching the
+  // map. The DNA still goes on: a dead interpreter is not a reason to send a
+  // prompt that invents a plinth.
   const fallback = {
     thing: housePrompt({ subject: ask, detail: '', palette: 'muted natural palette', clause, view: OBJECT_VIEW }),
     motion: '',
@@ -5895,7 +5893,7 @@ function allObjects(text) {
 // the headless planner call: prompt over stdin, one model for everything.
 // Every route that thinks goes through here, so this constant is the whole
 // answer to "which model is MAPVIS using".
-const PLANNER_MODEL = 'opus' // resolves to claude-opus-5, checked 2026-08-19
+const PLANNER_MODEL = 'opus' // an alias the cli resolves, so it does not pin a dated model id
 /* every planner process by job, so a change of mind can end one; a killed job rejects the way a timeout does */
 const LIVE = new Map()
 

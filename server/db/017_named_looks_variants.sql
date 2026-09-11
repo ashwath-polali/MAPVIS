@@ -1,5 +1,5 @@
 -- Named faces, exclusive variant sets, and a condition that is not only on a
--- placement. The fifth item of the authoring sweep's §9.
+-- placement.
 --
 -- WHAT NEEDED A COLUMN AND WHAT DID NOT, because three of these four fields ride
 -- storage that already exists and adding a column for them would be adding a

@@ -1,18 +1,14 @@
 -- One kind of point on the water, and it is called a berth.
 --
--- 010 gave every island a nested `berth` and a nested `approach`. 014 added a
--- separate `marks` array for the points that belong to no island. So the ocean
--- had two shapes doing one job, and the one an author reached for most could
--- not be placed: a berth was welded to the place that owned it, born at its
--- corner, and the corner a sail leg turns at halfway across had to be faked as a
--- berth on whichever island happened to be nearer.
+-- A point nested inside the island that owns it and a point in a free-standing
+-- `marks` array are two shapes doing one job, and the nested one cannot be
+-- placed: it is welded to its place, born at that place's corner. The corner a
+-- sail leg turns at halfway across then has to be faked as a berth on whichever
+-- island happens to be nearer.
 --
--- Ash, 2026-08-30: "collapse it into waypoints. currently, a berth is tied to a
--- corner of the map and annoying to place around. keep it simple, we can call it
--- a 'berth' which are basically waypoints for the ocean. you can place and move
--- it around freely. its callable in code. essentially if we wanted a ship to hop
--- on and drive from one island to the other, we can connect berths from
--- different islands, and any berths in the middle for steering."
+-- One kind of point instead. A berth is a waypoint on the ocean: dropped and
+-- dragged anywhere, addressable by name from code, and joinable, so a ship can
+-- run from one island to another through however many berths steer it.
 --
 -- So every nested point is lifted into `marks` and the nesting is stripped.
 -- Belonging to an island becomes a FIELD, `island`, naming the place: the point

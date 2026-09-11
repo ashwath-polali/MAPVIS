@@ -1,10 +1,9 @@
 -- Anchors addressed several at a time: a named set, and an ordered rack.
 --
--- Both come out of the authoring sweep's §6. An anchor could only ever be
--- addressed one name at a time, so a grape wanting the five steles hard-codes
--- five strings and neither side can say whether that is all of them, and the
--- trophy wall (the banner wall, the three season tokens, the graduation front
--- row) had no way to say that the third hook is the third hook every run.
+-- An anchor addressed one name at a time means a module wanting the five steles
+-- hard-codes five strings, and neither side can say whether that is all of
+-- them. An ordered wall of hooks needs more again: that the third hook is the
+-- third hook every run, whatever else moves.
 --
 --   sets   unordered membership. `steles` meaning those five, `the_berths`
 --          meaning every one on this map. Answers "is this one of them" and

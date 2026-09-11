@@ -175,7 +175,7 @@ function s3Store(E) {
           forcePathStyle: true,
           /* one attempt, because a capped bucket will not change its mind in 300ms and the sdk's backoff made 94 refusals outlive the browser */
           maxAttempts: 1,
-          /* the sdk ships NO timeouts unless handed some and treats a falsy one as never give up, so one stalled socket used to hang a whole publish forever */
+          /* the sdk ships NO timeouts unless handed some and treats a falsy one as never give up, so without these one stalled socket hangs a whole publish forever */
           requestHandler: { connectionTimeout: 10_000, requestTimeout: 60_000 },
         }),
       }

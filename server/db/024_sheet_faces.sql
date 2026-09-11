@@ -1,13 +1,12 @@
 -- A SHEET IS CUT BY THE SAME SCAN, ASKED THE OPPOSITE QUESTION.
 --
--- 023 added crop_note for one scan: an alpha flood fill that finds the hero
--- piece in a family and refuses rather than guessing. There are two scans now,
--- because /v2/create-ui-asset turned out to be a panel kit generator and nothing
--- else. Measured 2026-08-31: asked for an icon set of a compass, a key, a star,
--- a lock and a tick it returned panels, and asked for round blank chip tokens it
--- returned panels. So the six sheet types go to /v2/generate-image-v2 instead,
--- which paints an arbitrary subject with transparency and has no element list to
--- force furniture out of.
+-- One scan is the alpha flood fill that finds the hero piece in a family and
+-- refuses rather than guessing. This is the second, and it exists because
+-- /v2/create-ui-asset is a panel kit generator and nothing else: asked for an
+-- icon set of a compass, a key, a star, a lock and a tick it returns panels, and
+-- asked for round blank chip tokens it returns panels. So the six sheet types go
+-- to /v2/generate-image-v2 instead, which paints an arbitrary subject with
+-- transparency and has no element list to force furniture out of.
 --
 -- What comes back from that route is one canvas of separate small marks, and the
 -- scan reads it for EVERY shape above a minimum rather than for the largest one.

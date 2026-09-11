@@ -28,23 +28,21 @@ alter table ui_assets add column if not exists crop jsonb not null default '{}':
 
 -- WHY A CROP WAS REFUSED, IN THE SENTENCE THE AUTHOR READS.
 --
--- Ash's concern, and the reason the scan refuses instead of trying harder: "if
--- its AI or something just guessing, cropping can have problems". So a scan
--- that cannot prove which region is the hero keeps the whole image and says so
--- here, and the card says the piece needs a hand crop. A silently wrong crop is
--- the one outcome that must not happen, because the four numbers measured
--- against it would then be wrong everywhere the piece is mounted, with nothing
--- anywhere saying a word.
+-- The scan refuses instead of trying harder. One that cannot prove which region
+-- is the hero keeps the whole image and says so here, and the card asks for a
+-- hand crop. A silently wrong crop is the one outcome that must not happen: the
+-- four numbers measured against it would then be wrong everywhere the piece is
+-- mounted, with nothing anywhere saying a word.
 alter table ui_assets add column if not exists crop_note text not null default '';
 
 -- THE SHA OF THE BYTES THIS ROW POINTS AT, SO A STALE CACHE CANNOT WIN.
 --
 -- server/store/blobs.mjs memoises reads and evicts a key when a write passes
 -- through the SAME process. Nothing tells it about a write from another one, so
--- after a CLI script wrote 67035 bytes for `panel` the dev server kept serving
--- the 56644 it had cached until it was restarted, while the row and the bucket
--- were both correct the whole time. An author redrawing a piece saw the old
--- picture and nothing said why.
+-- a CLI script that writes 67035 bytes for `panel` leaves a running dev server
+-- serving the 56644 it cached until it restarts, while the row and the bucket
+-- are both correct. An author redrawing a piece then sees the stale picture
+-- with nothing saying why.
 --
 -- Recorded here rather than only in blob_shas because both image routes already
 -- read this row to find blob_key, so the check costs no extra query: hash what

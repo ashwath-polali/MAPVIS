@@ -1,4 +1,4 @@
-// the same call the export button makes, for a bundle exported earlier or a republish with no browser
+// the same call the export button makes, for a bundle already on disk or a republish with no browser
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'

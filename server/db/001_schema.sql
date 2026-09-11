@@ -1,10 +1,10 @@
 -- MAPVIS platform schema, postgres (neon).
 --
 -- The split this file assumes, and the reason it stays small: documents live
--- here, bytes live in object storage. A map's three mask planes used to be one
--- 1,056,768-character base64 string inside doc.json; they are an image and they
--- go to r2 as planes.png. What is left is metadata, the placements, and the
--- names the game addresses, and all of that is a few hundred kilobytes.
+-- here, bytes live in object storage. A map's three mask planes are an image
+-- and go to the bucket as planes.png, because as base64 inside the document
+-- they are a 1,056,768-character string. What is left is metadata, the
+-- placements, and the names the game addresses: a few hundred kilobytes.
 --
 -- Two things in here are deliberately ahead of their UI. The anchors table
 -- ships now because retrofitting author-typed names onto maps that already
@@ -92,10 +92,9 @@ create table maps (
   assets      jsonb not null default '[]'::jsonb,
   asset_next  integer not null default 1,
 
-  -- side documents that used to be their own files. All small and all read
-  -- with the map, so one row is one query. asks is the prompt history that
-  -- taught us what works, keeps is the last 20 kept, style is the cached read
-  -- of the painting.
+  -- side documents, all small and all read with the map, so one row is one
+  -- query. asks is the history of what was asked for, keeps is the last 20
+  -- kept, style is the cached read of the painting.
   asks        jsonb not null default '[]'::jsonb,
   keeps       jsonb not null default '[]'::jsonb,
   style       jsonb,
@@ -165,10 +164,10 @@ create index on anchors (to_slug);
 
 -- ----------------------------------------------------------------- library --
 
--- What used to be inferred by walking work/<id>/library/ and probing for
--- dirs.json, then 0.png, then effect.json, opening a file descriptor per item
--- to read 24 bytes of png header. On the hub that is 71 probes per listing.
--- Here it is one select, and the shape is written down instead of guessed.
+-- One select instead of a directory walk. Inferring this from disk means
+-- probing each item for dirs.json, then 0.png, then effect.json and opening a
+-- file descriptor to read 24 bytes of png header: 71 probes for a listing of
+-- 71 items. The shape is written down here rather than guessed per item.
 create table library_items (
   id           uuid primary key default gen_random_uuid(),
   map_id       uuid not null references maps(id) on delete cascade,

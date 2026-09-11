@@ -1,4 +1,4 @@
-// every frame packs into one image, because 800 loose pngs emptied a 2,500-a-day allowance in three page loads; nothing is resampled and the loose pngs still ship
+// every frame packs into one image, because 800 loose pngs empty a 2,500-a-day allowance in three page loads; nothing is resampled and the loose pngs still ship
 import { decodePNG, encodePNG } from '../sheet.mjs'
 
 /* the school chromebooks report 4096, and a sheet over that cannot be uploaded at all, so the failure lands in the classroom rather than at publish */

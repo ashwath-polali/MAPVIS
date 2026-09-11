@@ -1,11 +1,10 @@
 -- The ocean, said in the words the game already reads.
 --
--- 010 gave the water an author and 014 gave it waypoints. Both invented their
--- own spelling for things the running game had already named, and neither side
--- knew: the game asks for a composition of `slots` and MAPVIS answered with
--- `places`, so the whole document was discarded by one Array.isArray check and
--- a hand-written fallback was used instead, silently, with no error anywhere.
--- The consumer's running shape is canonical, so MAPVIS moves.
+-- The ocean and its waypoints are authored here and read by a game, and the two
+-- ends have to agree on fourteen names. Where they disagree the consumer's
+-- running shape is canonical and MAPVIS moves: a composition of `slots` read as
+-- `places` is discarded by one Array.isArray check and falls back to whatever
+-- the reader has hard-coded, silently, with no error anywhere.
 --
 -- Two of the fourteen disagreements need a column rather than a rename.
 --
@@ -18,7 +17,7 @@
 --            waypoint or renaming a title does not touch it.
 --
 --   home     where a run with no vessel record starts, and where a graduate is
---            handed back to. One slot name for the whole ocean. Nothing in
---            MAPVIS could say it, so the game had it hard-coded.
+--            handed back to. One slot name for the whole ocean, and the
+--            alternative is a slug hard-coded in the game that reads it.
 alter table world add column if not exists version integer not null default 1;
 alter table world add column if not exists home    text    not null default '';

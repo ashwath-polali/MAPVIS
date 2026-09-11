@@ -53,7 +53,7 @@ const shotZoom = (f) => {
   return Math.round((rel / GAME_OPENING_PULL) * 1000) / 1000
 }
 
-/* a projection owns its key's absence too, or a framings key left in the bag from an earlier export ships as a camera the author can neither see nor delete; second copy of src/core/mask.ts, change both */
+/* a projection owns its key's absence too, or a framings key left in the bag by a previous export ships as a camera the author can neither see nor delete; second copy of src/core/mask.ts, change both */
 const without = (meta, ...keys) => {
   if (!meta || typeof meta !== 'object') return undefined
   const out = { ...meta }
@@ -225,7 +225,7 @@ export function footprints(assets, files, yScale) {
   })
 }
 
-/* a published file is immutable so it is fetched once, because the free tier allows 2,500 downloads a day and a day of building blew through it; small files only */
+/* a published file is immutable so it is fetched once, because the free tier allows 2,500 downloads a day and a day of building goes straight through it; small files only */
 const HOT_MAX = 200
 const HOT_BYTES = 8 * 1024 * 1024
 const hot = new Map()
@@ -273,8 +273,7 @@ async function writesThisMonth() {
 
 export async function publishBundle(slug, { mapJson, assetsJson, images, files }) {
   /* A PUBLISH THAT TAKES MINUTES HAS TO SAY WHERE IT IS. It writes hundreds of
-   * objects and nothing said so until it finished, which is indistinguishable
-   * from hanging and was read as exactly that for hours. */
+   * objects, and silence until it finishes is indistinguishable from hanging. */
   const t0 = Date.now()
   const step = (what) => console.log(`[publish] ${slug}: ${what} · ${((Date.now() - t0) / 1000).toFixed(1)}s`)
   const m = await one('select id from maps where slug = $1', [slug])
@@ -548,7 +547,7 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
   const inAssets = (k) => 'assets/' + String(k).replace(/^\/+/, '').replace(/^assets\//, '')
   const all = new Map([...files].map(([k, v]) => [inAssets(k), v]))
 
-  /* every frame packs into one sheet, because 800 loose pngs emptied a 2,500-a-day allowance in three page loads and packed a map is five requests */
+  /* every frame packs into one sheet, because 800 loose pngs empty a 2,500-a-day allowance in three page loads and packed a map is five requests */
   let packed = null
   if (files.size) {
     /* the index is keyed the way assets.json asks, normalised rather than prefixed, because either mismatch makes every frame miss and fall back to a loose file while reporting success */
@@ -665,7 +664,7 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
       `[publish] ${slug} v${version}: ${loose} placement(s) missed the atlas, so opening this map costs about ${cost} requests`,
     )
   else console.log(`[publish] ${slug} v${version}: opening this map costs 6 requests`)
-  /* said out loud because a bundle with no footprints still loads and walks the old way, so 0 on a map with placements means the frames did not come through */
+  /* said out loud because a bundle with no footprints still loads and walks, so 0 on a map with placements means the frames did not come through */
   if (placed.length)
     console.log(
       `[publish] ${slug} v${version}: ${feet} of ${placed.length} placement(s) measured a footprint, ${solid} of them solid`,

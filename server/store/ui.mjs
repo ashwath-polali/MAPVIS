@@ -24,9 +24,8 @@ export const FILL_MODES = ['tile', 'scale']
 // drawn edge is a smear, so it saves with a word rather than being refused.
 export const REPEAT_MODES = ['stretch', 'repeat', 'round', 'space']
 
-// how text behaves when a member writes four sentences into an option, which
-// 40.13 records as having no behaviour at all today: "a member writing four
-// sentences into an option finds out in a classroom"
+// how text behaves when somebody writes four sentences into an option. With no
+// answer here the first person to find out is whoever is reading the screen.
 export const TEXT_WRAPS = ['wrap', 'nowrap']
 export const TEXT_OVERFLOWS = ['ellipsis', 'clip', 'grow']
 
@@ -92,12 +91,12 @@ export const PIECE_TYPES = [
     // the pair that drew v4, unchanged. This is the only row in the table whose
     // three levers are measured on a picture rather than reasoned from one.
     elements: ['window'],
-    elementsWhy: 'measured on dialogue_box_v4, the roll that worked',
+    elementsWhy: 'measured on a returned dialogue box rather than reasoned about',
     styleRef: 'dialogue-box.png',
     material: 'aged cream parchment, lightly mottled',
     what: 'Every line from every source, said by anybody.',
     why:
-      'Ash ruled on 2026-08-28 that the cutscene overlay and the HUD dialogue collapse into one component, and the record names three more renderers that must become this piece rather than a fourth: the year-start card, the beat say card and the graduation advance card.',
+      'The cutscene overlay and the HUD dialogue are one component, and three more renderers become this piece rather than a fourth: the year-start card, the beat say card and the graduation advance card.',
     // 688x384 and not the shipped 512x192, because 192 tall cannot hold a top slice, a bottom slice and a middle
     caution: 'Its height is a variable, not a number. It reports its own height so the camera can lift the painting clear of it.',
     regions: [
@@ -348,14 +347,14 @@ export const PIECE_TYPES = [
     elements: ['window'],
     elementsWhy: 'a window is a frame seen through, which is the only element name that agrees with an empty centre',
     styleRef: 'panel-square.png',
-    // its middle is the map. Anything named here is paint over Ash's art.
+    // its middle is the map. Anything named here is paint over the map's own art.
     material: null,
     // THE ONE PIECE DRAWN WITH ITS CENTRE EMPTY. The painting dims and one
     // anchor's region stays lit; the dim is engine geometry and only the lit
     // region's edge is drawn. A filled centre here would paint over the art.
     fill: false,
     what: 'A ring around a rectangle an author drew, with nothing in the middle.',
-    why: 'Ash\'s own moment at 4.7, pointing at the things at the central platform, and an island host introducing their space is the same beat reskinned.',
+    why: 'A host introducing their space, pointing at the things in it. One beat, reskinned for every island that has one.',
     caution: 'It has no regions. It is a ring, and it is the only piece whose slice record sets fill to false.',
     regions: [],
   }),
@@ -587,7 +586,7 @@ export function sheetCanvas(w, h) {
 // eventually do
 export const canvasFor = (t, w, h) => (usesImageEndpoint(t) ? sheetCanvas(w, h) : legalCanvas(w, h))
 
-/* the description goes to claude with the type's context and claude writes the pixellab prompt, because 240 generations went on two pieces hand-prompted without it */
+/* the description goes to the planner with the type's context and the planner writes the pixellab prompt: hand-prompting two pieces without it costs about 240 generations */
 
 /* ornament only in the corners: an anchor at top and bottom centre smeared into a row of half anchors as soon as the box widened */
 export const NINE_SLICE_LAW = [
@@ -1120,7 +1119,7 @@ export async function getUiByName(ownerId, name) {
 /* sha1 and base64url because this is a change detector rather than a signature, and it has to fit in a url */
 const shaOf = (buf) => crypto.createHash('sha1').update(buf).digest('base64url')
 
-/* the row's sha is checked against the bytes because blobs.mjs only evicts on a write through the same process, and a CLI write left the dev server serving 56644 stale bytes for `panel` */
+/* the row's sha is checked against the bytes because blobs.mjs only evicts on a write through the same process, so a CLI write leaves a running dev server serving stale bytes */
 async function currentBytes(key, sha, alsoForget = '') {
   if (!key) return null
   try {

@@ -22,8 +22,8 @@ for (const m of maps) {
   const lib = path.join(workDir, 'library')
   if (!fs.existsSync(lib)) continue
 
-  // what the database believes today, so the report says what CHANGES rather
-  // than just what exists
+  // what the database believes before the pass, so the report says what CHANGES
+  // rather than just what exists
   const before = new Map((await libraryOf(m.slug)).map((it) => [it.name, it]))
 
   // one entry per item: a still is <name>.png, everything else is a folder

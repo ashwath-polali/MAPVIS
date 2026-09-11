@@ -1,10 +1,10 @@
 -- Answer "has this file changed" without paying the bucket to find out.
 --
--- serveFromStore downloaded the whole object and THEN computed its ETag from
--- the bytes it had just fetched, so a 304 cost exactly as much as a 200. On a
--- laptop that is invisible because the disk answers first. On the deployed
--- editor it meant reopening a map spent one bucket read per file to be told
--- nothing had changed: 156 reads, every time, forever.
+-- An ETag computed from the bytes means downloading the whole object to build
+-- it, so a 304 costs exactly as much as a 200. On a laptop that is invisible
+-- because the disk answers first. On a deployed editor it means reopening a
+-- map spends one bucket read per file to be told nothing has changed: 156
+-- reads, every time, forever.
 --
 -- The sha is recorded when the bytes are written, so the tag is known before
 -- any read happens and a revalidation is one indexed primary-key lookup in

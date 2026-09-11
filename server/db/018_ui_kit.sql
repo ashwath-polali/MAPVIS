@@ -16,25 +16,23 @@
 -- drift the first time one is edited. This column only says the name is
 -- identifier-shaped; the refusal of a type nobody named is in the store.
 --
--- WHAT slices IS FOR. Every UI image in the game is drawn today with
--- `center / 100% 100% no-repeat`, which squashes one whole painting into
--- whatever box the element happens to be, and the inside of each painting is a
--- percentage a human measured in an image editor and typed into a stylesheet.
--- Two of those stylesheets say so out loud. The four numbers here are the fix:
--- source-pixel insets that CSS border-image and Pixi NineSliceSprite both take,
--- measured once against the picture and stored beside it, so the measurement
--- stops living in the wrong repo.
+-- WHAT slices IS FOR. `center / 100% 100% no-repeat` squashes one whole
+-- painting into whatever box the element happens to be, and leaves the inside
+-- of the painting as a percentage somebody measures in an image editor and
+-- types into a stylesheet, a repo away from the picture. The four numbers here
+-- are source-pixel insets that CSS border-image and Pixi NineSliceSprite both
+-- take, measured once against the picture and stored beside it.
 --
--- WHY THE COLUMN IS RENAMED. `slot` already means something else in this game:
--- a WorldSlot is an island's berth on the sea, referenced about thirty times
--- through PmapScene as slotOfMap, seaSlots, residentSlots and s.berth. Calling
--- a UI rectangle a slot costs a session the first time somebody greps. The word
--- on the wire is `region`, so the column is too.
+-- WHY THE COLUMN IS RENAMED. `slot` already means something else on the reading
+-- side: a world slot is an island's berth on the sea, named about thirty times
+-- over as slotOfMap, seaSlots, residentSlots and berth. One word for two things
+-- costs whoever greps for it. The word on the wire is `region`, so the column
+-- is too.
 alter table ui_assets rename column slots to regions;
 
--- which of the twenty-one this piece is. Blank on every row that predates the
--- type list, which is honest: those were drawn before there was a vocabulary
--- and nothing should claim to know what they are.
+-- which of the twenty-one this piece is. Blank is legal and means unclassified:
+-- a row drawn before the vocabulary existed should not claim a type nobody
+-- chose for it.
 alter table ui_assets add column if not exists type text not null default ''
   check (type = '' or type ~ '^[a-z][a-z0-9_]{0,31}$');
 
@@ -44,8 +42,8 @@ alter table ui_assets add column if not exists type text not null default ''
 -- complete the record on the way out and are not stored twice.
 alter table ui_assets add column if not exists slices jsonb not null default '{}'::jsonb;
 
--- CORE CHROME IS NEVER OVERRIDABLE (Ash, 2026-08-30). One kit for the whole
--- game, and a member's piece may only ADD to it. A row with this set refuses
+-- CORE CHROME IS NEVER OVERRIDABLE. One kit for the whole game, and a
+-- contributor's piece may only ADD to it. A row with this set refuses
 -- any write that does not also claim to be core, so a member cannot quietly
 -- replace the dialogue box every island speaks through. The name list that is
 -- reserved before any row exists lives beside the types in the store, because

@@ -41,7 +41,7 @@ try {
     : no(`document came back wrong: ${JSON.stringify(doc).slice(0, 120)}`)
   doc.events?.length ? ok(`${doc.events.length} door(s) survived: ${doc.events.map((e) => e.to).join(', ')}`) : no('no doors came back')
 
-  // the library, which used to be a directory walk
+  // the library, one select rather than a directory walk
   const l = await get(`/api/library/${slug}`)
   const items = (await l.body.json()).items || []
   items.length ? ok(`library: ${items.length} items`) : no('library came back empty')

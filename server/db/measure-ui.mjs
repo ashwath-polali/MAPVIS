@@ -223,7 +223,7 @@ function measure(im) {
     }
     /* AND NO SIDE MAY EAT THE MIDDLE. top + bottom has to stay under h or CSS
      * drops the whole border image and says nothing, so a runaway corner scan is
-     * capped here rather than discovered by checkSlices after a save. */
+     * capped here rather than caught by checkSlices after a save. */
     const capY = Math.floor((im.h - 1) / 2)
     const capX = Math.floor((im.w - 1) / 2)
     next.top = Math.min(next.top, capY)
@@ -363,7 +363,7 @@ const LAYOUT = {
   },
 
   // it is a ring. Its middle is the map, and a rectangle marked on it would be a
-  // place the engine draws over Ash's art.
+  // place the engine draws over the map's own art.
   highlight_edge: () => [],
 
   /* a cover plate is full-bleed with no middle, and this came back eleven plates, so wells go on one */

@@ -11,8 +11,8 @@
 -- than once per operation, because a write per bucket read would double the
 -- cost of the thing it is measuring.
 --
--- It is also the answer to "how close am I", which until now had no answer at
--- all short of reading Cloudflare's own dashboard.
+-- It is also the answer to "how close am I", which otherwise has no answer
+-- short of reading the provider's own dashboard.
 create table if not exists bucket_usage (
   month      text primary key,           -- 'YYYY-MM', UTC
   class_a    bigint not null default 0,  -- writes and listings, $4.50/million

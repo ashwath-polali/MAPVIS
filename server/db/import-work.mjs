@@ -94,7 +94,7 @@ if (!DRY) {
   console.log(`  document: ${K(docString.length)} would be split into planes + row`)
 }
 
-// ---- the side documents that used to be their own files --------------------
+// ---- the side documents, which are columns rather than files ---------------
 
 if (!DRY) {
   await q(

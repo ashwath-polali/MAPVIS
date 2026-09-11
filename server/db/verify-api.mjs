@@ -75,7 +75,7 @@ try {
     [`/api/v1/maps/${slug}/file/1/`, 'an empty file name'],
     ['/api/v1/maps/nope-not-a-map', 'a map that does not exist'],
   ]
-  /* found rather than named: hardcoding panther-maw failed the suite the day that map was published */
+  /* found rather than named: a hardcoded slug fails this suite the day that map is published */
   const unpublished = await one(
     `select slug from maps m where not exists (select 1 from publishes p where p.map_id = m.id) limit 1`,
   )

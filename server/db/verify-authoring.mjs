@@ -93,8 +93,8 @@ const scenePNG = (() => {
 })()
 
 /* WHAT AN AUTHOR TYPED. Every value below is one somebody has to be able to
- * enter in the tool, and every one of them used to die somewhere between the
- * form and the game. */
+ * enter in the tool, and this file follows each of them from the form all the
+ * way to the bundle the game reads. */
 const doc = {
   v: 3,
   w: W,
@@ -137,7 +137,7 @@ const doc = {
     // the anchor a variant set is addressed through, which is the only address
     // python has for one: every world-touching intent takes an anchor name
     { id: 5, name: 'the_berth', kind: 'point', x: 24, y: 22, r: 10, to: '', label: 'the berth' },
-    /* L-shaped because no circle holds a bending pier, at radius 220 the old 4-to-64 clamp refused */
+    /* L-shaped because no circle holds a bending pier, and at radius 220 it is well past the 64 a narrow clamp allows */
     {
       id: 6,
       name: 'the_pier',
@@ -147,7 +147,7 @@ const doc = {
       r: 220,
       to: '',
       label: 'the pier',
-      /* mode says which shape is live; it used to be settled by deletion, which lost the author's drawing */
+      /* mode says which shape is live, so nothing has to be deleted to choose one and no drawing is lost */
       shape: 'poly',
       poly: [
         [6, 26],
@@ -174,7 +174,7 @@ const doc = {
         [9, 9],
       ],
     },
-    /* writing one shape used to delete the others, so this holds all three and ships only the chosen one */
+    /* all three shapes are held at once and only the chosen one ships, so writing one cannot delete the others */
     {
       id: 8,
       name: 'the_switched_place',
@@ -244,7 +244,7 @@ const doc = {
   // the six numbers describing the body, none of them the defaults
   walk: { charH: 36, hip: 3, hipDY: 2, speed: 68, yScale: 0.66, near: 12 },
   props: { title: 'The Verify Yard', class: 'hall', islandId: 'verify_club', meta: { district: 'harbour' } },
-  /* a named route, because every crossing used to be numbers hand-typed in the game repo */
+  /* a named route, so a crossing is not numbers hand-typed into the game that reads it */
   paths: [
     {
       id: 1,
@@ -332,13 +332,13 @@ try {
   eq('the area survives the save', back.events.find((e) => e.name === 'the_yard')?.rect, [4, 4, 36, 30])
   const pier = back.events.find((e) => e.name === 'the_pier')
   eq('a drawn area survives the save with every corner it was given', pier?.poly, doc.events[5].poly)
-  /* THE CEILING WAS ONE LINE IN THE EDITOR AND NOWHERE ELSE, so this is what
-   * says a radius past the old 64 is not quietly clipped on the way through. */
-  eq('a radius past the old 64 cap survives the save', pier?.r, 220)
+  /* the ceiling is enforced in the editor and nowhere else, so this is what
+   * says a large radius is not quietly clipped on the way through. */
+  eq('a radius past the 64 the editor once clamped to survives the save', pier?.r, 220)
   /* two points store as no shape, checked here too since putDoc takes a raw POST with no mask.ts in front */
   eq('a two-point area is refused rather than stored', back.events.find((e) => e.name === 'the_half_shape')?.poly, undefined)
   eq('a drawn area remembers that drawing is the mode it is in', pier?.shape, 'poly')
-  /* all three shapes come back from postgres; this upsert used to null the others and lose the drawing */
+  /* all three shapes come back from postgres; an upsert that nulls the others loses the drawing */
   const switched = back.events.find((e) => e.name === 'the_switched_place')
   eq('switching to a circle keeps the drawn area', switched?.poly, doc.events[7].poly)
   eq('switching to a circle keeps the box too', switched?.rect, [22, 12, 30, 20])
@@ -353,7 +353,7 @@ try {
   eq('and the mode survives on a post too', counter?.shape, 'poly')
   eq('with the stand-at inside it and the heading beside it', [counter?.stand, counter?.facing], [[14, 36], 'north'])
 
-  /* switching a drawn door to a post used to throw the mode away on the next save and read back a circle */
+  /* switching a drawn door to a post keeps the mode, so the next save does not read it back as a circle */
   const swap = JSON.parse(JSON.stringify(doc))
   swap.events.find((e) => e.name === 'the_shed_door').kind = 'post'
   await putDoc(map.id, JSON.stringify(swap))
@@ -559,7 +559,7 @@ try {
     shape: 'rect',
   })
 
-  /* the bag used to be handed back whole, so a stale framing key shipped as a camera nobody could delete */
+  /* the bag is not handed back whole, or a leftover framing key ships as a camera nobody can delete */
   const yardMeta = (await one(`select meta from anchors where map_id = $1 and name = 'the_yard'`, [map.id])).meta
   await q(`update anchors set meta = $2::jsonb where map_id = $1 and name = 'the_yard'`, [
     map.id,
@@ -758,7 +758,7 @@ try {
           label: 'The Verify Dock',
           approach: { x: 940, y: 760 },
         },
-        /* a second berth on the same island is inert; the old rule made it the run-in the hull aimed at */
+        /* a second berth on the same island is inert, and must not become the run-in the hull aims at */
         { name: 'zz_verify_spare', kind: 'berth', x: 700, y: 500, island: 'zz_verify_isle', label: 'The Spare' },
         { name: 'zz_north_turn', kind: 'waypoint', x: 1600, y: 200, r: 50 },
       ],
@@ -766,9 +766,9 @@ try {
     const readBack = await getWorld_()
     const isle = readBack.places.find((p) => p.name === 'zz_verify_isle')
     const dock = readBack.marks.find((m) => m.name === 'zz_verify_dock')
-    /* A PLACE CARRIES NO POINT AT ALL NOW, and that is the fence: cleanPlace
-     * dropping the nesting is what stops a stale berth riding along beside the
-     * real one, where nothing would say which of the two the game read. */
+    /* A PLACE CARRIES NO POINT AT ALL, and that is the fence: cleanPlace
+     * dropping the nesting is what stops a leftover berth riding along beside
+     * the real one, where nothing says which of the two the game read. */
     eq('an island carries no point of its own', [isle?.berth, isle?.approach], [undefined, undefined])
     // field by field rather than whole, because this one came back out of jsonb
     // and postgres does not keep the key order an object went in with
@@ -1015,7 +1015,7 @@ try {
       ? ok('a berth tied to an island that is not there is named at the save')
       : no('a berth pointed at nothing and nobody said so')
 
-    /* the corner a leg turns at belongs to no island and used to be a constant typed into the game repo */
+    /* the corner a leg turns at belongs to no island, so without a mark it is a constant typed into the game that reads it */
     const marked = await saveWorld_({
       w: 4096,
       h: 4096,
@@ -1038,9 +1038,9 @@ try {
     const wp = readMarks.find((m) => m.name === 'zz_north_passage')
     eq('the waypoint survives the save', [wp?.kind, wp?.x, wp?.y, wp?.facing, wp?.r], ['waypoint', 1200, 400, 'north', 60])
     eq('a kind the author narrowed is kept', readMarks.find((m) => m.name === 'zz_deep_water')?.kind, 'anchorage')
-    /* BERTH IS THE FALLBACK NOW AND IT WAS `waypoint`. Everything on the water is
-     * a berth unless somebody deliberately narrowed it, so a kind this file has
-     * never heard of lands on the word Ash gave the category. */
+    /* BERTH IS THE FALLBACK, not `waypoint`. Everything on the water is a berth
+     * unless somebody deliberately narrowed it, so a kind this file has never
+     * heard of lands on the word the category is named for. */
     eq('a kind nothing recognises falls back to a berth', readMarks.find((m) => m.name === 'zz_old_approach')?.kind, 'berth')
 
     /* ONE NAMESPACE, because python has one. A grape calls sail_to("x") and
@@ -1086,7 +1086,7 @@ try {
         x: 1200,
         y: 400,
         facing: 'north',
-        // and the words a player is shown for it, which this route used to drop:
+        // and the words a player is shown for it, which the route has to carry:
         // an island holding only the address prints `zz_north_passage` at somebody
         label: 'the north passage',
         // which island it belongs to, so a grape that has sailed somewhere can
@@ -1367,7 +1367,7 @@ try {
         : no('the style reference never left, so nothing carries the palette of the shipped chrome')
     }
 
-    /* with no claude the words go out unchanged and it says so, so a bad prompt differs from none */
+    /* with no planner the words go out unchanged and the answer says so, so a bad prompt differs from none */
     const down = await chromePlan({
       ask: '  a wooden   dialogue box  ',
       t: gt,
@@ -1379,9 +1379,9 @@ try {
         throw new NoPlanner('none')
       },
     })
-    /* the sentence used to go out bare; it carries the code-owned tail even when no model was reached */
+    /* the sentence carries the code-owned tail even when no model is reached, rather than going out bare */
     down.routed === false && down.description.startsWith('a wooden dialogue box.')
-      ? ok('with no claude the author own sentence is what is described, unrewritten')
+      ? ok('with no planner the author own sentence is what is described, unrewritten')
       : no(`the degraded prompt was not the author's own words: ${down.description.slice(0, 120)}`)
     down.description.includes('One single complete piece, centred') && down.description.includes('Ornament only in the four corners')
       ? ok('and the tail code owns rides anyway, because a missing model is not a reason to send a prompt with no rules in it')
@@ -1452,8 +1452,8 @@ try {
       : no('a sheet either carries an element list or still says the panel route returns a grid of loose marks')
 
     /* FOUR TYPES THROUGH THE WHOLE PATH, one per tier plus the two the recipe
-     * was learned on. What is asserted is the request body, because the body is
-     * what is paid for and everything before it is a claim about the body. */
+     * is written against. What is asserted is the request body, because the body
+     * is what is paid for and everything before it is a claim about the body. */
     const wireFor = async (typeName) => {
       const t = pieceType(typeName)
       const style = chromeStyle(typeName)
@@ -1696,9 +1696,9 @@ try {
     const read = await getUiByName(owner.id, UI)
     const bar = read?.regions.find((s) => s.name === 'stamina')
     eq('a region comes back by name', [bar?.kind, bar?.x, bar?.y, bar?.w, bar?.h], ['fill', 10, 40, 180, 12])
-    /* A ROPE THAT STRETCHES IS A SMEAR AND A ROPE THAT TILES IS A ROPE, which
-     * is the whole reason `bar` became `fill`: the old kind carried neither a
-     * direction nor a tile rule, so the reader had to guess both. */
+    /* A ROPE THAT STRETCHES IS A SMEAR AND A ROPE THAT TILES IS A ROPE, which is
+     * what `fill` carries and a bare `bar` cannot: without a direction and a
+     * tile rule the reader has to guess both. */
     eq('a fill says which way it grows and whether it tiles', [bar?.axis, bar?.mode], ['right', 'tile'])
     eq('a region keeps the bag its author filled', bar?.meta, { fills: 'left' })
     eq('a region keeps its alignment', read?.regions.find((s) => s.name === 'speaker')?.align, 'left')
@@ -1816,8 +1816,8 @@ try {
       : no('the border image still depends on a token nothing defines')
 
     /* THE CONSTRAINT THAT BREAKS SILENTLY. If the top and bottom insets do not
-     * leave a middle, CSS drops to no border image at all and says nothing, and
-     * the author spends an hour in the wrong stylesheet. */
+     * leave a middle, CSS drops to no border image at all and says nothing,
+     * which sends the author to the wrong stylesheet. */
     const crossed = await thrown(() =>
       setUiRegions(owner.id, GROUND, [{ name: 'body', kind: 'text', x: 14, y: 14, w: 68, h: 68 }], {
         slice: { top: 60, right: 14, bottom: 50, left: 14 },
@@ -1950,9 +1950,8 @@ try {
     !dlg.css.includes('--kit-slice-dialogue_box')
       ? ok('the core dialogue box emits the handle the game mounts and not the kit name')
       : no(`the css still names dialogue_box, which the game has no class or token for: ${dlg.css.split('\n')[5] || ''}`)
-    /* put the author's piece back, every column and both pictures. A row that
-     * existed before this file started must exist after it stops, and it must
-     * still be cut the way it was cut. */
+    /* put the author's piece back, every column and both pictures. A row this
+     * file found must survive it unchanged, cut the way it was cut. */
     if (realDlgSnap) {
       await putUiBack(realDlgSnap)
       const kept = await getUiByName(owner.id, 'dialogue_box').catch(() => null)
@@ -1988,7 +1987,7 @@ try {
     await removeUi(owner.id, STUCK, { core: true })
   } finally {
     for (const n of [GROUND, SHEET, CORE]) await removeUi(owner.id, n, { core: true })
-    /* this used to delete the real dialogue_box every run; removeUi is not called, it drops both blobs */
+    /* the author's real dialogue_box is restored rather than removed: removeUi drops both blobs */
     if (realDlgSnap) await putUiBack(realDlgSnap)
     else await removeUi(owner.id, 'dialogue_box', { core: true })
   }
@@ -2208,9 +2207,9 @@ try {
       ? ok('a redraw that does not crop takes the old family away with it')
       : no('the previous import`s family is still under the undo route')
 
-    // and putting a crop back, which is the other half of Ash's condition: a
-    // crop that passed every check and is still wrong has to be one press to
-    // undo rather than a spend to draw again
+    // and putting a crop back, which is the other half of the rule: a crop that
+    // passed every check and is still wrong has to be one press to undo rather
+    // than a spend to draw again
     await setUiImage(owner.id, CROPPED, family, 688, 384)
     const put = await uncropUi(owner.id, CROPPED)
     eq('undoing a crop puts the whole family back as the piece', [put.w, put.h], [688, 384])

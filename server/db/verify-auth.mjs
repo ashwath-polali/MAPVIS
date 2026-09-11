@@ -25,7 +25,7 @@ const server = http.createServer((req, res) =>
 )
 await new Promise((r) => server.listen(PORT, '127.0.0.1', r))
 
-/* a 429 from the api's own bucket reads as a backoff regression, so it is retried rather than handed back */
+/* a 429 from the api's own bucket reads as a failure of the per-account backoff, so it is retried rather than handed back */
 const call = async (path, opts = {}, tries = 4) => {
   const r = await fetch(`http://127.0.0.1:${PORT}${path}`, {
     ...opts,
