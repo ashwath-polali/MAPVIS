@@ -162,6 +162,35 @@ try {
   fenced
     ? ok('and refused for any request that did not come from the loopback address')
     : no('the loopback fence is gone from currentUser')
+
+  // ---- what a client cannot raise ----------------------------------------
+  // Every ceiling that stands between a loop and a bill is read from the
+  // environment. A request that could widen one would be a request that could
+  // spend somebody else's money, so each is checked where it is declared.
+  const ceilings = [
+    ['the monthly bucket read limit', 'server/store/platform.mjs', /R2_MONTHLY_READ_LIMIT/],
+    ['the monthly bucket write limit', 'server/store/platform.mjs', /R2_MONTHLY_WRITE_LIMIT/],
+    ['the per-process bucket ceiling', 'server/store/blobs.mjs', /S3_MAX_OPS/],
+    ['the request budget', 'server/api.mjs', /RATE_PER_SEC/],
+    ['the credential budget', 'server/api.mjs', /AUTH_RATE_PER_MIN/],
+  ]
+  for (const [what, file, name] of ceilings) {
+    const text = fs.readFileSync(path.join(ROOT, file), 'utf8')
+    const line = text.split(/\r?\n/).find((l) => name.test(l) && /Number\(/.test(l)) || ''
+    const fromEnv = /(env\(\)|process\.env)\./.test(line)
+    const fromBody = /(b|body|req|url|params|input)\s*[.[]/.test(line)
+    fromEnv && !fromBody
+      ? ok(`${what} is read from the environment and from nothing a caller sends`)
+      : no(`${what} does not read from the environment alone: ${line.trim().slice(0, 90)}`)
+  }
+
+  // and nothing anywhere writes one back into the process it was read from
+  const writesEnv = ['server/api.mjs', 'server/store/blobs.mjs', 'server/store/platform.mjs', 'server/db/env.mjs']
+    .flatMap((f) => fs.readFileSync(path.join(ROOT, f), 'utf8').split(/\r?\n/))
+    .filter((l) => /process\.env(\.[A-Z_]+|\[)\s*=[^=]/.test(l))
+  writesEnv.length === 0
+    ? ok('and no route writes an environment value back, so a ceiling cannot be moved at runtime')
+    : no(`${writesEnv.length} line(s) assign to process.env outside a check harness`)
 } finally {
   server.close()
   fs.rmSync(SANDBOX, { recursive: true, force: true })
