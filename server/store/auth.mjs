@@ -137,14 +137,48 @@ export async function currentUser(req) {
   if (real) return real
   if (optedOut(req)) return null
   const solo = soloMode()
-  return solo ? await one(`select ${PUBLIC} from users where email = $1`, [String(solo).toLowerCase()]) : null
+  if (!solo || !fromThisMachine(req)) {
+    if (solo) sayRefused('the request did not come from this machine')
+    return null
+  }
+  return one(`select ${PUBLIC} from users where email = $1`, [String(solo).toLowerCase()])
 }
 
-/* solo mode cannot exist on a host whatever any file says, because a deploy that shipped .env once signed every anonymous visitor in as the club account */
+/* Solo mode is a development convenience and nothing else: it treats an
+ * unauthenticated request as one named account. Four fences, because a deploy
+ * that shipped .env once signed every anonymous visitor in as the club account.
+ * It is off unless MAPVIS_SOLO names an account, off wherever a serverless
+ * runtime is detected, off whenever NODE_ENV says production on any host at
+ * all, and off for any request that did not come from the loopback address. */
 export const soloMode = () => {
   const E = env()
-  if (E.VERCEL || E.AWS_LAMBDA_FUNCTION_NAME || E.MAPVIS_HOSTED === '1') return null
-  return E.MAPVIS_NO_SOLO === '1' ? null : E.MAPVIS_SOLO || null
+  if (E.MAPVIS_NO_SOLO === '1') return null
+  if (!E.MAPVIS_SOLO) return null
+  if (E.VERCEL || E.AWS_LAMBDA_FUNCTION_NAME || E.MAPVIS_HOSTED === '1') {
+    sayRefused('a hosted runtime was detected')
+    return null
+  }
+  if (E.NODE_ENV === 'production') {
+    sayRefused('NODE_ENV is production')
+    return null
+  }
+  return E.MAPVIS_SOLO
+}
+
+/* ::1, 127.0.0.0/8 and the ipv4-mapped spelling of the same. A unix socket has
+ * no address at all and is local by construction. */
+const LOOPBACK = /^(::1|::ffff:127\.\d+\.\d+\.\d+|127\.\d+\.\d+\.\d+)$/
+const fromThisMachine = (req) => {
+  const a = req?.socket?.remoteAddress
+  return !a || LOOPBACK.test(a)
+}
+
+/* said once and not per request, or a signed-out tab prints a line a second */
+let refusedOnce = false
+function sayRefused(why) {
+  if (refusedOnce) return
+  refusedOnce = true
+  console.warn(`[auth] MAPVIS_SOLO is set and was refused: ${why}. Sign in normally.`)
 }
 
 // ---- what an account may reach ---------------------------------------------

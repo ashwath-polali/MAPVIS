@@ -5,7 +5,10 @@ import { fileURLToPath } from 'node:url'
 import { env } from '../db/env.mjs'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
-const WORK = path.join(ROOT, 'work')
+/* the same directory the api writes its scratch to, so MAPVIS_WORK moves both
+ * or neither: a host with a read-only filesystem needs every writer pointed at
+ * the one writable place. */
+const workDir = () => env().MAPVIS_WORK || path.join(ROOT, 'work')
 
 const TYPES = { '.png': 'image/png', '.json': 'application/json', '.txt': 'text/plain' }
 const typeOf = (key) => TYPES[path.extname(key).toLowerCase()] || 'application/octet-stream'
@@ -265,10 +268,10 @@ function s3Store(E) {
 // ---- the laptop ------------------------------------------------------------
 
 function localStore() {
-  const at = (key) => path.join(WORK, '.blobs', clean(key))
+  const at = (key) => path.join(workDir(), '.blobs', clean(key))
   return {
     kind: 'local',
-    bucket: path.join(WORK, '.blobs'),
+    bucket: path.join(workDir(), '.blobs'),
 
     async put(key, body) {
       const f = at(key)
@@ -290,7 +293,7 @@ function localStore() {
 
     async list(prefix) {
       const p = clean(prefix + 'x').slice(0, -1)
-      const root = path.join(WORK, '.blobs')
+      const root = path.join(workDir(), '.blobs')
       const out = []
       const walk = (dir) => {
         if (!fs.existsSync(dir)) return

@@ -97,10 +97,9 @@ const WORK =
   (process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME ? path.join(os.tmpdir(), 'mapvis-work') : path.join(ROOT, 'work'))
 const PUBLIB = path.join(ROOT, 'public', 'library')
 
-const PYTHON =
-  process.env.MAPVIS_PYTHON || 'C:\\Users\\ashcy\\ComfyUI_windows_portable\\python_embeded\\python.exe'
-const SAM_CKPT =
-  process.env.MAPVIS_SAM_CKPT || 'C:\\Users\\ashcy\\AdventureGame\\.tmp_extract\\sam_vit_b_01ec64.pth'
+/* the optional mask proposer shells out to a python and a segment-anything checkpoint that live outside this repo, so there is no default: unset means the feature is off rather than pointing at one machine's disk */
+const PYTHON = process.env.MAPVIS_PYTHON || ''
+const SAM_CKPT = process.env.MAPVIS_SAM_CKPT || ''
 
 const MIME = { '.png': 'image/png', '.jpg': 'image/jpeg', '.json': 'application/json' }
 
@@ -172,6 +171,11 @@ export function api(req, res, next) {
     res.setHeader('Retry-After', '2')
     return send(res, 429, { error: 'too many requests' })
   }
+  const credWait = overCredRate(req, p)
+  if (credWait) {
+    res.setHeader('Retry-After', String(credWait))
+    return send(res, 429, { error: 'too many attempts · slow down' })
+  }
   Promise.resolve(serve(req, res, p, url)).catch((e) => {
     // a missing key is a condition, not a crash, and it has to say which one so
     // the ui can put the right wall in front of the right button
@@ -231,24 +235,56 @@ async function serve(req, res, p, url) {
 
 /* a token bucket per address, sized so a real map open never trips it: the hub asks for about 250 pngs at once and /work/ is served before any auth */
 const RATE = { perSec: Number(process.env.RATE_PER_SEC || 120), burst: Number(process.env.RATE_BURST || 600) }
-const buckets = new Map()
-function overRate(req) {
-  const who = String(req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'local').split(',')[0].trim()
+
+/* Whose address the buckets below are keyed on. x-forwarded-for is a header a
+ * client can write, so trusting it unasked hands every attacker an unlimited
+ * supply of fresh buckets. It is believed only behind a proxy that sets it. */
+const TRUST_PROXY =
+  process.env.TRUST_PROXY === '1' || !!process.env.VERCEL || !!process.env.AWS_LAMBDA_FUNCTION_NAME
+const clientIp = (req) => {
+  const fwd = TRUST_PROXY ? String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() : ''
+  return fwd || req.socket?.remoteAddress || 'local'
+}
+
+/* One bucket implementation, two sizes. The map is bounded because the key is
+ * attacker-controlled and an unbounded map is its own denial of service. */
+function take(buckets, who, rate) {
   const now = Date.now()
   let b = buckets.get(who)
   if (!b) {
-    // bounded, because the key is attacker-controlled and an unbounded map is
-    // its own denial of service
     if (buckets.size > 5000) buckets.clear()
-    b = { tokens: RATE.burst, at: now }
+    b = { tokens: rate.burst, at: now }
     buckets.set(who, b)
   }
-  b.tokens = Math.min(RATE.burst, b.tokens + ((now - b.at) / 1000) * RATE.perSec)
+  b.tokens = Math.min(rate.burst, b.tokens + ((now - b.at) / 1000) * rate.perSec)
   b.at = now
-  if (b.tokens < 1) return true
+  if (b.tokens < 1) return Math.max(1, Math.ceil((1 - b.tokens) / rate.perSec))
   b.tokens--
-  return false
+  return 0
 }
+
+const buckets = new Map()
+const overRate = (req) => take(buckets, clientIp(req), RATE)
+
+/* Anything that takes a password, mints a credential or creates an account gets
+ * a far tighter bucket than a page of pngs does. The per-account backoff in
+ * auth.mjs slows guessing at one address; this slows spraying one password
+ * across many, and it is the only thing standing in front of sign-up. */
+const CRED_RATE = {
+  perSec: Number(process.env.AUTH_RATE_PER_MIN || 30) / 60,
+  burst: Number(process.env.AUTH_RATE_BURST || 30),
+}
+const CREDENTIAL_PATHS = new Set([
+  '/api/auth/login',
+  '/api/auth/signup',
+  '/api/auth/provider',
+  '/api/auth/relay-token',
+  '/api/maps/delete',
+])
+const credBuckets = new Map()
+const overCredRate = (req, p) =>
+  CREDENTIAL_PATHS.has(p) && req.method === 'POST' ? take(credBuckets, clientIp(req), CRED_RATE) : 0
+
 
 async function route(req, res, p, url) {
   /* the post gate below is post-only and slugs are enumerable, so gets that name a map are checked here too; an ownerless map stays open on purpose */
@@ -336,8 +372,10 @@ async function route(req, res, p, url) {
     const outPath = path.join(dir, 'levels.png')
     fs.writeFileSync(inPath, Buffer.from(stripDataURL(b.image), 'base64'))
     if (fs.existsSync(outPath)) fs.unlinkSync(outPath)
-    if (!fs.existsSync(PYTHON)) return send(res, 500, { error: `no python at ${PYTHON}` })
-    if (!fs.existsSync(SAM_CKPT)) return send(res, 500, { error: `no sam checkpoint at ${SAM_CKPT}` })
+    if (!PYTHON || !SAM_CKPT)
+      return send(res, 501, { error: 'the mask proposer is not configured: set MAPVIS_PYTHON and MAPVIS_SAM_CKPT' })
+    if (!fs.existsSync(PYTHON)) return send(res, 500, { error: 'MAPVIS_PYTHON does not point at a file' })
+    if (!fs.existsSync(SAM_CKPT)) return send(res, 500, { error: 'MAPVIS_SAM_CKPT does not point at a file' })
     const out = await run(PYTHON, [
       path.join(HERE, 'propose_sam.py'),
       '--image',
@@ -2825,6 +2863,16 @@ async function readApi(req, res, p, url) {
     return res.end()
   }
   if (req.method !== 'GET') return send(res, 405, { error: 'read only' })
+
+  /* Every route below reads published rows, and publishing needs a database. On
+   * a clone with none configured this answered a 500 carrying the connection
+   * error, which reads to a polling game as an outage rather than as a tool
+   * nobody has pointed at a database yet. */
+  if (!platformOn())
+    return send(res, 503, {
+      error: 'this MAPVIS has no database configured, so nothing is published here yet',
+    })
+
   // maps / <slug> / <sub> / <version> / <rel...>
   const parts = p
     .slice('/api/v1/'.length)
