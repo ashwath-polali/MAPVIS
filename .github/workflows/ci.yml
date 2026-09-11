@@ -1,0 +1,38 @@
+# What a change has to pass before it is merged.
+#
+# Deliberately no secrets. Everything here runs on a fresh clone with nothing
+# configured, which is also how a stranger runs the tool the first time, so a
+# green run here means a clone actually works rather than meaning it works on
+# the one laptop that has a database.
+#
+# `npm run verify` is the other half and is not here: it needs a live Postgres
+# and a live bucket and it writes to them. Run that one by hand.
+
+name: ci
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - run: npm ci
+
+      - name: types
+        run: npm run typecheck
+
+      - name: the checks that need nothing configured
+        run: npm run verify:local
+
+      - name: build
+        run: npm run build
