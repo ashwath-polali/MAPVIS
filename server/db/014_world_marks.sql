@@ -10,7 +10,7 @@
 --
 -- So a mark is free standing. Each entry: name, kind, x, y, and optionally
 -- facing, r, label, meta. `kind` is one of berth, approach, waypoint, anchorage,
--- landmark or spawn, kept apart so a grape can ask for the anchorages without
+-- landmark or spawn, kept apart so a reader can ask for the anchorages without
 -- being handed every landmark as well.
 --
 -- The NAME is the whole interface, because python holds a name and never a

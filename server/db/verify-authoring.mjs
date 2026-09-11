@@ -668,7 +668,7 @@ try {
     await new Promise((r) => server.listen(PORT, '127.0.0.1', r))
     try {
       const body = await (await fetch(`http://127.0.0.1:${PORT}/api/v1/maps/${SLUG}/sets`)).json()
-      eq('a grape looks a set up by the name its author typed', body.sets?.the_stations, {
+      eq('a reader looks a set up by the name its author typed', body.sets?.the_stations, {
         label: 'the stations',
         members: ['coach_post', 'the_yard'],
       })
@@ -841,7 +841,7 @@ try {
     /* home stores a python name and the game matches the kebab id; isName bars a hyphen, so translate here */
     eq('and the run starts at a slot the game can resolve', comp.home, { slot: 'verify-yard' })
 
-    /* the game refuses to resume when version moves, so bumping it every save wipes a class's positions */
+    /* a consumer refuses to resume when version moves, so bumping it every save wipes everybody's position */
     const v1 = (await getWorld_()).version
     await saveWorld_({ w: 4096, h: 4096, home: 'zz_verify_isle', places: saved.places, regions: saved.regions })
     eq('a save that changed nothing leaves the world version alone', (await getWorld_()).version, v1)
@@ -1043,7 +1043,7 @@ try {
      * heard of lands on the word the category is named for. */
     eq('a kind nothing recognises falls back to a berth', readMarks.find((m) => m.name === 'zz_old_approach')?.kind, 'berth')
 
-    /* ONE NAMESPACE, because python has one. A grape calls sail_to("x") and
+    /* ONE NAMESPACE, because python has one. A reader calls sail_to("x") and
      * never says which list to look in, so a mark sharing a name with an island
      * is a call whose answer depends on which lookup runs first. */
     let clash = ''
@@ -1066,7 +1066,7 @@ try {
     await saveWorld_({ w: 4096, h: 4096, places: [], regions: [] })
     eq('a save that never mentions berths keeps them', (await getWorld_()).marks.length, 3)
 
-    /* /api/v1 must need no account: a chromebook with no login is what asks where the islands are */
+    /* /api/v1 must need no account: a browser with no login is what asks where the islands are */
     const server = http.createServer((req, res) =>
       api(req, res, () => {
         res.statusCode = 404
@@ -1081,7 +1081,7 @@ try {
         ? ok('the published ocean still answers with no account behind the request')
         : no(`/api/v1/world answered ${pub.status} to a request with no cookie`)
       const flat = await (await fetch(`http://127.0.0.1:${PORT}/api/v1/world/marks`)).json()
-      eq('a grape looks a berth up by the name its author typed', flat.marks?.zz_north_passage, {
+      eq('a reader looks a berth up by the name its author typed', flat.marks?.zz_north_passage, {
         kind: 'waypoint',
         x: 1200,
         y: 400,
@@ -1089,14 +1089,14 @@ try {
         // and the words a player is shown for it, which the route has to carry:
         // an island holding only the address prints `zz_north_passage` at somebody
         label: 'the north passage',
-        // which island it belongs to, so a grape that has sailed somewhere can
+        // which island it belongs to, so a reader that has routed somewhere can
         // tell what it arrived at without fetching the whole composition
         island: '',
         at: '',
         /* arrive tolerance is not optional: a hull moves in floats, so an exact-pixel test never fires */
         r: 60,
       })
-      /* a bound berth also answers to its island's name, so a grape need not know what the dock was called */
+      /* a bound berth also answers to its island's name, so a reader need not know what the dock was called */
       await saveWorld_({
         w: 4096,
         h: 4096,
@@ -1156,7 +1156,7 @@ try {
 
         /* THE GAME'S READ IS UNCHANGED BY ONE BYTE, which is the only promise
          * this item makes to the other repo. Asked through the real route with
-         * no cookie, the way the chromebook asks it. */
+         * no cookie, the way a browser asks it. */
         const still = await (await fetch(`http://127.0.0.1:${PORT}/api/v1/world/marks`)).json()
         eq('/api/v1/world still answers the game"s own ocean', Object.keys(still.marks).sort(), [
           'zz_alias_dock',
@@ -1170,7 +1170,7 @@ try {
         const mine = await (await fetch(`http://127.0.0.1:${PORT}/api/v1/worlds/${pub}`)).json()
         eq('and their engine reads it in the same words ours does', mine.slots?.length, 1)
         const theirMarks = await (await fetch(`http://127.0.0.1:${PORT}/api/v1/worlds/${pub}/marks`)).json()
-        eq('their berths come back flat, by name, the way a grape wants them', theirMarks.marks?.zz_their_berth?.x, 40)
+        eq('their berths come back flat, by name, the way a reader wants them', theirMarks.marks?.zz_their_berth?.x, 40)
         const nowhere = await fetch(`http://127.0.0.1:${PORT}/api/v1/worlds/00000000-0000-0000-0000-000000000000`)
         nowhere.status === 404 ? ok('an ocean nobody owns is a 404 rather than ours') : no(`a bogus address answered ${nowhere.status}`)
       } finally {
@@ -1704,7 +1704,7 @@ try {
     eq('a region keeps its alignment', read?.regions.find((s) => s.name === 'speaker')?.align, 'left')
     eq('text says what a long option does', read?.regions.find((s) => s.name === 'speaker')?.overflow, 'ellipsis')
 
-    /* refused, not numbered: the name is what a grape holds, and a silent region_3 promises nothing */
+    /* refused, not numbered: the name is what a reader holds, and a silent region_3 promises nothing */
     const nameless = await thrown(() => setUiRegions(owner.id, UI, [{ kind: 'text', x: 0, y: 0, w: 10, h: 10 }]))
     nameless.includes('no name')
       ? ok('a nameless region is refused rather than given a number')
@@ -2389,7 +2389,7 @@ try {
         ? no(`edge numbers that cannot be drawn are stored: ${crossed.join(' · ')}`)
         : ok('and every pair of them leaves a middle, so no piece silently loses its border image')
 
-      /* the type's list is the vocabulary a grape holds, so a box with no body has nowhere to write */
+      /* the type's list is the vocabulary a reader holds, so a box with no body has nowhere to write */
       const owed = []
       for (const p of shelf) {
         const t = pieceType(p.type)

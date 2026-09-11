@@ -11,8 +11,8 @@
 --   version  the game stamps a saved position with the world version it was
 --            taken in and refuses to resume a run when the number has changed.
 --            updated_at cannot do that job: it moves when an author drags one
---            island, which would throw away every saved position on the class's
---            chromebooks on every save. So this is an integer that only counts
+--            island, which would throw away everybody's saved position on every
+--            save. So this is an integer that only counts
 --            up when the composition itself really changed, and dragging a
 --            waypoint or renaming a title does not touch it.
 --

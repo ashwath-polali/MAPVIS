@@ -1,7 +1,7 @@
 // every frame packs into one image, because 800 loose pngs empty a 2,500-a-day allowance in three page loads; nothing is resampled and the loose pngs still ship
 import { decodePNG, encodePNG } from '../sheet.mjs'
 
-/* the school chromebooks report 4096, and a sheet over that cannot be uploaded at all, so the failure lands in the classroom rather than at publish */
+/* the low end of the machines this targets reports 4096, and a sheet over that cannot be uploaded at all, so the failure lands in front of a player rather than at publish */
 export const MAX_TEXTURE_SIZE = 4096
 
 const pow2 = (n) => 1 << Math.ceil(Math.log2(Math.max(1, n)))
@@ -46,7 +46,7 @@ export function packAtlas(files, { max = MAX_TEXTURE_SIZE, pad = 1 } = {}) {
   if (width > MAX_TEXTURE_SIZE || height > MAX_TEXTURE_SIZE)
     throw new Error(
       `the atlas for these ${items.length} frame(s) comes out ${width}x${height}, and a texture cannot be larger than ` +
-        `${MAX_TEXTURE_SIZE} on the school Chromebooks this targets, so no frame on the sheet would draw. ` +
+        `${MAX_TEXTURE_SIZE} on the low end of the machines this targets, so no frame on the sheet would draw. ` +
         `Widest frame ${widest - pad * 2}px, total packed area ${area}px. Split the map across two maps.`,
     )
 

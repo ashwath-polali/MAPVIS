@@ -1,4 +1,4 @@
-// export is a save: version N's bytes live at publish/<slug>/vN/ forever and are never rewritten, so a class mid-session cannot break and a cdn can cache them for good
+// export is a save: version N's bytes live at publish/<slug>/vN/ forever and are never rewritten, so a session already running cannot break and a cdn can cache them for good
 import crypto from 'node:crypto'
 import { q, one, many, tx } from '../db/pool.mjs'
 import { store, keys } from './blobs.mjs'
@@ -539,7 +539,7 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
         problems.map((p) => '  · ' + p).join('\n'),
     )
   // a warning is a fact the author should have, not a reason to refuse: a door
-  // to a room nobody has painted yet is the Maw's own design
+  // to a room nobody has painted yet is a deliberate shape
   for (const w of warnings) console.warn(`[publish] ${slug}: ${w}`)
   step('gate passed')
 

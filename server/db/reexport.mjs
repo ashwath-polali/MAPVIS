@@ -115,7 +115,7 @@ for (const a of doc.assets || []) {
   const look0 = pack(a)
   if (!look0) continue
   const looks = (a.looks || []).map(pack).map((l, i) => l || (i === 0 ? look0 : null))
-  /* name, when and lookNames were all dropped here, and all three fail invisibly until a grape misses */
+  /* name, when and lookNames are all droppable here, and all three fail invisibly until a reader misses one */
   const when = whenOf(a, doc.groups)
   const names = [
     isAnchorName(a.lookName) ? String(a.lookName) : '',

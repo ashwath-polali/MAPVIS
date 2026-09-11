@@ -134,7 +134,7 @@ export default function Ui() {
   const [maps, setMaps] = useState<MapRow[]>([])
   const [mine, setMine] = useState(false)
   /* THE PICTURE IS SERVED IMMUTABLE FOR A YEAR, which is right for a classroom
-   * of thirty chromebooks and wrong for the page that just redrew it. One stamp
+   * of thirty machines and wrong for the page that just redrew it. One stamp
    * per load busts the cache here and nowhere else. */
   const [stamp, setStamp] = useState(() => Date.now())
   const [step, setStep] = useState<Step>('pieces')
@@ -908,7 +908,7 @@ function Drawing({
   }
 
   // why a name is refused, said on the line under the box rather than after a
-  // press. All four cases are about the identifier a grape will hold.
+  // press. All four cases are about the identifier a reader will hold.
   const nameSays = !legal
     ? 'lower case, digits and underscores, starting with a letter'
     : reserved

@@ -20,8 +20,8 @@ const SHOUTED = new Set([
 ])
 
 /* short words that stay lower inside a name, the way a title does. First and
- * last word are exempt, because "The Maw Of Panthers" is not how anybody
- * writes it and neither is "of the maw". */
+ * last word are exempt, because "The Mouth Of The Cave" is not how anybody
+ * writes it and neither is "of the cave". */
 const QUIET = new Set(['a', 'an', 'and', 'at', 'by', 'de', 'for', 'in', 'of', 'on', 'or', 'the', 'to', 'vs'])
 
 /* An identifier unpacked into words. Both separators, because an anchor name is snake_case and a map id is kebab and a person should not have to know which they are looking at. A run of digits is never title-cased. */

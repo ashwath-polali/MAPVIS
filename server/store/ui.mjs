@@ -394,8 +394,8 @@ export const PIECE_TYPES = [
     h: 160,
     elements: null,
     elementsWhy: 'a sheet is painted on /v2/generate-image-v2, which has no element list at all, because the ui route draws panels even when it is asked for marks',
-    /* crest-panther.png is the only reference with no frame on it, so a small token cannot copy a panel's frame */
-    styleRef: 'crest-panther.png',
+    /* crest-token.png is the only reference with no frame on it, so a small token cannot copy a panel's frame */
+    styleRef: 'crest-token.png',
     material: null,
     faces: ['fall', 'winter', 'spring', 'spent', 'ghost'],
     what: 'The season token, one face per season plus spent and the ghost that draws at zero.',
@@ -414,7 +414,7 @@ export const PIECE_TYPES = [
     h: 256,
     elements: null,
     elementsWhy: 'a sheet is painted on /v2/generate-image-v2, which has no element list at all, because the ui route draws panels even when it is asked for marks',
-    styleRef: 'crest-panther.png',
+    styleRef: 'crest-token.png',
     material: null,
     /* named rather than left open, because an open family cannot be cut: one big blob and a correct sheet look the same to the count */
     faces: ['compass', 'key', 'star', 'lock', 'tick', 'cross', 'arrow', 'coin'],
@@ -434,7 +434,7 @@ export const PIECE_TYPES = [
     h: 160,
     elements: null,
     elementsWhy: 'a sheet is painted on /v2/generate-image-v2, which has no element list at all, because the ui route draws panels even when it is asked for marks',
-    styleRef: 'crest-panther.png',
+    styleRef: 'crest-token.png',
     material: null,
     /* frames and not states, numbered rather than described, because nobody has drawn the loop yet */
     faces: ['frame_1', 'frame_2', 'frame_3', 'frame_4'],
@@ -454,7 +454,7 @@ export const PIECE_TYPES = [
     h: 192,
     elements: null,
     elementsWhy: 'a sheet is painted on /v2/generate-image-v2, which has no element list at all, because the ui route draws panels even when it is asked for marks',
-    styleRef: 'crest-panther.png',
+    styleRef: 'crest-token.png',
     material: null,
     // the three the record actually asks for, and it was one face called `mark`
     // with the family left open. A stamp says a specific word without lettering:
@@ -476,7 +476,7 @@ export const PIECE_TYPES = [
     h: 256,
     elements: null,
     elementsWhy: 'a sheet is painted on /v2/generate-image-v2, which has no element list at all, because the ui route draws panels even when it is asked for marks',
-    styleRef: 'crest-panther.png',
+    styleRef: 'crest-token.png',
     material: null,
     // the record's five plus the hand, which is the one the record left out: a
     // pointer set is an arrow and a hand cursor, and the five below are all
@@ -706,7 +706,7 @@ export function typeBrief(t, { width, height, shelf = [] } = {}) {
 
 // ---- regions ---------------------------------------------------------------
 
-/* a missing name is refused rather than invented because the name is the address a grape holds, and the four numbers are checked before num() rounds an unreadable one to 0 */
+/* a missing name is refused rather than invented because the name is the address a reader holds, and the four numbers are checked before num() rounds an unreadable one to 0 */
 export function cleanRegion(s) {
   if (!s || !isName(s.name)) return null
   for (const k of ['x', 'y', 'w', 'h']) if (!isFinite(Number(s[k]))) return null

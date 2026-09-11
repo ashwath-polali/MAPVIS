@@ -15,6 +15,6 @@
 -- bytes, which costs object storage and costs no generation at all, and leaves
 -- every key shape and every ownership rule exactly where it was. The copy is
 -- also what the author usually wants in practice, because a barrel dropped into
--- the Maw is going to get palette-matched to black stone and a true share would
+-- one map is going to get palette-matched to black stone and a true share would
 -- have changed the barrel on the hub too.
 alter table library_items add column if not exists shared boolean not null default false;

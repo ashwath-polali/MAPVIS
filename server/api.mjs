@@ -2487,7 +2487,7 @@ async function route(req, res, p, url) {
     fs.writeFileSync(path.join(dir, 'assets.json'), JSON.stringify({ assets: outAssets }, null, 2))
     files.push(copied ? `assets.json (+${copied} png${copied > 1 ? 's' : ''})` : 'assets.json')
 
-    // the publish is an immutable version, so re-exporting cannot break a class mid-session, and map.json picks up anchors[] from the database on the way
+    // the publish is an immutable version, so re-exporting cannot break a session already running, and map.json picks up anchors[] from the database on the way
     step('assets folder rebuilt')
     let published = null
     if (platformOn()) {
@@ -2891,7 +2891,7 @@ async function readApi(req, res, p, url) {
        from maps m order by m.updated_at desc`,
     )
     const maps = rows.filter((r) => r.version)
-    /* ?with=anchors: a door graph over twelve islands cost thirteen requests, paid by a whole class at once on a 4 GB chromebook. opt-in, so the listing stays cheap */
+    /* ?with=anchors: a door graph over twelve islands costs thirteen requests, paid by thirty people at once on modest machines. opt-in, so the listing stays cheap */
     if (url.searchParams.get('with') === 'anchors' && maps.length) {
       /* the area comes with it: without it every region drew as a circle of its radius, and the shape mode is lifted off the meta bag the way readEvents does */
       const all = await many(
@@ -2922,7 +2922,7 @@ async function readApi(req, res, p, url) {
     return send(res, 200, { maps })
   }
 
-/* the ocean, live from row 1 and public because a freshman on a chromebook has no account; the game gates on Array.isArray(slots), so places discarded a real one */
+/* the ocean, live from row 1 and public because whoever is reading it has no account; a consumer gates on Array.isArray(slots), so places discarded a real one */
   if (kind === 'world' && !slugRaw) return send(res, 200, await composition(GAME_WORLD))
 
 /* berths flat, keyed by the name the author typed: mapvis authors where and python authors what happens, so do not add a routes key until something reads it */
@@ -2934,9 +2934,9 @@ async function readApi(req, res, p, url) {
       x: m.x,
       y: m.y,
       facing: m.facing || '',
-      /* the label rides along: without it a grape had the address and no words, so an island printed north_passage at somebody */
+      /* the label rides along: without it a reader has the address and no words, so an island prints north_passage at somebody */
       label: m.label || '',
-      /* which island it belongs to, or a grape can sail there and has to fetch the whole composition to say what it arrived at */
+      /* which island it belongs to, or a reader can route there and has to fetch the whole composition to say what it arrived at */
       island: m.island || '',
       // and where the hull puts somebody down once they are ashore, which is an
       // anchor name inside that island rather than a point on the ocean
@@ -2972,7 +2972,7 @@ async function readApi(req, res, p, url) {
       const buf = await uiImage(slugRaw)
       if (!buf) return notFound(res)
       res.setHeader('Content-Type', 'image/png')
-      /* immutable and no version in the key, so a redraw needs a rename; what it buys is thirty chromebooks fetching the chrome once between them */
+      /* immutable and no version in the key, so a redraw needs a rename; what it buys is thirty machines fetching the chrome once between them */
       res.setHeader('Cache-Control', 'public, max-age=31536000, immutable')
       res.setHeader('Access-Control-Allow-Origin', '*')
       return res.end(buf)
@@ -3008,7 +3008,7 @@ async function readApi(req, res, p, url) {
     })
   }
 
-  /* named collections flat, keyed by the author's name: sets and racks share one namespace, so a grape asks by name without saying which list */
+  /* named collections flat, keyed by the author's name: sets and racks share one namespace, so a reader asks by name without saying which list */
   if (sub === 'sets' || sub === 'racks') {
     const m = await one('select id, sets, racks from maps where slug = $1', [slug])
     if (!m) return send(res, 404, { error: `no map ${slug}` })
@@ -3066,7 +3066,7 @@ async function readApi(req, res, p, url) {
 
   // the bytes themselves. A version prefix never changes, so this is the one
   // thing in MAPVIS that is safe to cache forever, and caching it forever is
-  // what keeps a class of thirty chromebooks off the free tier's read budget.
+  // what keeps thirty machines at once off the free tier's read budget.
   if (sub === 'file') {
     const version = Number(parts[3])
     if (!Number.isFinite(version)) return notFound(res)

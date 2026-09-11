@@ -30,7 +30,7 @@
 -- THE VERSION IS NOT COUNTED UP. The game stamps a saved position with it and
 -- refuses to resume a run when it has moved. Every berth comes out of this at
 -- exactly the coordinates it went in at, so nothing the game reads has changed,
--- and bumping it would throw away the position of every chromebook in a class
+-- and bumping it would throw away every saved position at once
 -- for a rename.
 do $$
 declare

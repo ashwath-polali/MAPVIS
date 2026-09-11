@@ -16,7 +16,7 @@
 -- on the chart or on the wire says which of two points is which.
 --
 -- So it is a field. `approach` is NOT a kind of mark and it is not coming back
--- as one: nothing sails to a run-in, no grape ever names it, and it only means
+-- as one: nothing sails to a run-in, nothing ever names it, and it only means
 -- anything relative to one berth. That is the opposite of the destination 019
 -- was freeing, and it is the one case where welding a point to its owner is
 -- right rather than wrong.
@@ -34,7 +34,7 @@
 --
 -- THE VERSION IS NOT COUNTED UP. The game stamps a saved position with it and
 -- refuses to resume a run when it has moved, so bumping it throws away the
--- position of every chromebook in a class. Marks are deliberately outside the
+-- position everybody has saved. Marks are deliberately outside the
 -- version comparison in saveWorld for exactly this reason: moving a dock does
 -- not put a student inside a wall.
 do $$

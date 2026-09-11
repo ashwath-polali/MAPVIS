@@ -68,7 +68,7 @@ create index on relay_links (user_id);
 -- -------------------------------------------------------------------- maps --
 
 -- slug is globally unique, not unique per owner, and that is forced by the
--- door contract rather than chosen: an anchor writes to:'panther-maw' as a bare
+-- door contract rather than chosen: an anchor writes to:'back-room' as a bare
 -- string with no owner in it, so two people cannot both own 'hub'.
 create table maps (
   id          uuid primary key default gen_random_uuid(),
@@ -271,7 +271,7 @@ create index on usage (user_id, at desc);
 -- ---------------------------------------------------------------- publish --
 
 -- A publish is immutable. Version N's bytes live at a version-scoped prefix
--- forever and 'latest' is a pointer, so re-exporting can never break a class
+-- forever and 'latest' is a pointer, so re-exporting can never break a run
 -- that is mid-session and a game build can pin a version it was tested against.
 create table publishes (
   id           uuid primary key default gen_random_uuid(),

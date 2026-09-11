@@ -23,6 +23,10 @@ archive/
 .tmp-refute/
 dist-ssr/
 
+# the imaging toolkit: standalone, nothing in the request path imports it, and
+# it is a megabyte the host would upload on every deploy for nothing
+server/imaging/
+
 # history and tooling the runtime never reads
 .git/
 .github/

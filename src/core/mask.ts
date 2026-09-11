@@ -214,7 +214,7 @@ export interface MapAnchor {
   facing?: string
   /* what a player reads. NOT the identity. */
   label: string
-  /* author key/values a grape can read, and the bag every boundary copies whole: the upsert, the game's readAnchors and the publish projection each copy a fixed list plus all of meta, so this is what carries anything new across. */
+  /* author key/values a reader can pick up, and the bag every boundary copies whole: the upsert, a consumer's anchor read and the publish projection each copy a fixed list plus all of meta, so this is what carries anything new across. */
   meta?: Record<string, unknown>
   /* WHEN THIS PLACE IS THERE AT ALL. A condition on the NAME, not on a picture: an anchor may have no placement bound to it and still need to be off. Rides in the meta bag, because three copiers take a fixed field list plus all of meta, and migrateEvent folds it both ways so the field and the bag cannot disagree. */
   when?: string
@@ -525,7 +525,7 @@ export interface MapProps {
    * make between name and label, and for the same reason. */
   title: string
   class: MapClass
-  /* the school offering this map is about, joining it to a grape */
+  /* the subject this map is about, joining it to whatever code answers for that subject */
   islandId: string
   /* WHERE THE PAINT IS INSIDE THE CANVAS, as [w, h, ox, oy], stated rather than measured. Absent means measured, which is nearly always better; this is the correction for an edge the scan reads as picture. */
   paint?: [number, number, number, number]
@@ -587,7 +587,7 @@ export interface MapFraming {
   meta?: Record<string, unknown>
 }
 
-/* A NAMED SET OF ANCHORS. WHAT THE GAME DOES WITH ONE TODAY: nothing, read rather than assumed. Nothing groups anchors and no intent takes more than a single anchor string, so a grape wanting five steles hard-codes five and neither side can say whether that is all of them. Membership, not order; a rack below is the ordered one. An empty set is kept, because iterating it yields nothing, which is a correct answer. */
+/* A NAMED SET OF ANCHORS, read rather than assumed. Without one nothing groups anchors and no call takes more than a single anchor string, so a reader wanting five steles hard-codes five and neither side can say whether that is all of them. Membership, not order; a rack below is the ordered one. An empty set is kept, because iterating it yields nothing, which is a correct answer. */
 export interface MapAnchorSet {
   id: number
   /* author-typed, python-shaped, and unique across sets AND racks. See

@@ -876,7 +876,7 @@ input[type='range']:disabled {
 }
 /* THE MARKER IS THE SAME CARET EVERY OTHER FOLD IN THIS APP USES, and not a
    bare ⌘. That is the Mac command key, on a tool most people open on Windows
-   and on Chromebooks, so it names a key they do not have. It is also a font's
+   and on machines with no command key at all, so it names a key they do not have. It is also a font's
    idea of a symbol, at whatever weight the font feels like, sitting next to
    twenty drawn marks. */
 .keys summary::after {
@@ -2773,7 +2773,7 @@ input[type='range']:disabled {
   font: var(--fs-fine) var(--font-mono);
 }
 /* the map's own key/values. Two columns, the key in the machine face because
-   a grape reads it by that exact string. */
+   a reader picks it up by that exact string. */
 .metarows {
   display: grid;
   gap: 3px;
@@ -2920,8 +2920,8 @@ input[type='range']:disabled {
   font: var(--fs-micro) var(--font-mono);
   color: var(--dim);
 }
-/* this one was live rather than latent: a door named "Panther's Maw →
-   panther-maw" pushed the whole list 26px past the panel and grew a sideways
+/* a long label and a long address on one line: a door named "The Old Quarry →
+   old-quarry" pushes the whole list 26px past the panel and grows a sideways
    scrollbar on the test step. */
 .evrows {
   display: grid;

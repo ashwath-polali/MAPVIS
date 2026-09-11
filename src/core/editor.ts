@@ -4451,7 +4451,7 @@ export class Editor {
     return this.doc.stairRegions()
   }
 
-  /* A STAIR MADE ADDRESSABLE, by putting a named region over it. map.json.stairs is a machine fact and nobody types it; what nobody could do was NAME one, so a grape had no way to say which stair it meant. Rather than invent a second naming scheme keyed to a rectangle that moves when the paint moves, this makes the thing the tool already knows how to name. */
+  /* A STAIR MADE ADDRESSABLE, by putting a named region over it. map.json.stairs is a machine fact and nobody types it; what nobody could do was NAME one, so nothing downstream had a way to say which stair it meant. Rather than invent a second naming scheme keyed to a rectangle that moves when the paint moves, this makes the thing the tool already knows how to name. */
   markStair(r: StairRegion): number {
     const [x0, y0, x1, y1] = r.rect
     const id = this.addAnchor('region', Math.round((x0 + x1) / 2), Math.round((y0 + y1) / 2))
@@ -4508,7 +4508,7 @@ export class Editor {
     return picked.length
   }
 
-  /* ONE KEY ON ONE ANCHOR'S BAG, the stated extension point, which had only machine writers so the bag a grape reads carried MAPVIS bookkeeping and nothing an author chose. null removes the key and '' keeps it holding nothing. The keys MAPVIS writes itself are refused, or an author would be editing the tool's own record through a box that looks like theirs. */
+  /* ONE KEY ON ONE ANCHOR'S BAG, the stated extension point, which without an author writer carries MAPVIS bookkeeping and nothing an author chose. null removes the key and '' keeps it holding nothing. The keys MAPVIS writes itself are refused, or an author would be editing the tool's own record through a box that looks like theirs. */
   setAnchorMeta(id: number, key: string, value: string | null) {
     const e = this.doc.events.find((q) => q.id === id)
     if (!e) return false

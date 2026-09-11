@@ -1,6 +1,6 @@
 /* THE OCEAN DOCUMENT as the front end sees it. The browser had no types for it and carried marks through the save as unknown, which works until something wants to read one. Where this and server/store/world.mjs disagree, the server is right: it is the one that refuses a save. */
 
-/* WHAT A POINT ON THE WATER IS FOR, and there is one kind of point: a berth. The rest of this list is a FILTER so a grape can ask for anchorages without being handed every landmark; they are drawn and dragged the same. `approach` is not a kind, it is a field on a berth. */
+/* WHAT A POINT ON THE WATER IS FOR, and there is one kind of point: a berth. The rest of this list is a FILTER so a reader can ask for anchorages without being handed every landmark; they are drawn and dragged the same. `approach` is not a kind, it is a field on a berth. */
 export const MARK_KINDS = ['berth', 'waypoint', 'anchorage', 'landmark', 'spawn'] as const
 export type MarkKind = (typeof MARK_KINDS)[number]
 

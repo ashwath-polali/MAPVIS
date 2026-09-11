@@ -1,6 +1,6 @@
 import path from 'node:path'
 import fs from 'node:fs'
-// the linked machine, run with `node server/relay.mjs`; it polls rather than being called because a laptop behind a school network has no public address, and the platform degrades within ninety seconds of it going quiet
+// the linked machine, run with `node server/relay.mjs`; it polls rather than being called because a laptop behind a home or office network has no public address, and the platform degrades within ninety seconds of it going quiet
 import os from 'node:os'
 import { env } from './db/env.mjs'
 import { viaCli } from './store/planner.mjs'

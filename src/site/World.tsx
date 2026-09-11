@@ -26,7 +26,7 @@ type Place = {
   state: string
   /* two radii, and they were one. `discover` is how close the hull comes before
    * this island is found; `release` is how far out its bundle stays decoded,
-   * which is what gets trimmed first on a 4 GB chromebook. */
+   * which is what gets trimmed first on a 4 GB machine. */
   discover: number
   release: number
   meta?: Record<string, unknown>
@@ -762,7 +762,7 @@ function paint(c: CanvasRenderingContext2D, size: { w: number; h: number }, sc: 
     }
     /* THE HEADING HELD HERE, as a spur off the ring. It was drawn only for a
      * place's own berth, so a free point could carry a facing, save it, hand it
-     * to a grape and show nothing at all for it. */
+     * to a reader and show nothing at all for it. */
     const face = k.facing || ''
     const dx = face.includes('east') ? 1 : face.includes('west') ? -1 : 0
     const dy = face.includes('south') ? 1 : face.includes('north') ? -1 : 0
@@ -2042,7 +2042,7 @@ export default function World() {
             />
           ) : null}
 
-          {/* displayName and not the raw the_hub, with the identifier a hover away for a grape */}
+          {/* displayName and not the raw the_hub, with the identifier a hover away for whoever is writing code */}
           {/* only the work left: the counts and the size moved to the readout strip below */}
           {/* whose water this is decides what every row below means: only the game's is sailed */}
           {!sel && <Whose doc={doc} game={game} readUrl={readUrl} />}
@@ -2355,7 +2355,7 @@ function BerthPanel({
             value={m.name}
             spellCheck={false}
             maxLength={48}
-            title="what a grape calls sail_to with · one namespace with every island and every stretch of water"
+            title="what code calls sail_to with · one namespace with every island and every stretch of water"
             onChange={(e) => onEdit({ name: e.target.value })}
             onBlur={() => !legal && onEdit({ name: anchorName(m.name) })}
           />
@@ -2660,7 +2660,7 @@ function Inspector({
             value={p.name}
             spellCheck={false}
             maxLength={48}
-            title="the address a grape reaches this island by"
+            title="the address code reaches this island by"
             onChange={(e) => set({ name: e.target.value })}
             onBlur={() => !legal && set({ name: anchorName(p.name) })}
           />
@@ -2753,7 +2753,7 @@ function Inspector({
             type="number"
             min={0}
             value={p.release}
-            title="how far out this map's bundle stays in memory · the first thing dropped when a chromebook runs short"
+            title="how far out this map's bundle stays in memory · the first thing dropped when a machine runs short"
             onChange={(e) => set({ release: Math.max(0, Math.round(Number(e.target.value) || 0)) })}
           />
         </label>

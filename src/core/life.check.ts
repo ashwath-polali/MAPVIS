@@ -528,7 +528,7 @@ for (let i = 0; i <= 38000; i++) {
 const long = (gl >>> 0).toString(16).padStart(8, '0')
 ok('nothing below the cap moved', long === '55711aa4', `${long} against 55711aa4, 38001 samples over 1900s`)
 
-/* WHAT THE ROUND COSTS. The cap bounds the price of a call and still has to: the hub has 94 placements on school Chromebooks. The round costs one extra walk to learn its own length, measured 14.1us at t=3600s before and 27.2us after, and then FLAT, so t=1e9 costs the same as t=3600. The threshold is loose because a wall clock in a test is noisy; what is caught is growth by a factor. */
+/* WHAT THE ROUND COSTS. The cap bounds the price of a call and still has to: a busy map carries 94 placements on a modest machine. The round costs one extra walk to learn its own length, measured 14.1us at t=3600s before and 27.2us after, and then FLAT, so t=1e9 costs the same as t=3600. The threshold is loose because a wall clock in a test is noisy; what is caught is growth by a factor. */
 const perCall = (t: number, n: number) => {
   for (let i = 0; i < 200; i++) lifeAt(crab, t + i * 1e-6, home)
   let best = Infinity
@@ -946,7 +946,7 @@ const c2 = costOf(roundOf(2), 1e5)
 const c4 = costOf(roundOf(4), 1e5)
 const c6 = costOf(roundOf(6), 1e5)
 ok(
-  'a six state round is still a frame budget a Chromebook can pay',
+  'a six state round is still a frame budget a modest machine can pay',
   c6 < 400 && c6 < c2 * 4,
   `${cPlain.toFixed(1)}us plain, ${c2.toFixed(1)}us at two states, ${c4.toFixed(1)} at four, ${c6.toFixed(1)} at six`,
 )
@@ -962,7 +962,7 @@ ok(
   `${cStill.toFixed(1)}us for a six state round with one mover, against ${cPlain.toFixed(1)}us plain and ${c6.toFixed(1)}us with six movers`,
 )
 
-/* AND THE SAME READING WITH THE FLOOR IN FORCE, WHICH IS THE ONE THAT COSTS: a plain fenced walk is 164.6us against 22.7 with no floor, seven times, before any round exists. A round multiplies that by the movers and got dearer rather than cheaper, two states 257.8 to 364.5us and six 377.9 to 713.7, because the legs are now as long as the box says instead of the 5.83px the old share left. No exported bundle carries a round yet; this gate is for the day one does, on a Chromebook. */
+/* AND THE SAME READING WITH THE FLOOR IN FORCE, WHICH IS THE ONE THAT COSTS: a plain fenced walk is 164.6us against 22.7 with no floor, seven times, before any round exists. A round multiplies that by the movers and got dearer rather than cheaper, two states 257.8 to 364.5us and six 377.9 to 713.7, because the legs are as long as the box says rather than the 5.83px an even share leaves. No exported bundle carries a round yet; this gate is for the day one does, on the slowest machine it has to run on. */
 const costWith = (l: Life, t: number, floor: (x: number, y: number) => boolean) => {
   for (let i = 0; i < 200; i++) lifeAt(l, t + i * 1e-6, mh, floor)
   let best = Infinity

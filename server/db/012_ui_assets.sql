@@ -9,13 +9,13 @@
 --
 -- So a surface is not just a png. It is a png plus the named places inside it
 -- where a value goes, and the slots are the whole reason this table exists. A
--- generated panel with no slots is a wallpaper: the vine still has to be told
+-- generated panel with no slots is a wallpaper: the engine still has to be told
 -- where the number sits, where the bar fills from, where the button is
--- clickable, and every one of those numbers would be typed into vine source and
+-- clickable, and every one of those numbers would be typed into engine source and
 -- would go stale the moment the panel is regenerated one pixel wider.
 --
 -- OWNED BY AN ACCOUNT, NOT BY A MAP, and that is the point of it. A dialogue
--- box is not about the hub any more than it is about the Maw; it is the game's
+-- box is not about one map any more than about another; it is the consumer's
 -- own chrome, used by every island at once. library_items is map-scoped and
 -- could not have held this without the nullable map_id that 013 explains is not
 -- worth its blast radius.
@@ -24,7 +24,7 @@ create table if not exists ui_assets (
   id           uuid primary key default gen_random_uuid(),
   owner_id     uuid not null references users(id) on delete cascade,
 
-  -- the address a grape holds. Same python-identifier rule anchors and
+  -- the address a reader holds. Same python-identifier rule anchors and
   -- placements are held to, for the same reason: it is typed into member code
   -- and has to be legal there.
   name         text not null check (name ~ '^[a-z][a-z0-9_]{0,47}$'),

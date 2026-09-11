@@ -3745,7 +3745,7 @@ export default function App() {
       {readable(d)} · {d.name}
     </option>
   ))
-  /* identifier alone for a rack slot: the full pair clipped to "Panther's Maw · " and lost the address. */
+  /* identifier alone for a rack slot: the full pair clips and loses the address, which is the half that is addressable. */
   const anchorCodeOpts = doors.map((d) => (
     <option key={d.id} value={d.name}>
       {d.name}
@@ -3816,7 +3816,7 @@ export default function App() {
             <span>label · what a player reads</span>
             <input
               value={editingDoor.label}
-              placeholder="Panther's Maw"
+              placeholder="The Old Quarry"
               onChange={(e) => ed?.updateEvent(editingDoor.id, { label: e.target.value })}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === 'Escape') e.currentTarget.blur()
@@ -4057,9 +4057,9 @@ export default function App() {
               only visible from its own form, so an author looking at stele_2
               cannot tell it is one of the five that python iterates. */}
           {anchorIn.length > 0 && <div className="doorhint">in {anchorIn.join(' · ')}</div>}
-          {/* the bag a grape reads, which had no author writer at all and carried only mapvis bookkeeping. */}
+          {/* the bag a reader picks up, which without this carries only MAPVIS bookkeeping and nothing an author chose. */}
           <div className="metarows">
-            <div className="doorhint">what a grape can read off this anchor</div>
+            <div className="doorhint">what a reader can pick up off this anchor</div>
             {[
               ...Object.entries(editingDoor.meta ?? {}).filter(([k]) => !ANCHOR_META_RESERVED.includes(k)),
               ['', ''],

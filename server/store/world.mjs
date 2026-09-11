@@ -139,7 +139,7 @@ export function cleanMark(m) {
     ...(isName(m.island) ? { island: m.island } : {}),
     /* the anchor a hull puts somebody down at, because without it a voyage lands on the destination's default spawn and nothing says it was ignored */
     ...(isName(m.at) ? { at: m.at } : {}),
-    /* the run-in is nested because it is geometry relative to one berth that nothing sails to and no grape names, and it replaced a positional rule nothing on the page could see; still authorable over the wire only */
+    /* the run-in is nested because it is geometry relative to one berth that nothing sails to and nothing names, and it replaces a positional rule nothing on the page could see; still authorable over the wire only */
     ...(m.approach && isFinite(Number(m.approach.x)) && isFinite(Number(m.approach.y))
       ? { approach: { x: num(m.approach.x), y: num(m.approach.y) } }
       : {}),
@@ -264,7 +264,7 @@ export async function composition(id = GAME_WORLD) {
         rect: { x: Math.min(x0, x1), y: Math.min(y0, y1), w: Math.abs(x1 - x0), h: Math.abs(y1 - y0) },
       }
     }),
-    /* every point on the water including the ones folded into a slot above, mostly unread by the game and read flat by a grape at /api/v1/world/marks */
+    /* every point on the water including the ones folded into a slot above, mostly unread by a consumer and read flat at /api/v1/world/marks */
     marks: w.marks,
     source: 'mapvis',
   }
@@ -403,7 +403,7 @@ export async function saveWorld(input, client, id = GAME_WORLD) {
     e.problems = problems
     throw e
   }
-  /* the version counts up only when a hull's world moved, because the game refuses to resume a run when it changes and thirty chromebooks lose their place */
+  /* the version counts up only when a hull's world moved, because a consumer refuses to resume a run when it changes and everybody loses their place */
   /* keys sorted, because one side is freshly cleaned and the other came out of jsonb, and a raw stringify counted a version up on every empty save */
   const stable = (v) =>
     Array.isArray(v)

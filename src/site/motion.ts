@@ -1,4 +1,4 @@
-/* Reactivity without a library: everything writes a custom property or toggles a class and nothing animates from javascript, so the work stays on the compositor and a Chromebook keeps its frames. */
+/* Reactivity without a library: everything writes a custom property or toggles a class and nothing animates from javascript, so the work stays on the compositor and a modest machine keeps its frames. */
 import { useEffect, useRef, useState } from 'react'
 
 /* Reveal on arrival. One shared observer for the whole page rather than one per
