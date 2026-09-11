@@ -121,7 +121,7 @@ export const HELP: HelpSection[] = [
           'Leave everything else unpainted and it is solid.',
         ],
         note:
-          'Hand-drawn beats machine-drawn here and it is measured: by hand the boundary sits about 0.7 pixels off, from an AI pass about 4.2. Your correction is the deliverable.',
+          'Hand-drawn beats machine-drawn here and it is measured: by hand the boundary sits about 0.7 pixels off, from an automatic pass about 4.2. Your correction is the deliverable.',
       },
       {
         what: 'fill by region',

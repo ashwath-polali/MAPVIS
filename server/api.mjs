@@ -636,7 +636,7 @@ async function route(req, res, p, url) {
     const sent = new Set((Array.isArray(b.names) ? b.names : []).map(fold).filter(Boolean))
     /* a thing's own faces, not the whole library, so "which boulder" cannot be asked; the library is the fallback for a row with no faces of its own */
     const owner = cleanName(b.owner || '')
-    /* the store's listing: libraryItems walks a tmp folder empty every request on the host, so a round was planned with no faces and never changed picture */
+    /* the store's listing: libraryItems walks a tmp folder that is empty on every request on a host, so a round planned from it has no faces and never changes picture */
     const lib = platformOn() ? await libraryOf(id) : libraryItems(id)
     const mine = owner ? (lib.find((x) => x.name === owner) || {}).states || [] : []
     const onDisk = mine.length
@@ -713,7 +713,7 @@ async function route(req, res, p, url) {
           `orbit   a circuit: period, radiusX, radiusY.`,
           `drift   barely moving, for something moored or idling: driftX, driftY, period.`,
           ``,
-          /* rock is not a fifth kind: it was in Life and never named here, so a boat asked to rock came back drifting sideways */
+          /* rock is not a fifth kind, and it has to be named here as well as in Life, or a boat asked to rock comes back drifting sideways */
           `AND SEPARATELY, on any of the four: rock and rockRate. A tilt, in degrees either side ` +
             `of upright and leans per second. This is how something LEANS rather than travels: a ` +
             `boat at its mooring, a hanging sign, a lantern on a bracket. It rides on top of the ` +
@@ -1842,7 +1842,7 @@ async function route(req, res, p, url) {
       await dropItem(id, name)
       return send(res, 200, { removed: 'animated' })
     }
-    /* not on this disk is not not in the library: on the host every delete of a listed row said "not in the library" while the row was dropped */
+    /* not on this disk is not the same as not in the library: on a host the disk is empty, so answering from it says "not in the library" about a row that is there */
     let known = false
     if (platformOn()) {
       try {
@@ -1954,7 +1954,7 @@ async function route(req, res, p, url) {
     const description = String(b.description || '').trim()
     if (!description) return send(res, 400, { error: 'say what the piece is before drawing it' })
 
-    /* a dry run posts nothing and takes no lock: 280 generations went on rediscovering one recipe whose defect was a dropped elements field in the body */
+    /* a dry run posts nothing and takes no lock, so a recipe can be read back and compared without paying to find out what the body carried */
     const dry = b.dry === true || b.dry === 'true'
 
     /* one press draws one piece: a batch turns one bad prompt into five bad pictures with nobody having looked at the first */
@@ -2406,7 +2406,7 @@ async function route(req, res, p, url) {
       return null
     }
     const placements = (Array.isArray(b.assets) ? b.assets : []).filter((a) => a && typeof a === 'object')
-    /* counted apart, with ids: both continues reach one guard, so a bad x, y or scale was reported as missing art and sent a person hunting for a png that was there */
+    /* counted apart, with ids: both continues reach one guard, so a bad x, y or scale reported as missing art sends a person hunting for a png that is there */
     const badNumber = []
     const noArt = []
     for (const a of placements) {
@@ -4056,7 +4056,7 @@ async function pushLibrary(id, name) {
   }
 }
 
-/* origin.json maps a library name to the id that drew it: the library has three shapes and only one can hold metadata, and guessing across 769 rows was wrong often */
+/* origin.json maps a library name to the id that drew it: the library has three shapes and only one can hold metadata, so the link is recorded rather than guessed */
 const originPath = (id) => path.join(WORK, id, 'origin.json')
 
 function readOrigin(id) {
@@ -4315,7 +4315,7 @@ const SPRITE_MAX = 96
 // a clock.
 const CHAR_WAIT = 600000
 const WALK_WAIT = 900000
-/* vercel cuts a function at 300s and an eight-way animation takes five to fifteen minutes: waiting inside the request lost 55 generations to a press that did nothing */
+/* a serverless function is cut at 300s and an eight-way animation takes five to fifteen minutes, so waiting inside the request loses every generation it bought to a press that did nothing */
 const HOST_WAIT = 230000
 const onHost = () => !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME)
 class Pending extends Error {
@@ -5051,7 +5051,7 @@ export function chromeFinal({ subject, style, t }) {
   const one = (s) => String(s || '').replace(/\s+/g, ' ').trim()
   const sub = one(subject).replace(/[.,;:\s]+$/, '')
   const sty = one(style).replace(/^[.,;:\s]+/, '').replace(/[.\s]+$/, '')
-  /* the law goes in from code: both failed rolls had it in front of them and dropped it, and a dropped nine-slice law is a picture the game cannot cut */
+  /* the law goes in from code and not from the planner, which drops it: a picture missing the nine-slice law is one the game cannot cut */
   /* the middle sentence is dropped on the one ground with no middle: two instructions that cannot both be obeyed is how a generator picks */
   const law = t && t.tier === 'ground' ? ' ' + (t.fill === false ? RING_CLAUSE : GROUND_CLAUSE) : ''
   const alone = 'the piece alone as a cut-out on a fully transparent background, no lettering of any kind'
@@ -5236,7 +5236,7 @@ function guessColors(ask) {
   return m ? COLOR_RAMPS[m[1].toLowerCase()].slice() : []
 }
 
-// the seven rules are a menu with a ceiling: a portal was impossible until swirl was added by hand, so an unfitting ask gets a written renderer
+// the seven rules are a menu with a ceiling, so an ask that fits none of them gets a written renderer rather than the nearest rule
 
 // where a written recipe starts when the plan leaves a field out
 const CUSTOM_START = { width: 64, height: 64, frames: 8, speed: 1, size: 1, count: 8, direction: 0, spread: 1, intensity: 1 }

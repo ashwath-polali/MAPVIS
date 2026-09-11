@@ -529,7 +529,7 @@ export const PIECE_TYPES = [
     w: 0,
     h: 0,
     what: 'The world-scale text ground: a boat name on a stern, a signpost, a scoreboard, a room number plate.',
-    why: 'Six sweeps of the record put a signpost in the UI kit and it is not one. A signpost is world art at map scale in the island\'s own palette, which makes it a map object out of the asset stage.',
+    why: 'A signpost belongs in the asset stage and not in the UI kit. It is world art at map scale in the map\'s own palette, which makes it a map object rather than a piece of chrome.',
     caution:
       'What this library owes it is only the text region on it, and that region is measured in ART pixels rather than screen pixels, which is a different unit from every other type here.',
   }),

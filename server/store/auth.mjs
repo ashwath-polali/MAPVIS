@@ -129,7 +129,7 @@ export const clearSessionCookie = (res) =>
 /* an explicit sign-out beats that convenience, or the landing page bounces back to the dashboard on localhost and nowhere else */
 const optedOut = (req) => /(?:^|;\s*)mapvis_out=1(?:;|$)/.test(req.headers?.cookie || '')
 
-/* every irreversible route asks this and not currentUser, because a delete with no session was authorised as the solo account and destroyed a real map */
+/* every irreversible route asks this and not currentUser, or a delete with no session is authorised as the solo account and destroys a real map */
 export const sessionUser = (req) => whoIs(tokenFrom(req))
 
 export async function currentUser(req) {
