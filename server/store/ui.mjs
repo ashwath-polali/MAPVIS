@@ -184,7 +184,7 @@ export const PIECE_TYPES = [
     faces: ['raised', 'pressed', 'disabled'],
     what: 'The wide button, whose label is often a sentence rather than a verb.',
     why:
-      'The choice planks under the dialogue box are the entire decision-making vocabulary an ATC member has, because `choose` is one of only two words vine.py exposes. The widest button in the game carries "Under a B-. The Universal Retake Policy is real here: review, then run it back".',
+      'The choice planks under the dialogue box are the whole decision-making vocabulary a module author has. Their labels are sentences, not verbs: size this for something like "Take the long way round the headland and lose the light".',
     caution: 'The key cap is drawn on the plank so a keyboard player can see the number rather than guess it.',
     regions: [
       { name: 'label', kind: 'text', required: true },
@@ -507,11 +507,11 @@ export const PIECE_TYPES = [
     // its middle IS the illustration, so naming a surface there would flatten
     // the one type whose centre is meant to be busy
     material: null,
-    what: 'A full-bleed illustration with a title over a place name, a filling bar and one real BLHS fact under it.',
+    what: 'A full-bleed illustration with a title over a place name, a filling bar and one fact under it.',
     why:
       'It is the first one that gets made twenty times by twenty people, which is exactly why it is a type with a fixed region layout rather than twenty freehand pictures.',
     caution:
-      'It is not a nine-slice and it does not stretch, so it takes no edge numbers. The fact pool is 18 cards against roughly 154 sourced assertions, so the sentence length is not bounded.',
+      'It is not a nine-slice and it does not stretch, so it takes no edge numbers. The fact under it is drawn from a pool the game owns, so the sentence length is not bounded.',
     regions: [
       { name: 'title', kind: 'text', required: true },
       { name: 'fact', kind: 'text', required: false },

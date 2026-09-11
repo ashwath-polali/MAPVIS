@@ -2675,8 +2675,8 @@ function Inspector({
             spellCheck={false}
             maxLength={48}
             placeholder="home-island"
-            /* the ids are named because MAPVIS cannot see the roster, and the live hub was authored hub */
-            title="the roster id the game finds this slot by · today it knows home-island, stadium, flex-200 and atc-room"
+            /* MAPVIS cannot see the roster the game keeps, so this is typed rather than picked from a list */
+            title="the roster id the game finds this slot by"
             onChange={(e) => set({ place: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, '') })}
           />
         </label>

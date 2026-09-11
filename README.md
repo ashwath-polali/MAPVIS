@@ -1,31 +1,47 @@
 # MAPVIS
 
-A web tool for turning a painted image into a 2D game map.
+**Turn a painted picture into a walkable 2D game map.**
 
-You start from one picture. You draw the walkable ground onto it by hand at native resolution, mark
+You start from one image. You draw the walkable ground onto it by hand at native resolution, mark
 elevation and the things a character should walk behind, place props and give them movement, then
 walk the map yourself to check it holds up. Pressing export writes a versioned bundle a game engine
 reads over HTTP.
 
 Maps are drawn on a picture rather than assembled from tiles, so a map looks like whatever it was
-painted as. Nothing is snapped to a grid. Elevation and collision are stored per pixel.
+painted as. Nothing snaps to a grid. Elevation and collision are stored per pixel.
 
-Built for the Algorithmic Thinking Club at Bonney Lake High School.
+<p align="center">
+  <img src="site-art/2-harbour.png" width="700" alt="A harbour town seen from above, with a lighthouse, a stone breakwater and fishing boats at the quay.">
+  <br><em>One image. The quay is walkable, the water is not, and the sea wall is something to walk behind.</em>
+</p>
+
+<p align="center">
+  <img src="site-art/3-terraces.png" width="700" alt="Terraced fields climbing a mountainside to a temple, with stairs between each level.">
+  <br><em>Elevation is a value under every pixel, so the stairs connect four levels and the retaining walls do not.</em>
+</p>
+
+<p align="center">
+  <img src="site-art/4-market.png" width="700" alt="A market square at dusk, crowded with stalls, barrels, a cart and people.">
+  <br><em>Anything that moves comes out as its own asset and is given a behaviour, not a baked animation.</em>
+</p>
 
 ## Run it
 
 Node 22 or newer, which is what CI runs.
 
 ```
+git clone https://github.com/ashwath-polali/MAPVIS.git
+cd MAPVIS
 npm install
 npm run dev
 ```
 
-Open <http://localhost:5274>. That is all it needs: with no configuration the tool runs off this
-machine, keeping the mask in the browser and writing bundles to `work/<id>/`.
+Open <http://localhost:5274> and drop a png on it.
 
-One command and one port. The API runs inside the Vite dev server, so do not start a second API
-process. `npm run api` exists for running the API alone on 5275 and is not part of the normal loop.
+That is the whole of it. With no configuration MAPVIS runs off this machine: the mask lives in the
+browser, bundles are written to `work/<id>/`, and everything that needs a server says so instead of
+failing. One command and one port, because the API runs inside the Vite dev server. `npm run api`
+exists for running the API alone on 5275 and is not part of the normal loop.
 
 ### With a database and a bucket
 
@@ -42,8 +58,8 @@ so a host overrides the file and a test can turn a local convenience off. Nothin
 committed, ever reaches the browser bundle, or has a default in the code.
 
 Leave the `S3_*` lines blank and images fall back to `work/.blobs` on this machine. Leave
-`DATABASE_URL` blank as well and the whole platform half switches off: the editor still works and
-still exports, and the parts that need a server say so instead of failing.
+`DATABASE_URL` blank as well and the platform half switches off: the editor still works and still
+exports, and the read API answers with a sentence saying nothing is published here yet.
 
 ## Author a map
 
@@ -69,7 +85,8 @@ can hold (`lower_snake_case`), and those names are the contract a game is writte
 one later moves everything pointing at it and says how many moved.
 
 **Elevation and collision are per pixel and hand-drawn.** That is the point of the tool. A first pass
-can be proposed, but the correction is the deliverable, and it is worth the hour it takes.
+can be proposed, but the correction is the deliverable, and it is worth the hour it takes: a
+hand-drawn mask measures 0.69 px mean boundary error against 4.18 px for a derived one.
 
 ## Publish
 
@@ -96,31 +113,61 @@ it when.
 
 The read API is open and account-free, because a game fetches it with no session.
 
+## Deploy your own
+
+The whole API is one serverless function: `api/index.mjs` is nine lines around a plain node
+`(req, res)` handler. There is no host-specific storage anywhere, so moving host is a config file
+rather than a rewrite.
+
+1. Import the repo at your host. `vercel.json` needs no answers.
+2. Set the environment variables listed in `.env.example`. The eight that matter are
+   `DATABASE_URL`, `DATABASE_POOLED_URL`, the five `S3_*` values and `KEY_VAULT_SECRET`.
+3. Deploy, then open `/api/me`. `{"user":null}` means the database answered.
+
+**Do not set `MAPVIS_SOLO` on a host.** It is an authentication bypass for one person on one laptop.
+It refuses on a serverless runtime, refuses when `NODE_ENV` is production, and refuses any request
+that did not come from the loopback address, but the right value for it on a server is still blank.
+If a proxy in front of you sets `x-forwarded-for`, set `TRUST_PROXY=1` so the rate limiter keys on
+the real address instead of ignoring a header anybody can write.
+
 ## Layout
 
 - `src/core/` the editor: masks, elevation, movement, export
 - `src/ui/` and `src/site/` the editor surface and the pages around it
 - `server/` the API, storage adapters and the database schema
-- `server/db/` migrations and the verification scripts
-- `work/` bundles this machine has written
+- `server/db/` migrations and the checks
+- `work/` maps you author. Gitignored, and yours: back it up somewhere private.
 
-Documents go to Postgres, images to any S3-compatible bucket. There is no host-specific storage
-anywhere: moving off Vercel is a config file, not a rewrite.
+## Contribute
 
-## Checks
+Issues and pull requests are welcome. Before opening one:
 
 ```
-npm run typecheck   # tsc, no emit
-npm run verify      # the whole suite, against a real database and bucket
+npm run typecheck     # tsc, no emit
+npm run verify:local  # the checks that need nothing configured
+npm run build
 ```
 
-`npm run verify` is not a unit-test runner. It boots the API in-process and exercises the real
-thing: a document round trip that must be lossless, the read API including everything it has to
-refuse, sign-in and its backoff, the routing, every authored field reaching the bundle, and a gate
-that proves a published map loads with this machine's disk switched off. It needs `.env` filled in
-and it writes to the database it is pointed at.
+Those three are exactly what CI runs on every push, and they need no database, no bucket and no keys.
+`verify:local` boots the API in-process against a temporary directory and proves what has to be true
+on a fresh clone: a document round trip that is lossless, the read API refusing rather than crashing
+with no platform behind it, the limiter in front of sign-in, and the solo-mode bypass being off in
+every shape but a local one.
 
-## Two dependencies
+`npm run verify` is the other half and is not part of CI, because it needs a live Postgres and a live
+bucket and it writes to them: the read API including everything it has to refuse, sign-in and its
+backoff, the routing, every authored field reaching the bundle, and a gate that proves a published
+map loads with this machine's disk switched off.
 
-React and `pg`, plus the AWS S3 client. No router, no state library, no UI kit, no test framework.
-Seven routes do not justify twenty kilobytes.
+Two runtime dependencies, React and `pg`, plus the AWS S3 client. No router, no state library, no UI
+kit, no test framework. Seven routes do not justify twenty kilobytes.
+
+## License
+
+[PolyForm Noncommercial 1.0.0](LICENSE). Read it, learn from it, fork it, build on it: any
+noncommercial purpose is permitted, and use by a school, a university or any other educational
+institution is permitted explicitly. Commercial use is not. Keep the notice.
+
+The artwork is not covered by that license. Every image under `public/` and `site-art/` is pixel art
+generated with [PixelLab](https://pixellab.ai) and is subject to PixelLab's terms. And anything you
+draw in MAPVIS is yours: none of it is in this repository.

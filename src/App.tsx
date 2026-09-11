@@ -1637,7 +1637,7 @@ export default function App() {
           e.bustAssets(folderOf(res.item))
           setBust((q) => ({ ...q, [res.item.name]: Date.now() }))
           // it shrank, so EVERY placement of it grows by the same amount to
-          // stay the size it was — including ones that were never selected,
+          // stay the size it was, including ones that were never selected,
           // because they are all looking at the one file
           const n = e.rescalePlacementsOf(res.item, item.w / res.item.w, item.h / res.item.h)
           e.refreshPlacementsOf(res.item)

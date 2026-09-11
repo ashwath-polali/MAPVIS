@@ -874,12 +874,11 @@ input[type='range']:disabled {
 .keys summary::-webkit-details-marker {
   display: none;
 }
-/* THE MARKER IS THE SAME CARET EVERY OTHER FOLD IN THIS APP USES.
-   It was a bare ⌘ typed into the content, which is the Mac command key, on a
-   tool that ships to Windows machines in the ATC room and to school
-   Chromebooks. Nobody who uses this has that key. It was also the last glyph
-   standing in for a picture after the icon set went in: a font's idea of a
-   symbol, at whatever weight the font felt like, next to twenty drawn marks. */
+/* THE MARKER IS THE SAME CARET EVERY OTHER FOLD IN THIS APP USES, and not a
+   bare ⌘. That is the Mac command key, on a tool most people open on Windows
+   and on Chromebooks, so it names a key they do not have. It is also a font's
+   idea of a symbol, at whatever weight the font feels like, sitting next to
+   twenty drawn marks. */
 .keys summary::after {
   content: '';
   flex: none;
@@ -2338,10 +2337,10 @@ input[type='range']:disabled {
   padding: 8px 6px 6px;
   min-width: 0;
   max-width: 100%;
-  /* No overflow:hidden here. It was added to stop the sliders spilling
-     sideways, and it also clipped everything below the preview — the tuning
-     controls and the keep buttons were rendered, inside the box, unreachable,
-     with nothing to scroll because the box itself was the wrong height. The
+  /* No overflow:hidden here. It stops the sliders spilling sideways and it also
+     clips everything below the preview: the tuning controls and the keep buttons
+     render, inside the box, unreachable, with nothing to scroll because the box
+     itself is the wrong height. The
      sideways fix is the minmax track and the min-width:0 below; clipping was
      never doing that work. */
   border: var(--hair) solid var(--edge);

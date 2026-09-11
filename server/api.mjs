@@ -4873,7 +4873,7 @@ async function translateAsk(ask, kind, styleClause, id, job) {
         `shaft and a small wooden door at the base".\n` +
         `- palette: one short phrase naming this object's colour family, 4 to 10 words, starting ` +
         `with the word "muted". Example: "muted palette of dark basalt, golden timber and teal".\n` +
-        `- motion: only for animated — movement words alone (drifting upward, flickering gently). ` +
+        `- motion: only for animated, movement words alone (drifting upward, flickering gently). ` +
         `Nothing environmental. Empty for static.\n` +
         `- w,h: canvas in px, 32 to 128. Match the object's real proportions: a tree or a tower is ` +
         `taller than wide, a boat or a bench is wider than tall. 48-64 for small props and ` +

@@ -1,10 +1,8 @@
 /* WHAT A HUMAN READS. The name/label split exists in the data and every surface ignored it, printing `the_hub` and `panthers_maw` at people. Returns a `derived` flag saying the words were guessed from an identifier rather than typed. */
 
-/* the words that stay upper when a name is unpacked. Every one of these is a
- * thing this project actually says out loud, and "Atc Room" reads as a typo. */
+/* Acronyms that stay upper when a name is unpacked, because "Ap Room" reads as
+ * a typo. Extend it for the vocabulary your own maps use. */
 const SHOUTED = new Set([
-  'atc',
-  'blhs',
   'ap',
   'ib',
   'frc',

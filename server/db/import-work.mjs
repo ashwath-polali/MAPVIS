@@ -57,8 +57,8 @@ const owner = DRY
   : await ensureUser({
       email: need(`BOOTSTRAP_EMAIL`),
       password: need(`BOOTSTRAP_PASSWORD`),
-      displayName: 'Algorithmic Thinking Club',
-      // the club account is wired to a linked machine rather than holding keys
+      displayName: env().BOOTSTRAP_NAME || 'Maps',
+      // the shared account is wired to a linked machine rather than holding keys
       claude: 'relay',
       pixellab: 'relay',
     })

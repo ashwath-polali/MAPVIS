@@ -74,8 +74,8 @@ export function Foot() {
       <div className="foot-in">
         <div>
           <p className="aside" style={{ maxWidth: '34ch', margin: 0 }}>
-            Built for the Algorithmic Thinking Club at Bonney Lake High School, so that a map somebody
-            painted can become a place somebody else can walk.
+            So that a map somebody painted can become a place somebody else can walk, with the
+            ground, the elevation and the things on it drawn by hand rather than guessed.
           </p>
         </div>
         <div className="foot-cols">
@@ -93,7 +93,7 @@ export function Foot() {
             <a className="ul" href="/api/v1/maps">
               the read api
             </a>
-            <a className="ul" href="https://github.com/ashwath-polali/MAPVIS-next">
+            <a className="ul" href="https://github.com/ashwath-polali/MAPVIS">
               source
             </a>
           </div>

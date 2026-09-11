@@ -24,7 +24,7 @@ const E = env()
 const owner = await ensureUser({
   email: need(`BOOTSTRAP_EMAIL`),
   password: need(`BOOTSTRAP_PASSWORD`),
-  displayName: 'Algorithmic Thinking Club',
+  displayName: E.BOOTSTRAP_NAME || 'Maps',
   claude: 'relay',
   pixellab: 'relay',
 })

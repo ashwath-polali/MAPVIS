@@ -37,7 +37,7 @@ export async function mapIdFor(slug, { create = false } = {}) {
         await ensureUser({
           email: need(`BOOTSTRAP_EMAIL`),
           password: need(`BOOTSTRAP_PASSWORD`),
-          displayName: 'Algorithmic Thinking Club',
+          displayName: env().BOOTSTRAP_NAME || 'Maps',
           claude: 'relay',
           pixellab: 'relay',
         })

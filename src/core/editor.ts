@@ -1970,7 +1970,7 @@ export class Editor {
       }
       this.capture(e)
     } else {
-      // empty painting: start the band. The selection is not cleared yet — a
+      // empty painting: start the band. The selection is not cleared yet. A
       // click that turns out to be a click and not a drag clears it on the way
       // up, so a band that starts over nothing does not flash the panel empty.
       this.bandSt = { a: [fx, fy], b: [fx, fy], base: extend ? this.selIds() : [], add: extend }
@@ -3362,8 +3362,8 @@ export class Editor {
     return changed
   }
   // the walker never starts inside a wall: mask edits can move blocked ground under a
-  // stale spawn, so the start point spirals out to the nearest standable pixel — the
-  // same validated-spawn law the game's scene applies on load
+  // stale spawn, so the start point spirals out to the nearest standable pixel, by
+  // the same validated-spawn law the game's scene applies on load
   private groundNear(p: [number, number]): [number, number] {
     if (canStand(this.doc, this.cfg, p[0], p[1])) return p
     for (let r = 4; r <= 400; r += 4)
@@ -5638,7 +5638,7 @@ export class Editor {
     }
     // One picked thing gets its full transform box. Many get a light outline
     // each so you can see exactly what is in the set, plus one frame round the
-    // lot with the handles that scale it — the way a slide editor does it.
+    // lot with the handles that scale it, the way a slide editor does it.
     const picked = this.selAssets()
     if (picked.length === 1) {
       this.drawTransformBox(g, z, picked[0])
