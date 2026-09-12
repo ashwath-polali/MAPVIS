@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import { useSession, setProvider, makeRelayToken, signOut, can, type User } from './session'
 import { go } from './router'
 import { SOUND_EXISTS, audioSupported, audioUnblocked, isMuted, onFirstGesture, setMuted } from '../core/audio'
+import * as api from '../api'
 
 type Relay = { id: string; name: string; capabilities: string[]; last_seen_at: string | null; live: boolean }
 
@@ -53,6 +54,8 @@ export function Settings({ onClose }: { onClose: () => void }) {
             />
           </ul>
         </section>
+
+        <Hand />
 
         <section className="keys">
           <h3>Keys</h3>
@@ -234,5 +237,78 @@ function Key({ user, which, title, api, note }: { user: User; which: 'claude' | 
       {mode === 'relay' && <p className="sheet-note">Currently using a linked machine instead of a key.</p>}
       {why && <p className="sheet-bad">{why}</p>}
     </div>
+  )
+}
+
+/* THE HOUSE HAND, AND WHO MAY DRAW WITH IT. Only the account that owns it sees
+ * this at all: /api/styles returns the grant list to the owner and to nobody
+ * else, so an account that is not the owner renders nothing here. */
+function Hand() {
+  const [granted, setGranted] = useState<string[] | null>(null)
+  const [email, setEmail] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [why, setWhy] = useState('')
+
+  useEffect(() => {
+    api
+      .styles()
+      .then((r) => setGranted(r.grants ?? null))
+      .catch(() => setGranted(null))
+  }, [])
+
+  // not the owner, so there is nothing here to show them
+  if (granted === null) return null
+
+  const send = async (to: string, revoke?: true) => {
+    setBusy(true)
+    setWhy('')
+    try {
+      const r = await api.grantHand(to, revoke)
+      setGranted(r.granted)
+      if (!revoke) setEmail('')
+    } catch (e) {
+      setWhy(String(e instanceof Error ? e.message : e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <section>
+      <h3>The house hand</h3>
+      <p className="sheet-note">
+        Everyone here draws in the same style. An account you name can choose it on the first step of the editor;
+        everyone else sees only Other and draws in their own.
+      </p>
+      <div className="sheet-row">
+        <input
+          value={email}
+          placeholder="their email"
+          spellCheck={false}
+          onChange={(e) => setEmail(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && email.trim()) void send(email.trim())
+          }}
+        />
+        <button className="sheet-btn" disabled={busy || !email.trim()} onClick={() => void send(email.trim())}>
+          Grant
+        </button>
+      </div>
+      {granted.length > 0 ? (
+        <ul className="works">
+          {granted.map((e) => (
+            <li key={e}>
+              <span>{e}</span>
+              <button className="sheet-btn quiet" disabled={busy} onClick={() => void send(e, true)}>
+                Take back
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="sheet-note">Nobody else yet.</p>
+      )}
+      {why && <p className="sheet-bad">{why}</p>}
+    </section>
   )
 }

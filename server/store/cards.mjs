@@ -76,7 +76,16 @@ export async function ownCard(user) {
  * the absence of a choice from it. */
 export async function cardsFor(user) {
   const out = []
-  if (await mayUseHouse(user)) out.push(houseCard(await houseRef()))
+  if (await mayUseHouse(user)) {
+    /* the row is made on first sight rather than by the migration, because the
+     * words live in a file a person edits and sql is the wrong place to keep a
+     * second copy of them. Without a row there is nothing for a grant to point
+     * at, so the owner opening the editor once is what makes granting possible. */
+    if (user && houseOwner() === String(user.email || '').toLowerCase()) {
+      await ensureHouseCard(user.id, await houseRef()).catch(() => null)
+    }
+    out.push(houseCard(await houseRef()))
+  }
   const mine = await ownCard(user)
   if (mine) out.push(mine)
   return out

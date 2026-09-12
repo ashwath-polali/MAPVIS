@@ -74,6 +74,11 @@ export const mapPrompt = (subject: string, style: string, kind?: string) =>
 export const setMapStyle = (id: string, style: string, kind?: string) =>
   jpost<{ style: string; kind: string }>('/api/map-style', { id, style, kind })
 
+/* the house hand handed to somebody else, and taken back. The owner alone, and
+ * the list that comes back is who may draw with it now. */
+export const grantHand = (email: string, revoke?: true) =>
+  jpost<{ email: string | null; granted: string[] }>('/api/styles/grant', { email, revoke })
+
 export const styleFromMap = (from: string, title?: string) =>
   jpost<{ card: StyleCard }>('/api/styles/mine', { from, title })
 
