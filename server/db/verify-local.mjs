@@ -31,6 +31,11 @@ for (const k of [
 ])
   process.env[k] = ''
 process.env.MAPVIS_STORAGE = 'work'
+/* an owner is named so the house-hand checks below mean the same thing on a
+ * fresh clone as they do on a configured one. With nobody named the permission
+ * deliberately opens up, because that is one person on one laptop and there are
+ * no other accounts to keep it from; the case worth checking is the other one. */
+process.env.HOUSE_STYLE_OWNER = 'owner@example.invalid'
 process.env.MAPVIS_WORK = SANDBOX
 
 const { api } = await import('../api.mjs')
@@ -162,6 +167,40 @@ try {
   fenced
     ? ok('and refused for any request that did not come from the loopback address')
     : no('the loopback fence is gone from currentUser')
+
+  // ---- whose hand a stranger may draw with -------------------------------
+  // The house style is the one thing on this platform that is not public. A
+  // signed-out visitor must be offered none of it, must be refused when they
+  // name it anyway, and must still be able to draw under Other.
+  //
+  // This is checked because it has already failed once: the owner is read from
+  // the environment, and reading it with process.env instead of env() finds
+  // nothing, which the permission treats as "nothing configured" and opens to
+  // everybody. An empty string is the dangerous value here.
+  {
+    const offered = await call('/api/styles')
+    const keys = (offered.json?.cards || []).map((c) => c.key)
+    keys.length === 0
+      ? ok('a signed-out visitor is offered no house hand at all')
+      : no(`a stranger was offered ${JSON.stringify(keys)}`)
+    offered.json?.fallback === ''
+      ? ok('and their default is Other, which is the prompt as typed')
+      : no(`a stranger defaults to ${JSON.stringify(offered.json?.fallback)}`)
+
+    const taken = await call('/api/map-prompt', { method: 'POST', body: { subject: 'an island', style: 'adventure-game' } })
+    const words = String(taken.json?.prompt || '')
+    !taken.json?.style && !words.includes('chunky isometric pixel forms')
+      ? ok('and naming it outright still writes none of its craft into the prompt')
+      : no('a stranger read the house craft sentence by naming the key')
+
+    const drew = await call('/api/generate', { method: 'POST', body: { prompt: 'an island', style: 'adventure-game', n: 1 } })
+    drew.status === 403 ? ok('and drawing with it is refused outright') : no(`drawing in the house hand answered ${drew.status}`)
+
+    const other = await call('/api/map-prompt', { method: 'POST', body: { subject: 'an island', style: '' } })
+    other.status === 200 && String(other.json?.prompt || '').startsWith('an island')
+      ? ok('while Other is open to them and keeps their own words in front')
+      : no('a stranger cannot draw at all')
+  }
 
   // ---- what a client cannot raise ----------------------------------------
   // Every ceiling that stands between a loop and a bill is read from the

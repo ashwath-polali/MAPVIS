@@ -40,6 +40,23 @@ on its own and never loops back to the same frame at the same moment.
 **Then you walk it yourself.** Before a map goes anywhere, you put a character on it and try the
 route. If a doorway is a pixel too narrow, you find out here.
 
+## One hand, many maps
+
+Before you describe a map, you choose whose hand draws it. A **style card** carries the craft and
+nothing else: the projection, how chunky the pixels are, how edges are outlined, where the light
+falls, how saturated it all is. It never carries a subject.
+
+Typing a kind fills in what the engine needs of that class and nothing about the place. An island
+gets a transparent coast, because the engine draws its own moving ocean underneath it. A room gets
+character scale and no sky. Two people both typing "island" get two different islands drawn by the
+same hand, which is the whole point: a kind is a scaffold, never a copy.
+
+The hand then stays on the map. Every prop generated for it afterwards is drawn the same way, so a
+bookshelf made for a room belongs to that room. Published maps carry the card's name, so anything
+reading a bundle can say which hand drew it.
+
+Choosing **Other** sends your words as you typed them, with no card at all.
+
 ## What comes out
 
 A finished map is a bundle: the picture, the ground and height data, everything placed on it, and the

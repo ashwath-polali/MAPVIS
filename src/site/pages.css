@@ -720,3 +720,10 @@
 .broke .aside {
   color: var(--wax);
 }
+
+/* whose hand drew a map, on its dashboard card. Quiet: it sits in the row of
+   counts and is a fact about the map rather than a thing to press. */
+.card-hand {
+  color: var(--acc-mark);
+  letter-spacing: 0.02em;
+}

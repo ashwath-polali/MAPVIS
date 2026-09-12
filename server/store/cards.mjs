@@ -8,6 +8,7 @@
 // has to offer a choice there.
 
 import { q, one, many } from '../db/pool.mjs'
+import { env } from '../db/env.mjs'
 import { platformOn } from './platform.mjs'
 import { HOUSE_CARD, HOUSE_KEY, cardFrom } from './style.mjs'
 
@@ -17,7 +18,12 @@ import { HOUSE_CARD, HOUSE_KEY, cardFrom } from './style.mjs'
  * it is offered to whoever is signed in on this machine, which is the one-laptop
  * case the whole tool falls back to. */
 export const houseOwner = () => {
-  const e = process.env.HOUSE_STYLE_OWNER || process.env.OCEAN_OWNER || process.env.BOOTSTRAP_EMAIL || ''
+  /* env() and not process.env: .env is read into a merged object and never
+   * exported into the process, so process.env finds nothing here and an unset
+   * owner reads as "nothing is configured", which opens the house hand to
+   * everybody. That is the one failure this whole file exists to prevent. */
+  const E = env()
+  const e = E.HOUSE_STYLE_OWNER || E.OCEAN_OWNER || E.BOOTSTRAP_EMAIL || ''
   return String(e).trim().toLowerCase()
 }
 
@@ -79,12 +85,12 @@ export async function cardsFor(user) {
 /* the published map whose picture the house card passes as its style image.
  * Empty is fine and common: the craft sentence carries the hand on its own. */
 async function houseRef() {
-  if (!platformOn()) return process.env.HOUSE_STYLE_REF || ''
+  if (!platformOn()) return env().HOUSE_STYLE_REF || ''
   try {
     const row = await one(`select ref_slug from style_cards where house = true and key = $1 limit 1`, [HOUSE_KEY])
-    return String((row && row.ref_slug) || process.env.HOUSE_STYLE_REF || '')
+    return String((row && row.ref_slug) || env().HOUSE_STYLE_REF || '')
   } catch {
-    return String(process.env.HOUSE_STYLE_REF || '')
+    return String(env().HOUSE_STYLE_REF || '')
   }
 }
 

@@ -4102,3 +4102,76 @@ body[data-view='editor'] *::-webkit-scrollbar-track {
   border-color: var(--acc);
   color: var(--acc);
 }
+
+/* THE HAND, ON THE FIRST STEP. A row of choices and not a dropdown: there are
+   two or three of them, they are the first decision a map asks for, and a
+   dropdown hides the fact that there is a choice at all. */
+.stylepick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 0 0 6px;
+}
+.stylebtn {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  padding: 5px 8px;
+  font: inherit;
+  font-size: var(--fs-fine);
+  color: var(--dim);
+  background: var(--raised);
+  border: 1px solid var(--edge);
+  border-radius: var(--r);
+  cursor: pointer;
+}
+.stylebtn:hover {
+  color: var(--ink);
+  border-color: var(--edge-lit);
+}
+/* the live one carries the accent, the same way the live step does, because
+   this is a state and not a press */
+.stylebtn.on {
+  color: var(--ink);
+  background: var(--acc-soft);
+  border-color: var(--acc);
+}
+/* which card is the granted one, said quietly: it is a fact about the card and
+   not a warning about it */
+.stylebtn-tag {
+  font-size: var(--fs-micro);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--acc);
+  opacity: 0.85;
+}
+/* the prompt that will be sent, shut by default. Open it and it wraps rather
+   than scrolling sideways, because it is prose and reading it is the point. */
+.willdraw {
+  margin: 0 0 8px;
+  font-size: var(--fs-fine);
+  color: var(--dim);
+}
+.willdraw summary {
+  cursor: pointer;
+  list-style: none;
+  color: var(--dim);
+}
+.willdraw summary::-webkit-details-marker {
+  display: none;
+}
+.willdraw summary:hover {
+  color: var(--ink);
+}
+.willdraw p {
+  margin: 4px 0 0;
+  padding: 6px 8px;
+  background: var(--raised);
+  border: 1px solid var(--edge);
+  border-radius: var(--r);
+  line-height: var(--lh);
+  overflow-wrap: anywhere;
+}

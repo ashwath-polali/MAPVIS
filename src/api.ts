@@ -40,8 +40,52 @@ async function jget<T>(url: string): Promise<T> {
 
 export const balance = () => jget<{ usd?: number }>('/api/balance')
 
-export const generate = (prompt: string, n: number, w: number, h: number) =>
-  jpost<{ jobs: { id?: string; seed?: number; error?: string }[] }>('/api/generate', { prompt, n, w, h })
+/* WHOSE HAND A MAP IS DRAWN BY. A card carries the craft sentence: projection,
+ * cluster size, outline, light and saturation, and nothing about the subject.
+ * The house card is one account's and is offered only where it has been granted,
+ * so a stranger signing up is never handed it. */
+export interface StyleCard {
+  key: string
+  title: string
+  clause: string
+  house: boolean
+  ref: string
+}
+
+export const styles = () =>
+  jget<{
+    cards: StyleCard[]
+    fallback: string
+    kinds: { kind: string; canvas: { w: number; h: number } }[]
+    grants?: string[]
+  }>('/api/styles')
+
+/* the words that would be sent, written but not bought, so the hand can be read
+ * before anything is spent on it */
+export const mapPrompt = (subject: string, style: string, kind?: string) =>
+  jpost<{ prompt: string; kind: string; style: string; canvas: { w: number; h: number }; parts: string[] }>('/api/map-prompt', {
+    subject,
+    style,
+    kind,
+  })
+
+/* the choice, kept on the map so every asset made for it afterwards and every
+ * republish are drawn by the same hand */
+export const setMapStyle = (id: string, style: string, kind?: string) =>
+  jpost<{ style: string; kind: string }>('/api/map-style', { id, style, kind })
+
+export const styleFromMap = (from: string, title?: string) =>
+  jpost<{ card: StyleCard }>('/api/styles/mine', { from, title })
+
+export const generate = (prompt: string, n: number, w: number, h: number, style?: string, kind?: string) =>
+  jpost<{ jobs: { id?: string; seed?: number; error?: string }[]; prompt?: string; style?: string; kind?: string }>('/api/generate', {
+    prompt,
+    n,
+    w,
+    h,
+    style,
+    kind,
+  })
 
 export const jobState = (id: string) =>
   jget<{ state: 'running' | 'done' | 'failed'; images?: string[]; error?: string }>('/api/job/' + encodeURIComponent(id))

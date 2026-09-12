@@ -97,8 +97,12 @@ export const listMaps = (ownerId) =>
             (select count(*)::int from anchors a where a.map_id = m.id)        as anchors,
             (select count(*)::int from library_items l where l.map_id = m.id)  as library,
             jsonb_array_length(m.assets)                                       as placements,
-            (select max(version) from publishes p where p.map_id = m.id)       as published
-     from maps m where m.owner_id = $1 order by m.updated_at desc`,
+            (select max(version) from publishes p where p.map_id = m.id)       as published,
+            -- whose hand drew it, for the card on the dashboard. Left joined
+            -- because a map drawn under Other has none and that is not a fault.
+            c.key as style, c.title as style_title, m.style_kind as kind
+     from maps m left join style_cards c on c.id = m.style_card_id
+     where m.owner_id = $1 order by m.updated_at desc`,
     [ownerId],
   )
 

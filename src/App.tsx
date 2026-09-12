@@ -646,6 +646,12 @@ export default function App() {
   const [st, setSt] = useState<EditorStatus | null>(null)
   const [step, setStep] = useState<StepId>('load')
   const [prompt, setPrompt] = useState('')
+  /* THE HAND, CHOSEN BEFORE THE SUBJECT IS TYPED. Empty is Other: the words go
+   * out as typed. The list is whatever this account may draw with, which for
+   * almost everybody is nothing but their own. */
+  const [cards, setCards] = useState<api.StyleCard[]>([])
+  const [styleKey, setStyleKey] = useState('')
+  const [willDraw, setWillDraw] = useState('')
   const [cands, setCands] = useState<Cand[]>([])
   const [usd, setUsd] = useState('')
   const [toasts, setToasts] = useState<Toast[]>([])
@@ -3161,6 +3167,42 @@ export default function App() {
     if (e) e.trimReq = (ids: string[]) => void doTrim(ids)
   }, [doTrim])
 
+  useEffect(() => {
+    let gone = false
+    api
+      .styles()
+      .then((r) => {
+        if (gone) return
+        setCards(r.cards)
+        // the first offered is the default, and with none offered it is Other
+        setStyleKey((k) => (k ? k : r.fallback || ''))
+      })
+      .catch(() => {
+        /* no database and no account is the one-laptop case: Other, silently */
+      })
+    return () => {
+      gone = true
+    }
+  }, [])
+
+  /* the words that would be sent, read back from the server so what is shown is
+   * what runs rather than a second copy of the assembly living in the browser */
+  useEffect(() => {
+    const sub = prompt.trim()
+    if (!sub) return setWillDraw('')
+    let gone = false
+    const t = setTimeout(() => {
+      api
+        .mapPrompt(sub, styleKey)
+        .then((r) => !gone && setWillDraw(r.prompt))
+        .catch(() => !gone && setWillDraw(''))
+    }, 250)
+    return () => {
+      gone = true
+      clearTimeout(t)
+    }
+  }, [prompt, styleKey])
+
   // ---- generate (wiring identical to the previous MAPVIS) --------------
   const run = useCallback(async () => {
     const e = edRef.current
@@ -3173,7 +3215,10 @@ export default function App() {
     e.setBusy(`generating ${n}`)
     setCands([])
     try {
-      const { jobs } = await api.generate(p, n, w, h)
+      const { jobs } = await api.generate(p, n, w, h, styleKey)
+      // the choice belongs to the map from here, so every asset made for it
+      // afterwards is drawn by the same hand without being asked again
+      if (e.sceneId) void api.setMapStyle(e.sceneId, styleKey).catch(() => {})
       const live: Cand[] = jobs
         .filter((j) => j.id)
         .map((j) => ({ id: j.id as string, seed: j.seed || 0, state: 'running' as const }))
@@ -3353,6 +3398,39 @@ export default function App() {
       </label>
 
       <Sec>generate</Sec>
+      {/* THE HAND COMES BEFORE THE SUBJECT. Choosing it after the words are
+          typed reads as a filter on them; choosing it first reads as what it is,
+          which is who is drawing. Only shown when there is a hand to choose:
+          an account with none has no choice to make and Other is the only
+          answer, so an empty pair of buttons would be furniture. */}
+      {cards.length > 0 && (
+        <div className="stylepick">
+          {cards.map((c) => (
+            <button
+              key={c.key}
+              className={'stylebtn' + (styleKey === c.key ? ' on' : '')}
+              onClick={() => {
+                setStyleKey(c.key)
+                disarm()
+              }}
+              title={c.clause}
+            >
+              {c.title}
+              {c.house ? <span className="stylebtn-tag">house</span> : null}
+            </button>
+          ))}
+          <button
+            className={'stylebtn' + (styleKey === '' ? ' on' : '')}
+            onClick={() => {
+              setStyleKey('')
+              disarm()
+            }}
+            title="no style card · the words go out as typed"
+          >
+            Other
+          </button>
+        </div>
+      )}
       <label className="field">
         <input
           value={prompt}
@@ -3371,6 +3449,14 @@ export default function App() {
           {candN} paintings to choose from{usd ? ` · ${usd} left` : ''}
         </span>
       </label>
+      {/* what will actually be sent, because a hand described is a hand nobody
+          can check and this is free to show */}
+      {willDraw ? (
+        <details className="willdraw">
+          <summary>what will be drawn</summary>
+          <p>{willDraw}</p>
+        </details>
+      ) : null}
       <button
         className={'primary genbtn' + (armed === 'load-gen' ? ' armed' : '')}
         onClick={askRun}

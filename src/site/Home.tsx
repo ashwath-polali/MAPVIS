@@ -19,6 +19,11 @@ type MapRow = {
   library: number
   placements: number
   published: number | null
+  /* whose hand drew it. Empty on every map made before there was a choice, and
+   * on every map drawn under Other, which is not a fault and is not marked. */
+  style?: string | null
+  style_title?: string | null
+  kind?: string | null
 }
 
 // A map may be in more than one of these at once, which is why the control on
@@ -569,6 +574,9 @@ function Card({ m, onDelete, org }: { m: MapRow; onDelete: () => void; org?: Org
           <span>{m.placements} placed</span>
           <span className={m.anchors ? 'lit' : ''}>{m.anchors} named</span>
           {m.published != null ? <span className="lit">v{m.published}</span> : null}
+          {/* the hand, only when there was one: a map drawn as typed says
+              nothing rather than saying "none", which would read as missing */}
+          {m.style ? <span className="card-hand">{m.style_title || m.style}</span> : null}
         </div>
         <div className="card-do">
           <a href={`/edit?id=${encodeURIComponent(m.slug)}`} draggable={false}>
