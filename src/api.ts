@@ -464,10 +464,16 @@ export const assetAnimate = (
     recover?: true | string
   },
 ) =>
-  jpost<{ plan?: AnimPlan; item?: LibItem; note?: string; free?: boolean; pending?: boolean; group?: string }>('/api/asset-animate', {
-    id,
-    ...o,
-  })
+  /* `partial` is set when a heading's own job failed and it kept its standing
+   * frame. The set is whole and it walks; one of its headings does not move,
+   * which is worth saying rather than leaving to be found on the map. */
+  jpost<{ plan?: AnimPlan; item?: LibItem; note?: string; free?: boolean; pending?: boolean; group?: string; partial?: string }>(
+    '/api/asset-animate',
+    {
+      id,
+      ...o,
+    },
+  )
 
 // ---- the effect engine --------------------------------------------------
 

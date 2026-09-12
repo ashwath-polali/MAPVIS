@@ -563,19 +563,36 @@ function framesByDir(detail, tpl, known) {
 }
 
 /* the character is polled rather than the jobs, one read a tick, and `known` is needed because an animation group can come back unnamed, so on a character that already moves the wait would end on the OLD motion */
-export async function awaitAnimation(characterId, handle, { timeoutMs = 600000, known } = {}) {
+/* ONE DIRECTION FAILING MUST NOT THROW AWAY THE OTHERS. An eight-way ask is
+ * eight background jobs, each bought separately. Ending the wait on the first
+ * failure abandons every heading that did draw, and they are already paid for:
+ * it reads to the person as a two and a half minute wait that produced nothing.
+ *
+ * So a failure narrows what the wait is holding out for instead of ending it.
+ * The wait ends when every job has settled, and hands back whatever landed;
+ * newGroupDirs fills the missing headings from their standing rotation and
+ * refuses below four, which is where the real floor belongs. Only a run where
+ * EVERY job failed throws, because then there is genuinely nothing to collect.
+ *
+ * `readDetail` and `readJob` are injected so the partial-failure path can be
+ * exercised without buying a generation to do it. */
+export async function awaitAnimation(
+  characterId,
+  handle,
+  { timeoutMs = 600000, known, every = 5000, notes, readDetail = characterDetail, readJob = job } = {},
+) {
   if (!characterId) throw new Error('no character to wait on')
   const h = handle || {}
   const tpl = String(h.templateAnimationId || '')
   const want = (Array.isArray(h.directions) ? h.directions : []).map((k) => String(k).toLowerCase())
   const jobIds = Array.isArray(h.jobIds) ? h.jobIds : Array.isArray(h.background_job_ids) ? h.background_job_ids : []
-  const every = 5000
   let misses = 0
+  const failed = new Map()
   for (let tick = 0, waited = 0; waited < timeoutMs; tick++, waited += every) {
     await wait(every)
     let d
     try {
-      d = await characterDetail(characterId)
+      d = await readDetail(characterId)
       misses = 0
     } catch (e) {
       if (++misses >= 3) throw e
@@ -586,10 +603,29 @@ export async function awaitAnimation(characterId, handle, { timeoutMs = 600000, 
     // library import holds a view set to
     const ready = want.length ? want.every((k) => got[k]) : Object.keys(got).length >= 4
     if (ready) return d
+
     if (jobIds.length && tick % 6 === 5) {
-      const states = await Promise.all(jobIds.map((j) => job(j).catch(() => ({ state: 'running' }))))
-      const bad = states.find((s) => s.state === 'failed')
-      if (bad) throw new Error(String(bad.error || 'a direction failed').slice(0, 200))
+      const states = await Promise.all(
+        jobIds.map((j) =>
+          readJob(j).then(
+            (s) => [j, s],
+            () => [j, { state: 'running' }],
+          ),
+        ),
+      )
+      for (const [j, s] of states) {
+        if (s.state !== 'failed' || failed.has(j)) continue
+        const why = String(s.error || 'a direction failed').slice(0, 200)
+        failed.set(j, why)
+        if (notes) notes.push(why)
+      }
+      // nothing drew, so waiting longer cannot change the answer
+      if (failed.size >= jobIds.length) throw new Error(String([...failed.values()][0] || 'a direction failed').slice(0, 200))
+      /* some drew and some did not. Nothing is still running, so the set in
+       * hand is the final one: hand it back rather than holding out for a
+       * heading whose job is already dead. The caller re-reads and falls back
+       * to recovery if the detail has not caught up yet. */
+      if (failed.size && states.every(([, s]) => s.state !== 'running')) return d
     }
   }
   throw new Error('the animation timed out')

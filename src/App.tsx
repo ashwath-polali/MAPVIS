@@ -1898,9 +1898,11 @@ export default function App() {
         setAnimNote(r.note || '')
         setAnimAsk('')
         setAnimOpen(false)
+        /* a partial run is a success with a hole in it, so it is said plainly and
+         * not folded into the note where it reads as a detail. */
         push(
-          `${next.name} is moving · ${plan.motion}` +
-            (r.note ? ' · ' + r.note : '') +
+          (r.partial ? `${next.name} moves, mostly · ${r.partial}` : `${next.name} is moving · ${plan.motion}`) +
+            (r.note && !r.partial ? ' · ' + r.note : '') +
             ' · the old pixels are in .prev',
         )
       } catch (err) {

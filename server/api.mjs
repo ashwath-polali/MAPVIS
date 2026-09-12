@@ -1367,6 +1367,16 @@ async function route(req, res, p, url) {
         const keepId = plan.characterId || (it.meta && it.meta.characterId) || ''
         await swapFolder(id, name, st.stage, { dirs: st.dirs, fps: st.fps, characterId: keepId })
         noteAsk(id, name, ask, plan.motion, 'motion')
+        /* SAY WHICH HEADINGS ACTUALLY MOVE. A heading whose job failed keeps its
+         * standing rotation, which is one frame, and the set still loads and
+         * still walks. Reporting that as an eight-way motion would leave the
+         * author to find the statue themselves, on the map, later. */
+        const stood = Object.entries(st.dirs)
+          .filter(([, frames]) => !Array.isArray(frames) || frames.length < 2)
+          .map(([k]) => k)
+        const partial = stood.length
+          ? `${Object.keys(st.dirs).length - stood.length} of ${Object.keys(st.dirs).length} headings move · ${stood.join(', ')} kept a standing frame`
+          : ''
         return send(res, 200, {
           item: {
             name,
@@ -1377,7 +1387,8 @@ async function route(req, res, p, url) {
             w: st.w,
             h: st.h,
           },
-          note: plan.note,
+          note: [plan.note, partial].filter(Boolean).join(' · '),
+          partial: partial || undefined,
         })
       }
 
@@ -3731,19 +3742,42 @@ async function runCharacterMotion(plan, seed, gate, halt) {
     name: group,
     seed,
   })
+  /* EVERY GENERATION IS BOUGHT FROM HERE. Whatever goes wrong below, the money
+   * is spent, so no path out of this function may end without first looking on
+   * the account for frames that are already there. */
+  const failures = []
   // the wait is told what was already there for the same reason: without it, a
   // character that already moves reports finished on the first tick
   try {
     d = await raceStop(
       gate,
-      pixellab.awaitAnimation(plan.characterId, h, { timeoutMs: onHost() ? HOST_WAIT : WALK_WAIT, known: before }),
+      pixellab.awaitAnimation(plan.characterId, h, {
+        timeoutMs: onHost() ? HOST_WAIT : WALK_WAIT,
+        known: before,
+        notes: failures,
+      }),
     )
   } catch (e) {
     // out of budget on the host is pending, not failure: the frames are paid
     // for and will be there when the client asks again for this group
     if (onHost() && /timed out/.test(String((e && e.message) || e))) throw new Pending(group)
+    // a stop is the one case the person asked for and is left as it was
+    if (String((e && e.message) || e) === 'stopped') throw e
+    /* anything else and the generations are still bought, so look before giving
+     * up. newGroupDirs and not recoverCharacterMotion: the latter refuses a
+     * named group unless EVERY wanted heading moved, which is exactly the shape
+     * of a run where one of eight failed. This reads the same detail the success
+     * path reads, takes only frames this job produced, fills the heading that
+     * failed with its standing rotation and refuses below four. */
+    const late = await pixellab.characterDetail(plan.characterId).catch(() => null)
+    const salvaged = late && newGroupDirs(late, group, before, heads, rot)
+    if (salvaged) {
+      console.error(`[animate] ${plan.characterId}: ${String((e && e.message) || e)} · the frames that did draw were collected`)
+      return withStills(salvaged, rot)
+    }
     throw e
   }
+  if (failures.length) console.error(`[animate] ${failures.length} heading(s) failed: ${failures.join(' · ')}`)
   let byDir = newGroupDirs(d, group, before, heads, rot)
   /* the job reports finished before the detail lists the group, which threw away a paid motion on the hub's knights; the frames are bought, so read again */
   for (let tries = 0; !byDir && tries < 5; tries++) {

@@ -13,8 +13,8 @@
     "relay": "node server/relay.mjs",
     "doctor": "node server/db/doctor.mjs",
     "migrate": "node server/db/migrate.mjs",
-    "verify:local": "node server/db/verify-stand.mjs && node server/db/verify-local.mjs",
-    "verify": "node server/db/verify-stand.mjs && node server/db/verify-local.mjs && node server/db/doctor.mjs && node server/db/verify-map.mjs hub && node server/db/verify-api.mjs hub && node server/db/verify-auth.mjs && node server/db/verify-routing.mjs && node server/db/verify-authoring.mjs && node server/db/gate.mjs hub"
+    "verify:local": "node server/db/verify-stand.mjs && node server/db/verify-animate.mjs && node server/db/verify-local.mjs",
+    "verify": "node server/db/verify-stand.mjs && node server/db/verify-animate.mjs && node server/db/verify-local.mjs && node server/db/doctor.mjs && node server/db/verify-map.mjs hub && node server/db/verify-api.mjs hub && node server/db/verify-auth.mjs && node server/db/verify-routing.mjs && node server/db/verify-authoring.mjs && node server/db/gate.mjs hub"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1118.0",
