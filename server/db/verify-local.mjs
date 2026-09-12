@@ -68,7 +68,7 @@ const call = async (p, opts = {}) => {
   try {
     json = await r.json()
   } catch {}
-  return { status: r.status, json, retryAfter: r.headers.get('retry-after') }
+  return { status: r.status, json, retryAfter: r.headers.get('retry-after'), cache: r.headers.get('cache-control') }
 }
 
 try {
@@ -167,6 +167,43 @@ try {
   fenced
     ? ok('and refused for any request that did not come from the loopback address')
     : no('the loopback fence is gone from currentUser')
+
+  // ---- how long an answer may be kept ------------------------------------
+  // A url carrying a version names one set of bytes for ever. Left with no
+  // header a host fills one in, and its default turns every versioned file into
+  // a conditional request on every open, which is the round trip the version in
+  // the url exists to avoid. Checked here because it is a property of the url
+  // shape, so it holds with no database behind it and no map published.
+  {
+    const cc = async (path) => (await call(path)).cache
+    const IMM = 'public, max-age=31536000, immutable'
+
+    ;(await cc('/api/v1/maps/anything/file/7/map.json')) === IMM
+      ? ok('a versioned map file is immutable, so a browser that has it never asks again')
+      : no(`a versioned file answered ${JSON.stringify(await cc('/api/v1/maps/anything/file/7/map.json'))}`)
+
+    ;(await cc('/api/v1/ui/band/image?v=abc123')) === IMM
+      ? ok('and a ui piece asked for by content hash is immutable too')
+      : no(`a hashed ui piece answered ${JSON.stringify(await cc('/api/v1/ui/band/image?v=abc123'))}`)
+
+    ;(await cc('/api/v1/maps/hub')) === 'public, max-age=60'
+      ? ok('while the manifest gets a minute, because it is what moves when a map is republished')
+      : no(`the manifest answered ${JSON.stringify(await cc('/api/v1/maps/hub'))}`)
+
+    ;(await cc('/api/v1/maps/hub?v=3')) === IMM
+      ? ok('and a manifest pinned to a version is immutable like the files under it')
+      : no(`a pinned manifest answered ${JSON.stringify(await cc('/api/v1/maps/hub?v=3'))}`)
+
+    /* the listing is every map and their newest versions, so it is the one
+     * answer that must not be held: a map published a moment ago has to appear */
+    ;(await cc('/api/v1/maps')) === null
+      ? ok('and the listing of every map is never held, since a new publish has to show in it')
+      : no(`the listing answered ${JSON.stringify(await cc('/api/v1/maps'))}`)
+
+    ;(await cc('/api/v1/ui/band/image')) === null
+      ? ok('and a ui piece with no hash on it is not claimed to be immutable')
+      : no(`an unhashed ui piece answered ${JSON.stringify(await cc('/api/v1/ui/band/image'))}`)
+  }
 
   // ---- whose hand a stranger may draw with -------------------------------
   // The house style is the one thing on this platform that is not public. A

@@ -2994,6 +2994,27 @@ async function readApi(req, res, p, url) {
   }
   if (req.method !== 'GET') return send(res, 405, { error: 'read only' })
 
+  /* HOW LONG AN ANSWER MAY BE KEPT, decided once here rather than at each route,
+   * because the rule is about the shape of the url and not about the handler.
+   *
+   * A url carrying a version or a content hash names one set of bytes for ever.
+   * Nothing behind it can change without the url changing too, so it is
+   * immutable and a browser that has it never asks again. With no header at all
+   * a host fills one in, and the default is max-age=0 must-revalidate, which
+   * turns every one of those into a conditional request: the bytes are not
+   * re-sent, but the round trip is paid on every file on every open.
+   *
+   * The manifest is the one document that has to move when a map is republished,
+   * so it gets a minute. Long enough that thirty people opening at once ask for
+   * it once between them, short enough that a republish is visible while the
+   * person who pressed it is still standing there. Asked for by version it is
+   * pinned, and a pinned version is immutable like everything else. */
+  const IMMUTABLE = 'public, max-age=31536000, immutable'
+  const pinned = url.searchParams.has('v')
+  if (/^\/api\/v1\/maps\/[^/]+\/file\/\d+\//.test(p)) res.setHeader('Cache-Control', IMMUTABLE)
+  else if (p.startsWith('/api/v1/ui/') && pinned) res.setHeader('Cache-Control', IMMUTABLE)
+  else if (/^\/api\/v1\/maps\/[^/]+$/.test(p)) res.setHeader('Cache-Control', pinned ? IMMUTABLE : 'public, max-age=60')
+
   /* Every route below reads published rows, and publishing needs a database. On
    * a clone with none configured this answered a 500 carrying the connection
    * error, which reads to a polling game as an outage rather than as a tool

@@ -782,7 +782,10 @@ try {
           kind: 'berth',
           x: 880,
           y: 700,
-          facing: 'north',
+          /* south and not north: this berth sits inside its island's box, so a
+           * bow to the north lies in the land and the save is refused for it.
+           * The heading is what the hull holds once she is tied up. */
+          facing: 'south',
           at: 'coach_post',
           island: 'zz_verify_isle',
           label: 'The Verify Dock',
@@ -805,7 +808,7 @@ try {
     eq(
       'a berth exists in world space and says whose it is',
       [dock?.x, dock?.y, dock?.facing, dock?.at, dock?.island],
-      [880, 700, 'north', 'coach_post', 'zz_verify_isle'],
+      [880, 700, 'south', 'coach_post', 'zz_verify_isle'],
     )
     eq('and a point in open water belongs to nobody', readBack.marks.find((m) => m.name === 'zz_north_turn')?.island, undefined)
     // the second point survives the round trip nested, which is what makes it an
@@ -846,7 +849,7 @@ try {
       name: 'zz_verify_dock',
       x: 880,
       y: 700,
-      facing: 'north',
+      facing: 'south',
       // without this second point sail.ts never runs its two-stage berthing and every arrival is nose-in
       approach: { x: 940, y: 760 },
       at: 'coach_post',
@@ -993,7 +996,10 @@ try {
       home: '',
       places: [{ name: 'zz_skew_isle', map: '', x: 100, y: 100, w: 64, h: 64, state: 'rumour', discover: 900 }],
       regions: [],
-      marks: [{ name: 'zz_skew_dock', kind: 'berth', x: 140, y: 140, facing: 'north-west', island: 'zz_skew_isle' }],
+      /* THE BERTH MOVES, NOT THE HEADING. This case is about a diagonal being
+       * warned about and kept, so the diagonal has to stay; it sits north-west
+       * of its island's middle instead, where north-west is open water. */
+      marks: [{ name: 'zz_skew_dock', kind: 'berth', x: 80, y: 80, facing: 'north-west', island: 'zz_skew_isle' }],
     })
     skew.warnings.some((w) => w.includes('north-west') && w.includes('point west'))
       ? ok('a berth aimed at a diagonal is named at the save')
@@ -1211,10 +1217,28 @@ try {
       await new Promise((r) => server.close(r))
     }
   } finally {
-    /* put the shared row back with the stamp dropped: a restore is an overwrite, not an edit on a snapshot */
-    await saveWorld_({ ...worldBefore, updatedAt: 0 }, wc)
-    /* the version goes back too: a run counts two changes and the game drops saved positions, 341 to 395 */
-    await wc.query('update world set version = $1 where id = $2', [worldBefore.version, GAME_WORLD])
+    /* PUT THE ROW BACK AS IT WAS FOUND, in one write and through no validation.
+     * A restore is an overwrite of a snapshot and not an edit, so it must not be
+     * judged: going back through saveWorld asks the rules about a document this
+     * file did not write, and a suite that fails because the live ocean breaks a
+     * rule is a suite coupled to production data rather than to the code. The
+     * version goes back in the same statement, because a run that counts two
+     * changes makes a consumer drop every saved position. */
+    await wc.query(
+      `update world set w = $1, h = $2, places = $3::jsonb, regions = $4::jsonb,
+              marks = $5::jsonb, home = $6, version = $7, updated_at = now()
+        where id = $8`,
+      [
+        worldBefore.w,
+        worldBefore.h,
+        JSON.stringify(worldBefore.places),
+        JSON.stringify(worldBefore.regions),
+        JSON.stringify(worldBefore.marks),
+        worldBefore.home,
+        worldBefore.version,
+        GAME_WORLD,
+      ],
+    )
     // the lock is released by withWorld, with the client, so a crash frees it
     // with the connection instead of wedging the next runner
   }

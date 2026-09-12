@@ -270,6 +270,51 @@ export async function composition(id = GAME_WORLD) {
   }
 }
 
+/* WHICH WAY A COMPASS WORD POINTS, on the chart. y grows south, the same as
+ * every raster in this tool, so north is negative y. */
+export const FACING_VECTORS = {
+  north: [0, -1],
+  south: [0, 1],
+  east: [1, 0],
+  west: [-1, 0],
+  'north-east': [0.7071, -0.7071],
+  'north-west': [-0.7071, -0.7071],
+  'south-east': [0.7071, 0.7071],
+  'south-west': [-0.7071, 0.7071],
+}
+
+/* how far off straight-at-the-island still counts as pointing into it. 0.5 is
+ * sixty degrees: a bow aimed anywhere inside that cone is aimed at the land, and
+ * anything wider than it is lying along the shore, which is what mooring is. */
+export const INTO_COAST = 0.5
+
+/* A BERTH WHOSE BOW IS IN THE LAND. The facing is the heading the hull holds
+ * once she is tied up, so it must not point at the island she is tied to.
+ *
+ * Measured against the direction from the berth to the island's middle, not
+ * against its box: a box test refuses a berth lying along a shore simply for
+ * being beside it, and a dock is always beside it. What this can see is the
+ * footprint the world document carries, so a berth deep inside a bay is judged
+ * against the island as a whole and not against the water it actually sits in.
+ * That is the one case where a hand is better than this, and it says so. */
+export function facingIntoCoast(mark, place, map) {
+  if (!mark || !place) return null
+  const v = FACING_VECTORS[String(mark.facing || '').toLowerCase()]
+  if (!v) return null
+  /* the painting's middle, the same point checkWorld measures a berth's reach
+   * from, so the two answers cannot disagree about where the island is */
+  const cx = place.x + (map && map.paint_w > 0 ? map.paint_ox + map.paint_w / 2 : (map ? map.w : place.w) / 2)
+  const cy = place.y + (map && map.paint_h > 0 ? map.paint_oy + map.paint_h / 2 : (map ? map.h : place.h) / 2)
+  const dx = cx - mark.x
+  const dy = cy - mark.y
+  const d = Math.hypot(dx, dy)
+  // tied up exactly on the middle of its own island is a different fault, and
+  // there is no direction to measure from a point with no distance
+  if (d < 1) return null
+  const dot = (v[0] * dx + v[1] * dy) / d
+  return dot > INTO_COAST ? { dot, degrees: Math.round((Math.acos(Math.min(1, dot)) * 180) / Math.PI) } : null
+}
+
 /* a duplicate name is fatal because names are the addressing system, and an unpublished map id is only a warning because a slot may name next week's island */
 export function checkWorld(doc, slugs = [], maps = new Map()) {
   const problems = []
@@ -318,6 +363,16 @@ export function checkWorld(doc, slugs = [], maps = new Map()) {
       if (d > p.discover)
         warnings.push(
           `"${b.name}" ties up ${Math.round(d)} out from "${p.name}", which is only discovered at ${p.discover}, so the dock is offered before the island is`,
+        )
+      /* THE BOW IN THE LAND. The heading is what the hull holds once she is tied
+       * up, so pointing it at the island is a ship moored into the rocks. A
+       * refusal and not a warning: it is one press to turn, it is visible on the
+       * chart as the ghost lying across the shore, and a world saved with it
+       * reaches a player as a ship facing a cliff. */
+      const into = facingIntoCoast(b, p, mm)
+      if (into)
+        problems.push(
+          `"${b.name}" is aimed ${b.facing}, which is ${into.degrees}° off straight into "${p.name}" · that is the heading the hull holds once she is tied up, so she would lie bow-first in the coast · turn her along the shore or out to open water`,
         )
       /* named here rather than dropped in cleanMark, because dropping a diagonal produces the same west and says nothing */
       if (b.facing && !BERTH_FACINGS.includes(b.facing))

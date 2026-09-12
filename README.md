@@ -57,6 +57,16 @@ reading a bundle can say which hand drew it.
 
 Choosing **Other** sends your words as you typed them, with no card at all.
 
+## The water between them
+
+Islands sit on one shared chart, and the points on it are marked by hand. A **berth** is where a ship
+ties up, and its heading is one thing only: how she lies once she is moored. While you place or turn
+one, the hull is drawn on the water at that heading at its real size, so you set it by eye rather
+than by picking a word and hoping. A bow pointing into the land is refused when the chart is saved.
+
+The **run-in** is a separate mark, drawn as a short dotted line into the berth: it is where she comes
+in from, so an arrival is a turn onto the heading rather than a nose into the dock.
+
 ## What comes out
 
 A finished map is a bundle: the picture, the ground and height data, everything placed on it, and the

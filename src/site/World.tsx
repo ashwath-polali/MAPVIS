@@ -5,7 +5,7 @@ import { useSession } from './session'
 import { anchorName, anchorShape, isAnchorName } from '../core/mask'
 import { ANCHOR_INK, inkFor } from '../core/ink'
 import { displayName } from '../core/naming'
-import { MARK_KINDS, isMarkName, type MarkKind, type WorldMark } from '../core/world'
+import { MARK_KINDS, isMarkName, HULL, headingOf, type MarkKind, type WorldMark } from '../core/world'
 import './world.css'
 
 /* The shape the server keeps, field for field. cleanPlace is the authority and
@@ -759,6 +759,51 @@ function paint(c: CanvasRenderingContext2D, size: { w: number; h: number }, sc: 
       c.stroke()
       c.setLineDash([])
       c.globalAlpha = 1
+    }
+    /* THE SHIP AS SHE WOULD LIE, at the real size and the real heading, while
+     * this berth is the one in hand. The compass word alone cannot answer the
+     * question an author is actually asking, which is whether a hull this long
+     * fits here pointing that way: a berth reading "north" beside a jetty is
+     * either right or absurd and the word looks identical either way. Drawn
+     * under the mark and the spur so neither is hidden by it. */
+    if (k.kind === 'berth' && lit) {
+      const head = headingOf(k.facing)
+      if (head) {
+        const L = (HULL.length * fit.s) / 2
+        const B = (HULL.beam * fit.s) / 2
+        c.save()
+        c.translate(mx, my)
+        // atan2 of the heading itself, so the bow is drawn where the word points
+        // rather than where a table of eight rotations says it should be
+        c.rotate(Math.atan2(head[1], head[0]))
+        c.beginPath()
+        // bow forward, square stern: a pointed oval reads as a leaf and gives no
+        // sense of which end is which, which is the whole thing being set here
+        c.moveTo(L, 0)
+        c.quadraticCurveTo(L * 0.35, -B, -L * 0.55, -B)
+        c.lineTo(-L, -B * 0.72)
+        c.lineTo(-L, B * 0.72)
+        c.lineTo(-L * 0.55, B)
+        c.quadraticCurveTo(L * 0.35, B, L, 0)
+        c.closePath()
+        c.globalAlpha = on ? 0.22 : 0.14
+        c.fillStyle = tint
+        c.fill()
+        c.globalAlpha = on ? 0.85 : 0.5
+        c.lineWidth = 1.4
+        c.strokeStyle = tint
+        c.stroke()
+        // the centre line, because a hull with no keel drawn reads as a blob at
+        // the sizes this chart is usually looked at
+        c.globalAlpha = on ? 0.5 : 0.3
+        c.beginPath()
+        c.moveTo(L * 0.85, 0)
+        c.lineTo(-L * 0.85, 0)
+        c.lineWidth = 1
+        c.stroke()
+        c.globalAlpha = 1
+        c.restore()
+      }
     }
     /* THE HEADING HELD HERE, as a spur off the ring. It was drawn only for a
      * place's own berth, so a free point could carry a facing, save it, hand it
@@ -2446,10 +2491,18 @@ function BerthPanel({
         {/* four on a berth, since the engine sends every diagonal west, and nine where python reads */}
         <Facing
           v={m.facing || ''}
-          say="the heading held here"
+          say={m.kind === 'berth' ? 'how she lies once tied up' : 'the heading held here'}
           only={m.kind === 'berth' ? BERTH_FACINGS : undefined}
           on={(k) => onEdit({ facing: k || undefined })}
         />
+        {/* the ghost is the answer to this, so the note points at it rather than
+            describing a heading in words the chart is already showing */}
+        {m.kind === 'berth' && (
+          <p className="world-note">
+            The hull is drawn to size on the chart at this heading. Turn her until she lies along the shore: a bow
+            pointing into the land is refused when the ocean is saved.
+          </p>
+        )}
       </section>
 
       {/* the game aims here first, so with no run-in every arrival is a straight-in nose */}
