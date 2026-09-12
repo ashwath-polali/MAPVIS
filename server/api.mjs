@@ -87,6 +87,8 @@ import {
   sessionUser,
 } from './store/auth.mjs'
 import { verifyPassword } from './store/crypto.mjs'
+import { mapPrompt, styleStamp, fitCanvas, STYLE_OPTIONS, SCAFFOLDS, KINDS, kindOf } from './store/style.mjs'
+import { cardsFor, cardFor, mapCard, setMapStyle, setOwnCard, grantHouse, revokeHouse, grantedTo, houseOwner } from './store/cards.mjs'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(HERE, '..')
@@ -330,23 +332,124 @@ async function route(req, res, p, url) {
   }
   if (p === '/api/balance') return send(res, 200, await pixellab.balance())
 
+  /* WHICH HANDS THIS ACCOUNT MAY DRAW WITH, asked by the first step before the
+   * subject is typed. "Other" is not in the list: it is choosing none of them. */
+  if (p === '/api/styles') {
+    const me = await currentUser(req).catch(() => null)
+    const cards = await cardsFor(me)
+    return send(res, 200, {
+      cards: cards.map((c) => ({ key: c.key, title: c.title, clause: c.craft.clause, house: !!c.house, ref: c.ref || '' })),
+      // the first one offered is the default, and with none it is Other
+      fallback: cards.length ? cards[0].key : '',
+      kinds: KINDS.map((k) => ({ kind: k, canvas: SCAFFOLDS[k].canvas })),
+      // only the owner is shown the grant list, because it is a list of people
+      grants: me && houseOwner() === String(me.email || '').toLowerCase() ? await grantedTo(me) : undefined,
+    })
+  }
+
+  /* an account's own hand, taken off one of its own maps. The craft is that
+   * map's style card, which is a reading it has already seen work. */
+  if (p === '/api/styles/mine' && req.method === 'POST') {
+    const me = await sessionUser(req)
+    if (!me) return send(res, 401, { error: 'sign in first' })
+    const b = await body(req)
+    const from = safeId(b.from || '')
+    if (!from) return send(res, 400, { error: 'say which map the hand comes from' })
+    const owns = await one('select 1 from maps where slug = $1 and owner_id = $2', [from, me.id])
+    if (!owns) return send(res, 403, { error: `${from} is not yours` })
+    let craft = null
+    try {
+      craft = JSON.parse(fs.readFileSync(path.join(WORK, from, 'style.json'), 'utf8'))
+    } catch {
+      /* not read yet is not an error to shout about: the asset stage writes it */
+    }
+    if (!craft || !craft.clause) return send(res, 409, { error: `${from} has not been read for its style yet` })
+    try {
+      const card = await setOwnCard(me, { key: b.key || from, title: b.title || from, craft, ref: from })
+      return send(res, 200, { card: { key: card.key, title: card.title, clause: card.craft.clause, ref: card.ref } })
+    } catch (e) {
+      return send(res, 400, { error: String((e && e.message) || e).slice(0, 200) })
+    }
+  }
+
+  /* the house hand handed to somebody else, and taken back. The owner alone,
+   * checked in the store rather than here. */
+  if (p === '/api/styles/grant' && req.method === 'POST') {
+    const me = await sessionUser(req)
+    if (!me) return send(res, 401, { error: 'sign in first' })
+    const b = await body(req)
+    try {
+      const out = b.revoke ? await revokeHouse(me, b.email) : await grantHouse(me, b.email)
+      return send(res, 200, { ...out, granted: await grantedTo(me) })
+    } catch (e) {
+      return send(res, 403, { error: String((e && e.message) || e).slice(0, 200) })
+    }
+  }
+
+  /* THE CHOICE, STORED ON THE MAP. Made on the first step and kept, so a
+   * republish and every asset afterwards are drawn by the same hand. */
+  if (p === '/api/map-style' && req.method === 'POST') {
+    const b = await body(req)
+    const id = safeId(b.id)
+    if (!id) return send(res, 400, { error: 'which map' })
+    const me = await currentUser(req).catch(() => null)
+    try {
+      const out = await setMapStyle(id, { cardKey: String(b.style || ''), kind: String(b.kind || ''), user: me })
+      return send(res, 200, { style: out && out.card ? out.card.key : '', kind: (out && out.kind) || '' })
+    } catch (e) {
+      return send(res, 400, { error: String((e && e.message) || e).slice(0, 200) })
+    }
+  }
+
+  /* the prompt a map would be drawn from, written but not sent. Free, and it is
+   * what the first step shows so a person can read the hand before buying it. */
+  if (p === '/api/map-prompt' && req.method === 'POST') {
+    const b = await body(req)
+    const me = await currentUser(req).catch(() => null)
+    const card = await cardFor(me, String(b.style || ''))
+    const out = mapPrompt({ subject: String(b.subject || ''), kind: String(b.kind || ''), card })
+    return send(res, 200, {
+      prompt: out.prompt,
+      kind: out.kind,
+      style: out.card || '',
+      canvas: fitCanvas(b.w && b.h ? { w: b.w, h: b.h } : out.canvas),
+      parts: out.parts.map((x) => x.name),
+    })
+  }
+
   if (p === '/api/generate' && req.method === 'POST') {
     const b = await body(req)
-    const prompt = String(b.prompt || '').trim()
-    if (!prompt) return send(res, 400, { error: 'no prompt' })
+    const typed = String(b.prompt || '').trim()
+    if (!typed) return send(res, 400, { error: 'no prompt' })
     const n = Math.max(1, Math.min(6, b.n || 4))
-    const w = b.w || 688
-    const h = b.h || 384
-    /* nothing ever passed generateImage a style ref, so every map went out with none; style is a slug, and styleOptions takes craft with color_palette off */
+
+    /* THE HAND IS PUT ON HERE AND NOT IN THE BROWSER. A client that assembles
+     * the prompt is a client that can be asked for a hand it was never granted,
+     * and the whole point of the house card is that it is not everybody's. */
+    const me = await currentUser(req).catch(() => null)
+    const card = await cardFor(me, String(b.style || ''))
+    if (b.style && !card) return send(res, 403, { error: 'that hand is not one this account may draw with' })
+    const built = mapPrompt({ subject: typed, kind: String(b.kind || ''), card })
+    const prompt = built.prompt || typed
+    const box = fitCanvas(b.w && b.h ? { w: b.w, h: b.h } : built.canvas)
+    const w = box.w
+    const h = box.h
+
+    /* the reference painting, with its colour switched off. A style image
+     * carries outline, detail and shading and cannot carry the angle, which is
+     * why the projection is in the words above and not left to the picture. */
     let styleImage
-    if (b.style) {
+    const refSlug = card && card.ref ? card.ref : String(b.styleRefMap || '')
+    if (refSlug) {
       try {
-        styleImage = await styleRef(String(b.style))
+        styleImage = await styleRef(refSlug)
       } catch (e) {
-        return send(res, 400, { error: `style "${b.style}": ${String(e.message || e).slice(0, 160)}` })
+        /* a reference that will not load is not a reason to refuse the map: the
+         * craft sentence carries the hand on its own and the person is told */
+        console.error(`[style] ${refSlug}: ${String((e && e.message) || e)} · drawing from the words alone`)
       }
     }
-    const styleOptions = b.styleOptions && typeof b.styleOptions === 'object' ? b.styleOptions : undefined
+    const styleOptions = b.styleOptions && typeof b.styleOptions === 'object' ? b.styleOptions : card ? STYLE_OPTIONS : undefined
     const jobs = []
     for (let i = 0; i < n; i++) {
       const seed = Math.floor(Math.random() * 1e9)
@@ -356,7 +459,17 @@ async function route(req, res, p, url) {
         jobs.push({ error: String(e.message || e).slice(0, 200) })
       }
     }
-    return send(res, 200, { jobs, w, h, style: b.style || null, styleOptions: styleOptions || null })
+    return send(res, 200, {
+      jobs,
+      w,
+      h,
+      style: card ? card.key : null,
+      kind: built.kind || '',
+      // the words that were actually sent, so the first step can show the hand
+      // rather than describe it
+      prompt,
+      styleOptions: styleOptions || null,
+    })
   }
 
   if (p.startsWith('/api/job/')) {
@@ -404,14 +517,15 @@ async function route(req, res, p, url) {
     const ask = String(b.ask || '').trim()
     if (!ask) return send(res, 400, { error: 'no ask' })
     // the id rides along so the ask can be shaped by what he has kept on THIS
-    // map; a client that never sends one just gets the cold rewrite
-    const t = await translateAsk(
-      ask,
-      b.kind === 'animated' ? 'animated' : 'static',
-      b.styleClause,
-      b.id ? safeId(b.id) : '',
-      String(b.job || ''),
-    )
+    /* THE MAP'S OWN HAND WINS OVER THE ONE THE CLIENT SENT. A map drawn in the
+     * house hand has to have its bookshelf drawn by the same hand, and the
+     * clause for that is on the map rather than in the browser. The client's
+     * clause is the fallback for a map with no card, which is every map that
+     * takes its look from its own painting. */
+    const mapId = b.id ? safeId(b.id) : ''
+    const drawn = mapId ? await mapCard(mapId).catch(() => null) : null
+    const clause = drawn && drawn.card ? drawn.card.craft.clause : b.styleClause
+    const t = await translateAsk(ask, b.kind === 'animated' ? 'animated' : 'static', clause, mapId, String(b.job || ''))
     return send(res, 200, { t })
   }
 

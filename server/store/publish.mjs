@@ -305,9 +305,11 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
     `select m.title, m.class, m.island_id, m.meta, m.char_h, m.char_hip, m.char_hipdy, m.speed, m.yscale, m.step_tol,
             m.base_w, m.base_h, m.base_ox, m.base_oy, m.paint_set, m.paint_w, m.paint_h, m.paint_ox, m.paint_oy,
             m.paths, m.framings, m.sets, m.racks,
-            m.variants, m.asset_groups, m.cover_fact,
+            m.variants, m.asset_groups, m.cover_fact, m.style_kind,
+            c.key as style_key, c.title as style_title, c.craft as style_craft, c.house as style_house,
             u.email as owner_email
-     from maps m join users u on u.id = m.owner_id where m.id = $1`,
+     from maps m join users u on u.id = m.owner_id
+     left join style_cards c on c.id = m.style_card_id where m.id = $1`,
     [m.id],
   )
   /* MEASURED BEFORE THE BUNDLE IS ASSEMBLED, and never fatal: a scene this
@@ -344,6 +346,25 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
       ox: props?.base_ox ?? 0,
       oy: props?.base_oy ?? 0,
     },
+    /* WHICH HAND DREW IT, carried in the bundle so a reader can say so without an
+     * account. A member's island made on their own account in the house hand has
+     * to be recognisable as the same hand as everything else, and the only place
+     * that fact can survive leaving the platform is here. */
+    ...(props?.style_key || props?.style_kind
+      ? {
+          style: {
+            ...(props?.style_kind ? { kind: props.style_kind } : {}),
+            ...(props?.style_key
+              ? {
+                  key: props.style_key,
+                  title: props.style_title || props.style_key,
+                  clause: (props.style_craft && props.style_craft.clause) || '',
+                  ...(props.style_house ? { house: true } : {}),
+                }
+              : {}),
+          },
+        }
+      : {}),
     /* provenance rides inside the bundle, because a file that has left the platform cannot be traced back to the press that made it without a database query */
     provenance: { owner: props?.owner_email || '', publishedAt: new Date().toISOString(), version },
     ...(props?.cover_fact ? { coverFact: props.cover_fact } : {}),
