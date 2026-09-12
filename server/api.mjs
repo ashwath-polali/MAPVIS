@@ -1230,6 +1230,11 @@ async function route(req, res, p, url) {
       return send(res, 200, { item: item || null, face, usage })
     } catch (e) {
       const m = String((e && e.message) || e)
+      /* a state that was bought and could not be collected is findable only by
+       * the id it was bought under, so that id goes in the log rather than out
+       * with the error. */
+      if (e && (e.characterId || e.objectId))
+        console.error(`[state] ${owner}: ${m} · bought as ${e.characterId || e.objectId}`)
       return send(res, m === 'stopped' ? 499 : 502, { error: m.slice(0, 300) })
     } finally {
       done()

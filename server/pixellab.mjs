@@ -314,6 +314,11 @@ export async function objectState({ objectId, edit, name, seed }) {
   const out = await call('POST', `/v2/objects/${encodeURIComponent(objectId)}/states`, req)
   const id = out.object_id
   if (!id) throw new Error('the state was queued without an id to collect it from')
+  /* bought from here, so every way out below carries the id it was bought under */
+  const withId = (e) => {
+    e.objectId = id
+    return e
+  }
   // an edit is quicker than a build, but it is the same queue behind it
   for (let waited = 0; waited < 300000; waited += 5000) {
     await new Promise((r) => setTimeout(r, 5000))
@@ -323,11 +328,11 @@ export async function objectState({ objectId, edit, name, seed }) {
     } catch {
       continue // a row that is not queryable yet is not a failure yet
     }
-    if (String(d.status || '').toLowerCase() === 'failed') throw new Error('the state failed to draw')
+    if (String(d.status || '').toLowerCase() === 'failed') throw withId(new Error('the state failed to draw'))
     const url = (d.storage_urls && d.storage_urls.unknown) || ''
     if (url) return { b64: (await fetchPNG(url)).toString('base64'), objectId: id, usage: out.usage || null }
   }
-  throw new Error('the state timed out')
+  throw withId(new Error('the state timed out'))
 }
 
 export async function characterState({ characterId, edit, name, seed, size }) {
@@ -350,7 +355,15 @@ export async function characterState({ characterId, edit, name, seed, size }) {
   /* what it actually cost, carried back rather than assumed. The schema does
    * not price this endpoint anywhere and the docs do not either, so the only
    * honest source is the usage the call itself answers with. */
-  return { characterId: id, usage: out.usage || null, detail: await awaitCharacter(id) }
+  try {
+    return { characterId: id, usage: out.usage || null, detail: await awaitCharacter(id) }
+  } catch (e) {
+    /* the state is bought and it exists under this id. Losing the id with the
+     * error is what makes a timeout unrecoverable rather than merely slow, so
+     * it rides out on the error for the caller to record. */
+    e.characterId = id
+    throw e
+  }
 }
 
 /* never use the eight-direction OBJECT endpoint for anything with a body: pixellab's own docs say the identity transfer is unreliable and it returns a generic figure instead of yours */

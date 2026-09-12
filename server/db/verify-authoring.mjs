@@ -95,6 +95,10 @@ const scenePNG = (() => {
 /* WHAT AN AUTHOR TYPED. Every value below is one somebody has to be able to
  * enter in the tool, and this file follows each of them from the form all the
  * way to the bundle the game reads. */
+/* overwritten before the save by the lookup below, which finds a real anchor on
+ * the target map. It is a placeholder and never a name anything has to carry. */
+const DOOR_PLACEHOLDER = 'the_far_side'
+
 const doc = {
   v: 3,
   w: W,
@@ -131,9 +135,9 @@ const doc = {
     // an area, four numbers meaning two opposite corners
     { id: 2, name: 'the_yard', kind: 'region', x: 10, y: 10, r: 8, to: '', label: '', rect: [4, 4, 36, 30] },
     // a hall is a place you are inside of, so the gate insists on a way out
-    { id: 3, name: 'the_way_out', kind: 'door', x: 12, y: 12, r: 8, to: 'hub', toAnchor: 'quarry_gate', label: 'out' },
+    { id: 3, name: 'the_way_out', kind: 'door', x: 12, y: 12, r: 8, to: 'hub', toAnchor: DOOR_PLACEHOLDER, label: 'out' },
     /* a barred door with no placement, so the condition rides the meta bag every projection copies whole */
-    { id: 4, name: 'the_barred_way', kind: 'door', x: 16, y: 12, r: 8, to: 'hub', toAnchor: 'quarry_gate', label: 'the barred way', when: 'cord("service")' },
+    { id: 4, name: 'the_barred_way', kind: 'door', x: 16, y: 12, r: 8, to: 'hub', toAnchor: DOOR_PLACEHOLDER, label: 'the barred way', when: 'cord("service")' },
     // the anchor a variant set is addressed through, which is the only address
     // python has for one: every world-touching intent takes an anchor name
     { id: 5, name: 'the_berth', kind: 'point', x: 24, y: 22, r: 10, to: '', label: 'the berth' },
@@ -203,7 +207,7 @@ const doc = {
       y: 38,
       r: 9,
       to: 'hub',
-      toAnchor: 'quarry_gate',
+      toAnchor: DOOR_PLACEHOLDER,
       label: 'the shed',
       shape: 'poly',
       poly: [
@@ -315,6 +319,32 @@ const existing = await getMapBySlug(SLUG)
 if (existing) await q('delete from maps where id = $1', [existing.id])
 const map = await createMap({ slug: SLUG, ownerId: owner.id, w: W, h: H, base: { w: W, h: H, ox: 0, oy: 0 }, spawn: [8, 8] })
 console.log(`${SLUG}  ${map.id}  ${W}x${H}`)
+
+/* THE DOOR'S TARGET IS FOUND, NEVER NAMED. Every door below arrives on a map
+ * this file does not own, and the publish gate refuses a door whose target
+ * anchor is not really there. Naming one couples this suite to whatever that
+ * map happens to carry and breaks it the day somebody renames an anchor, which
+ * is the one rename the tool exists to make safe. So: take a real name off the
+ * target if it has one, and otherwise send the doors at a map nobody has
+ * painted, which the gate warns about instead of refusing. */
+const doorTarget = 'hub'
+const liveAnchor = await one(
+  `select a.name from anchors a join maps m on m.id = a.map_id where m.slug = $1 order by a.name limit 1`,
+  [doorTarget],
+)
+for (const ev of doc.events) {
+  if (ev.kind !== 'door' || ev.to !== doorTarget) continue
+  if (liveAnchor) ev.toAnchor = liveAnchor.name
+  else {
+    ev.to = 'zz-no-such-map'
+    ev.toAnchor = ''
+  }
+}
+console.log(
+  liveAnchor
+    ? `  note  doors arrive at ${doorTarget}."${liveAnchor.name}", found rather than named`
+    : `  note  ${doorTarget} carries no anchors, so the doors point at a map nobody has painted`,
+)
 
 try {
   await putDoc(map.id, JSON.stringify(doc))
@@ -549,7 +579,7 @@ try {
   eq('a second shot on the same anchor sits beside it', pa?.meta?.framings?.wide_on_the_coach, { zoom: 1, dx: 0, dy: 0 })
   /* look_at asks with no name and every miss falls here, so named shots without a default is a dead camera */
   eq('the entry shot is the anchor default', pa?.meta?.framing, { zoom: 2, dx: -12, dy: -20, name: 'over_the_coach' })
-  /* MERGED, NOT SWAPPED IN. The real hub's quarry_gate already carries docId
+  /* MERGED, NOT SWAPPED IN. A real map's anchor already carries docId
    * and derived, and the game writes derived itself, so a projection that
    * replaced the bag would take both out. */
   eq('the bag that was already there is still under it', pa?.meta?.docId, 1)
