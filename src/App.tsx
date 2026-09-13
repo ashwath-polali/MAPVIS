@@ -640,6 +640,41 @@ function FxPlay({ frames, zoom, fps }: { frames: HTMLCanvasElement[]; zoom: numb
   return <canvas ref={ref} className="fxcv" />
 }
 
+/* Where a map opened by id gets its painting from, in order. The working copy is
+ * the live one so it goes first; the published bundle is the copy that always
+ * exists once a map has been exported, and it is the road back for a map whose
+ * painting never reached the store. `loadPainting` keeps whatever it is given, so
+ * arriving by the second road also repairs the first. */
+async function paintingFor(id: string): Promise<string | null> {
+  const work = `/work/${encodeURIComponent(id)}/scene.png`
+  try {
+    if ((await fetch(work, { method: 'HEAD' })).ok) return work
+  } catch {
+    /* no answer is not a painting either, so fall through to the bundle */
+  }
+  try {
+    const r = await fetch(`/api/v1/maps/${encodeURIComponent(id)}`)
+    if (!r.ok) return null
+    const j = (await r.json()) as { files?: Record<string, { url?: string }> }
+    return j.files?.['scene.png']?.url || null
+  } catch {
+    return null
+  }
+}
+
+async function openById(ed: Editor, id: string) {
+  const src = await paintingFor(id)
+  if (!src) {
+    ed.say(`${id} has no painting yet · drop one in`)
+    return
+  }
+  try {
+    await ed.loadPainting(src, id)
+  } catch {
+    ed.say(`could not load the painting for ${id}`)
+  }
+}
+
 export default function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const edRef = useRef<Editor | null>(null)
@@ -912,20 +947,19 @@ export default function App() {
     ed.attach(canvasRef.current as HTMLCanvasElement)
     setSt(ed.status())
 
-    /* ?id with no ?img fetches /work/<id>/scene.png, or a map opened from the dashboard answers "no painting". */
+    /* ?id with no ?img takes the working copy, then the map's own published
+     * bundle, and only then says there is no painting. The second road is what
+     * was missing: a map whose painting never reached the store answered "drop
+     * one in" and stopped, so `loadPainting` never ran, so the upload that would
+     * have fixed it never ran either. A published map always carries its own
+     * painting, so opening one now repairs it on the way in. */
     const q = new URLSearchParams(location.search)
     const img = q.get('img')
     const id = q.get('id')
     if (img) {
       void ed.loadPainting(img, id || slug(img.split('/').pop() || 'scene')).catch(() => ed.say('could not load ' + img))
     } else if (id) {
-      const from = `/work/${encodeURIComponent(id)}/scene.png`
-      void fetch(from, { method: 'HEAD' })
-        .then((r) => {
-          if (!r.ok) throw new Error('no painting saved for ' + id)
-          return ed.loadPainting(from, id)
-        })
-        .catch(() => ed.say(`${id} has no painting yet · drop one in`))
+      void openById(ed, id)
     }
 
     return () => ed.detach()
