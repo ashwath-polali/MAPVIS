@@ -3818,6 +3818,18 @@ export default function App() {
         </span>
         <span className="walklabel">of the map is walkable</span>
       </div>
+      {/* WHAT IS WALKABLE IS DECIDED BY WHERE THE THINGS STAND, and this step draws the bare painting,
+          so the floor round a well or a crate was being traced from memory. They come up faint and
+          stay untouchable: the pointer on this step belongs to the mask, and nothing here can select
+          or move a placement. */}
+      <Row
+        icon={st?.assetGhost ? 'eye' : 'eyeoff'}
+        label="show the assets"
+        desc="faint, and only to look at · nothing here can move them"
+        keep
+        on={!!st?.assetGhost}
+        onClick={() => push(ed?.toggleAssetGhost() ? 'assets showing, faint · they cannot be edited here' : 'assets hidden')}
+      />
       <details className="more">
         <summary>
           <Icon name="dots" /> more

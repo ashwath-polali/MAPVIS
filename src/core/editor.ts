@@ -207,6 +207,8 @@ export interface EditorStatus {
   assetSel: string
   assetSelAll: string[]
   lifePlay: boolean
+  /* whether the placements are being drawn as a faint reference on a step that cannot edit them */
+  assetGhost: boolean
   placing: string
   hiddenGroups: string[]
   proposedGroups: string[]
@@ -456,6 +458,12 @@ export class Editor {
   // assetMode is owned by the workflow (step 5 turns it on); while it is on,
   // the pointer places, selects and drags placements instead of painting mask
   assetMode = false
+  /* THE ART AS A REFERENCE ONLY, for painting levels underneath it. What is walkable is decided by
+   * where the things on the map stand, and the levels step draws the bare painting, so the author was
+   * holding the furniture in their head while tracing the floor around it. This draws the placements
+   * faintly and changes nothing else: the pointer still belongs to the mask, because every path that
+   * picks, drags or places a placement is gated on assetMode and this is not that. */
+  assetGhost = false
   placing: LibItem | null = null
   /* Selection is a SET with an anchor. selAsset is the anchor: the one the inspector shows numbers for. It stays a plain property so every path that sets it keeps working, and the setter collapses the set to that one id. Everything acting on "the selection" reads selIds(), so one thing and forty go down the same road. */
   private _selAsset = ''
@@ -772,6 +780,7 @@ export class Editor {
       // an area is dragged out of nothing.
       cropKind: this.cropSt ? (this.cropSt.id ? 'crop' : 'area') : '',
       lifePlay: this.lifePlay,
+      assetGhost: this.assetGhost,
       clip: clipboard.length ? (clipboard.length > 1 ? `${clipboard.length} items` : assetLabel(clipboard[0])) : '',
     }
   }
@@ -1845,6 +1854,13 @@ export class Editor {
     this.regionHL = c
   }
   // ---- the assets step. Life the painting deliberately left out, placed on top of it. Every mutation snapshots the document first, so z walks placements, drags, scales and clears back exactly like mask strokes.
+  /* on or off, and it answers where it landed so the caller can say so */
+  toggleAssetGhost(): boolean {
+    this.assetGhost = !this.assetGhost
+    this.dirty = true
+    this.emit()
+    return this.assetGhost
+  }
   setAssetMode(on: boolean) {
     if (this.assetMode === on) return
     this.assetMode = on
@@ -5568,6 +5584,10 @@ export class Editor {
       if (this.tool === 'region' && this.regionHL && !this.walking) g.drawImage(this.regionHL, 0, 0, w, h)
     }
     if (this.assetMode) this.drawAssets(g, z)
+    /* the reference pass. Only when the step does NOT own the placements, so the assets step is never
+     * drawing them twice, and with no selection box, no handles and no group frame, because none of
+     * that can be acted on from here and an outline you cannot grab reads as a bug. */
+    else if (this.assetGhost) this.drawAssets(g, z, true)
 
     if (this.grid && z >= 4) {
       g.strokeStyle = 'rgba(255,255,255,0.09)'
@@ -5731,11 +5751,16 @@ export class Editor {
   }
 
   // The placements, y-sorted among themselves and layered over the painting exactly how the game will draw them: anchor 0.5,1 at x,y, axis scales with flips as negative scale, rotation about the feet.
-  private drawAssets(g: CanvasRenderingContext2D, z: number) {
+  private drawAssets(g: CanvasRenderingContext2D, z: number, faint = false) {
     const now = performance.now() / 1000
     /* Everyone resolved first, then pushed apart, then drawn, the identical three passes the game runs: every position is a pure function of the clock, so the whole set is knowable at once. A placement that never moves was put on its spot on purpose, and keeping it out of the SET altogether also made it nothing to push off, so a walker went straight through it. It takes part now and its own answer is thrown away, so it pushes and never moves. */
     const t = this.lifeNow()
-    const movers = this.doc.assets.filter((a) => this.lifePlay && a.life && !this.hiddenGroups.has(a.group))
+    /* A REFERENCE HOLDS STILL. The repaint loop only runs itself for the step that owns the
+     * placements, so a faint pass is redrawn by whatever else dirties the canvas, which while painting
+     * is every stroke. Left animated, the walkers would jump to a new spot on each stroke and the
+     * floor would be traced against furniture that keeps moving. So nothing travels and nothing
+     * cycles: every placement is drawn where it was put, on its first frame. */
+    const movers = faint ? [] : this.doc.assets.filter((a) => this.lifePlay && a.life && !this.hiddenGroups.has(a.group))
     const at = new Map<string, LifeAt>()
     /* the picker reads this very map, so the box you can click is the sprite you can see. Handed over before a pixel is drawn, because the outline, the handles and the group frame read it too, and rebuilt empty every frame so a paused preview leaves nothing behind for a click to trip over. */
     this.liveAt = at
@@ -5770,21 +5795,26 @@ export class Editor {
       const push = floorPush(pts, separate(pts, this.cfg.yScale, 1), this.standsAt, fenced)
       movers.forEach((a, i) => at.set(a.id, { ...res[i], dx: res[i].dx + push[i].dx, dy: res[i].dy + push[i].dy }))
     }
+    /* EVERY ALPHA IN THE LOOP BELOW IS ABSOLUTE, so a globalAlpha set once round the call would be
+     * wiped by the first placement that fades or rides ghosted. The base is multiplied through
+     * instead, which is the only way a faint pass and a fading behaviour can both be honoured. */
+    const base = faint ? 0.38 : 1
+    if (faint) g.globalAlpha = base
     for (const a of this.assetsSorted()) {
       // a placement that MOVES is drawn where its behaviour says it is right
       // now, off the same maths the game runs, so what is on screen here is
       // what will be on screen there
       const L = at.get(a.id) || null
       /* A walk cycle is a GAIT. Running it off the clock alone made a figure stood at the end of a leg march on the spot, so it freezes on its first frame while it waits, which is the standing pose the cycle was drawn from. */
-      const img = this.assetFrame(a, now, L ? L.facing : undefined, L ? L.art : 0, !L || L.moving)
+      const img = this.assetFrame(a, faint ? 0 : now, L ? L.facing : undefined, L ? L.art : 0, faint ? false : !L || L.moving)
       // an unaccepted sparkle group rides ghosted until the check keeps it
       const ghost = this.proposedGroups.has(a.group)
-      if (ghost) g.globalAlpha = 0.55
+      if (ghost) g.globalAlpha = base * 0.55
       if (L && L.alpha <= 0.01) {
-        if (ghost) g.globalAlpha = 1
+        if (ghost) g.globalAlpha = base
         continue
       }
-      if (L) g.globalAlpha = (ghost ? 0.55 : 1) * L.alpha
+      if (L) g.globalAlpha = base * (ghost ? 0.55 : 1) * L.alpha
       if (img) {
         g.save()
         g.translate((a.x + (L ? L.dx : 0)) * z, (a.y + (L ? L.dy : 0)) * z)
@@ -5805,7 +5835,11 @@ export class Editor {
         g.closePath()
         g.stroke()
       }
-      if (ghost || L) g.globalAlpha = 1
+      if (ghost || L) g.globalAlpha = base
+    }
+    if (faint) {
+      g.globalAlpha = 1
+      return
     }
     // One picked thing gets its full transform box. Many get a light outline
     // each so you can see exactly what is in the set, plus one frame round the
