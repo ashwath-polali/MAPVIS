@@ -4,7 +4,7 @@ import type { CustomControl } from './core/customfx'
 /* KEEPALIVE CANNOT CARRY AN EXPORT. The fetch standard caps a keepalive body at 64 KiB and a browser refuses an over-quota one outright: measured in the browser, 60 KiB reaches the server and 64 KiB rejects with TypeError in four milliseconds. A map's bundle is about half a megabyte, so with the flag set unconditionally no press ever puts a byte on the wire and nothing says why. It is honoured only when the payload fits. */
 const KEEPALIVE_MAX = 60 * 1024
 
-/* A REQUEST THAT NEVER ANSWERS HAS TO BECOME AN ERROR, because a promise that never settles is not a slow export, it is a dead button: doExport holds a flag while it waits, so one interrupted export left every later press returning without making a request. Publishing the hub takes about 23s, so the ceiling is generous; this catches never, not slow. */
+/* A REQUEST THAT NEVER ANSWERS HAS TO BECOME AN ERROR, because a promise that never settles is not a slow call, it is a dead button: doExport holds a flag while it waits, so one interrupted export left every later press returning without making a request. This is the floor under the SHORT calls only, and the map below carries the long ones; it catches never, not slow, and what it must never do again is catch a generation that is still being drawn. */
 const POST_TIMEOUT_MS = 180_000
 
 /* BUT THREE MINUTES IS SHORTER THAN THE WORK, AND THAT COST REAL MONEY. This one ceiling governed
@@ -15,23 +15,31 @@ const POST_TIMEOUT_MS = 180_000
  * eight-way runs in thirty-one minutes, thirty-two generations, every job completed, none collected.
  *
  * So the deadline belongs to the route and not to the transport. These are the calls whose server
- * side legitimately outlives three minutes, each set at or above the ceiling the server itself waits
- * to, so the browser is never the first to give up. The server's own numbers are CHAR_WAIT 600s,
- * WALK_WAIT 900s and HOST_WAIT 230s, in server/api.mjs.
+ * side legitimately outlives three minutes, each set past the ceiling the server itself waits to plus
+ * the downloads after it, so the browser is never the first to give up. The server's own numbers are
+ * CHAR_WAIT 600s, WALK_WAIT 900s and HOST_WAIT 230s, in server/api.mjs.
+ *
+ * None of this beats the host, which cuts a function at 300s whatever is written here (vercel.json,
+ * maxDuration) and answers with its own page rather than json. That is why the read below cannot
+ * assume a body parses, and why HOST_WAIT exists at all: on the host the answer to a long fan-out is
+ * a receipt to collect later, never a longer wait.
  *
  * Everything absent from this map keeps the three minutes, which is what it was written for. */
 const SLOW_POSTS: Array<[string, number]> = [
-  // a sprite: one body then up to eight walk cycles, and the server waits 600s and 900s for them
-  ['/api/character-gen', 960_000],
+  /* a sprite is the body and then up to eight walk cycles in ONE request: CHAR_WAIT 600s plus
+   * WALK_WAIT 900s plus sixty-four downloads after them. 960s was under the server's own sum, so the
+   * browser was still the first to give up on the most expensive thing in the tool. */
+  ['/api/character-gen', 1_620_000],
   ['/api/character-import', 960_000],
-  // a motion on an existing rig: eight jobs in one fan-out
-  ['/api/asset-animate', 960_000],
+  // a motion on an existing rig: the free plan read, then WALK_WAIT 900s of fan-out, then 64 frames
+  ['/api/asset-animate', 1_200_000],
   // one object, then an animation of it: two sequential waits of up to 300s each
   ['/api/asset-anim', 660_000],
   ['/api/asset-gen', 360_000],
   ['/api/asset-gen-here', 360_000],
   // one edited rotation set, which is every heading in a single job
-  ['/api/asset-state', 600_000],
+  // awaitCharacter's own 600s, and then every heading comes down
+  ['/api/asset-state', 720_000],
   ['/api/account-import', 360_000],
   // the planner reads a painting and reasons about it
   ['/api/asset-plan', 300_000],
@@ -67,8 +75,23 @@ async function jpost<T>(url: string, body: unknown, opts?: { keepalive?: boolean
       throw new Error(`${url} did not answer within ${ms / 1000}s`)
     throw e
   }
-  const j = await r.json()
-  if (!r.ok || j.error) throw new Error(j.error || r.statusText)
+  /* A GATEWAY DOES NOT ANSWER IN JSON. The host cuts a function at 300s and sends its own page, and
+   * r.json() on that throws out of the parser before the status is looked at, so a wait that ran out
+   * reads as a bug in this file. Only reachable now that the paid routes are allowed past three
+   * minutes, because until then the abort above always answered first. */
+  const raw = await r.text()
+  let j: unknown
+  try {
+    j = raw ? JSON.parse(raw) : {}
+  } catch {
+    throw new Error(
+      r.ok
+        ? `${url} answered with ${raw.length} characters that are not json`
+        : `${url} was cut off before it answered · whatever it had already bought is on the account, so collect it rather than pressing again`,
+    )
+  }
+  const o = (j || {}) as { error?: string }
+  if (!r.ok || o.error) throw new Error(o.error || r.statusText)
   return j as T
 }
 

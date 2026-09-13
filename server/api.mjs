@@ -1520,12 +1520,12 @@ async function route(req, res, p, url) {
           }
           if (!byDir) {
             try {
-              byDir = await runCharacterMotion(plan, seed, gate, halt)
+              byDir = await runCharacterMotion(plan, seed, gate, halt, (g) => notePending(id, name, g, plan))
             } catch (e) {
               if (!(e instanceof Pending)) throw e
-              /* the name goes somewhere durable before the answer, so a reload, a closed tab or a
-               * poll that runs out can still collect it for nothing */
-              await notePending(id, name, e.group, plan)
+              /* the receipt is already written, by runCharacterMotion the moment the fan-out was
+               * bought, so a reload or a closed tab can collect this for nothing whether or not the
+               * wait ever got as far as answering pending */
               return send(res, 200, {
                 pending: true,
                 group: e.group,
@@ -1540,6 +1540,9 @@ async function route(req, res, p, url) {
         // undoing.
         const st = await stageViews(id, name, byDir, it.fps || 8)
         if (!st) throw new Error('the headings did not save')
+        /* THE RECEIPT IS TORN UP ONLY NOW, with the frames on the item. Left standing, a later press
+         * with different words would collect this motion and report it as the new one. */
+        await clearPending(id, name)
         /* the character id is the only way back to the rig, so never write undefined over one that was there or the motion can never be replaced */
         const keepId = plan.characterId || (it.meta && it.meta.characterId) || ''
         await swapFolder(id, name, st.stage, { dirs: st.dirs, fps: st.fps, characterId: keepId }, { dropEffect: true })
@@ -4112,7 +4115,7 @@ const frameSet = (d) => {
 }
 
 /* the read before the spend is what makes a replacement safe: without it a second re-animate reads back the previous walk and overwrites the item with it */
-async function runCharacterMotion(plan, seed, gate, halt) {
+async function runCharacterMotion(plan, seed, gate, halt, receipt) {
   halt()
   let d = await raceStop(gate, pixellab.characterDetail(plan.characterId))
   const before = frameSet(d)
@@ -4141,7 +4144,15 @@ async function runCharacterMotion(plan, seed, gate, halt) {
   })
   /* EVERY GENERATION IS BOUGHT FROM HERE. Whatever goes wrong below, the money
    * is spent, so no path out of this function may end without first looking on
-   * the account for frames that are already there. */
+   * the account for frames that are already there.
+   *
+   * AND THE RECEIPT IS WRITTEN HERE, not where the wait gives up. It used to be written only in the
+   * Pending catch, and Pending is thrown only on the host, so on a laptop nothing was ever recorded:
+   * a browser that hit its deadline, a closed tab, a crash or a dev server restarted under the author
+   * left eight bought generations with nothing naming them, and the next press bought eight more.
+   * That is the case this whole cluster exists for and it was still open. The line is between the
+   * money leaving and anything that can fail. */
+  if (receipt) await receipt(group)
   const failures = []
   // the wait is told what was already there for the same reason: without it, a
   // character that already moves reports finished on the first tick
@@ -4214,7 +4225,14 @@ async function recoverCharacterMotion(plan, group = '') {
   /* the group that was asked for, when one was: best would hand back a motion the character already had and leave the one just paid for unread */
   const named = (g) =>
     [g.display_name, g.animation_type, g.animation_name].some((n) => String(n || '').toLowerCase() === group.toLowerCase())
-  const pool = group ? groups.filter(named) : groups
+  /* AND FALL BACK OFF THE NAME WHEN IT FINDS NOTHING, because the name is measured not to work: the
+   * note at runCharacterMotion's own fallback says the strict reading failed every time over eleven
+   * animations and the unnamed reading succeeded every time. pixellab does not always carry the
+   * display name back on the detail. Holding to the name means collecting nothing and charging again,
+   * which is the failure this whole path exists to stop, so the name is a preference and not a
+   * condition. What keeps that safe is the floor below: a group has to genuinely MOVE to be taken. */
+  const byName = group ? groups.filter(named) : groups
+  const pool = byName.length ? byName : groups
   let best = null
   for (const g of pool) {
     const byDir = {}
@@ -4242,7 +4260,7 @@ async function recoverCharacterMotion(plan, group = '') {
    * never becomes `best`. The headings that did not draw keep their standing rotation and the route
    * reports them by name, so a statue is said out loud rather than found on the map a week later. */
   const floor = Math.max(1, Math.ceil(wanted.size / 2))
-  if (group && best && best.hit < floor) return null
+  if (best && best.hit < floor) return null
   return best && best.moves ? best : null
 }
 
