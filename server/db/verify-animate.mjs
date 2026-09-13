@@ -231,6 +231,33 @@ try {
   !placementIsOf({ kind: 'static', src: still }, itemMatch({ kind: 'animated', frames: [] }))
     ? ok('and an item with no frames matches nothing rather than every placement on the map')
     : no('an item with no frames swept up a placement')
+
+  /* AND ALL OF IT THE OTHER WAY ROUND, because animating is reversible now: there is a button that
+   * takes the movement off a thing and leaves a still where the folder of frames was. Every
+   * placement of it is holding frame urls under a folder that has just been deleted, so if the match
+   * finds none of them they keep those urls and draw nothing at all. Same three symptoms as before,
+   * same silence, opposite direction. */
+  const flat = itemMatch({ kind: 'static', src: still })
+  flat.wasFolder === LIB + 'palm/' ? ok('a still knows the folder of frames it replaced') : no(`the folder was read as ${flat.wasFolder}`)
+  placementIsOf({ kind: 'animated', frames: [LIB + 'palm/0.png', LIB + 'palm/1.png'] }, flat)
+    ? ok('so a placement that was animated is recognised when the animation comes off')
+    : no('a placement of the frames was not matched, so it would keep urls with no files under them')
+  placementIsOf({ kind: 'static', src: still }, flat) ? ok('and one that was never animated still matches') : no('a still placement stopped matching its own still')
+  /* the prefix trap, in this direction too: `palm` and `palm-trimmed` both exist after an in-place
+   * edit, and a match on the bare name without the slash would sweep the second one up */
+  !placementIsOf({ kind: 'animated', frames: [LIB + 'palm-trimmed/0.png'] }, flat)
+    ? ok('while an animated palm-trimmed is left alone, the slash being what separates them')
+    : no('palm-trimmed was swept up by palm')
+  !placementIsOf({ kind: 'static', src: LIB + 'palm-trimmed.png' }, flat) ? ok('and so is a still one') : no('a still palm-trimmed was matched as palm')
+
+  /* and the KIND has to move back with it. A placement left animated on a frames list whose folder
+   * is gone is the invisible asset all over again: the renderer reads frames for an animated
+   * placement and never looks at src. */
+  const ed = fs.readFileSync(path.join(ROOT, 'src/core/editor.ts'), 'utf8')
+  const branch = ed.slice(ed.indexOf('refreshPlacementsOf(item: LibItem)'), ed.indexOf('  refreshPlacementsOf(item: LibItem)') + 2600)
+  branch.includes("a.kind = 'static'") && branch.includes('if (a.frames) delete a.frames')
+    ? ok('and a flattened item takes its placements back to static and drops their frames')
+    : no('refreshPlacementsOf sets src alone, so a placement stays animated on frames that are gone')
 }
 
 console.log(bad ? `\n${bad} problem(s).` : '\na heading that fails costs that heading and nothing else.')

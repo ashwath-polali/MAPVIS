@@ -456,6 +456,13 @@ export async function pushItem(slug, name, workDir) {
   if (!folderFirst && fs.existsSync(still)) {
     const buf = fs.readFileSync(still)
     await s.put(keys.libStill(id, name), buf, 'image/png')
+    /* AND THE FRAMES IT USED TO BE ARE GONE FROM THE STORE, after the still is safely up. Taking the
+     * animation off a thing left them there: hydrateMap pulls a map's whole library back down onto
+     * an empty work/, so the folder reappeared beside the png, folderFirst read true again, and the
+     * thing was animated once more on the very next request. On a host, where work/ is always empty
+     * and so a hydrate always runs, removing an animation did not stick at all. The store has to
+     * hold the shape the disk holds and no other. */
+    await s.delPrefix(keys.libPrefix(id, name))
     const { w, h } = size(still)
     await upsertItem(id, name, 'static', { w, h, frame_count: 0, prefix: keys.libPrefix(id, name), origin: originOf(fs, path, workDir, name) })
     return { name, kind: 'static' }
@@ -467,13 +474,23 @@ export async function pushItem(slug, name, workDir) {
   // frames, and any per-heading folders beside them
   const meta = readJson(fs, path.join(folder, 'dirs.json'))
   const effect = readJson(fs, path.join(folder, 'effect.json'))
+  /* EVERY KEY THIS PUSH WRITES, so that whatever is left under the item's prefix afterwards can be
+   * recognised as belonging to a shape it no longer has and removed. Counting is not enough: a
+   * heading set, a frame list and a written effect put files in three different shapes, and an
+   * eight-frame motion replaced by a four-frame one leaves frames four to seven sitting there for
+   * the next hydrate to pull down and the disk reader to count. */
+  const wrote = new Set()
+  const put = async (key, buf, ct) => {
+    wrote.add(key)
+    await s.put(key, buf, ct)
+  }
   let n = 0
   let w = 0
   let h = 0
   while (fs.existsSync(path.join(folder, n + '.png'))) {
     const f = path.join(folder, n + '.png')
     if (!n) ({ w, h } = size(f))
-    await s.put(keys.libFrame(id, name, n), fs.readFileSync(f), 'image/png')
+    await put(keys.libFrame(id, name, n), fs.readFileSync(f), 'image/png')
     n++
   }
 
@@ -486,7 +503,7 @@ export async function pushItem(slug, name, workDir) {
       const f = path.join(folder, heading, i + '.png')
       if (!w) ({ w, h } = size(f))
       const key = `maps/${id}/library/${name}/${heading}/${i}.png`
-      await s.put(key, fs.readFileSync(f), 'image/png')
+      await put(key, fs.readFileSync(f), 'image/png')
       dirs[heading].push(key)
     }
     if (!dirs[heading].length) delete dirs[heading]
@@ -500,7 +517,7 @@ export async function pushItem(slug, name, workDir) {
       if (!fs.existsSync(f)) return
       if (!w) ({ w, h } = size(f))
       const key = `maps/${id}/library/${name}/${file}`
-      await s.put(key, fs.readFileSync(f), 'image/png')
+      await put(key, fs.readFileSync(f), 'image/png')
       into.push(key)
     }
     if (meta?.dirs && typeof meta.dirs === 'object') {
@@ -524,8 +541,25 @@ export async function pushItem(slug, name, workDir) {
   }
 
   /* the two sidecars go up with the frames, because hydrateMap pulls the pngs back onto an empty work/ and the disk readers read the files rather than the row */
-  if (meta) await s.put(`maps/${id}/library/${name}/dirs.json`, Buffer.from(JSON.stringify(meta)), 'application/json')
-  if (effect) await s.put(`maps/${id}/library/${name}/effect.json`, Buffer.from(JSON.stringify(effect)), 'application/json')
+  if (meta) await put(`maps/${id}/library/${name}/dirs.json`, Buffer.from(JSON.stringify(meta)), 'application/json')
+  if (effect) await put(`maps/${id}/library/${name}/effect.json`, Buffer.from(JSON.stringify(effect)), 'application/json')
+
+  /* NOW THE STORE HOLDS THIS SHAPE AND NOTHING ELSE. Two things go: the loose png, if this item used
+   * to be a still and has just been animated, and anything still under the folder that this push did
+   * not write, which is the tail of a longer motion or the flat headings of a set that has become a
+   * frame list. Both only ever come back to bite on a host, where hydrateMap pulls the whole library
+   * down onto an empty work/ and the disk readers believe what they find there. Done last, so
+   * nothing is removed until what replaces it is up. */
+  await s.del(keys.libStill(id, name)).catch(() => {
+    /* nothing there to remove, which is the ordinary case */
+  })
+  try {
+    for (const o of await s.list(keys.libPrefix(id, name))) if (!wrote.has(o.key)) await s.del(o.key)
+  } catch (e) {
+    /* the bytes that matter are all up; a sweep that could not run leaves the store holding more
+     * than it should rather than less, and import-work.mjs reconciles a whole map */
+    console.error(`[library] could not clear what ${name} used to be:`, e.message)
+  }
 
   await upsertItem(id, name, n > 1 || Object.keys(dirs).length ? 'animated' : 'static', {
     w,

@@ -1789,17 +1789,20 @@ async function route(req, res, p, url) {
       if (!restored) return send(res, 500, { error: 'it came back unreadable' })
       return send(res, 200, { item: restored, from: `version ${back.seq}` })
     }
-    // <name>.png and <name> for the first copy, <name>-2.png upward after it
+    /* <name>.png and <name> for the first copy, <name>-2.png upward after it.
+     * Built with a real escape and NOT out of a plain string: inside quotes a
+     * lone backslash is dropped, so the pattern read `<name>-d+` and matched the
+     * LETTER d. Every numbered copy in .prev was invisible to it, which left an
+     * undo able to reach the newest one and no further back, with seven good
+     * versions sitting beside it. cleanName leaves only a-z, 0-9 and dashes, so
+     * the name needs no escaping of its own. */
+    const numbered = numberedCopy(name)
     const cands = fs
       .readdirSync(prev, { withFileTypes: true })
       .map((e) => e.name)
-      .filter((n) => n === name || n === name + '.png' || new RegExp('^' + name + '-\d+(\.png)?$').test(n))
+      .filter((n) => n === name || n === name + '.png' || numbered.test(n))
     if (!cands.length) return send(res, 404, { error: 'no earlier copy of that one' })
-    const rank = (n) => {
-      const m = n.match(/-(\d+)(\.png)?$/)
-      return m ? Number(m[1]) : 1
-    }
-    cands.sort((a, c) => rank(c) - rank(a))
+    cands.sort((a, c) => prevRank(c) - prevRank(a))
     const from = path.join(prev, cands[0])
     const dir = libDirOf(id)
     try {
@@ -1835,6 +1838,116 @@ async function route(req, res, p, url) {
       : libraryItems(id).find((x) => x.name === name)
     if (!item) return send(res, 500, { error: 'it came back unreadable' })
     return send(res, 200, { item })
+  }
+
+  /* AN ANIMATION COMES OFF A THING, AND COMES BACK. Animating used to be one way: the only road
+   * back was the generic undo, which steps back one version whatever that version happens to be,
+   * so an author who cropped after animating got the uncropped picture back instead of the still
+   * they asked for. This is the deliberate switch, and it spends nothing either way, because the
+   * frames are already bought and are kept rather than thrown away.
+   *
+   * Off, by shape:
+   *   frames  the folder goes to .prev whole and frame 0 becomes the loose png
+   *   views   every heading keeps its first picture, which is the standing rotation the figure
+   *           was drawn with before any motion was asked for, so it still faces where it walks
+   *   still   nothing to take off
+   * On: the newest FOLDER kept for this name, which is the last shape of it that moved.
+   */
+  if (p === '/api/asset-animation' && req.method === 'POST') {
+    const b = await body(req)
+    const id = safeId(b.id)
+    /* THE RAW NAME IS WHAT DECIDES THIS, not the cleaned one: cleanName falls back to the word
+     * "asset" rather than to nothing, so a missing name reads as truthy and this would have gone
+     * looking for a library row called asset and flattened it if one existed. The animate route
+     * guards the same way for the same reason. */
+    if (!b.name) return send(res, 400, { error: 'no item' })
+    const name = cleanName(b.name)
+    const on = b.on === true
+    /* the host's work/ is empty, so what the store holds has to come down before the disk is read
+     * or a listed item is "not in the library" */
+    try {
+      await hydrateMap(id, path.join(WORK, id))
+    } catch (e) {
+      console.error('[animation] could not hydrate from object storage:', e.message)
+    }
+    await ensureSidecars(id, name)
+    const it = readLibItem(id, name)
+    if (!it) return send(res, 404, { error: 'not in the library' })
+    const dir = libDirOf(id)
+
+    try {
+      if (!on) {
+        if (it.shape === 'still') return send(res, 409, { error: 'that one does not move' })
+        if (!it.plays) return send(res, 409, { error: 'that one already stands still' })
+        if (it.shape === 'views') {
+          /* the whole set goes to .prev before a single file is unlinked, so the walk cycles are
+           * recoverable even though what is left behind is a working set of headings */
+          await keepPrevDir(id, it.folder, name)
+          const held = {}
+          for (const h of it.heads) {
+            const keep = String(it.dirs[h][0])
+            const base = keep.slice(keep.lastIndexOf('/') + 1)
+            held[h] = [keep]
+            for (const f of it.dirs[h].slice(1)) {
+              const gone = String(f).slice(String(f).lastIndexOf('/') + 1)
+              if (gone !== base) fs.rmSync(path.join(it.folder, gone), { force: true })
+            }
+          }
+          /* the character id is the way back to the rig, and a set with no rig can never be given
+           * another motion, so what the set knew about itself is carried rather than rebuilt */
+          const meta = { ...(it.meta && typeof it.meta === 'object' ? it.meta : {}), dirs: held, fps: it.fps || 8 }
+          fs.writeFileSync(path.join(it.folder, 'dirs.json'), JSON.stringify(meta, null, 2))
+        } else {
+          const first = path.join(it.folder, '0.png')
+          if (!fs.existsSync(first)) return send(res, 409, { error: 'it has no first frame to keep' })
+          const bytes = fs.readFileSync(first)
+          await keepPrevDir(id, it.folder, name)
+          /* the png is written BEFORE the folder goes, so a crash between the two leaves both
+           * rather than neither, and readLibItem prefers the folder while both are there */
+          fs.writeFileSync(path.join(dir, name + '.png'), bytes)
+          fs.rmSync(it.folder, { recursive: true, force: true })
+        }
+      } else {
+        if (it.plays) return send(res, 409, { error: 'that one already moves' })
+        const prev = path.join(WORK, id, '.prev')
+        const numbered = numberedCopy(name)
+        const folders = (fs.existsSync(prev) ? fs.readdirSync(prev, { withFileTypes: true }) : [])
+          .filter((e) => e.isDirectory())
+          .map((e) => e.name)
+          .filter((n) => n === name || numbered.test(n))
+        if (!folders.length) return send(res, 404, { error: 'no frames were ever kept for this one' })
+        folders.sort((x, y) => prevRank(y) - prevRank(x))
+        const from = path.join(prev, folders[0])
+        /* WHAT IS THERE NOW GOES TO .prev TOO, so the switch is a switch and not a one-way trip.
+         * A still goes as a file and a standing view set as a folder, which is why both helpers
+         * are here rather than one. */
+        const to = path.join(dir, name)
+        const png = path.join(dir, name + '.png')
+        if (fs.existsSync(png)) await keepPrevFile(id, png, name + '.png')
+        else await keepPrevDir(id, to, name)
+        fs.rmSync(to, { recursive: true, force: true })
+        fs.mkdirSync(to, { recursive: true })
+        for (const f of fs.readdirSync(from)) {
+          const sp = path.join(from, f)
+          if (fs.statSync(sp).isFile()) fs.copyFileSync(sp, path.join(to, f))
+        }
+        /* a folder that came back is not a file: a stale flat png beside it is a second answer to
+         * which pixels this is, and every reader would have to pick between them */
+        fs.rmSync(png, { force: true })
+        fs.rmSync(from, { recursive: true, force: true })
+      }
+    } catch (e) {
+      return send(res, 500, { error: String((e && e.message) || e).slice(0, 200) })
+    }
+
+    /* the store has to be told, or the library keeps serving the shape that was just switched away
+     * from and every placement of it points at bytes nobody has */
+    await pushLibrary(id, name)
+    const item = platformOn()
+      ? (await libraryOf(id)).find((x) => x.name === name)
+      : libraryItems(id).find((x) => x.name === name)
+    if (!item) return send(res, 500, { error: 'it came back unreadable' })
+    return send(res, 200, { item, plays: !!on })
   }
 
   if (p === '/api/asset-crop' && req.method === 'POST') {
@@ -2598,6 +2711,10 @@ async function route(req, res, p, url) {
         ...look0,
         x,
         y,
+        /* WHICH OF TWO OVERLAPPING THINGS IS IN FRONT, and left out entirely when the author never
+         * touched it, which is nearly every placement and every map published so far. A reader
+         * that has never heard of it adds nothing to y and draws exactly what it drew before. */
+        ...(Number.isFinite(Number(a.z)) && Number(a.z) !== 0 ? { z: Math.round(Number(a.z)) } : {}),
         ...tf,
         ...(looks.length ? { looks } : {}),
         ...(names.some((n) => n) ? { lookNames: names } : {}),
@@ -4071,6 +4188,22 @@ const PREV_MAX = 8
 
 // the path to write this backup to: the plain name while it is free, then
 // -2, -3 and up. Answers null only if the folder itself cannot be made.
+/* THE COPIES .prev HOLDS FOR ONE NAME, and which of them is newest. prevPath writes the first
+ * copy under the plain name and numbers every one after it, so these two are the only way to
+ * read that back. Shared rather than copied because the undo and the animation switch have to
+ * agree about which version is newest, and a pattern written out twice is a pattern that
+ * drifts once.
+ *
+ * Built with a real escape and NOT out of a plain string: inside quotes a lone backslash is
+ * dropped, so the pattern read `<name>-d+` and matched the LETTER d, which left the undo able
+ * to reach the newest copy and no further back. cleanName leaves only a-z, 0-9 and dashes, so
+ * the name itself needs no escaping.
+ */
+const numberedCopy = (name) => new RegExp('^' + name + '-\\d+(\\.png)?$')
+const prevRank = (n) => {
+  const m = n.match(/-(\d+)(\.png)?$/)
+  return m ? Number(m[1]) : 1
+}
 function prevPath(id, as, isDir) {
   const prev = path.join(WORK, safeId(id), '.prev')
   fs.mkdirSync(prev, { recursive: true })

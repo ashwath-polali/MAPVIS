@@ -193,6 +193,15 @@ export const library = (id: string) => jget<{ items: LibItem[] }>('/api/library/
 export const assetRevert = (id: string, name: string) =>
   jpost<{ item: LibItem }>('/api/asset-revert', { id, name })
 
+/* TAKE THE ANIMATION OFF A THING, OR PUT IT BACK. Free both ways: the frames are already bought
+ * and go to the kept copies rather than to the bin. Off leaves the first frame as an ordinary
+ * picture, and for a set of headings leaves the standing rotation, so it still faces where it
+ * walks. On puts back the newest frames kept for that name. Deliberately not assetRevert, which
+ * steps back one version whatever that version is: an author who cropped after animating asked to
+ * stop the movement and got the uncropped picture. */
+export const assetAnimation = (id: string, name: string, on: boolean) =>
+  jpost<{ item: LibItem; plays: boolean }>('/api/asset-animation', { id, name, on })
+
 /* ONE generation: this thing, edited into another face. The endpoint edits the art already on the account, which is what makes the face match the thing it belongs to, and for a character it edits all 4 or 8 rotations in one job so the swap keeps its heading. */
 export const assetState = (
   id: string,

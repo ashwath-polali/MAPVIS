@@ -168,6 +168,37 @@ try {
     ? ok('and refused for any request that did not come from the loopback address')
     : no('the loopback fence is gone from currentUser')
 
+  // ---- undoing an edit, all eight steps of it -----------------------------
+  // .prev keeps up to eight earlier copies of an item, named <name>.png then
+  // <name>-2.png upward. The route finds them with a pattern built out of a
+  // string, and a lone backslash inside quotes is dropped: '\d' written there
+  // is the letter d. The pattern matched <name>-ddd and never <name>-2, so an
+  // undo reached the newest copy and no further, with seven good versions
+  // sitting beside it and no way to say so.
+  //
+  // The line is lifted out of the route and exercised rather than read, because
+  // reading is what missed it.
+  {
+    const route = fs.readFileSync(path.join(ROOT, 'server/api.mjs'), 'utf8')
+    /* the shared reader, not the line that used to sit inside the revert route: the undo and the
+     * animation switch both have to agree which kept copy is the newest, so the pattern is written
+     * once and named, and this exercises the one they both call. */
+    const line = route.split(/\r?\n/).find((l) => l.includes('const numberedCopy = (name) =>'))
+    if (!line) no('nothing builds a pattern for the copies kept beside an item any more')
+    else {
+      const make = new Function(line.trim() + '; return numberedCopy')
+      const re = make()('palm')
+      const hits = (n) => re.test(n)
+      hits('palm-2.png') && hits('palm-8.png') && hits('palm-3')
+        ? ok('an undo can reach every numbered copy kept beside an item, not just the newest')
+        : no(`the revert pattern misses its own numbered copies: ${re.source}`)
+      !hits('palm-d') && !hits('palm-ddd.png')
+        ? ok('and the digits are digits rather than the letter d')
+        : no(`the revert pattern is matching letters: ${re.source}`)
+      !hits('other-2.png') ? ok('while another item of a similar name is left alone') : no('the pattern reached another item')
+    }
+  }
+
   // ---- how long an answer may be kept ------------------------------------
   // A url carrying a version names one set of bytes for ever. Left with no
   // header a host fills one in, and its default turns every versioned file into
