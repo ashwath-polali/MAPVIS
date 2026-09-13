@@ -3076,6 +3076,33 @@ export default function App() {
     [push],
   )
 
+  /* THE ANIMATION SWITCH. Nothing is generated either way, so it needs no plan, no price and no
+     confirm: taking the movement off keeps the frames, and putting it back reads the frames that
+     were kept. The library row, the decoded images and every placement of it all have to be told,
+     the same four steps an in-place edit takes, because the item has changed shape and a placement
+     holding the old shape's urls draws nothing at all. */
+  const doAnimSwitch = useCallback(
+    async (name: string, on: boolean) => {
+      const ed = edRef.current
+      if (!ed) return
+      try {
+        const r = await api.assetAnimation(ed.sceneId, name, on)
+        setLib((prev) => [...(prev || []).filter((x) => x.name !== r.item.name), r.item])
+        ed.bustAssets(folderOf(r.item))
+        setBust((q) => ({ ...q, [r.item.name]: Date.now() }))
+        const n = ed.refreshPlacementsOf(r.item)
+        push(
+          on
+            ? `${name} moves again${n > 1 ? ` · all ${n} of them on the map` : ''}`
+            : `${name} stands still${n > 1 ? ` · all ${n} of them on the map` : ''}`,
+        )
+      } catch (err) {
+        push(String(err instanceof Error ? err.message : err).slice(0, 110))
+      }
+    },
+    [push],
+  )
+
   const applyCrop = useCallback(
     async (id: string, r: { x: number; y: number; w: number; h: number }) => {
       const e = edRef.current
@@ -5750,6 +5777,31 @@ export default function App() {
           <input type="checkbox" checked={selA.fy} onChange={() => ed?.flipSelected('y')} /> flip v
         </label>
       </div>
+      {/* WHICH OF TWO OVERLAPPING THINGS IS IN FRONT. It writes a nudge to the sort key and
+          moves nothing: the older version of these two shifted the placement down the map, which
+          put it in front and also stood it somewhere its author had not put it. The step is
+          measured against what this actually covers, so one press clears the thing in the way. */}
+      <div className="actrow">
+        <button
+          className="abtn"
+          data-tip="in front of what it overlaps · it does not move"
+          onClick={() => ed?.order('front')}
+        >
+          move forward
+        </button>
+        <button
+          className="abtn"
+          data-tip="behind what it overlaps · it does not move"
+          onClick={() => ed?.order('back')}
+        >
+          move back
+        </button>
+        {!!selA.z && (
+          <button className="abtn" data-tip="sort by where it stands again" onClick={() => ed?.orderReset()}>
+            reset order
+          </button>
+        )}
+      </div>
       <div className="actrow">
         <button
           className={'abtn' + (st?.cropping ? ' on' : '')}
@@ -5780,6 +5832,24 @@ export default function App() {
             disabled={plBusy || !!animRun}
           >
             animate
+          </button>
+        )}
+        {/* THE WAY BACK, and the way back to the way back. Asked for by name: reverting was the
+            only road and it steps back one version whatever that version happens to be. It offers
+            "bring it back" on anything standing still, because whether frames were ever kept for a
+            row is a question only the server can answer, and it answers it in a sentence. */}
+        {animItem && (
+          <button
+            className="abtn"
+            data-tip={
+              selMoves
+                ? 'keep the first picture and stop the movement · nothing is generated'
+                : 'put back the frames it had, if it ever had any · nothing is generated'
+            }
+            onClick={() => void doAnimSwitch(animItem.name, !selMoves)}
+            disabled={plBusy || !!animRun}
+          >
+            {selMoves ? 'remove animation' : 'bring it back'}
           </button>
         )}
         {selIsFx && selItem && (
@@ -6033,7 +6103,8 @@ export default function App() {
     </div>
   )
 
-  /* many at once: the game y-sorts, so "in front" means standing lower down and there is no z-index to set. */
+  /* many at once: in front and behind are a nudge to the sort key, so the picked placements stay
+     exactly where their author put them. See Editor.order. */
   /* the group every picked placement is already in, or blank when they differ,
      so the select never claims a crowd is somewhere only one of them is */
   const manyPicked = assets.filter((a) => selAll.includes(a.id))
@@ -6118,12 +6189,17 @@ export default function App() {
         </button>
       </div>
       <div className="manyrow">
-        <button className="abtn tiny" data-tip="stands them lower, so they draw in front" onClick={() => ed?.order('front')}>
-          to front
+        <button className="abtn tiny" data-tip="in front of what they overlap · they do not move" onClick={() => ed?.order('front')}>
+          forward
         </button>
-        <button className="abtn tiny" data-tip="stands them higher, so they draw behind" onClick={() => ed?.order('back')}>
-          to back
+        <button className="abtn tiny" data-tip="behind what they overlap · they do not move" onClick={() => ed?.order('back')}>
+          back
         </button>
+        {manyPicked.some((a) => a.z) && (
+          <button className="abtn tiny" data-tip="sort by where they stand again" onClick={() => ed?.orderReset()}>
+            reset order
+          </button>
+        )}
         <button className="abtn tiny" onClick={() => ed?.duplicateSelected(true)}>
           duplicate
         </button>
