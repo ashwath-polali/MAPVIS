@@ -48,6 +48,8 @@ const SLOW_POSTS: Array<[string, number]> = [
   ['/api/style-card', 300_000],
   ['/api/translate', 300_000],
   ['/api/generate', 600_000],
+  // one painting, the same wait a map's own painting takes
+  ['/api/cover-gen', 360_000],
   ['/api/propose', 300_000],
 ]
 const deadlineFor = (url: string) => {
@@ -158,6 +160,39 @@ export const generate = (prompt: string, n: number, w: number, h: number, style?
 
 export const jobState = (id: string) =>
   jget<{ state: 'running' | 'done' | 'failed'; images?: string[]; error?: string }>('/api/job/' + encodeURIComponent(id))
+
+/* THE TRANSITION SCREEN A MAP IS ENTERED THROUGH. A cover belongs to a map, so the game shows it on
+ * every door and every sail into that map with no python naming it. The default has no name and is
+ * the map's own; an extra carries a code name that enter(map, cover="<name>") calls. */
+
+/* free, and the whole sentence the router would send, so nothing is paid for on a guess */
+export const coverPrompt = (subject: string, style?: string) =>
+  jpost<{ prompt: string; style: string; canvas: { w: number; h: number }; parts: string[] }>('/api/cover-prompt', {
+    subject,
+    style,
+  })
+
+/* ONE generation, and only on the press. The prompt is built on the server, never here. */
+export const coverGen = (subject: string, style?: string) =>
+  jpost<{ job: { id: string; seed: number }; w: number; h: number; prompt: string; style: string | null }>(
+    '/api/cover-gen',
+    { subject, style },
+  )
+
+/* keep what came back. No name is the map's own cover; a name is an extra python can call. */
+export const coverSave = (id: string, image: string, name?: string) =>
+  jpost<{ cover: boolean; covers: string[]; kept: string }>('/api/cover-save', { id, image, name })
+
+export const coverRemove = (id: string, name?: string) =>
+  jpost<{ cover: boolean; covers: string[] }>('/api/cover-remove', { id, name })
+
+export const coversOf = (id: string) =>
+  jget<{ cover: boolean; covers: string[] }>('/api/covers/' + encodeURIComponent(id))
+
+/* the picture itself. The cache buster is the caller's, because a kept cover replaces the one before
+ * it under the same url and the browser would go on drawing the old one. */
+export const coverUrl = (id: string, name?: string, bust?: number) =>
+  `/api/cover/${encodeURIComponent(id)}${name ? '/' + encodeURIComponent(name) : ''}${bust ? `?t=${bust}` : ''}`
 
 export const propose = (image: string) =>
   jpost<{ levels: string; note: Record<string, unknown> }>('/api/propose', { image })

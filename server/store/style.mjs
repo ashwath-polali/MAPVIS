@@ -204,3 +204,55 @@ export function fitCanvas({ w, h }) {
   }
   return { w: even(W), h: even(H) }
 }
+
+// ---- the cover -------------------------------------------------------------
+
+/* WHAT A TRANSITION SCREEN IS, and it is not a map. A map is painted to be walked on and its
+ * scaffolds say so: transparent surrounds, a readable floor, a shoreline the cut can find. A cover
+ * is painted to be LOOKED at for two seconds while the next map loads, so none of that applies and
+ * putting it in SCAFFOLDS would also let kindOf guess it off the word "cover" in somebody's subject.
+ *
+ * The one hard rule is that it carries no words. The game draws the place's name itself, on its own
+ * drawn plaque with a kicker over it (src/game/stage/covers.ts), so lettering in the picture lands
+ * under lettering on top of it. */
+export const COVER_SCAFFOLD = {
+  title: 'cover',
+  /* the widest frame under the ceiling with both sides even: 688 x 384 is 264,192 against 265,000,
+   * and it is the shape the game shows a cover in */
+  canvas: { w: 688, h: 384 },
+  structure:
+    'one wide painted scene of the place named above, seen from a little way off so the whole of it reads at a glance, ' +
+    'filling the frame corner to corner with no transparent space and nothing cut off at the edges, ' +
+    'a clear foreground, middle and distance, and one place for the eye to rest near the middle',
+  /* said twice over and last, because it is the instruction a generator drops first and a cover with
+   * a title painted into it cannot be used at all */
+  extra:
+    'no text, no title, no lettering, no words, no numbers, no logo, no signage, no banner and nothing written anywhere in the picture',
+}
+
+/* THE WHOLE PROMPT FOR A COVER, built here and never in the browser, for the same reason mapPrompt is:
+ * a client that assembles the prompt is a client that can ask for a hand it was never granted. Same
+ * shape as mapPrompt so the two can be read side by side, and the subject leads because it is the one
+ * part a person typed. */
+export function coverPrompt({ subject, card, max = 1400 }) {
+  const sub = tidy(subject)
+  if (!sub) return { prompt: '', card: null, parts: [], canvas: COVER_SCAFFOLD.canvas }
+  const parts = [
+    { name: 'subject', text: sub },
+    { name: 'structure', text: COVER_SCAFFOLD.structure },
+    card && card.craft && card.craft.clause ? { name: 'craft', text: card.craft.clause } : null,
+    /* last, and it repeats the no-words rule the scaffold already made, because the game writes the
+     * title over this picture and a painted one underneath it reads as a mistake nobody can fix */
+    { name: 'edge', text: COVER_SCAFFOLD.extra + ', no border, no frame, no user interface' },
+  ].filter(Boolean)
+  return {
+    prompt: parts.map((p) => tidy(p.text)).join('. ').slice(0, max) + '.',
+    card: card ? card.key : null,
+    parts,
+    canvas: COVER_SCAFFOLD.canvas,
+  }
+}
+
+/* the code name an extra cover is called by, the same rule an anchor name follows, because python
+ * addresses both and one namespace shape across the tool is worth more than the freedom of two */
+export const isCoverName = (s) => /^[a-z][a-z0-9_]{0,47}$/.test(String(s || ''))

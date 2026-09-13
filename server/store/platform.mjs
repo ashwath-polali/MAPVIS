@@ -938,3 +938,70 @@ export async function freeName(slug, want) {
   if (!taken.has(want)) return want
   for (let i = 2; ; i++) if (!taken.has(`${want}-${i}`)) return `${want}-${i}`
 }
+
+// ---- covers ----------------------------------------------------------------
+
+/* THE TRANSITION SCREEN A MAP IS ENTERED THROUGH. One per map with no name, which is the map's own,
+ * plus any number of extras a code name addresses. Kept beside the masks in the store, so a cover
+ * survives the laptop that drew it the way a painting does. */
+export async function saveCover(slug, buf, name = '') {
+  const id = await mapIdFor(slug, { create: true })
+  if (!id) {
+    const e = new Error('sign in to keep a cover')
+    e.name = 'NoOwner'
+    throw e
+  }
+  const key = name ? keys.coverNamed(id, name) : keys.cover(id)
+  await store().put(key, buf, 'image/png')
+  return key
+}
+
+export async function readCover(slug, name = '') {
+  if (!platformOn()) return null
+  const id = await mapIdFor(slug)
+  if (!id) return null
+  try {
+    return await store().get(name ? keys.coverNamed(id, name) : keys.cover(id))
+  } catch {
+    /* no cover drawn for this map yet, which is every map until somebody draws one */
+    return null
+  }
+}
+
+/* what a map has: whether it owns a default, and the code names of its extras. Read off the store
+ * rather than a column, because the bytes are the record and a column could disagree with them. */
+export async function coversOf(slug) {
+  if (!platformOn()) return { cover: false, covers: [] }
+  const id = await mapIdFor(slug)
+  if (!id) return { cover: false, covers: [] }
+  const s = store()
+  let has = false
+  try {
+    const b = await s.get(keys.cover(id))
+    has = !!(b && b.length)
+  } catch {
+    /* none, which is the ordinary case */
+  }
+  let covers = []
+  try {
+    covers = (await s.list(keys.coversPrefix(id)))
+      .map((o) => o.key.slice(keys.coversPrefix(id).length))
+      .filter((n) => n.endsWith('.png'))
+      .map((n) => n.slice(0, -4))
+      .sort()
+  } catch {
+    /* a store that cannot be listed reports no extras rather than throwing the panel away */
+  }
+  return { cover: has, covers }
+}
+
+export async function dropCover(slug, name = '') {
+  if (!platformOn()) return
+  const id = await mapIdFor(slug)
+  if (!id) return
+  await store()
+    .del(name ? keys.coverNamed(id, name) : keys.cover(id))
+    .catch(() => {
+      /* removing one that is not there is the same end state */
+    })
+}

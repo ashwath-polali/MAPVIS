@@ -26,6 +26,10 @@ import {
   copyLibraryItem,
   mapIdFor,
   hydrateItem,
+  saveCover,
+  readCover,
+  coversOf,
+  dropCover,
 } from './store/platform.mjs'
 import {
   listUi,
@@ -89,7 +93,17 @@ import {
   sessionUser,
 } from './store/auth.mjs'
 import { verifyPassword } from './store/crypto.mjs'
-import { mapPrompt, styleStamp, fitCanvas, STYLE_OPTIONS, SCAFFOLDS, KINDS, kindOf } from './store/style.mjs'
+import {
+  mapPrompt,
+  styleStamp,
+  fitCanvas,
+  STYLE_OPTIONS,
+  SCAFFOLDS,
+  KINDS,
+  kindOf,
+  coverPrompt,
+  isCoverName,
+} from './store/style.mjs'
 import { cardsFor, cardFor, mapCard, setMapStyle, setOwnCard, grantHouse, revokeHouse, grantedTo, houseOwner } from './store/cards.mjs'
 
 const HERE = path.dirname(fileURLToPath(import.meta.url))
@@ -430,6 +444,149 @@ async function route(req, res, p, url) {
 
   /* the prompt a map would be drawn from, written but not sent. Free, and it is
    * what the first step shows so a person can read the hand before buying it. */
+  /* WHAT A COVER WOULD BE ASKED FOR, free and spending nothing. The same shape as /api/map-prompt and
+   * for the same reason: the author sees the whole sentence before deciding to pay for it. */
+  if (p === '/api/cover-prompt' && req.method === 'POST') {
+    const b = await body(req)
+    const me = await currentUser(req).catch(() => null)
+    const card = await cardFor(me, String(b.style || ''))
+    const out = coverPrompt({ subject: String(b.subject || ''), card })
+    return send(res, 200, {
+      prompt: out.prompt,
+      style: out.card || '',
+      canvas: fitCanvas(out.canvas),
+      parts: out.parts.map((x) => x.name),
+    })
+  }
+
+  /* ONE GENERATION, and only on a press. The hand is put on here and never in the browser, the same
+   * rule /api/generate follows: a client that assembles the prompt is a client that can ask for a
+   * hand it was never granted. */
+  if (p === '/api/cover-gen' && req.method === 'POST') {
+    const b = await body(req)
+    const typed = String(b.subject || '').trim()
+    if (!typed) return send(res, 400, { error: 'say what the screen should show' })
+    const me = await currentUser(req).catch(() => null)
+    const card = await cardFor(me, String(b.style || ''))
+    if (b.style && !card) return send(res, 403, { error: 'that hand is not one this account may draw with' })
+    const built = coverPrompt({ subject: typed, card })
+    const box = fitCanvas(built.canvas)
+    /* the reference painting with its colour switched off, exactly as a map is drawn, so a cover
+     * comes back in the same hand as the island it is a cover for */
+    let styleImage
+    const refSlug = card && card.ref ? card.ref : String(b.styleRefMap || '')
+    if (refSlug) {
+      try {
+        styleImage = await styleRef(refSlug)
+      } catch (e) {
+        console.error(`[cover] ${refSlug}: ${String((e && e.message) || e)} · drawing from the words alone`)
+      }
+    }
+    const seed = Math.floor(Math.random() * 1e9)
+    try {
+      const id = await pixellab.submit({
+        prompt: built.prompt,
+        w: box.w,
+        h: box.h,
+        seed,
+        styleImage,
+        styleOptions: card ? STYLE_OPTIONS : undefined,
+      })
+      return send(res, 200, { job: { id, seed }, w: box.w, h: box.h, prompt: built.prompt, style: card ? card.key : null })
+    } catch (e) {
+      return send(res, 502, { error: String(e.message || e).slice(0, 200) })
+    }
+  }
+
+  /* KEEPING ONE. The bytes come from the browser because that is where the job was collected, the
+   * same road the painting itself takes at /api/save. No name is the map's own cover; a name is an
+   * extra that python calls by it. */
+  if (p === '/api/cover-save' && req.method === 'POST') {
+    const b = await body(req)
+    const id = safeId(b.id)
+    const name = String(b.name || '').trim().toLowerCase()
+    if (name && !isCoverName(name))
+      return send(res, 400, { error: 'a code name starts with a letter and holds only letters, numbers and underscores' })
+    const raw64 = stripDataURL(String(b.image || ''))
+    if (!raw64) return send(res, 400, { error: 'no picture' })
+    const buf = Buffer.from(raw64, 'base64')
+    if (!buf.length) return send(res, 400, { error: 'no picture' })
+    /* to disk as well, because the export reads the folder and a laptop with no platform still has
+     * to be able to ship a cover it drew */
+    try {
+      const dir = path.join(WORK, id)
+      fs.mkdirSync(name ? path.join(dir, 'covers') : dir, { recursive: true })
+      fs.writeFileSync(name ? path.join(dir, 'covers', name + '.png') : path.join(dir, 'cover.png'), buf)
+    } catch (e) {
+      console.error('[cover] could not write it to disk:', e.message)
+    }
+    try {
+      if (platformOn()) await saveCover(id, buf, name)
+    } catch (e) {
+      return send(res, e.name === 'NoOwner' ? 401 : 500, { error: String(e.message || e).slice(0, 160) })
+    }
+    return send(res, 200, { ...(await coversOf(id)), kept: name || 'cover' })
+  }
+
+  if (p === '/api/cover-remove' && req.method === 'POST') {
+    const b = await body(req)
+    const id = safeId(b.id)
+    const name = String(b.name || '').trim().toLowerCase()
+    if (name && !isCoverName(name)) return send(res, 400, { error: 'not a code name' })
+    try {
+      const dir = path.join(WORK, id)
+      fs.rmSync(name ? path.join(dir, 'covers', name + '.png') : path.join(dir, 'cover.png'), { force: true })
+    } catch {
+      /* a file that is not there is the end state asked for */
+    }
+    await dropCover(id, name)
+    return send(res, 200, await coversOf(id))
+  }
+
+  /* what this map has, asked by the cover step when it opens */
+  if (p.startsWith('/api/covers/') && req.method === 'GET') {
+    const id = safeId(decodeURIComponent(p.slice('/api/covers/'.length)))
+    const out = await coversOf(id)
+    /* the disk answers too, for a laptop with no platform behind it */
+    if (!platformOn()) {
+      const dir = path.join(WORK, id)
+      out.cover = fs.existsSync(path.join(dir, 'cover.png'))
+      try {
+        out.covers = fs
+          .readdirSync(path.join(dir, 'covers'))
+          .filter((n) => n.endsWith('.png'))
+          .map((n) => n.slice(0, -4))
+          .sort()
+      } catch {
+        out.covers = []
+      }
+    }
+    return send(res, 200, out)
+  }
+
+  /* the picture itself, for the card and the preview. Never cached, because it is replaced in place
+   * every time the author keeps a new one. */
+  if (p.startsWith('/api/cover/') && req.method === 'GET') {
+    const rest = decodeURIComponent(p.slice('/api/cover/'.length)).split('/')
+    const id = safeId(rest[0])
+    const name = rest[1] ? String(rest[1]).replace(/\.png$/i, '').toLowerCase() : ''
+    if (name && !isCoverName(name)) return notFound(res)
+    let buf = null
+    try {
+      const dir = path.join(WORK, id)
+      const f = name ? path.join(dir, 'covers', name + '.png') : path.join(dir, 'cover.png')
+      if (fs.existsSync(f)) buf = fs.readFileSync(f)
+    } catch {
+      /* the store is asked next */
+    }
+    if (!buf) buf = await readCover(id, name)
+    if (!buf) return notFound(res)
+    res.setHeader('Content-Type', 'image/png')
+    res.setHeader('Cache-Control', 'no-store')
+    res.setHeader('Content-Length', buf.length)
+    return res.end(buf)
+  }
+
   if (p === '/api/map-prompt' && req.method === 'POST') {
     const b = await body(req)
     const me = await currentUser(req).catch(() => null)
@@ -2879,17 +3036,49 @@ async function route(req, res, p, url) {
           const f = path.join(dir, name)
           return fs.existsSync(f) ? fs.readFileSync(f) : null
         }
+        /* THE COVERS RIDE IN THE BUNDLE. A cover belongs to a map, so it ships with the map rather
+         * than being a thing the game holds a table of: every door into this island and every sail
+         * to it then shows the author's own screen with no python naming it. The default is
+         * cover.png; the extras keep their code names under covers/, which is the path
+         * enter(map, cover="<name>") resolves against. The vendor step copies whatever the manifest
+         * lists, nested paths included, so nothing on the game side has to learn these two names. */
+        const coverDir = path.join(WORK, id, 'covers')
+        const extras = {}
+        let extraNames = []
+        try {
+          extraNames = fs
+            .readdirSync(coverDir)
+            .filter((n) => n.toLowerCase().endsWith('.png'))
+            .map((n) => n.slice(0, -4).toLowerCase())
+            .filter(isCoverName)
+            .sort()
+          for (const n of extraNames) extras[`covers/${n}.png`] = fs.readFileSync(path.join(coverDir, n + '.png'))
+        } catch {
+          /* a map with no extra covers, which is nearly all of them */
+        }
+        const coverPng = png('cover.png')
+        /* SAID IN map.json AS WELL AS SHIPPED, because a reader should be able to ask whether this
+         * map has a cover without fetching a png to find out. */
+        const mapJson = {
+          ...b.map,
+          ...(coverPng ? { cover: true } : {}),
+          ...(extraNames.length ? { covers: extraNames } : {}),
+        }
         published = await publishBundle(id, {
-          mapJson: b.map,
+          mapJson,
           assetsJson: { assets: outAssets },
           images: {
             'scene.png': png('scene.png'),
             'levels.png': png('levels.png'),
             'occluders.png': png('occluders.png'),
             'cut.png': png('cut.png'),
+            ...(coverPng ? { 'cover.png': coverPng } : {}),
+            ...extras,
           },
           files: writes,
         })
+        if (coverPng || extraNames.length)
+          files.push(`cover${extraNames.length ? ` (+${extraNames.length} named)` : ''}`)
         files.push(`published v${published.version} (${published.anchors} anchor${published.anchors === 1 ? '' : 's'})`)
       } catch (e) {
         console.error('[export] published to disk but not to the platform:', e.message)

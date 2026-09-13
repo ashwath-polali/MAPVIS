@@ -334,6 +334,11 @@ export const keys = {
   planes: (mapId) => `maps/${mapId}/planes.png`,
   scene: (mapId) => `maps/${mapId}/scene.png`,
   mask: (mapId, role) => `maps/${mapId}/${role}.png`,
+  /* the transition screen a map is entered through, and the extra ones python calls by name. Beside
+   * the masks rather than under library/, because a cover is never placed on anything. */
+  cover: (mapId) => `maps/${mapId}/cover.png`,
+  coverNamed: (mapId, name) => `maps/${mapId}/covers/${name}.png`,
+  coversPrefix: (mapId) => `maps/${mapId}/covers/`,
   libStill: (mapId, name) => `maps/${mapId}/library/${name}.png`,
   libFrame: (mapId, name, i) => `maps/${mapId}/library/${name}/${i}.png`,
   libPrefix: (mapId, name) => `maps/${mapId}/library/${name}/`,

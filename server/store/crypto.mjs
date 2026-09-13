@@ -94,7 +94,12 @@ export function anchorName(s) {
   return n || 'anchor'
 }
 
-export const isAnchorName = (s) => /^[a-z][a-z0-9_]{0,47}$/.test(String(s))
+/* TYPE FIRST, the same rule and the same reason as isPlacementName below, which
+ * learned it first. String(undefined) is "undefined" and passes the pattern, so
+ * every unnamed FACE went out as one literally called `undefined`: twelve
+ * placements on atc-1 alone, and on the game side that string resolves to a real
+ * picture instead of refusing. */
+export const isAnchorName = (s) => typeof s === 'string' && /^[a-z][a-z0-9_]{0,47}$/.test(s)
 
 /* a placement name may not look like a machine id, because the game resolves names and ids together and `a55` would mean two objects on one map */
 /* TYPE FIRST, and that is not pedantry. String(undefined) is "undefined",
