@@ -79,7 +79,8 @@ type Vocab = {
   floor: number
 }
 
-type MapRow = { slug: string; title: string }
+/* version, because a thumbnail falls back to the published bundle when work/ holds no painting */
+type MapRow = { slug: string; title: string; version?: number | null }
 
 /* the shape a piece name has to read as, and the same one an anchor name does.
  * Deliberately a python identifier, so renaming a piece for a person cannot
@@ -105,17 +106,11 @@ const post = async (path: string, body: unknown) => {
    one is a row here rather than a redesign. */
 type GroupId = 'pieces' | 'covers'
 
-const GROUPS: { id: GroupId; name: string; about: string }[] = [
-  {
-    id: 'pieces',
-    name: 'game pieces',
-    about: 'the panels, boxes, buttons and marks the whole game is dressed in, drawn once for every screen',
-  },
-  {
-    id: 'covers',
-    name: 'transition screens',
-    about: 'the screen a student looks at on the way into a map, one per map and any number of named extras',
-  },
+const GROUPS: { id: GroupId; name: string; name2: string }[] = [
+  /* NO SENTENCES. The dashboard's cards say a name and then numbers, and a paragraph explaining what
+     a thing is reads as an apology for it not being obvious. The pictures do the explaining. */
+  { id: 'pieces', name: 'game pieces', name2: 'the chrome every screen is dressed in' },
+  { id: 'covers', name: 'transition screens', name2: 'what a student sees on the way in' },
 ]
 
 type Step = 'pieces' | 'draw' | 'mark'
@@ -160,6 +155,9 @@ export default function Ui() {
   const [step, setStep] = useState<Step>('pieces')
   /* empty is the chooser, which is where the page now opens */
   const [group, setGroup] = useState<GroupId | ''>('')
+  /* WHICH MAPS CARRY A COVER, asked once so the chooser can show one and count them. A card with a
+     picture on it is the whole difference between this page and a list of words. */
+  const [coverMaps, setCoverMaps] = useState<string[]>([])
   // which of the twenty-one is armed for drawing, and which drawn piece is open
   const [armed, setArmed] = useState('')
   const [open, setOpen] = useState('')
@@ -190,7 +188,21 @@ export default function Ui() {
     void load()
     fetch('/api/my-maps')
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((j: { maps?: MapRow[] }) => setMaps(j.maps || []))
+      .then((j: { maps?: MapRow[] }) => {
+        const rows = j.maps || []
+        setMaps(rows)
+        /* which of them carry a cover, asked once so the chooser can put a real one on its card and
+           count the rest. One request per map is fine at ten and would not be at a hundred, so it is
+           capped rather than left to grow quietly. */
+        void Promise.all(
+          rows.slice(0, 24).map((m) =>
+            fetch('/api/covers/' + encodeURIComponent(m.slug))
+              .then((r) => (r.ok ? r.json() : null))
+              .then((c: { cover?: boolean } | null) => (c && c.cover ? m.slug : ''))
+              .catch(() => ''),
+          ),
+        ).then((hit) => setCoverMaps(hit.filter(Boolean)))
+      })
       .catch(() => {})
     /* CORE CHROME BELONGS TO ONE ACCOUNT, the same one the ocean does, so that
      * is the question being asked. Everyone else makes an additive piece, which
@@ -244,6 +256,32 @@ export default function Ui() {
         : ''
 
   /* uikit rides beside app as a fence: every rule under it in ui.css is a metric and never a colour. */
+  /* the real pictures, and never a placeholder: the first few pieces this account has actually drawn,
+     and a cover it has actually kept. An illustration of a thing is worse than the thing. */
+  /* ONE piece, filling the frame, the way the cover beside it does. Four of them shrunk to a quarter
+     height read as a loading state, and most chrome is dark art that disappears on a dark field. The
+     one with the most drawn on it is the one that reads: a plate sheet carries a dozen plaques where
+     a cue carries one arrow. */
+  const piecesArt = (v?.ui || [])
+    .filter((p) => p.src)
+    .sort((a, c) => (c.w || 0) * (c.h || 0) - (a.w || 0) * (a.h || 0))
+    .slice(0, 1)
+    .map((p) => `${p.src}?v=${stamp}`)
+  const coversArt = coverMaps.slice(0, 1).map((s) => `/api/cover/${encodeURIComponent(s)}?t=${stamp}`)
+  /* TWO NUMBERS THAT SAY DIFFERENT THINGS. It was "18 drawn · 18 core" and "1 of 10 maps · 10 maps",
+     which is one fact printed twice each time, and a number that repeats the one beside it teaches a
+     reader to stop reading the row. */
+  const madePieces = (v?.ui || []).length
+  const outPieces = (v?.ui || []).filter((p) => p.published).length
+  const piecesNums = [
+    `${madePieces} drawn`,
+    ...(madePieces ? [outPieces === madePieces ? 'all published' : `${outPieces} published`] : []),
+  ]
+  const coversNums = [
+    coverMaps.length ? `${coverMaps.length} of ${maps.length} maps` : `none of ${maps.length}`,
+    ...(coverMaps.length ? [] : ['every map falls back']),
+  ]
+
   /* THE CHOOSER. Nothing else is on screen until a group is picked, because the page's whole problem
      was that it looked like one editor for one thing. */
   if (!group)
@@ -261,20 +299,44 @@ export default function Ui() {
         </header>
         <main>
           <div className="uk-pick">
-            {/* the question is asked in the body and not only in the header strip, because the header
-                is where this page puts a status and a body is where it puts a decision */}
             <h1 className="uk-ask">What are you making?</h1>
+            {/* the product's own card, the one the dashboard uses for a map: a painting on top, a name
+                and then numbers under it. Nothing here invents a second card. */}
             <div className="uk-cards">
-            {GROUPS.map((g) => (
-              <button key={g.id} className="uk-card" onClick={() => setGroup(g.id)}>
-                <b>{g.name}</b>
-                <span>{g.about}</span>
-              </button>
-            ))}
+              {GROUPS.map((g) => {
+                const art = g.id === 'pieces' ? piecesArt : coversArt
+                return (
+                  <article key={g.id} className="card uk-group" onClick={() => setGroup(g.id)}>
+                    <button className="card-art uk-art" onClick={() => setGroup(g.id)}>
+                      {art.length ? (
+                        <span className={'uk-art-in uk-art-' + g.id}>
+                          {art.map((s) => (
+                            <img key={s} src={s} alt="" draggable={false} loading="lazy" />
+                          ))}
+                        </span>
+                      ) : (
+                        <span className="card-none">nothing drawn yet</span>
+                      )}
+                    </button>
+                    <div className="card-say">
+                      <div className="card-top">
+                        <h2>{g.name}</h2>
+                      </div>
+                      <div className="card-nums">
+                        {(g.id === 'pieces' ? piecesNums : coversNums).map((n, i) => (
+                          <span key={n} className={i === 0 ? 'lit' : ''}>
+                            {n}
+                          </span>
+                        ))}
+                      </div>
+                      <div className="card-do">
+                        <span>{g.name2}</span>
+                      </div>
+                    </div>
+                  </article>
+                )
+              })}
             </div>
-            {/* said rather than left to be discovered: a chooser with two things on it invites the
-                question, and the honest answer is that the third is not built */}
-            <p className="uk-soon">More groups, and groups you name yourself, are not built yet.</p>
           </div>
         </main>
       </div>

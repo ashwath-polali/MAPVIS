@@ -751,8 +751,8 @@
 }
 .uk-cards {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 320px));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 380px));
+  gap: 18px;
   align-items: start;
   width: 100%;
 }
@@ -818,4 +818,63 @@
 .uk-back:hover {
   color: var(--ink);
   border-color: var(--edge-ctl);
+}
+
+/* THE GROUP CARD IS THE DASHBOARD'S CARD. .card, .card-art, .card-say, .card-nums all come from
+   arrive.css, which main.tsx loads for the whole product, so this adds the arrangement of the
+   pictures inside the frame and nothing else. A second card language on a third page is how a
+   product stops looking like one product. */
+.uk-group {
+  cursor: pointer;
+}
+.uk-group:hover {
+  border-color: #2b3947;
+}
+.uk-art {
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: #06080b;
+  cursor: pointer;
+}
+.uk-art-in {
+  position: absolute;
+  inset: 0;
+  display: grid;
+}
+.uk-art-in img {
+  image-rendering: pixelated;
+  transition: transform 700ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.card:hover .uk-art-in img {
+  transform: scale(1.04);
+}
+/* a cover fills the frame, because that is exactly what a cover does */
+.uk-art-covers img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+/* THE PIECES ARE NOT ONE PICTURE, so they are laid out as what they are: three of the things this
+   account has actually drawn, resting on the dark the game rests them on, at their own size rather
+   than stretched to fill a frame they were never cut for. */
+/* THE PIECES ARE NOT ONE PICTURE. Four of them, close together and larger, reading as a kit resting
+   on the dark the game rests them on. Sparse and small read as a loading state. */
+/* the kit sits ON something, because chrome is drawn to be laid over a scene and a piece floating on
+   the page's own black has no edges at all */
+.uk-art-pieces {
+  align-content: center;
+  justify-items: center;
+  padding: 7% 8%;
+  background: radial-gradient(ellipse at 50% 42%, #1b2430 0%, #080b10 100%);
+}
+.uk-art-pieces img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 3px 10px rgba(0, 0, 0, 0.65));
+}
+/* the one line under the numbers, in the dashboard's own quiet voice rather than a paragraph */
+.uk-group .card-do span {
+  color: var(--ink-3);
 }

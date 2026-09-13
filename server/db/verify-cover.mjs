@@ -172,7 +172,18 @@ console.log('')
   cov.includes('cvr-band') && cov.includes('title.toUpperCase()')
     ? ok('and draws the title band over it, so a cover is judged with the title where the title lands')
     : no('the preview is a bare picture')
-  cov.includes('<select value={slug}') ? ok('and the map it belongs to is picked from a dropdown') : no('there is no way to say which map it is for')
+  /* THE MAP IS PICKED BY ITS PAINTING. It was a dropdown of slugs, and a dropdown is the one control
+   * that makes a visual tool feel like a form: you choose the island by looking at it. */
+  cov.includes('cvr-map-art') && cov.includes('shot(m)')
+    ? ok('and the map it belongs to is picked by its painting rather than off a list of slugs')
+    : no('there is no way to say which map it is for')
+  cov.includes('cvr-dot')
+    ? ok('with the ones already carrying a cover marked, so finding out does not cost ten clicks')
+    : no('nothing says which maps already carry a cover')
+  /* a reply for a map nobody is looking at any more must not land on the panel */
+  cov.includes('if (!dead) setHas(c)')
+    ? ok('and a stale answer cannot overwrite the current one, so the panel cannot contradict the strip')
+    : no('a slow reply for the previous map can still overwrite the current one')
 
   const app = read('src/App.tsx')
   !app.includes("{ id: 'cover'") && !app.includes('coverPanel')
