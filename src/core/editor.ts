@@ -353,18 +353,74 @@ function legsOf(p: MapPath): [Pt, Pt][] {
  * `library/palm/0.png`, so a url match alone misses every placement of it. They
  * then keep pointing at a png that is deleted moments later: nothing is drawn,
  * and a reload does not help because the dead url is what was saved. */
-export function itemMatch(item: { kind: string; src?: string; frames?: string[] }): { key: string; wasStill: string } {
+/* WHERE A PLACEMENT SITS IN THE DRAW ORDER. Every surface that draws a map has to answer this
+ * the same way: the editor, the three previews on the site, and the game. It is y plus the
+ * author's nudge, so with no nudge it is exactly the y-sort every published map already has.
+ */
+/* DO TWO DRAWN BOXES SHARE ANY PIXELS. Touching edges do not count: two barrels standing flush
+ * are not covering each other and reordering them changes nothing anybody can see. */
+export function boxesOverlap(
+  a: { x0: number; x1: number; y0: number; y1: number },
+  b: { x0: number; x1: number; y0: number; y1: number },
+): boolean {
+  return a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0
+}
+
+/* HOW FAR THE NUDGE HAS TO MOVE to clear everything the selection covers, or nothing when it is
+ * already clear. Out here because the arithmetic is the whole feature and the rest of order() is
+ * reading boxes off a canvas: the one part worth being sure about should not need a browser.
+ *
+ * The step lands one past the far end of what it overlaps, so a single press clears the thing in
+ * the way rather than a fraction of it, and the already-clear case returns null rather than 0,
+ * because a press that keeps adding to a bias that is doing nothing is how a placement ends up
+ * sorting a thousand deep for no reason. */
+export function orderDelta(dir: 'front' | 'back', mine: number[], theirs: number[]): number | null {
+  if (!mine.length || !theirs.length) return null
+  if (dir === 'front') {
+    const top = Math.max(...theirs)
+    const from = Math.max(...mine)
+    return from > top ? null : top + 1 - from
+  }
+  const low = Math.min(...theirs)
+  const from = Math.min(...mine)
+  return from < low ? null : low - 1 - from
+}
+
+export function assetDepth(a: { y: number; z?: number }): number {
+  const z = Number(a.z)
+  return a.y + (Number.isFinite(z) ? z : 0)
+}
+
+export function itemMatch(item: { kind: string; src?: string; frames?: string[] }): {
+  key: string
+  wasStill: string
+  wasFolder: string
+} {
   const first = item.frames && item.frames[0]
   const key = item.kind === 'animated' ? (first ? first.slice(0, first.lastIndexOf('/') + 1) : '') : item.src || ''
   // the folder and the still it replaced differ by one slash, so it is derived
   // rather than guessed at or passed in beside it
   const wasStill = item.kind === 'animated' && key ? key.slice(0, -1) + '.png' : ''
-  return { key, wasStill }
+  /* AND THE SAME DERIVATION THE OTHER WAY ROUND, because animating is reversible now: taking
+   * the animation off a thing leaves a still where a folder of frames was, and every placement
+   * of it is holding frame urls under a folder that has just been deleted. Without this the
+   * match found none of them, so they kept those urls, drew nothing, and survived a reload,
+   * which is the same three symptoms animating a still used to have. A trailing slash is what
+   * keeps `palm` off `palm-trimmed`. */
+  const wasFolder = item.kind !== 'animated' && key.slice(-4).toLowerCase() === '.png' ? key.slice(0, -4) + '/' : ''
+  return { key, wasStill, wasFolder }
 }
 
-export function placementIsOf(a: { kind: string; src?: string; frames?: string[] }, m: { key: string; wasStill: string }): boolean {
+export function placementIsOf(
+  a: { kind: string; src?: string; frames?: string[] },
+  m: { key: string; wasStill: string; wasFolder: string },
+): boolean {
   if (!m.key) return false
-  if (a.kind === 'animated') return !!(a.frames && a.frames[0] && a.frames[0].startsWith(m.key))
+  if (a.kind === 'animated') {
+    const f = a.frames && a.frames[0]
+    if (!f) return false
+    return f.startsWith(m.key) || (!!m.wasFolder && f.startsWith(m.wasFolder))
+  }
   return a.src === m.key || (!!m.wasStill && a.src === m.wasStill)
 }
 
@@ -2200,7 +2256,7 @@ export class Editor {
     return [top[0] + (vx / L) * out, top[1] + (vy / L) * out]
   }
   private assetsSorted(): PlacedAsset[] {
-    return this.doc.assets.filter((a) => !this.hiddenGroups.has(a.group)).sort((p, q) => p.y - q.y)
+    return this.doc.assets.filter((a) => !this.hiddenGroups.has(a.group)).sort((p, q) => assetDepth(p) - assetDepth(q))
   }
   selectAsset(id: string) {
     const a = this.doc.assets.find((q) => q.id === id)
@@ -2356,6 +2412,17 @@ export class Editor {
     this.say(`spaced ${picked.length} evenly`)
   }
   /* Stacking order. The game y-sorts, so what this really moves is the feet: to put something in front you stand it lower down the map. Saying that plainly beats a "bring to front" that silently does nothing once the bundle is exported. */
+  /* IN FRONT OF, OR BEHIND, WHAT IT OVERLAPS. The map is drawn in depth order and depth is
+   * where a thing stands, so the old version of this moved the placement down the map to put
+   * it in front: correct on screen and wrong about the world, because a barrel does not slide
+   * two feet south to sit over a puddle. It nudges the sort key instead, which leaves x and y
+   * exactly where the author put them.
+   *
+   * The step is measured against what this actually COVERS rather than against the whole map,
+   * so one press clears the thing in the way and not every thing on the island. With nothing
+   * overlapping it there is nothing to be in front of, and it says so rather than quietly
+   * writing a number that changes no pixels.
+   */
   order(dir: 'front' | 'back') {
     const picked = this.selAssets()
     if (!picked.length) {
@@ -2367,19 +2434,58 @@ export class Editor {
       this.say('nothing else on the map')
       return
     }
-    const ys = others.map((a) => a.y)
-    const target = dir === 'front' ? Math.max(...ys) + 1 : Math.min(...ys) - 1
-    const cur = picked.map((a) => a.y)
-    const from = dir === 'front' ? Math.max(...cur) : Math.min(...cur)
-    const d = target - from
-    if (!d) {
-      this.say(dir === 'front' ? 'already in front' : 'already behind')
+    /* the drawn boxes, live movement left out: a wanderer's depth has to be decided about the
+     * thing itself and not about wherever it happened to have walked to when the button was
+     * pressed, or the same two presses would order it differently each time. */
+    const box = (a: PlacedAsset) => {
+      const c = this.assetCorners(a, false)
+      const xs = c.map((p) => p[0])
+      const ys = c.map((p) => p[1])
+      return { x0: Math.min(...xs), x1: Math.max(...xs), y0: Math.min(...ys), y1: Math.max(...ys) }
+    }
+    const mine = picked.map(box)
+    const over = others.filter((a) => mine.some((m) => boxesOverlap(box(a), m)))
+    if (!over.length) {
+      this.say('nothing overlaps it, so there is nothing to be in front of')
+      return
+    }
+    const d = orderDelta(dir, picked.map(assetDepth), over.map(assetDepth))
+    if (d === null) {
+      this.say(dir === 'front' ? 'already in front of what it covers' : 'already behind what it covers')
       return
     }
     this.doc.snap()
-    for (const a of picked) a.y = clamp(Math.round(a.y + d), 0, this.doc.H - 1)
+    for (const a of picked) {
+      const next = Math.round((a.z || 0) + d)
+      /* a bias wider than the map is meaningless, since y itself cannot exceed it */
+      const lim = clamp(next, -this.doc.H, this.doc.H)
+      if (lim) a.z = lim
+      else delete a.z
+    }
     this.touched()
-    this.say(dir === 'front' ? `moved in front · ${Math.abs(d)}px down` : `moved behind · ${Math.abs(d)}px up`)
+    this.say(
+      dir === 'front'
+        ? `in front of ${over.length} thing${over.length > 1 ? 's' : ''} it covers · it has not moved`
+        : `behind ${over.length} thing${over.length > 1 ? 's' : ''} it covers · it has not moved`,
+    )
+  }
+  /* BACK TO SORTING BY WHERE IT STANDS, which is the only state a map has ever been published
+   * in and so the one an author must be able to get back to without guessing at a number. */
+  orderReset() {
+    const picked = this.selAssets()
+    if (!picked.length) {
+      this.say('click an asset first')
+      return
+    }
+    const biased = picked.filter((a) => a.z)
+    if (!biased.length) {
+      this.say('already sorted by where it stands')
+      return
+    }
+    this.doc.snap()
+    for (const a of biased) delete a.z
+    this.touched()
+    this.say(`${biased.length} back to sorting by where it stands`)
   }
   clearGroup(group: string) {
     const n = this.doc.assets.filter((a) => a.group === group).length
@@ -2456,7 +2562,13 @@ export class Editor {
         // is a second answer to which pixels this is
         if (a.src) delete a.src
       } else {
+        /* AND THE KIND MOVES BACK WITH IT. This set src alone, so a placement that had been
+         * animated stayed kind animated on a frames list whose folder was gone: the renderer
+         * reads frames for an animated placement and never looks at src, so it drew nothing at
+         * all. The mirror of the bug the branch above carries a comment about. */
+        a.kind = 'static'
         a.src = item.src
+        if (a.frames) delete a.frames
       }
     }
     this.touched()

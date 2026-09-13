@@ -5,6 +5,10 @@ import { Walker, canStand, defaultCfg, type WalkCfg } from '../core/walk'
 import type { MaskDoc } from '../core/mask'
 
 type Rect = [number, number, number, number]
+/* THE SAME DEPTH RULE THE EDITOR AND THE GAME USE, so a map is drawn in one order wherever it
+ * is drawn. Where it stands, plus the author's nudge, and no nudge is the plain y-sort. */
+const zOf = (p: { z?: number }) => (Number.isFinite(Number(p.z)) ? Number(p.z) : 0)
+
 type Placed = {
   x: number
   y: number
@@ -25,6 +29,10 @@ type Placed = {
   life?: unknown
   /* [ox, oy, rx, ry] base ellipse in painting pixels from the anchor; an older bundle carries none. */
   foot?: number[]
+  /* WHICH OF TWO OVERLAPPING THINGS IS IN FRONT, written by move-forward and move-back in the
+   * editor. Added to the sort key and never to the position. Absent on nearly every placement
+   * and on every bundle published before it existed. */
+  z?: number
 }
 /* one drawable: either a rectangle in the sheet, or its own image */
 type Cell = { img: HTMLImageElement; r: Rect }
@@ -470,8 +478,10 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
           for (let i = 0; i < pts.length; i++)
             if (shown[i].moves) pts[i] = { ...pts[i], x: pts[i].x + push[i].dx, y: pts[i].y + push[i].dy }
 
+          /* y here is the sort key and nothing else, the drawn position being read off pts,
+           * so the author's nudge belongs in it directly. */
           const order: Array<{ y: number; go: () => void }> = shown.map((s, i) => ({
-            y: pts[i].y,
+            y: pts[i].y + zOf(s.v.p),
             go: () => {
               const v = s.v
               const set = v.dirs[s.face] || v.dirs.south

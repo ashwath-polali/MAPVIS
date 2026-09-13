@@ -14,6 +14,10 @@ export type Stop = {
   side?: 'left' | 'right'
 }
 
+/* THE SAME DEPTH RULE THE EDITOR AND THE GAME USE, so a map is drawn in one order wherever it
+ * is drawn. Where it stands, plus the author's nudge, and no nudge is the plain y-sort. */
+const zOf = (p: { z?: number }) => (Number.isFinite(Number(p.z)) ? Number(p.z) : 0)
+
 type Placed = {
   id: string
   x: number
@@ -29,6 +33,10 @@ type Placed = {
   fps?: number
   dirs?: Record<string, string[]>
   life?: unknown
+  /* WHICH OF TWO OVERLAPPING THINGS IS IN FRONT, written by move-forward and move-back in the
+   * editor. Added to the sort key and never to the position. Absent on nearly every placement
+   * and on every bundle published before it existed. */
+  z?: number
 }
 type Ready = {
   p: Placed
@@ -163,7 +171,10 @@ export function useTour({
 
         const t = (now - t0) / 1000
         const pts: Array<{ x: number; y: number; r: number }> = []
-        const frame: Array<{ r: Ready; x: number; y: number; a: number; face: string; flip: boolean }> = []
+        /* d is the DEPTH and y is where it is drawn, and they are two numbers now rather
+         * than one, because a nudge changes what a thing is drawn in front of and never
+         * where it is drawn. */
+        const frame: Array<{ r: Ready; x: number; y: number; d: number; a: number; face: string; flip: boolean }> = []
         for (const r of live) {
           let dx = 0
           let dy = 0
@@ -178,15 +189,16 @@ export function useTour({
             face = s.facing
             flip = s.flip
           }
-          frame.push({ r, x: r.p.x + dx, y: r.p.y + dy, a: alpha, face, flip })
+          frame.push({ r, x: r.p.x + dx, y: r.p.y + dy, d: r.p.y + dy + zOf(r.p), a: alpha, face, flip })
           pts.push({ x: r.p.x + dx, y: r.p.y + dy, r: 3 })
         }
         separate(pts, meta.yScale ?? 0.72, 1)
         frame.forEach((f, i) => {
+          f.d += pts[i].y - f.y
           f.x = pts[i].x
           f.y = pts[i].y
         })
-        frame.sort((a, b) => a.y - b.y)
+        frame.sort((a, b) => a.d - b.d)
 
         for (const f of frame) {
           const r = f.r

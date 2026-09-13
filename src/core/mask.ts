@@ -53,6 +53,14 @@ export interface PlacedAsset {
   dirs?: Record<string, string[]>
   x: number
   y: number
+  /* WHICH OF TWO OVERLAPPING THINGS IS IN FRONT, and nothing else. Added to y to sort
+   * and never to place, so bringing a lamp forward over a puddle does not lift the lamp
+   * off the ground. Absent, which is nearly everything, means sort purely by where it
+   * stands. A bias rather than a layer number on purpose: a person walking past a tree
+   * still has to pass behind it and then in front of it, and a layer number would freeze
+   * that. See Editor.order.
+   */
+  z?: number
   scale: number
   sx: number
   sy: number
