@@ -1561,8 +1561,7 @@ export class Editor {
       this.showHits = !this.showHits
       this.dirtyMask = true
       this.say(this.showHits ? 'hit marks shown' : 'hit marks hidden')
-    } else if (k === 'a') this.toggleEvents()
-    else if (e.key === 'Enter') this.closePoly()
+    } else if (e.key === 'Enter') this.closePoly()
     else if (e.key === 'Escape') {
       this.poly = []
       this.dirty = true

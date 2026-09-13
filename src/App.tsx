@@ -6989,7 +6989,6 @@ export default function App() {
           'arrows nudge, shift 8px · [ ] scale',
           'ctrl c copies · ctrl v pastes · ctrl d duplicates · z undoes',
           'ctrl p pixelates · ctrl t trims the base · both edit the asset itself',
-          'a hides the anchor zones',
         ]}
       />
     </>
