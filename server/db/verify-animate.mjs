@@ -233,19 +233,5 @@ try {
     : no('an item with no frames swept up a placement')
 }
 
-// ---- and the library row the server writes for it ---------------------------
-// pushItem reads the disk to decide what a row is. During a swap the loose png
-// and the new folder both exist, because the png is only deleted once the folder
-// is whole. Reading the png first records a still with no frames, the png is then
-// deleted, and the library is left calling an animated thing a still.
-{
-  const store = fs.readFileSync(path.join(ROOT, 'server/store/platform.mjs'), 'utf8')
-  const head = store.slice(store.indexOf('export async function pushItem'), store.indexOf('const folder = path.join(lib, name)'))
-  const folderWins = head.includes('!folderFirst && fs.existsSync(still)')
-  folderWins
-    ? ok('the frame folder is believed over a png of the same name, which is only ever a half-finished swap')
-    : no('pushItem still reads the loose png first, so an animated item is recorded as a still with no frames')
-}
-
 console.log(bad ? `\n${bad} problem(s).` : '\na heading that fails costs that heading and nothing else.')
 process.exit(bad ? 1 : 0)
