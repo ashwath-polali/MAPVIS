@@ -85,7 +85,7 @@ async function tick() {
 
 say(`${NAME} -> ${BASE}, serving ${CAPS.join(', ')}`)
 // every claim is a request on the platform's free tier, so an idle relay asks slowly and a forgotten one stops
-const FAST_MS = 2000, IDLE_MS = 10000, BUSY_FOR_MS = 3 * 60 * 1000, GIVE_UP_MS = 30 * 60 * 1000
+const FAST_MS = 2000, IDLE_MS = 30000, BUSY_FOR_MS = 3 * 60 * 1000, GIVE_UP_MS = 30 * 60 * 1000
 let lastJobAt = Date.now()
 for (;;) {
   try {
