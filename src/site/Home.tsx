@@ -39,8 +39,25 @@ const when = (iso: string) => {
   const d = Math.round(s / 86400)
   return d < 30 ? d + ' days ago' : new Date(iso).toLocaleDateString()
 }
-/* published first, the only copy on a host, then /work/ so an unexported map still has a picture. */
+/* The working copy first, because it is the live one, and the published bundle
+ * behind it. The comment that stood here promised that pair and the line under it
+ * only ever asked for /work/, so a map whose painting never reached the store read
+ * "no painting yet" with nothing behind it and no way to find out why. A published
+ * map always carries its own painting in its bundle, so that is the second chance. */
 const shot = (m: MapRow) => `/work/${m.slug}/scene.png`
+
+const published = (m: MapRow): string | null =>
+  m.published ? `/api/v1/maps/${encodeURIComponent(m.slug)}/file/${m.published}/scene.png` : null
+
+/* Wired as onError rather than as a chain, because an <img> src has to be one
+ * synchronous string. Once only: without the guard a missing bundle swaps the src
+ * back and forth for ever and every swap is another request. */
+const fallBack = (m: MapRow) => (e: { currentTarget: HTMLImageElement }) => {
+  const next = published(m)
+  if (!next || e.currentTarget.dataset.fell) return
+  e.currentTarget.dataset.fell = '1'
+  e.currentTarget.src = next
+}
 
 /* a map missing from the hand order sorts to the top, not the bottom: unplaced means newer than the order. */
 const inOrder = (list: MapRow[], seq: string[]) => {
@@ -462,7 +479,7 @@ function Lead({ m, onDelete }: { m: MapRow; onDelete: () => void }) {
       <button className="card-bin lead-bin" title={`delete ${m.slug}`} aria-label={`delete ${m.slug}`} onClick={onDelete}>
         <Trash />
       </button>
-      <img src={shot(m) as string} alt="" />
+      <img src={shot(m) as string} alt="" onError={fallBack(m)} />
       <div className="lead-say">
         <span className="lead-when">last opened {when(m.updated_at)}</span>
         <h1>{displayName({ name: m.slug, title: m.title }).text}</h1>
@@ -557,7 +574,7 @@ function Card({ m, onDelete, org }: { m: MapRow; onDelete: () => void; org?: Org
           not the drag this card means, so both hand it up to the article */}
       <a className="card-art" href={`/edit?id=${encodeURIComponent(m.slug)}`} draggable={false}>
         {src ? (
-          <img src={src} alt="" loading="lazy" decoding="async" draggable={false} />
+          <img src={src} alt="" loading="lazy" decoding="async" draggable={false} onError={fallBack(m)} />
         ) : (
           <span className="card-none">no painting yet</span>
         )}

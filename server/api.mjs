@@ -1989,7 +1989,18 @@ async function route(req, res, p, url) {
   // reopening a map: whatever was exported under this id, as data urls. Always
   // 200, so a map that was never exported does not put a 404 in the console.
   if (p.startsWith('/api/scene/')) {
-    const dir = path.join(WORK, safeId(decodeURIComponent(p.slice('/api/scene/'.length))))
+    const sceneId = safeId(decodeURIComponent(p.slice('/api/scene/'.length)))
+    const dir = path.join(WORK, sceneId)
+    /* the host's work/ is empty, so pull what the store holds before reading the
+     * disk; costs nothing on a laptop. This is the LAST-RESORT restore an editor
+     * falls back to when the browser and the platform both hold no document, and
+     * it was the one route in this family that never got the call, so on the host
+     * it answered nulls for every map and the fallback could never fire. */
+    try {
+      await hydrateMap(sceneId, dir)
+    } catch (e) {
+      console.error('[scene] could not hydrate from object storage:', e.message)
+    }
     const out = {}
     const png = (n) => {
       const f = path.join(dir, n)

@@ -61,7 +61,7 @@ import { Walker, canStand, checkReach, type WalkCfg, type ReachResult } from './
  * do: it prints the label and never the identifier. It was captioning
  * `the_maw_mouth` and `the_dock_walk` straight onto the painting. */
 import { displayName } from './naming'
-import { savedScene, saveDoc, loadDoc, type LibItem } from '../api'
+import { savedScene, saveDoc, loadDoc, saveScene, type LibItem } from '../api'
 
 export type Tool =
   | 'region'
@@ -762,10 +762,43 @@ export class Editor {
     } finally {
       this.loading = false
     }
+    /* AND THE PAINTING ITSELF HAS TO REACH THE STORE. `saveScene` had exactly one
+     * caller, `pick()`, which runs only when a candidate generated inside MAPVIS is
+     * chosen. A dropped file and a `?img=` open both land here and neither uploaded
+     * anything, so a map's painting lived in one browser tab while its cut and its
+     * levels autosaved to postgres every four seconds. The dashboard then said "no
+     * painting yet" and reopening by id found nothing, on a map whose work was
+     * perfectly safe. `?img=` is the opening MAPS.md documents, so the documented
+     * road was the one that lost the picture. */
+    void this.keepPainting()
     this.fit()
     this.dirtyMask = true
     this.dirty = true
     this.emit()
+  }
+
+  /* Put this painting in the store when the store has none. It can only ever FILL a
+   * gap: a map that already has one is left alone, so reopening an id with a
+   * different picture cannot overwrite what is there. That is why the HEAD comes
+   * first instead of writing unconditionally. */
+  private async keepPainting() {
+    const id = this.sceneId
+    if (!id) return
+    try {
+      const r = await fetch(`/work/${encodeURIComponent(id)}/scene.png`, { method: 'HEAD' })
+      if (r.ok) return
+    } catch {
+      /* no answer means no copy, and the write below is the thing that fixes it */
+    }
+    const url = this.paintingDataURL()
+    if (!url) return
+    try {
+      await saveScene(id, url)
+    } catch (e) {
+      /* said out loud, once, because a painting that never reached the store is the
+       * difference between a map that reopens and one that looks empty */
+      this.say('painting not saved: ' + (e instanceof Error ? e.message : String(e)))
+    }
   }
 
   paintingDataURL(): string | null {
