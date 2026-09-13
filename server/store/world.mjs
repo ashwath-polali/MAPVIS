@@ -81,9 +81,6 @@ export const SEA_KINDS = ['sailable', 'shallow', 'forbidden', 'mist', 'ambience'
 /* everything on the water is a berth and this list is a filter rather than a second type; approach is never a kind because it only means anything relative to the berth it hangs on */
 export const MARK_KINDS = ['berth', 'waypoint', 'anchorage', 'landmark', 'spawn']
 
-/* four headings only, because the game's radOf answers east, south and north and sends every diagonal to west with nothing said; a waypoint's facing is not narrowed */
-export const BERTH_FACINGS = ['north', 'east', 'south', 'west']
-
 const isName = (s) => /^[a-z][a-z0-9_]{0,47}$/.test(String(s || ''))
 
 /* the roster's place id is kebab-case, which a python identifier cannot spell, so it is a second field and without it every island stays misty forever */
@@ -283,6 +280,21 @@ export const FACING_VECTORS = {
   'south-west': [-0.7071, 0.7071],
 }
 
+/* WHICH WORDS ARE A HEADING AT ALL, which is every compass point rather than four. It was four
+ * because the game's radOf read east, south and north and sent everything else to west without
+ * saying so, so a diagonal drawn on the chart moored the hull facing somewhere it was never aimed.
+ * The game turns all eight into radians now, so the reason is gone and so is the restriction: a
+ * coastline does not run north to south to suit us, and half the shores on a map could not be lain
+ * along at all.
+ *
+ * Taken off the table above rather than written out again, because two lists disagreeing is how a
+ * heading becomes publishable and undrawable. It is a spelling check now and not a capability one:
+ * what it stops is "norht" reaching a bundle.
+ *
+ * And it sits BELOW that table deliberately. A const is not hoisted, so reading it from higher up
+ * the file threw on the way in and took the whole server down with it. */
+export const BERTH_FACINGS = Object.keys(FACING_VECTORS)
+
 /* how far off straight-at-the-island still counts as pointing into it. 0.5 is
  * sixty degrees: a bow aimed anywhere inside that cone is aimed at the land, and
  * anything wider than it is lying along the shore, which is what mooring is. */
@@ -374,10 +386,11 @@ export function checkWorld(doc, slugs = [], maps = new Map()) {
         problems.push(
           `"${b.name}" is aimed ${b.facing}, which is ${into.degrees}° off straight into "${p.name}" · that is the heading the hull holds once she is tied up, so she would lie bow-first in the coast · turn her along the shore or out to open water`,
         )
-      /* named here rather than dropped in cleanMark, because dropping a diagonal produces the same west and says nothing */
+      /* named rather than dropped in cleanMark, because a facing that quietly disappears still moors
+       * the hull somewhere and says nothing about why it is not where it was drawn */
       if (b.facing && !BERTH_FACINGS.includes(b.facing))
         warnings.push(
-          `"${b.name}" is aimed ${b.facing} and the game only turns north, east, south and west into a heading · a hull tying up there will point west`,
+          `"${b.name}" is aimed ${b.facing}, which is not a compass point · a hull tying up there will point west`,
         )
     }
   }

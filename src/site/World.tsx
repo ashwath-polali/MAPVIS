@@ -5,7 +5,7 @@ import { useSession } from './session'
 import { anchorName, anchorShape, isAnchorName } from '../core/mask'
 import { ANCHOR_INK, inkFor } from '../core/ink'
 import { displayName } from '../core/naming'
-import { MARK_KINDS, isMarkName, HULL, headingOf, type MarkKind, type WorldMark } from '../core/world'
+import { MARK_KINDS, isMarkName, HULL, HEADINGS, headingOf, type MarkKind, type WorldMark } from '../core/world'
 import './world.css'
 
 /* The shape the server keeps, field for field. cleanPlace is the authority and
@@ -340,7 +340,10 @@ const FACE_GRID = [
 const FACE_ARROW = '↖↑↗←·→↙↓↘'
 
 /* radOf answers east, south and north and sends everything else west, so the four come from the server. */
-const BERTH_FACINGS = ['north', 'east', 'south', 'west']
+/* every point on the compass, read off the same table the ghost hull is drawn from so the picker and
+ * the drawing can never disagree about what a heading is. It was four while the game turned a
+ * diagonal into west without saying so. */
+const BERTH_FACINGS = Object.keys(HEADINGS)
 
 /* anchors map through the registry's w/h, not the png's size, so a stale publish stretches the picture. */
 const anchorAt = (p: Place, m: MapRow, a: Anchor) => ({
@@ -2488,7 +2491,7 @@ function BerthPanel({
             onChange={(e) => onEdit({ r: Math.max(0, Math.round(Number(e.target.value) || 0)) })}
           />
         </label>
-        {/* four on a berth, since the engine sends every diagonal west, and nine where python reads */}
+        {/* all nine either way now. A berth was held to four while the game sent every diagonal west. */}
         <Facing
           v={m.facing || ''}
           say={m.kind === 'berth' ? 'how she lies once tied up' : 'the heading held here'}
@@ -2573,7 +2576,8 @@ function Facing({ v, say, on, only }: { v: string; say: string; on: (k: string) 
             <button
               key={k || 'none'}
               className={'world-fbtn' + ((k ? v === k : !v) ? ' on' : '')}
-              title={off ? `the game cannot hold ${k}, so a hull here would point west` : k || 'no opinion'}
+              /* nothing is dead on a berth any more; the guard stays for whatever the next consumer cannot hold */
+          title={off ? `the game cannot hold ${k}` : k || 'no opinion'}
               disabled={off}
               aria-pressed={k ? v === k : !v}
               onClick={() => on(k && v !== k ? k : '')}

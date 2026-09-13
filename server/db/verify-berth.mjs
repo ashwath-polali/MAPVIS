@@ -7,7 +7,10 @@
 //
 // The hub's own numbers are in here as a case, because the rule was written against them and a rule
 // checked only on invented data is a rule nobody has seen fire.
-import { facingIntoCoast, checkWorld, FACING_VECTORS, INTO_COAST } from '../store/world.mjs'
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { facingIntoCoast, checkWorld, FACING_VECTORS, INTO_COAST, BERTH_FACINGS } from '../store/world.mjs'
 
 let bad = 0
 const ok = (m) => console.log(`  ok    ${m}`)
@@ -130,6 +133,57 @@ const HUB_BERTH = { name: 'the_hub_berth', kind: 'berth', x: 2264, y: 2145, isla
   const wrong = Object.entries(FACING_VECTORS).filter(([, v]) => Math.abs(Math.hypot(v[0], v[1]) - 1) > 1e-3)
   wrong.length === 0 ? ok('every heading is a unit vector, so the ghost is drawn the same length whichever way she lies') : no(`${wrong.length} headings are not unit length`)
   FACING_VECTORS.north[1] === -1 ? ok('and north is negative y, the way every raster in this tool has it') : no('north points south')
+}
+
+// ---- every heading a berth can hold, and the game holding it ---------------
+// A berth was held to four compass points because the game's radOf read three words and sent
+// everything else to west, silently, so a diagonal drawn on the chart moored the hull facing
+// somewhere nobody aimed it. A coastline does not run north to south to suit us, so half the shores
+// on a map could not be lain along at all.
+//
+// Both sides changed together, which is the only way this can be true, so both sides are read here.
+// The angle the game turns a word into has to be the angle the vector this tool publishes points at,
+// or the ghost hull on the chart lies about the moored ship.
+{
+  const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
+  BERTH_FACINGS.length === 8
+    ? ok('a berth can be aimed at all eight compass points')
+    : no(`a berth is held to ${BERTH_FACINGS.length} headings: ${BERTH_FACINGS.join(', ')}`)
+  BERTH_FACINGS.every((f) => FACING_VECTORS[f])
+    ? ok('and every one of them is a heading the chart can draw, being the same list')
+    : no('a heading is publishable that the chart cannot draw')
+
+  /* THE GAME'S OWN TABLE, read out of its source and compared angle by angle against the vectors
+   * this tool publishes. Screen space with y down, so atan2(dy, dx) is the heading in radians. */
+  const g = fs.readFileSync(path.join(ROOT, '..', 'AdventureGame', 'src/game/pmap/PmapScene.tsx'), 'utf8')
+  const tbl = g.slice(g.indexOf('const RADS: Record<string, number> = {'), g.indexOf('const radOf ='))
+  tbl ? ok("the game reads its headings off a table rather than a chain of three words") : no('the game has no heading table')
+  /* one line at a time, so the pattern needs no newline of its own: a line-spanning class in a
+   * generated file is exactly where an escape gets eaten and the regex stops meaning what it reads */
+  const rads = {}
+  for (const line of tbl.split(/\r?\n/)) {
+    const m = line.match(/^\s*'?([a-z-]+)'?:\s*(.+?),?\s*$/)
+    if (!m || !/Math\.PI|^-?[\d.]+$/.test(m[2])) continue
+    rads[m[1]] = Function('return ' + m[2].replace(/Math\.PI/g, String(Math.PI)))()
+  }
+  Object.keys(rads).length === 8
+    ? ok('and it holds all eight, so no heading falls through to west unsaid')
+    : no(`the game's table holds ${Object.keys(rads).length} headings, not 8`)
+  const wrong = Object.entries(FACING_VECTORS).filter(([k, v]) => {
+    const want = Math.atan2(v[1], v[0])
+    const got = rads[k]
+    if (got === undefined) return true
+    return Math.abs(Math.atan2(Math.sin(want - got), Math.cos(want - got))) > 1e-3
+  })
+  wrong.length === 0
+    ? ok('and every angle it turns a word into is the angle that word points on the chart')
+    : no(`${wrong.length} heading(s) are drawn one way here and another in the game: ${wrong.map(([k]) => k).join(', ')}`)
+
+  /* the fallback still answers west, so every world published while a diagonal meant west keeps
+   * drawing exactly as it did rather than swinging on the next load */
+  g.includes('return r === undefined ? Math.PI : r')
+    ? ok('while a word it does not know still answers west, so nothing already published moves')
+    : no('an unknown heading no longer falls back to west, so old bundles may swing')
 }
 
 console.log(bad ? `\n${bad} problem(s).` : '\na berth points along the shore or out to sea, and never into the land she is tied to.')
