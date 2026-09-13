@@ -253,21 +253,29 @@ export default function Ui() {
           <a className="brand" href="/" title="your maps">
             MAPVIS
           </a>
-          <span className="uk-head">what are you making?</span>
+          {/* the question is asked once, in the body where the decision is made */}
+          <span className="uk-head" />
           <a className="helpbtn backbtn" href="/" data-tip="back to your maps">
             ←
           </a>
         </header>
-        <main className="uk-pick">
-          {GROUPS.map((g) => (
-            <button key={g.id} className="uk-card" onClick={() => setGroup(g.id)}>
-              <b>{g.name}</b>
-              <span>{g.about}</span>
-            </button>
-          ))}
-          {/* said rather than left to be discovered: a chooser with two things on it invites the
-              question, and the honest answer is that the third is not built */}
-          <p className="uk-soon">More groups, and groups you name yourself, are not built yet.</p>
+        <main>
+          <div className="uk-pick">
+            {/* the question is asked in the body and not only in the header strip, because the header
+                is where this page puts a status and a body is where it puts a decision */}
+            <h1 className="uk-ask">What are you making?</h1>
+            <div className="uk-cards">
+            {GROUPS.map((g) => (
+              <button key={g.id} className="uk-card" onClick={() => setGroup(g.id)}>
+                <b>{g.name}</b>
+                <span>{g.about}</span>
+              </button>
+            ))}
+            </div>
+            {/* said rather than left to be discovered: a chooser with two things on it invites the
+                question, and the honest answer is that the third is not built */}
+            <p className="uk-soon">More groups, and groups you name yourself, are not built yet.</p>
+          </div>
         </main>
       </div>
     )
@@ -288,7 +296,10 @@ export default function Ui() {
           </a>
         </header>
         <main>
-          <Covers maps={maps} />
+          {/* a div, for the same reason the chooser is one: main is flex on this page */}
+          <div className="uk-hold">
+            <Covers maps={maps} />
+          </div>
         </main>
       </div>
     )

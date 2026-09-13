@@ -720,27 +720,66 @@
    could make was the one thing it showed. The chooser is the first screen now, and
    it is a list on purpose: a third group is a row rather than a redesign. */
 
+/* THE CONTENT LIVES IN A DIV INSIDE main, NOT ON IT. The page carries
+   body[data-view='editor'] main { display: flex }, which outranks a class, so styling main itself
+   left it a flex row: the cards went down the left in one column and the note sat out to the right of
+   them. Both times. */
+.uk-hold,
+.uk-pick {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: auto;
+}
 .uk-pick {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
   gap: 14px;
-  padding: 28px 20px;
+  padding-top: 44px;
+  /* START, not stretch: a stretched grid turned two cards into two eight-hundred-pixel columns with
+     the words stranded at the top and the bottom of each. */
   align-content: start;
+  justify-items: start;
+  padding: 28px 20px;
   max-width: 900px;
+}
+/* the cards are their own grid so the note below cannot be auto-placed into a third column, which is
+   exactly where it landed when it was a child of this one */
+.uk-ask {
+  margin: 0 0 6px;
+  font: 400 var(--fs-lead) var(--font-display);
+  color: var(--ink);
+  letter-spacing: 0.01em;
+}
+.uk-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 320px));
+  gap: 16px;
+  align-items: start;
+  width: 100%;
 }
 .uk-card {
   display: grid;
-  gap: 6px;
-  padding: 18px 16px;
+  gap: 7px;
+  /* the rows size to their words rather than sharing the card's height between them */
+  align-content: start;
+  padding: 20px 18px 22px;
   text-align: left;
-  border-radius: var(--r);
+  border-radius: var(--r-soft, 8px);
   border: 1px solid var(--edge-ctl);
   background: var(--raised);
   color: var(--ink);
   cursor: pointer;
+  /* a card is a door, so it lifts a little when the pointer is on it rather than only changing a
+     hairline: on a dark page a border colour alone is almost no feedback at all */
+  transition: border-color 120ms ease, transform 120ms ease, background 120ms ease;
 }
 .uk-card:hover {
   border-color: var(--acc);
+  background: var(--panel, var(--raised));
+  transform: translateY(-1px);
+}
+.uk-card:focus-visible {
+  outline: 2px solid var(--acc);
+  outline-offset: 2px;
 }
 .uk-card > b {
   font: 600 var(--fs-body) var(--font-label);
@@ -754,13 +793,15 @@
 /* said rather than left to be found: two cards invite the question and the honest
    answer is that the rest is not built */
 .uk-soon {
-  grid-column: 1 / -1;
-  margin: 4px 0 0;
+  margin: 2px 0 0;
   font: var(--fs-micro) var(--font-mono);
   color: var(--ink-3);
 }
 
 .uk-head {
+  /* takes the slack, so whatever trails it sits at the right edge the way every other header here
+     has its meta */
+  margin-right: auto;
   font: var(--fs-micro) var(--font-mono);
   color: var(--ink-3);
   letter-spacing: 0.04em;

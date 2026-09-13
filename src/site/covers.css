@@ -99,6 +99,10 @@
   gap: 14px;
   align-content: start;
   min-width: 0;
+  /* the pictures are 720 wide at most, so the column is too: left to fill the window, the remove
+     press floated out to the far right with three hundred pixels of nothing between it and the thing
+     it removes */
+  max-width: 760px;
 }
 .cvr-lab {
   margin: 6px 0 0;
@@ -203,9 +207,9 @@
 
 .cvr-have {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
-  align-items: start;
+  align-items: end;
 }
 
 /* THE EXACT LINE A MEMBER TYPES, shown rather than described: a name reconstructed out of a sentence
