@@ -172,7 +172,9 @@ const HUB_BERTH = { name: 'the_hub_berth', kind: 'berth', x: 2264, y: 2145, isla
 
   /* THE GAME'S OWN TABLE, read out of its source and compared angle by angle against the vectors
    * this tool publishes. Screen space with y down, so atan2(dy, dx) is the heading in radians. */
-  const g = fs.readFileSync(path.join(ROOT, '..', 'AdventureGame', 'src/game/pmap/PmapScene.tsx'), 'utf8')
+  const gp = path.join(ROOT, '..', 'AdventureGame', 'src/game/pmap/PmapScene.tsx')
+  if (!fs.existsSync(gp)) { ok('the game repo is not beside this one, so its heading table is not cross-checked here') } else {
+  const g = fs.readFileSync(gp, 'utf8')
   const tbl = g.slice(g.indexOf('const RADS: Record<string, number> = {'), g.indexOf('const radOf ='))
   tbl ? ok("the game reads its headings off a table rather than a chain of three words") : no('the game has no heading table')
   /* one line at a time, so the pattern needs no newline of its own: a line-spanning class in a
@@ -201,6 +203,7 @@ const HUB_BERTH = { name: 'the_hub_berth', kind: 'berth', x: 2264, y: 2145, isla
   g.includes('return r === undefined ? Math.PI : r')
     ? ok('while a word it does not know still answers west, so nothing already published moves')
     : no('an unknown heading no longer falls back to west, so old bundles may swing')
+  }
 }
 
 // ---- the dial: any angle, and the same angle everywhere --------------------
@@ -245,7 +248,9 @@ const HUB_BERTH = { name: 'the_hub_berth', kind: 'berth', x: 2264, y: 2145, isla
   /* THE GAME TURNS THE SAME ANGLE THE SAME WAY. Read out of its source and compared, because a sign
    * flip here draws the ghost one way on the chart and moors her the other. */
   const HERE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
-  const g = fs.readFileSync(path.join(HERE, '..', 'AdventureGame', 'src/game/pmap/PmapScene.tsx'), 'utf8')
+  const gp = path.join(HERE, '..', 'AdventureGame', 'src/game/pmap/PmapScene.tsx')
+  if (!fs.existsSync(gp)) { ok('the game repo is not beside this one, so its heading table is not cross-checked here') } else {
+  const g = fs.readFileSync(gp, 'utf8')
   g.includes('return Math.atan2(-Math.cos(t), Math.sin(t))')
     ? ok('the game turns degrees into radians with the convention the chart draws')
     : no('the game does not read an angle, or reads it with another convention')
@@ -263,6 +268,7 @@ const HUB_BERTH = { name: 'the_hub_berth', kind: 'berth', x: 2264, y: 2145, isla
   bad2.length === 0
     ? ok('and it agrees at every angle round the circle, not only at the eight the words name')
     : no(`${bad2.length} angle(s) are drawn one way and moored another, first at ${bad2[0]}°`)
+  }
 }
 
 // ---- and the coast rule tells rather than refuses --------------------------
