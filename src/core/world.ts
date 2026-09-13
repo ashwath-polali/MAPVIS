@@ -26,6 +26,35 @@ export const HEADINGS: Record<string, [number, number]> = {
 
 export const headingOf = (facing?: string): [number, number] | null => HEADINGS[String(facing || '').toLowerCase()] || null
 
+/* degrees clockwise from north into a unit vector on the chart, where y grows south. Written out
+ * rather than taken off HEADINGS so an angle between two words is drawn where it actually points. */
+export const vecOfBearing = (deg: number): [number, number] => {
+  const r = (Number(deg) * Math.PI) / 180
+  return [Math.sin(r), -Math.cos(r)]
+}
+
+/* WHICH WAY A MARK IS REALLY POINTING: the angle when there is one, the word when there is not. One
+ * function, because the chart, the coast rule and the publish each answering this their own way is
+ * how a hull ends up drawn at one heading and moored at another. */
+export const vecOfMark = (m: { facing?: string; bearing?: number }): [number, number] | null =>
+  Number.isFinite(Number(m?.bearing)) ? vecOfBearing(Number(m.bearing)) : headingOf(m?.facing)
+
+/* the nearest of the eight to an angle, kept on `facing` so a word-reader still gets a sensible one.
+ * Rounded rather than floored: 44 degrees is north-east and not north. */
+export const WORDS_CW = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west']
+export const nearestFacing = (deg: number): string => {
+  const d = ((Number(deg) % 360) + 360) % 360
+  return WORDS_CW[Math.round(d / 45) % 8]
+}
+
+/* and back, so a mark that only ever carried a word can be put on the dial without losing where it
+ * was pointing the moment somebody opens it */
+export const bearingOfMark = (m: { facing?: string; bearing?: number }): number => {
+  if (Number.isFinite(Number(m?.bearing))) return ((Number(m.bearing) % 360) + 360) % 360
+  const i = WORDS_CW.indexOf(String(m?.facing || '').toLowerCase())
+  return i < 0 ? 0 : i * 45
+}
+
 export type MarkKind = (typeof MARK_KINDS)[number]
 
 /* A NAMED POINT ON THE WATER. It may belong to an island and it is never welded
@@ -39,6 +68,13 @@ export interface WorldMark {
   x: number
   y: number
   facing?: string
+  /* THE HEADING AS AN ANGLE, which is the real one. Eight words cannot say "along this shore" when a
+     coast runs at 23 degrees, and a berth is the one mark whose whole job is to lie along something.
+     Degrees clockwise from north, so 0 is north and 90 is east, the way a person reads a compass.
+     `facing` is kept beside it as the nearest of the eight, so everything that reads a word, python
+     included, keeps reading one and nothing already written has to change. When both are here this
+     one is the truth. */
+  bearing?: number
   /* how close counts as arrived, so sailing to a berth is not an exact-pixel
      test on a hull that moves in floats */
   r?: number

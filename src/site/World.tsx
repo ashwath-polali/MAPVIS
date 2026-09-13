@@ -5,7 +5,17 @@ import { useSession } from './session'
 import { anchorName, anchorShape, isAnchorName } from '../core/mask'
 import { ANCHOR_INK, inkFor } from '../core/ink'
 import { displayName } from '../core/naming'
-import { MARK_KINDS, isMarkName, HULL, HEADINGS, headingOf, type MarkKind, type WorldMark } from '../core/world'
+import {
+  MARK_KINDS,
+  isMarkName,
+  HULL,
+  HEADINGS,
+  vecOfMark,
+  bearingOfMark,
+  nearestFacing,
+  type MarkKind,
+  type WorldMark,
+} from '../core/world'
 import './world.css'
 
 /* The shape the server keeps, field for field. cleanPlace is the authority and
@@ -770,7 +780,9 @@ function paint(c: CanvasRenderingContext2D, size: { w: number; h: number }, sc: 
      * either right or absurd and the word looks identical either way. Drawn
      * under the mark and the spur so neither is hidden by it. */
     if (k.kind === 'berth' && lit) {
-      const head = headingOf(k.facing)
+      /* the angle the author set, not the nearest of eight: the ghost is the whole reason a dial is
+       * worth having, so drawing it snapped would make the control a lie */
+      const head = vecOfMark(k)
       if (head) {
         const L = (HULL.length * fit.s) / 2
         const B = (HULL.beam * fit.s) / 2
@@ -2496,14 +2508,48 @@ function BerthPanel({
           v={m.facing || ''}
           say={m.kind === 'berth' ? 'how she lies once tied up' : 'the heading held here'}
           only={m.kind === 'berth' ? BERTH_FACINGS : undefined}
-          on={(k) => onEdit({ facing: k || undefined })}
+          on={(k) =>
+            onEdit(
+              m.kind === 'berth'
+                ? /* a compass press is a preset ON the dial, so the two controls can never disagree
+                     about where she is pointing */
+                  k
+                  ? { facing: k, bearing: bearingOfMark({ facing: k }) }
+                  : { facing: undefined, bearing: undefined }
+                : { facing: k || undefined },
+            )
+          }
         />
+        {/* THE DIAL, because a coastline does not run at a multiple of forty-five. The eight words
+            above are presets on it now rather than the whole vocabulary: a shore at 23 degrees could
+            not be lain along at all, and the ghost hull is drawn from this, so what is set is what is
+            seen. `facing` is kept at the nearest word beside it so everything that reads a word,
+            python included, still reads one. */}
+        {m.kind === 'berth' && (
+          <label className="world-dial">
+            <span>
+              turn her <em>{Math.round(bearingOfMark(m))}°</em> <i>{nearestFacing(bearingOfMark(m))}</i>
+            </span>
+            <input
+              type="range"
+              min={0}
+              max={359}
+              value={Math.round(bearingOfMark(m))}
+              title="degrees clockwise from north · the ghost on the chart turns with it"
+              onChange={(e) => {
+                const deg = ((Math.round(Number(e.target.value)) % 360) + 360) % 360
+                onEdit({ bearing: deg, facing: nearestFacing(deg) })
+              }}
+            />
+          </label>
+        )}
         {/* the ghost is the answer to this, so the note points at it rather than
             describing a heading in words the chart is already showing */}
         {m.kind === 'berth' && (
           <p className="world-note">
-            The hull is drawn to size on the chart at this heading. Turn her until she lies along the shore: a bow
-            pointing into the land is refused when the ocean is saved.
+            The hull is drawn to size on the chart at this heading. Turn her until she lies along the shore. A bow
+            aimed at the middle of the island is pointed out when the ocean is saved, but it is only measured from
+            one point and cannot tell a jetty from a cliff, so your eye on the ghost beats it.
           </p>
         )}
       </section>
@@ -2520,9 +2566,10 @@ function BerthPanel({
 function RunIn({ m, heeded, onEdit }: { m: WorldMark; heeded: boolean; onEdit: (patch: Partial<WorldMark>) => void }) {
   const a = m.approach
   const make = () => {
-    const f = m.facing || ''
-    let dx = f.includes('east') ? 1 : f.includes('west') ? -1 : 0
-    let dy = f.includes('south') ? 1 : f.includes('north') ? -1 : 0
+    /* off the real heading rather than off the word, or a run-in born for a berth set to 23 degrees
+     * would be laid out for north-east and sit off the line she actually comes in on */
+    const v = vecOfMark(m)
+    let [dx, dy] = v || [0, -1]
     if (!dx && !dy) dy = -1
     const n = Math.hypot(dx, dy) || 1
     // far enough out that the two marks are separate targets at the opening

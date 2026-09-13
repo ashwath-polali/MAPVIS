@@ -10,7 +10,17 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { facingIntoCoast, checkWorld, FACING_VECTORS, INTO_COAST, BERTH_FACINGS } from '../store/world.mjs'
+import {
+  facingIntoCoast,
+  checkWorld,
+  FACING_VECTORS,
+  INTO_COAST,
+  BERTH_FACINGS,
+  vecOfBearing,
+  vecOfMark,
+  bearingOf,
+  nearestFacing,
+} from '../store/world.mjs'
 
 let bad = 0
 const ok = (m) => console.log(`  ok    ${m}`)
@@ -108,23 +118,30 @@ const HUB_BERTH = { name: 'the_hub_berth', kind: 'berth', x: 2264, y: 2145, isla
   }
   const maps = new Map([['hub', HUB_MAP]])
   const bad1 = checkWorld(doc, ['hub'], maps)
-  const said = bad1.problems.find((s) => s.includes('bow-first in the coast'))
-  said ? ok('checkWorld raises it as a problem, so the save is refused rather than warned about') : no('the save was allowed')
+  /* IT TELLS RATHER THAN REFUSES NOW. It knows one point, the middle of the painting, so a berth at
+   * the end of a jetty lying along that jetty reads as aimed at the land. That is not a rare corner:
+   * it is the hub's own berth, 2 degrees off the middle and moored over open water the whole length
+   * of the hull, and the save was refused. */
+  const said = bad1.warnings.find((s) => s.includes('straight at the middle'))
+  said ? ok('checkWorld says a bow aimed at the middle, as a warning the author can overrule by eye') : no('nothing was said at all')
   said && said.includes('the_hub_berth') && said.includes('the_hub')
-    ? ok('and the sentence names the berth and the island it would run into')
+    ? ok('and the sentence names the berth and the island it is aimed at')
     : no(`the message does not name both: ${said}`)
+  bad1.problems.filter((s) => s.includes('straight at the middle')).length === 0
+    ? ok('and it never blocks the save, because the ghost on the chart is the better judge')
+    : no('it is still refusing the save')
 
   const turned = { ...doc, marks: [{ ...HUB_BERTH, facing: 'south' }] }
-  checkWorld(turned, ['hub'], maps).problems.filter((s) => s.includes('bow-first in the coast')).length === 0
+  checkWorld(turned, ['hub'], maps).warnings.filter((s) => s.includes('straight at the middle')).length === 0
     ? ok('and turning her out to sea clears it')
-    : no('a berth facing open water was still refused')
+    : no('a berth facing open water was still warned about')
 
-  /* a berth on no island cannot be judged and must not block a save: an author
+  /* a berth on no island cannot be judged and must not be mentioned: an author
    * is allowed to mark the water before the island is there */
   const loose = { ...doc, marks: [{ ...HUB_BERTH, island: '', facing: 'north' }] }
-  checkWorld(loose, ['hub'], maps).problems.filter((s) => s.includes('bow-first in the coast')).length === 0
-    ? ok('while a berth belonging to no island never blocks one')
-    : no('a free-standing berth was refused')
+  checkWorld(loose, ['hub'], maps).warnings.filter((s) => s.includes('straight at the middle')).length === 0
+    ? ok('while a berth belonging to no island is never judged at all')
+    : no('a free-standing berth was judged')
 }
 
 // ---- the vectors the chart draws the ghost from ----------------------------
@@ -184,6 +201,90 @@ const HUB_BERTH = { name: 'the_hub_berth', kind: 'berth', x: 2264, y: 2145, isla
   g.includes('return r === undefined ? Math.PI : r')
     ? ok('while a word it does not know still answers west, so nothing already published moves')
     : no('an unknown heading no longer falls back to west, so old bundles may swing')
+}
+
+// ---- the dial: any angle, and the same angle everywhere --------------------
+// Eight words cannot say "along this shore" when a coast runs at 23 degrees, and a berth is the one
+// mark whose whole job is to lie along something. So a berth carries an angle, and `facing` is kept
+// beside it at the nearest of the eight so python and every older reader still read a word.
+{
+  /* the angle and the word have to mean the same thing, or the compass presses on the dial move the
+   * hull somewhere the press did not say */
+  const off = Object.entries(FACING_VECTORS).filter(([k, v]) => {
+    const b = vecOfBearing(bearingOf({ facing: k }))
+    return Math.hypot(b[0] - v[0], b[1] - v[1]) > 1e-3
+  })
+  off.length === 0
+    ? ok('every compass word turns into the same vector as the angle it sits at, so a preset and the dial agree')
+    : no(`${off.length} word(s) disagree with their own angle: ${off.map(([k]) => k).join(', ')}`)
+
+  bearingOf({ facing: 'north' }) === 0 && bearingOf({ facing: 'east' }) === 90 && bearingOf({ facing: 'west' }) === 270
+    ? ok('and the dial reads clockwise from north, which is how a person reads a compass')
+    : no('the dial is not clockwise from north')
+
+  /* the angle WINS, because a berth turned to 23 degrees that gets judged and drawn as north-east is
+   * a control that does not control anything */
+  const v23 = vecOfMark({ facing: 'north', bearing: 23 })
+  const want23 = vecOfBearing(23)
+  Math.hypot(v23[0] - want23[0], v23[1] - want23[1]) < 1e-6
+    ? ok('an angle beats the word beside it, so the dial is what is drawn and what is judged')
+    : no('the word won over the angle')
+
+  /* and a mark with only a word still answers, so nothing written before the dial existed changes */
+  const vw = vecOfMark({ facing: 'south-east' })
+  Math.abs(vw[0] - 0.7071) < 1e-3 && Math.abs(vw[1] - 0.7071) < 1e-3
+    ? ok('while a mark carrying only a word is read exactly as it always was')
+    : no('a word-only mark changed meaning')
+
+  /* the boundary between two words is HALFWAY between them, 67.5 and not 45: 46 degrees is nearer
+   * north-east than east and calling it east would be the floor, not the nearest */
+  nearestFacing(23) === 'north-east' && nearestFacing(67) === 'north-east' && nearestFacing(68) === 'east' && nearestFacing(350) === 'north'
+    ? ok('and the word kept beside an angle is the nearest of the eight, rounded rather than floored, and wraps past north')
+    : no(`the nearest word is wrong: 23 -> ${nearestFacing(23)}, 67 -> ${nearestFacing(67)}, 68 -> ${nearestFacing(68)}, 350 -> ${nearestFacing(350)}`)
+
+  /* THE GAME TURNS THE SAME ANGLE THE SAME WAY. Read out of its source and compared, because a sign
+   * flip here draws the ghost one way on the chart and moors her the other. */
+  const HERE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
+  const g = fs.readFileSync(path.join(HERE, '..', 'AdventureGame', 'src/game/pmap/PmapScene.tsx'), 'utf8')
+  g.includes('return Math.atan2(-Math.cos(t), Math.sin(t))')
+    ? ok('the game turns degrees into radians with the convention the chart draws')
+    : no('the game does not read an angle, or reads it with another convention')
+  const toRad = (deg) => {
+    const t = (deg * Math.PI) / 180
+    return Math.atan2(-Math.cos(t), Math.sin(t))
+  }
+  const bad2 = []
+  for (let deg = 0; deg < 360; deg += 7) {
+    const v = vecOfBearing(deg)
+    const want = Math.atan2(v[1], v[0])
+    const got = toRad(deg)
+    if (Math.abs(Math.atan2(Math.sin(want - got), Math.cos(want - got))) > 1e-6) bad2.push(deg)
+  }
+  bad2.length === 0
+    ? ok('and it agrees at every angle round the circle, not only at the eight the words name')
+    : no(`${bad2.length} angle(s) are drawn one way and moored another, first at ${bad2[0]}°`)
+}
+
+// ---- and the coast rule tells rather than refuses --------------------------
+// It knows ONE POINT, the middle of the painting, so a berth at the end of a jetty lying along that
+// jetty reads as aimed at the land: the hub's own berth is 2 degrees off the middle and moored over
+// open water. It could not be made right without the walkable mask, so it stopped blocking the save.
+{
+  const doc = {
+    w: 4096,
+    h: 4096,
+    home: 'the_hub',
+    places: [HUB_PLACE],
+    regions: [],
+    marks: [{ ...HUB_BERTH, facing: 'north' }],
+  }
+  const r = checkWorld(doc, ['hub'], new Map([['hub', HUB_MAP]]))
+  r.problems.filter((s) => /bow|coast|straight at the middle/.test(s)).length === 0
+    ? ok('a bow aimed at the island middle no longer refuses the save')
+    : no('it is still a refusal, so a berth on a jetty cannot be saved')
+  r.warnings.some((s) => s.includes('straight at the middle'))
+    ? ok('and it is said as a warning, with the angle, so the author can judge it against the ghost')
+    : no('nothing is said at all, so a bow in the rocks would ship silently')
 }
 
 console.log(bad ? `\n${bad} problem(s).` : '\na berth points along the shore or out to sea, and never into the land she is tied to.')

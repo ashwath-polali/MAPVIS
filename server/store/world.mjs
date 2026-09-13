@@ -128,6 +128,12 @@ export function cleanMark(m) {
     x: num(m.x),
     y: num(m.y),
     ...(m.facing ? { facing: String(m.facing).slice(0, 16) } : {}),
+    /* the heading as an angle, degrees clockwise from north, which is what a berth actually needs: a
+     * coastline does not run at a multiple of forty-five to suit the eight words. Rounded to whole
+     * degrees, because a tenth of a degree over a forty-six pixel hull is a tenth of a pixel and only
+     * makes the document noisy. `facing` rides beside it as the nearest word so nothing that reads a
+     * word has to learn anything. */
+    ...(isFinite(Number(m.bearing)) ? { bearing: ((Math.round(num(m.bearing)) % 360) + 360) % 360 } : {}),
     // how close counts as arrived, so sailing to a berth is not an exact-pixel
     // test on a hull that moves in floats. Absent leaves it to the caller.
     ...(isFinite(Number(m.r)) ? { r: Math.max(0, num(m.r)) } : {}),
@@ -244,6 +250,10 @@ export async function composition(id = GAME_WORLD) {
                 x: b.x,
                 y: b.y,
                 ...(BERTH_FACINGS.includes(b.facing) ? { facing: b.facing } : {}),
+                /* the exact angle beside the word. A reader that has never heard of it takes the word
+                 * and is no worse off than it was, and one that has gets the heading the author
+                 * actually set rather than the nearest of eight. */
+                ...(isFinite(Number(b.bearing)) ? { bearing: Math.round(Number(b.bearing)) } : {}),
                 ...(b.approach ? { approach: { x: b.approach.x, y: b.approach.y } } : {}),
                 ...(b.at ? { at: b.at } : {}),
               },
@@ -269,6 +279,36 @@ export async function composition(id = GAME_WORLD) {
 
 /* WHICH WAY A COMPASS WORD POINTS, on the chart. y grows south, the same as
  * every raster in this tool, so north is negative y. */
+/* degrees clockwise from north into a chart vector, y growing south. The twin of vecOfBearing in
+ * src/core/world.ts, and they are checked against each other rather than trusted to agree. */
+export const vecOfBearing = (deg) => {
+  const r = (Number(deg) * Math.PI) / 180
+  return [Math.sin(r), -Math.cos(r)]
+}
+
+/* WHICH WAY A MARK IS REALLY POINTING, asked in one place so the chart, the coast rule and the
+ * publish cannot answer it three ways. */
+export const vecOfMark = (m) => {
+  if (isFinite(Number(m && m.bearing))) return vecOfBearing(Number(m.bearing))
+  return FACING_VECTORS[String((m && m.facing) || '').toLowerCase()] || null
+}
+
+/* the eight words clockwise from north, which is the order a dial reads them in and NOT the order
+ * FACING_VECTORS happens to be written in */
+export const WORDS_CW = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west']
+
+/* what a mark is pointing, in degrees, whichever of the two fields it carries. Answering in degrees
+ * even for a word-only mark is what lets one sentence describe both. */
+export const bearingOf = (m) => {
+  if (isFinite(Number(m && m.bearing))) return ((Math.round(Number(m.bearing)) % 360) + 360) % 360
+  const i = WORDS_CW.indexOf(String((m && m.facing) || '').toLowerCase())
+  return i < 0 ? 0 : i * 45
+}
+
+/* and the nearest word to an angle, so `facing` can be kept truthful beside a dial that does not
+ * land on one. Rounded, so 44 degrees is north-east rather than north. */
+export const nearestFacing = (deg) => WORDS_CW[Math.round((((Number(deg) % 360) + 360) % 360) / 45) % 8]
+
 export const FACING_VECTORS = {
   north: [0, -1],
   south: [0, 1],
@@ -311,7 +351,9 @@ export const INTO_COAST = 0.5
  * That is the one case where a hand is better than this, and it says so. */
 export function facingIntoCoast(mark, place, map) {
   if (!mark || !place) return null
-  const v = FACING_VECTORS[String(mark.facing || '').toLowerCase()]
+  /* the angle when the author set one, the word when they did not: a berth on a dial is the normal
+   * case now and judging it by the nearest of eight would refuse a heading nobody chose */
+  const v = vecOfMark(mark)
   if (!v) return null
   /* the painting's middle, the same point checkWorld measures a berth's reach
    * from, so the two answers cannot disagree about where the island is */
@@ -376,15 +418,25 @@ export function checkWorld(doc, slugs = [], maps = new Map()) {
         warnings.push(
           `"${b.name}" ties up ${Math.round(d)} out from "${p.name}", which is only discovered at ${p.discover}, so the dock is offered before the island is`,
         )
-      /* THE BOW IN THE LAND. The heading is what the hull holds once she is tied
-       * up, so pointing it at the island is a ship moored into the rocks. A
-       * refusal and not a warning: it is one press to turn, it is visible on the
-       * chart as the ghost lying across the shore, and a world saved with it
-       * reaches a player as a ship facing a cliff. */
+      /* THE BOW IN THE LAND, and it says so rather than refusing.
+       *
+       * It was a refusal, and the refusal was wrong often enough to be worse than the fault. All this
+       * knows about "the island" is ONE POINT, the middle of the painting, so it reads any heading
+       * inside a sixty degree cone of that point as aimed at the coast. A berth at the end of a jetty
+       * that jUts out from the island is the ordinary case and it breaks the model completely: lying
+       * along that jetty, which is what mooring alongside one IS, points almost exactly back at the
+       * middle. The hub's own berth is 2 degrees off it, over open water the whole length of the hull,
+       * and the save was refused.
+       *
+       * Doing this properly means asking the walkable mask whether the bow ends up on land, which is
+       * a per-pixel question about a png this function is not given and cannot fetch. Until it is, the
+       * honest arbiter is the author: the ghost hull is drawn to size at the real heading for exactly
+       * that reason, and a warning tells them what the geometry looks like without overruling what
+       * they can see. */
       const into = facingIntoCoast(b, p, mm)
       if (into)
-        problems.push(
-          `"${b.name}" is aimed ${b.facing}, which is ${into.degrees}° off straight into "${p.name}" · that is the heading the hull holds once she is tied up, so she would lie bow-first in the coast · turn her along the shore or out to open water`,
+        warnings.push(
+          `"${b.name}" is aimed ${Math.round(bearingOf(b))}°, which is ${into.degrees}° off straight at the middle of "${p.name}" · that is the heading the hull holds once she is tied up, so check the ghost is lying along the shore and not into it`,
         )
       /* named rather than dropped in cleanMark, because a facing that quietly disappears still moors
        * the hull somewhere and says nothing about why it is not where it was drawn */

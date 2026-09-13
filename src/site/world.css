@@ -1041,3 +1041,32 @@ details.world-fold[open] > summary {
     transition: none !important;
   }
 }
+
+/* THE BERTH DIAL. A coastline does not run at a multiple of forty-five, so the eight compass
+   presses above this are shortcuts onto it rather than the whole vocabulary. Shares .world-f's
+   label shape so the two controls read as one thing asked two ways. */
+.world-dial {
+  display: grid;
+  gap: 3px;
+}
+.world-dial > span {
+  font: 400 var(--fs-micro) var(--font-mono);
+  color: var(--quiet);
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+}
+/* the number leads, because it is the thing being set; the word follows it as a reading */
+.world-dial em {
+  font-style: normal;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.world-dial i {
+  font-style: normal;
+  color: var(--quiet);
+}
+.world-dial input[type='range'] {
+  width: 100%;
+  accent-color: var(--gold);
+}
