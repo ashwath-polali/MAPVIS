@@ -84,8 +84,8 @@ async function tick() {
 }
 
 say(`${NAME} -> ${BASE}, serving ${CAPS.join(', ')}`)
-// every claim is a request on the platform's free tier, so an idle relay asks slowly and a forgotten one stops
-const FAST_MS = 2000, IDLE_MS = 30000, BUSY_FOR_MS = 3 * 60 * 1000, GIVE_UP_MS = 30 * 60 * 1000
+// every claim is a request on the platform's free tier, so an idle relay asks slowly; it runs at logon and never stops on its own
+const FAST_MS = 2000, IDLE_MS = 30000, BUSY_FOR_MS = 3 * 60 * 1000
 let lastJobAt = Date.now()
 for (;;) {
   try {
@@ -98,9 +98,5 @@ for (;;) {
     quiet = true
   }
   const idle = Date.now() - lastJobAt
-  if (idle > GIVE_UP_MS) {
-    say(`no job for ${Math.round(idle / 60000)} minutes, stopping; run npm run relay when you generate again`)
-    process.exit(0)
-  }
   await new Promise((r) => setTimeout(r, idle < BUSY_FOR_MS ? FAST_MS : IDLE_MS))
 }
