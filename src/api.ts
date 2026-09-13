@@ -7,9 +7,50 @@ const KEEPALIVE_MAX = 60 * 1024
 /* A REQUEST THAT NEVER ANSWERS HAS TO BECOME AN ERROR, because a promise that never settles is not a slow export, it is a dead button: doExport holds a flag while it waits, so one interrupted export left every later press returning without making a request. Publishing the hub takes about 23s, so the ceiling is generous; this catches never, not slow. */
 const POST_TIMEOUT_MS = 180_000
 
+/* BUT THREE MINUTES IS SHORTER THAN THE WORK, AND THAT COST REAL MONEY. This one ceiling governed
+ * every call, and an eight-heading animation is eight background jobs that take about five minutes
+ * together, so the browser gave up while pixellab was still drawing. The generations were bought,
+ * the server finished and saved them minutes later, and the author was told "did not answer within
+ * 180s" and pressed again, which bought all eight a second time. Measured on the account: four
+ * eight-way runs in thirty-one minutes, thirty-two generations, every job completed, none collected.
+ *
+ * So the deadline belongs to the route and not to the transport. These are the calls whose server
+ * side legitimately outlives three minutes, each set at or above the ceiling the server itself waits
+ * to, so the browser is never the first to give up. The server's own numbers are CHAR_WAIT 600s,
+ * WALK_WAIT 900s and HOST_WAIT 230s, in server/api.mjs.
+ *
+ * Everything absent from this map keeps the three minutes, which is what it was written for. */
+const SLOW_POSTS: Array<[string, number]> = [
+  // a sprite: one body then up to eight walk cycles, and the server waits 600s and 900s for them
+  ['/api/character-gen', 960_000],
+  ['/api/character-import', 960_000],
+  // a motion on an existing rig: eight jobs in one fan-out
+  ['/api/asset-animate', 960_000],
+  // one object, then an animation of it: two sequential waits of up to 300s each
+  ['/api/asset-anim', 660_000],
+  ['/api/asset-gen', 360_000],
+  ['/api/asset-gen-here', 360_000],
+  // one edited rotation set, which is every heading in a single job
+  ['/api/asset-state', 600_000],
+  ['/api/account-import', 360_000],
+  // the planner reads a painting and reasons about it
+  ['/api/asset-plan', 300_000],
+  ['/api/scene-plan', 300_000],
+  ['/api/life-plan', 300_000],
+  ['/api/style-card', 300_000],
+  ['/api/translate', 300_000],
+  ['/api/generate', 600_000],
+  ['/api/propose', 300_000],
+]
+const deadlineFor = (url: string) => {
+  const hit = SLOW_POSTS.find(([p]) => url === p || url.startsWith(p + '/'))
+  return hit ? hit[1] : POST_TIMEOUT_MS
+}
+
 async function jpost<T>(url: string, body: unknown, opts?: { keepalive?: boolean }): Promise<T> {
   const payload = JSON.stringify(body)
-  const cut = AbortSignal.timeout(POST_TIMEOUT_MS)
+  const ms = deadlineFor(url)
+  const cut = AbortSignal.timeout(ms)
   let r: Response
   try {
     r = await fetch(url, {
@@ -23,7 +64,7 @@ async function jpost<T>(url: string, body: unknown, opts?: { keepalive?: boolean
     // name the wait, because "failed to fetch" sends the next person looking at
     // the server when the server may never have been asked
     if (e instanceof DOMException && e.name === 'TimeoutError')
-      throw new Error(`${url} did not answer within ${POST_TIMEOUT_MS / 1000}s`)
+      throw new Error(`${url} did not answer within ${ms / 1000}s`)
     throw e
   }
   const j = await r.json()

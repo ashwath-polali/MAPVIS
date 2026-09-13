@@ -108,7 +108,22 @@ export async function libraryOf(slug) {
   )
   const base = `/work/${slug}/library`
   return rows.map((r) => {
-    const it = { name: r.name, kind: r.kind, w: r.w, h: r.h }
+    /* A SET OF HEADINGS IS STATIC WITH DIRS, and every other reader in this tool already says so:
+     * libraryItems off the disk, readLook in the editor, and the routes' own answers. Only this
+     * column disagreed, because a view set writes <heading>-<i>.png and never 0.png, so frame_count
+     * is 0 while the kind came out 'animated'.
+     *
+     * What that cost: the client places by kind, and for 'animated' it copies `frames` and never
+     * touches `src`. frame_count 0 means there are no frames to copy, so the placement landed with
+     * an empty frame list and nothing else: no ghost under the cursor, a 24 by 24 handle box round a
+     * 36 by 48 figure, no library row resolvable from it so the whole inspector vanished, and on
+     * export no resting heading so every such figure shipped facing south. Measured on the live
+     * database: 27 of 27 view sets are stored this way.
+     *
+     * Healed here rather than migrated, so rows written by the old code come back right on the next
+     * read and nothing has to be republished. upsertItem writes it correctly from now on. */
+    const kind = r.dirs && !(r.frame_count > 1) ? 'static' : r.kind
+    const it = { name: r.name, kind, w: r.w, h: r.h }
     if (r.fps) it.fps = r.fps
     if (r.is_effect) it.effect = true
     if (r.frame_count > 0) it.frames = Array.from({ length: r.frame_count }, (_, i) => `${base}/${r.name}/${i}.png`)
@@ -465,7 +480,10 @@ export async function pushItem(slug, name, workDir) {
     await s.delPrefix(keys.libPrefix(id, name))
     const { w, h } = size(still)
     await upsertItem(id, name, 'static', { w, h, frame_count: 0, prefix: keys.libPrefix(id, name), origin: originOf(fs, path, workDir, name) })
-    return { name, kind: 'static' }
+    /* AND ITS FACES, which this branch used to return before ever reaching. An object is a loose png,
+     * so every second face ever drawn for one was skipped here and stored nowhere at all. */
+    const faces = await pushStates(slug, name, workDir)
+    return { name, kind: 'static', faces }
   }
 
   const folder = path.join(lib, name)
@@ -561,7 +579,9 @@ export async function pushItem(slug, name, workDir) {
     console.error(`[library] could not clear what ${name} used to be:`, e.message)
   }
 
-  await upsertItem(id, name, n > 1 || Object.keys(dirs).length ? 'animated' : 'static', {
+  /* a set of headings is STATIC with dirs, never animated: see the note in libraryOf about what
+   * calling it animated did to every placement made after a reload */
+  await upsertItem(id, name, n > 1 ? 'animated' : 'static', {
     w,
     h,
     fps: effect?.fps ?? meta?.fps ?? null,
@@ -674,7 +694,35 @@ export async function pushStates(slug, item, workDir) {
   }
 
   if (fs.existsSync(dir)) {
+    /* A LOOSE <face>.png IS A FACE TOO, and skipping it is why no face has ever been stored. The
+     * object branch of asset-state writes exactly that shape, so walking only directories made every
+     * second face drawn for an object invisible here: no blob, no row, while the toast said it was
+     * ready and a life round naming it silently drew picture 0. Read off the live database:
+     * library_states holds no rows at all, and never has. Filed as face/0.png, the same shape a
+     * headingless face already takes, so one reader serves both. */
     for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (ent.isFile() && /\.png$/i.test(ent.name)) {
+        const face = ent.name.replace(/\.png$/i, '')
+        const f = path.join(dir, ent.name)
+        const { w, h } = size(f)
+        await s.put(`maps/${id}/states/${item}/${face}/0.png`, fs.readFileSync(f), 'image/png')
+        await q(
+          `insert into library_states (item_id, face, dirs, frame_count, blob_prefix, fps, w, h, src)
+           values ($1,$2,null,1,$3,6,$4,$5,$6)
+           on conflict (item_id, face) do update set
+             dirs=null, frame_count=1, fps=6, w=excluded.w, h=excluded.h, src=excluded.src`,
+          [
+            row.id,
+            face,
+            keys.statePrefix(id, item, face),
+            w,
+            h,
+            `/work/${slug}/states/${encodeURIComponent(item)}/${encodeURIComponent(face)}/0.png`,
+          ],
+        )
+        seen.push(face)
+        continue
+      }
       if (!ent.isDirectory()) continue
       const face = ent.name
       const faceDir = path.join(dir, face)
@@ -806,6 +854,42 @@ export const versionsOf = async (slug, name) => {
 
 /* Put the newest kept version back, for a machine whose .prev folder holds
  * nothing because the edit happened somewhere else. */
+/* ONE ITEM'S BYTES BACK ONTO DISK, so the row can be derived from them rather than hand-patched.
+ * hydrateMap pulls a whole map, which is hundreds of files for the sake of one. */
+export async function hydrateItem(slug, name, workDir) {
+  if (!platformOn()) return 0
+  const fs = await import('node:fs')
+  const path = await import('node:path')
+  const id = await mapIdFor(slug)
+  if (!id) return 0
+  const s = store()
+  const lib = path.join(workDir, 'library')
+  fs.mkdirSync(lib, { recursive: true })
+  /* both shapes of the same name, and the loose png LAST, so a name that is a folder now does not
+   * end up with a stale flat png beside it */
+  fs.rmSync(path.join(lib, name), { recursive: true, force: true })
+  fs.rmSync(path.join(lib, name + '.png'), { force: true })
+  let n = 0
+  for (const o of await s.list(keys.libPrefix(id, name))) {
+    const rel = o.key.slice(keys.libPrefix(id, name).length)
+    if (!rel) continue
+    const to = path.join(lib, name, rel)
+    fs.mkdirSync(path.dirname(to), { recursive: true })
+    fs.writeFileSync(to, await s.get(o.key))
+    n++
+  }
+  try {
+    const b = await s.get(keys.libStill(id, name))
+    if (b && b.length) {
+      fs.writeFileSync(path.join(lib, name + '.png'), b)
+      n++
+    }
+  } catch {
+    /* a folder-shaped item owns no loose png, which is the ordinary case */
+  }
+  return n
+}
+
 export async function restoreVersion(slug, name) {
   if (!platformOn()) return null
   const id = await mapIdFor(slug)
@@ -836,6 +920,13 @@ export async function dropItem(slug, name) {
   const s = store()
   await s.delPrefix(keys.libPrefix(id, name))
   await s.del(keys.libStill(id, name)).catch(() => {})
+  /* AND THE FACES IT WORE. The row's library_states cascade away with it, but the blobs did not, so
+   * asking for a troll again handed back the free name, hydrateMap pulled the dead troll's face
+   * pixels back down, and the next push rowed them onto the new one. An author got a face they never
+   * paid for, of a different object. */
+  await s.delPrefix(`maps/${id}/states/${name}/`).catch(() => {
+    /* nothing there, which is every item that never wore a second face */
+  })
   await one('delete from library_items where map_id = $1 and name = $2 returning id', [id, name])
 }
 

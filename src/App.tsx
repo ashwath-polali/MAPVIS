@@ -1676,6 +1676,17 @@ export default function App() {
           // cache and the map goes on drawing the replaced pixels
           e.bustAssets(folderOf(res.item))
           setBust((q) => ({ ...q, [res.item.name]: Date.now() }))
+          /* THE SNAPSHOT GOES FIRST, or the undo restores the scales it just grew.
+             rescalePlacementsOf mutates without snapping and refreshPlacementsOf snaps AFTER it, so
+             the one step this used to file already held the doubled values: pressing z put the
+             placements back exactly as the pixelate had left them. */
+          e.doc.snap()
+          /* and the ART has to be filed as revertible, the way a crop files it. Without an entry at
+             this depth Editor.beforeUndo has nothing to call there and asset-revert is never asked, so
+             the pixelated png stayed on disk and in the store while the toast said z undoes it. The
+             original pixels were in .prev and in library_versions with no button in the tool able to
+             reach them, so a batch pixelate at the wrong grain was permanent. */
+          pixelUndo.current.push({ name: res.item.name, at: e.doc.histLen() })
           // it shrank, so EVERY placement of it grows by the same amount to
           // stay the size it was, including ones that were never selected,
           // because they are all looking at the one file
@@ -1914,7 +1925,13 @@ export default function App() {
             }
           }
           if (!got) {
-            push(`${item.name} · still not collected after twenty minutes · press animate again with the same words and it will be collected, not redrawn`)
+            /* THIS SENTENCE USED TO BE A LIE THAT COST MONEY. Pressing again sent no recover, so it
+               redrew and charged for every heading a second time, while the first set sat finished on
+               the account. The group is written down on the server now, so a fresh press collects it
+               before it spends anything, and the sentence is true. */
+            push(
+              `${item.name} · still drawing after twenty minutes · press animate again and it will be collected for nothing, not redrawn`,
+            )
             return
           }
           r = got
@@ -3098,6 +3115,43 @@ export default function App() {
         )
       } catch (err) {
         push(String(err instanceof Error ? err.message : err).slice(0, 110))
+      }
+    },
+    [push],
+  )
+
+  /* FRAMES ALREADY BOUGHT, FETCHED FOR NOTHING. The server looks on the account for a motion this
+     figure was paid for and hands it back; it refuses rather than guessing when it cannot find one,
+     and it will not pad a set of standing rotations into a fake walk cycle. No plan, no price and no
+     confirm, because nothing here can spend. */
+  const doCollect = useCallback(
+    async (item: api.LibItem) => {
+      const e = edRef.current
+      if (!e) return
+      const sid = e.sceneId
+      e.setBusy(`looking for ${item.name}`)
+      try {
+        const r = await api.assetAnimate(sid, { name: item.name, ask: '', confirm: true, recover: true })
+        if (e.sceneId !== sid) return
+        if (!r.item) {
+          push(`nothing already paid for was found for ${item.name}`)
+          return
+        }
+        const next = r.item
+        setLib((prev) => [...(prev || []).filter((x) => x.name !== next.name), next])
+        e.bustAssets(folderOf(next))
+        setBust((q) => ({ ...q, [next.name]: Date.now() }))
+        if (next.w !== item.w || next.h !== item.h) e.rescalePlacementsOf(next, item.w / next.w, item.h / next.h)
+        e.refreshPlacementsOf(next)
+        push(
+          r.partial
+            ? `${next.name} collected, mostly · ${r.partial} · nothing was spent`
+            : `${next.name} collected · nothing was spent`,
+        )
+      } catch (err) {
+        push(String(err instanceof Error ? err.message : err).slice(0, 110))
+      } finally {
+        e.setBusy('')
       }
     },
     [push],
@@ -5832,6 +5886,22 @@ export default function App() {
             disabled={plBusy || !!animRun}
           >
             animate
+          </button>
+        )}
+        {/* WHAT WAS BOUGHT AND NEVER ARRIVED. A run whose group name nobody wrote down leaves its
+            frames finished on the account with nothing pointing at them, and until this there was no
+            way to reach them: the only button that sent recover was inside a poll loop that had
+            already given up. It spends nothing, and it says what it found rather than writing
+            silently, because collecting the wrong motion over a figure's art is worse than not
+            collecting. */}
+        {animItem && selWays > 0 && (
+          <button
+            className="abtn"
+            data-tip="look on the account for frames a press already paid for · nothing is generated"
+            onClick={() => void doCollect(animItem)}
+            disabled={plBusy || !!animRun}
+          >
+            collect what was paid for
           </button>
         )}
         {/* THE WAY BACK, and the way back to the way back. Asked for by name: reverting was the

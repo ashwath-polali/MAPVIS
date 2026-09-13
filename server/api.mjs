@@ -24,6 +24,8 @@ import {
   snapshotVersion,
   restoreVersion,
   copyLibraryItem,
+  mapIdFor,
+  hydrateItem,
 } from './store/platform.mjs'
 import {
   listUi,
@@ -628,7 +630,7 @@ async function route(req, res, p, url) {
     const name = file.replace(/\.png$/i, '')
     await pushLibrary(id, name)
     return send(res, 200, {
-      item: { name, kind: 'static', src: `/work/${id}/library/${file}`, w: size.w, h: size.h },
+      item: await libRow(id, name, { name, kind: 'static', src: `/work/${id}/library/${file}`, w: size.w, h: size.h }),
     })
   }
 
@@ -1257,7 +1259,7 @@ async function route(req, res, p, url) {
         // awaited push saveStatic makes on the still branch two lines down.
         await pushLibrary(id, aname)
         return send(res, 200, {
-          item: { name: aname, kind: 'animated', frames: rel, fps: 6, w: fsize.w, h: fsize.h },
+          item: await libRow(id, aname, { name: aname, kind: 'animated', frames: rel, fps: 6, w: fsize.w, h: fsize.h }),
         })
       }
       return send(res, 200, { item: await saveStatic(id, b64, wantName, prompt, t.thing, drawn.objectId) })
@@ -1389,7 +1391,22 @@ async function route(req, res, p, url) {
       const b64 = drawn.b64
       // the base is bought. A stop between the two halves saves the second
       // generation, and the first one still lands, as a still object.
-      const frames = await stillOnStop(gate, () => pixellab.animate({ base64: b64, action: motion, frameCount: 8, seed }))
+      /* EVERY PATH OUT OF HERE KEEPS THE CUTOUT. The object above is bought and paid for, and only a
+       * stop used to file it: any other failure of the animation half answered 502 with the bytes
+       * dropped on the floor, so pressing stop kept your money and a real failure did not. */
+      let frames
+      try {
+        frames = await stillOnStop(gate, () => pixellab.animate({ base64: b64, action: motion, frameCount: 8, seed }))
+      } catch (e) {
+        if (String((e && e.message) || e) === 'stopped') throw e
+        const why = String((e && e.message) || e).slice(0, 160)
+        console.error(`[asset-anim] the animation failed after the object was bought: ${why}`)
+        const kept = await saveStatic(id, b64, wantName, prompt, t.thing, drawn.objectId)
+        return send(res, 200, {
+          item: kept,
+          note: `the animation did not come back, so the picture you paid for is saved standing · ${why}`,
+        })
+      }
       if (!frames)
           return send(res, 200, { item: await saveStatic(id, b64, wantName, prompt, t.thing, drawn.objectId), note: STOPPED_STILL })
       const dir = libDirOf(id)
@@ -1402,11 +1419,16 @@ async function route(req, res, p, url) {
         rel.push(`/work/${id}/library/${name}/${i}.png`)
       }
       const size = pngSize(path.join(fdir, '0.png'))
+      /* THE ID THAT MAKES A SECOND FACE POSSIBLE, on the path that SUCCEEDS. Only the stopped path
+       * recorded it, so a finished animated asset could never be given another face while a stopped
+       * one could, off the same generation and the same object. Filed under the name the item really
+       * got, which freeLibraryName may have numbered. */
+      if (drawn.objectId) noteOrigin(id, name, { objectId: drawn.objectId })
       noteAsk(id, name, prompt, t.thing)
       // both spends are bought and WORK is a fresh tmp dir per request on a host, so telling disk alone lost the item with the instance
       await pushLibrary(id, name)
       return send(res, 200, {
-        item: { name, kind: 'animated', frames: rel, fps: 6, w: size.w, h: size.h },
+        item: await libRow(id, name, { name, kind: 'animated', frames: rel, fps: 6, w: size.w, h: size.h }),
       })
     } catch (e) {
       const m = String((e && e.message) || e)
@@ -1423,7 +1445,13 @@ async function route(req, res, p, url) {
     const name = cleanName(b.name || '')
     const ask = String(b.ask || '').replace(/\s+/g, ' ').trim().slice(0, PROMPT_MAX)
     if (!b.name) return send(res, 400, { error: 'no item' })
-    if (!ask) return send(res, 400, { error: 'say what it should do' })
+    /* A COLLECTION NEEDS NO WORDS. Asking for frames that are already drawn and paid for needs the
+     * rig and the headings, both of which are properties of the item, and nothing at all from the
+     * sentence that was typed the first time. Demanding the ask here meant the only way to reach
+     * money already spent was to remember the exact words, which is not a thing anybody does a day
+     * later. */
+    const collecting = b.recover === true || typeof b.recover === 'string'
+    if (!ask && !collecting) return send(res, 400, { error: 'say what it should do' })
     /* the item may exist only in the store: readLibItem reads the disk, and on the host work/ is empty, so a listed sprite came back "not in the library" */
     try {
       await hydrateMap(id, path.join(WORK, id))
@@ -1440,11 +1468,15 @@ async function route(req, res, p, url) {
      * lie, and the price is the whole of what the person is agreeing to. */
     let plan
     try {
-      plan = await animatePlan(it, ask, id, job, b)
+      /* a collection goes straight at the rig rather than through the router: the router reads the
+       * painting and reasons about what the words mean, which costs seconds and an answer nobody is
+       * going to use, because what comes back is whatever was already drawn. */
+      plan = collecting && it.shape === 'views' ? await collectPlan(it, b) : await animatePlan(it, ask, id, job, b)
     } catch (e) {
       const m = String((e && e.message) || e)
       return send(res, m === 'stopped' ? 499 : 502, { error: m.slice(0, 300) })
     }
+    if (collecting && plan.path === 'blocked') return send(res, 409, { error: plan.why })
     // nothing below this line runs without the word: a stray post, a reload or
     // a retry loop must not spend
     if (b.confirm !== true) return send(res, 200, { plan })
@@ -1459,22 +1491,48 @@ async function route(req, res, p, url) {
         /* frames a previous attempt paid for but could not read back: recovery is offered before the spend rather than as a repair after it */
         let byDir = null
         if (b.recover) {
-          // a named group is one this client started and is waiting on; a bare
-          // true takes whatever complete motion is on the account
-          const found = await recoverCharacterMotion(plan, typeof b.recover === 'string' ? b.recover : '')
+          /* a named group is one this client started and is waiting on; a bare true takes whatever
+           * motion is on the account, which is the only way back to frames bought by a press whose
+           * group name nobody wrote down */
+          let want = typeof b.recover === 'string' ? b.recover : ''
+          if (!want) {
+            const held = await readPending(id, name)
+            if (held && held.group) want = held.group
+          }
+          const found = await recoverCharacterMotion(plan, want)
           if (!found) return send(res, 409, { error: 'nothing already paid for was found on this one' })
+          await clearPending(id, name)
           byDir = found.byDir
         } else {
-          try {
-            byDir = await runCharacterMotion(plan, seed, gate, halt)
-          } catch (e) {
-            if (!(e instanceof Pending)) throw e
-            return send(res, 200, {
-              pending: true,
-              group: e.group,
-              plan,
-              note: 'pixellab is still drawing · the frames are paid for and will be collected when they are done',
-            })
+          /* COLLECT BEFORE SPENDING. A press that follows a run whose frames were paid for and never
+           * collected used to buy the whole fan-out again, which is what the give-up message in the
+           * client was telling people to do while promising the opposite. If something is still
+           * outstanding for this item, it is asked for first and costs nothing; only when there is
+           * nothing to collect does a generation get bought. */
+          const held = await readPending(id, name)
+          if (held && held.group) {
+            const got = await recoverCharacterMotion(plan, held.group).catch(() => null)
+            if (got) {
+              await clearPending(id, name)
+              byDir = got.byDir
+              console.error(`[animate] ${name}: collected the group ${held.group} that was already paid for, nothing spent`)
+            }
+          }
+          if (!byDir) {
+            try {
+              byDir = await runCharacterMotion(plan, seed, gate, halt)
+            } catch (e) {
+              if (!(e instanceof Pending)) throw e
+              /* the name goes somewhere durable before the answer, so a reload, a closed tab or a
+               * poll that runs out can still collect it for nothing */
+              await notePending(id, name, e.group, plan)
+              return send(res, 200, {
+                pending: true,
+                group: e.group,
+                plan,
+                note: 'pixellab is still drawing · the frames are paid for and will be collected when they are done',
+              })
+            }
           }
         }
         // past here every generation is bought and every frame is theirs, so
@@ -1484,7 +1542,7 @@ async function route(req, res, p, url) {
         if (!st) throw new Error('the headings did not save')
         /* the character id is the only way back to the rig, so never write undefined over one that was there or the motion can never be replaced */
         const keepId = plan.characterId || (it.meta && it.meta.characterId) || ''
-        await swapFolder(id, name, st.stage, { dirs: st.dirs, fps: st.fps, characterId: keepId })
+        await swapFolder(id, name, st.stage, { dirs: st.dirs, fps: st.fps, characterId: keepId }, { dropEffect: true })
         noteAsk(id, name, ask, plan.motion, 'motion')
         /* SAY WHICH HEADINGS ACTUALLY MOVE. A heading whose job failed keeps its
          * standing rotation, which is one frame, and the set still loads and
@@ -1527,18 +1585,23 @@ async function route(req, res, p, url) {
       const st = stageFrames(id, name, frames)
       /* a still becomes a frame folder under the same name, and the png goes only once the folder is whole, so a crash leaves the original standing */
       if (it.shape === 'still') await keepPrevFile(id, it.file, name + '.png')
-      await swapFolder(id, name, st.stage, null)
+      /* THE RATE HAS TO BE WRITTEN DOWN. The answer below says 6 and nothing carried that 6 to the
+       * row, so after a reload the listing had no rate at all and the client's `it.fps || 8` made it
+       * 8: two copies of the same plume on one map ran a third apart and the bundle shipped whichever
+       * number happened to be in memory. Measured on the live database: 17 frame folders carry no
+       * rate. A sidecar with a rate and no headings is read as a rate by everything that reads it and
+       * as no heading set by everything that looks for one.
+       *
+       * dropEffect, because a recipe left beside pixellab's frames would be pushed as the thing that
+       * drew them. */
+      await swapFolder(id, name, st.stage, { fps: 6 }, { dropEffect: true })
       if (it.shape === 'still') fs.rmSync(it.file, { force: true })
-      // an item that carried a written recipe does not carry it any more.
-      // Leaving effect.json beside pixellab's frames would reopen a recipe that
-      // did not draw them, and the library would keep calling it an effect.
-      else fs.rmSync(path.join(libDirOf(id), name, 'effect.json'), { force: true })
       noteAsk(id, name, ask, plan.motion, 'motion')
       // 6, because that is what libraryItems will say about this folder on the
       // next read: a frame folder carries no rate of its own unless effect.json
       // is beside it, and the one that was there did not draw these pixels
       return send(res, 200, {
-        item: { name, kind: 'animated', frames: st.frames, fps: 6, w: st.w, h: st.h },
+        item: await libRow(id, name, { name, kind: 'animated', frames: st.frames, fps: 6, w: st.w, h: st.h }),
         note: plan.note,
       })
     } catch (e) {
@@ -1649,7 +1712,11 @@ async function route(req, res, p, url) {
     if (b.ask && !b.overwrite) noteAsk(id, name, b.ask, rec.type === 'custom' ? 'written' : rec.type, 'effect')
     // a kept effect ending at disk was gone with the request on a host; pushItem carries effect.json across with the frames
     await pushLibrary(id, name)
-    return send(res, 200, { item: { name, kind: 'animated', effect: true, frames: rel, fps, w: size.w, h: size.h } })
+    /* the hand-set effect flag was the client's own workaround for this exact gap, and the listing
+     * carries it properly, so it stays here only as the floor */
+    return send(res, 200, {
+      item: await libRow(id, name, { name, kind: 'animated', effect: true, frames: rel, fps, w: size.w, h: size.h }),
+    })
   }
 
   // The rule, the numbers and the colours a saved effect was built from, so the
@@ -1785,6 +1852,23 @@ async function route(req, res, p, url) {
     if (!fs.existsSync(prev) || !fs.readdirSync(prev).length) {
       const back = await restoreVersion(id, name).catch(() => null)
       if (!back) return send(res, 404, { error: 'nothing was kept for this one' })
+      /* THE ROW HAS TO BE REWRITTEN, because restoreVersion only moves bytes. Undoing across a shape
+       * change was therefore catastrophic: animating a still leaves the row saying animated with eight
+       * frames, and a restore to the still deleted those eight blobs and left the row pointing at
+       * them. The client takes this answer and writes those dead urls into every placement of the
+       * item, then autosaves. Every copy drew nothing, in the editor, in the export and in the game,
+       * and a reload could not help because the row itself was wrong.
+       *
+       * Pulling the restored bytes down and pushing them is the same path the rest of the tool uses,
+       * so the row is derived from what is really there rather than patched by hand. It also fixes the
+       * laptop symptom: the disk copy is replaced by what came back, so the next edit cannot push the
+       * pre-restore bytes straight back up. */
+      try {
+        await hydrateItem(id, name, path.join(WORK, id))
+        await pushItem(id, name, path.join(WORK, id))
+      } catch (e) {
+        console.error('[revert] the bytes came back but the row could not be rewritten:', e.message)
+      }
       const restored = (await libraryOf(id)).find((x) => x.name === name)
       if (!restored) return send(res, 500, { error: 'it came back unreadable' })
       return send(res, 200, { item: restored, from: `version ${back.seq}` })
@@ -2051,7 +2135,7 @@ async function route(req, res, p, url) {
       const size = pngSize(path.join(fdir, '0.png'))
       // see the push in the views branch above: same reason, same rule
       await pushLibrary(id, name)
-      return send(res, 200, { item: { name, kind: 'animated', frames: rel, fps, w: size.w, h: size.h } })
+      return send(res, 200, { item: await libRow(id, name, { name, kind: 'animated', frames: rel, fps, w: size.w, h: size.h }) })
     }
     const file = name + '.png'
     fs.writeFileSync(path.join(dir, file), Buffer.from(stripDataURL(String(frames[0])), 'base64'))
@@ -2059,11 +2143,13 @@ async function route(req, res, p, url) {
     // see the push in the views branch above: same reason, same rule
     await pushLibrary(id, name)
     return send(res, 200, {
-      item: { name, kind: 'static', src: `/work/${id}/library/${file}`, w: size.w, h: size.h },
+      item: await libRow(id, name, { name, kind: 'static', src: `/work/${id}/library/${file}`, w: size.w, h: size.h }),
     })
   }
 
-  // one item out of the library, held inside work/<id>/library; the delete is final and the ui clears its placements separately
+  /* one item out of the library, held inside work/<id>/library; the delete is final and the ui clears
+     its placements separately. The faces it wore go with it: see stateDirOf below and dropItem, which
+     clears the blobs. Leaving the folder behind meant the next item to take that name inherited them. */
   if (p === '/api/library-remove' && req.method === 'POST') {
     const b = await body(req)
     if (!String(b.name || '').trim()) return send(res, 400, { error: 'no name' })
@@ -2075,13 +2161,24 @@ async function route(req, res, p, url) {
     const fdir = path.resolve(dir, name)
     // a delete has to land in both places or the item reappears on the next
     // listing, which now comes from the database rather than the folder
+    /* THE FACES IT WORE GO WITH IT. dropItem clears the blobs and library_states cascades off the
+     * row, but this folder stayed, and freeLibraryName then handed the same name to the next thing
+     * asked for. On a laptop the disk reader bound the dead item's faces straight onto the new row, so
+     * an author got a face they never paid for, of a different object; on the host a hydrate pulled
+     * the orphaned pixels back and the next push rowed them in. */
+    const faces = path.resolve(stateDirOf(id, name))
+    const dropFaces = () => {
+      if (faces.startsWith(path.resolve(WORK, id) + path.sep)) fs.rmSync(faces, { recursive: true, force: true })
+    }
     if (inside(png) && fs.existsSync(png) && fs.statSync(png).isFile()) {
       fs.unlinkSync(png)
+      dropFaces()
       await dropItem(id, name)
       return send(res, 200, { removed: 'static' })
     }
     if (inside(fdir) && fs.existsSync(fdir) && fs.statSync(fdir).isDirectory()) {
       fs.rmSync(fdir, { recursive: true, force: true })
+      dropFaces()
       await dropItem(id, name)
       return send(res, 200, { removed: 'animated' })
     }
@@ -3705,10 +3802,17 @@ async function writeRotations(id, plan) {
 async function ensureSidecars(id, name) {
   if (!platformOn()) return
   const folder = path.join(libDirOf(id), name)
-  if (!fs.existsSync(folder) || !fs.statSync(folder).isDirectory()) return
+  const isFolder = fs.existsSync(folder) && fs.statSync(folder).isDirectory()
   const dj = path.join(folder, 'dirs.json')
   const ej = path.join(folder, 'effect.json')
-  if (fs.existsSync(dj) && fs.existsSync(ej)) return
+  /* A STILL NEEDS THIS TOO, for the origin. It used to return here unless the item was a folder,
+   * which is exactly why a second face works on a sprite and is refused on an object: a character's
+   * rig id lives inside dirs.json, which IS a blob and comes back on a hydrate, while an object's
+   * drawing id lives only in work/<id>/origin.json, which is never a blob and never comes back. The
+   * listing reads the id out of the database and lights the becomes button with it, then the route
+   * reads the file, finds nothing, and answers that nothing on record drew this. Twelve rows on the
+   * live database are in that state. */
+  if (isFolder && fs.existsSync(dj) && fs.existsSync(ej) && originHas(id, name)) return
   let it = null
   try {
     it = (await libraryOf(id)).find((x) => x.name === name) || null
@@ -3717,6 +3821,11 @@ async function ensureSidecars(id, name) {
     return
   }
   if (!it) return
+  /* the row's own copy, written back where readOrigin will find it. noteOrigin merges over whatever
+   * is on disk, so without this a later face write flattens the drawing id away entirely: it merges
+   * {faces} over an empty file and pushItem upserts that over the column. */
+  if (it.origin && typeof it.origin === 'object' && !originHas(id, name)) noteOrigin(id, name, it.origin)
+  if (!isFolder) return
   if (!fs.existsSync(dj) && it.dirs) {
     const meta = { dirs: it.dirs, fps: it.fps || 8 }
     if (it.origin && it.origin.characterId) meta.characterId = it.origin.characterId
@@ -3855,6 +3964,26 @@ async function animateAsk(it, ask, id, job) {
 }
 
 /* the motion words are asked once and only the price is re-derived on confirm, so neither the client nor the router can talk it up or down */
+/* WHAT A COLLECTION NEEDS AND NOTHING MORE: which rig drew this figure and which headings it owns.
+ * Priced at nothing, because a collection cannot spend: it reads the account and takes frames that
+ * were bought by a press that has already happened. */
+async function collectPlan(it, b) {
+  const who = await characterFor(it, b.characterId)
+  if (!who.id) return { name: it.name, shape: it.shape, path: 'blocked', price: 0, why: who.why }
+  noteCharacterId(it, who.id)
+  return {
+    name: it.name,
+    shape: it.shape,
+    path: 'character',
+    motion: 'collected',
+    frames: 0,
+    headings: it.heads,
+    characterId: who.id,
+    found: who.from,
+    price: 0,
+  }
+}
+
 async function animatePlan(it, ask, id, job, b) {
   const had = b.plan && typeof b.plan === 'object' ? b.plan : null
   const said = had
@@ -4099,8 +4228,21 @@ async function recoverCharacterMotion(plan, group = '') {
     if (Object.keys(byDir).length && (!best || hit > best.hit))
       best = { byDir: withStills(byDir, rot), hit, moves: Object.keys(byDir).length, name: g.display_name || g.animation_type }
   }
-  /* withStills makes a rotations-only group look like a complete eight, and recovering that wrote stills over the fishmonger's art and called it success */
-  if (group && best && best.hit < wanted.size) return null
+  /* withStills makes a rotations-only group look like a complete eight, and recovering that wrote
+   * stills over the fishmonger's art and called it success, which is why this refuses rather than
+   * padding whatever it finds. But it used to refuse unless EVERY wanted heading moved, and that is
+   * too strict by exactly the shape a real run fails in: one of eight jobs fails, seven draw, and on
+   * the host this branch IS the normal collection path because a five minute fan-out cannot fit in a
+   * function's budget. So all eight paid generations were abandoned, forever, and the client polled
+   * for twenty minutes and was told nothing.
+   *
+   * It holds to a floor instead, the same idea the throwing path's newGroupDirs holds to: most of
+   * what was asked for has to genuinely MOVE, counted before a single still is filled in. That keeps
+   * the rotations-only trap shut, because such a group contributes no moving heading at all and
+   * never becomes `best`. The headings that did not draw keep their standing rotation and the route
+   * reports them by name, so a statue is said out loud rather than found on the map a week later. */
+  const floor = Math.max(1, Math.ceil(wanted.size / 2))
+  if (group && best && best.hit < floor) return null
   return best && best.moves ? best : null
 }
 
@@ -4257,10 +4399,18 @@ async function keepPrevDir(id, from, as) {
 }
 
 /* one row either way: the item keeps its name so placements pick the new pixels up, and unused files go or a shorter motion leaves a longer one's tail */
-async function swapFolder(id, name, stage, meta) {
+async function swapFolder(id, name, stage, meta, opts) {
   const folder = path.join(libDirOf(id), name)
   /* .prev is added to and never emptied first: clearing it before refilling means re-animating a figure twice deletes the original eight headings outright */
   await keepPrevDir(id, folder, name)
+  /* THE WRITTEN RECIPE GOES BEFORE THE PUSH AND AFTER THE BACKUP. Its callers deleted effect.json
+   * afterwards, but this function ends by pushing, and the push reads effect.json off the folder and
+   * writes is_effect true with the old rule and the old rate into the row. So re-animating an effect
+   * answered "animated, fps 6, no effect" and then came back after a reload as an effect again,
+   * carrying a recipe that did not draw those pixels: one press of save in that panel re-rendered the
+   * old rule over the generation just bought. The backup above still holds it, so the old effect is
+   * recoverable. */
+  if (opts && opts.dropEffect) fs.rmSync(path.join(folder, 'effect.json'), { force: true })
   fs.mkdirSync(folder, { recursive: true })
   const keep = new Set()
   for (const f of fs.readdirSync(stage)) {
@@ -4358,12 +4508,40 @@ async function saveStatic(id, b64, wantName, ask, prompt, objectId) {
   // Awaited rather than fired off, so the response never claims a thing exists
   // before its bytes are durable.
   await pushLibrary(id, name)
-  return { name, kind: 'static', src: `/work/${id}/library/${file}`, w: size.w, h: size.h }
+  /* through the listing, so a just-generated object comes back with canState set and its becomes
+   * button live. It used to be greyed out for the whole session with a tooltip claiming nothing on
+   * record drew it, one line after the id that drew it was written down. */
+  return libRow(id, name, { name, kind: 'static', src: `/work/${id}/library/${file}`, w: size.w, h: size.h })
 }
 
 // Every library write ends at one of four functions. This is what each of them
 // calls when it is done, and it is why generation still appears in a listing
 // that now comes from the database rather than from a directory walk.
+/* THE ROW AS EVERY OTHER READER SEES IT. A route that answers with an object it assembled itself
+ * drops whatever it did not think to include, and that is not a cosmetic loss: the client fetches
+ * the library exactly once a session and then swaps this answer into its state, so an omission is
+ * gone until the page is reloaded.
+ *
+ * That is the whole of "it works after F5 and not before". A crop on a troll dropped `states`, so the
+ * face list emptied and a life round naming "boulder" silently drew picture 0. It dropped `canState`,
+ * so the one-generation becomes button went dead with a tooltip saying nothing on record drew this,
+ * which was untrue. It dropped `effect`, so the pencil vanished from an effect that still had its
+ * recipe on disk. Animating a character dropped both. Generating anything dropped canState.
+ *
+ * The listing is the authority on what a row is, so ask it rather than guessing. What the route built
+ * is kept as a floor: if the listing cannot answer at all the route still says something, because
+ * answering nothing after a spend is worse than answering thinly. */
+async function libRow(id, name, made) {
+  try {
+    const rows = platformOn() ? await libraryOf(id) : libraryItems(id)
+    const hit = rows.find((x) => x.name === name)
+    if (hit) return hit
+  } catch (e) {
+    console.error('[library] could not read the row back, answering with what was built:', e.message)
+  }
+  return made
+}
+
 async function pushLibrary(id, name) {
   try {
     await pushItem(id, name, path.join(WORK, safeId(id)))
@@ -4383,6 +4561,17 @@ function readOrigin(id) {
     return j && typeof j === 'object' && !Array.isArray(j) ? j : {}
   } catch {
     return {}
+  }
+}
+
+/* whether the drawing id for this row is already on disk, so the seed above runs once rather than
+ * on every request */
+function originHas(id, name) {
+  try {
+    const o = readOrigin(id)[name]
+    return !!(o && (o.objectId || o.characterId))
+  } catch {
+    return false
   }
 }
 
@@ -4636,6 +4825,54 @@ const WALK_WAIT = 900000
 /* a serverless function is cut at 300s and an eight-way animation takes five to fifteen minutes, so waiting inside the request loses every generation it bought to a press that did nothing */
 const HOST_WAIT = 230000
 const onHost = () => !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME)
+/* WHAT WAS PAID FOR AND NOT YET COLLECTED, kept where a later request can find it. On the host a
+ * fan-out cannot finish inside one function, so the route answers pending with the group name it
+ * started, and until now that name lived only in the browser's poll loop: a reload, a closed tab or
+ * a poll that ran out lost it, and the only way forward was to press again and buy all eight a
+ * second time. Measured on the account before this was written: four eight-way runs in thirty-one
+ * minutes, thirty-two generations, every job completed, not one collected.
+ *
+ * A blob and not a file, because work/ is empty on every request there, and not a column because
+ * this is scratch that wants to disappear the moment it is used. */
+const pendingKey = async (id, name) => {
+  const mid = await mapIdFor(id)
+  return mid ? `maps/${mid}/pending/${cleanName(name)}.json` : ''
+}
+async function notePending(id, name, group, plan) {
+  try {
+    const k = await pendingKey(id, name)
+    if (!k) return
+    await store().put(
+      k,
+      Buffer.from(JSON.stringify({ group, at: Date.now(), characterId: plan?.characterId || '', headings: plan?.headings || [] })),
+      'application/json',
+    )
+  } catch (e) {
+    /* a note that cannot be written costs the free collection, never the frames */
+    console.error('[animate] could not record what is still drawing:', e.message)
+  }
+}
+async function readPending(id, name) {
+  try {
+    const k = await pendingKey(id, name)
+    if (!k) return null
+    const b = await store().get(k)
+    const j = b && JSON.parse(String(b))
+    return j && j.group ? j : null
+  } catch {
+    /* nothing outstanding, which is the ordinary case */
+    return null
+  }
+}
+async function clearPending(id, name) {
+  try {
+    const k = await pendingKey(id, name)
+    if (k) await store().del(k)
+  } catch {
+    /* a note left behind is read again and finds nothing, which is harmless */
+  }
+}
+
 class Pending extends Error {
   constructor(group) {
     super('still drawing')

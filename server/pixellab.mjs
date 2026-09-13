@@ -656,10 +656,25 @@ export async function animate({ base64, action, frameCount = 8, seed }) {
   const out = await call('POST', '/v2/animate-with-text-v3', req)
   const id = out.background_job_id
   if (!id) throw new Error('animate returned no job id')
-  // typical generation time is 30-180 seconds; give it five minutes
+  /* typical generation time is 30-180 seconds; give it five minutes.
+   *
+   * AND RIDE OUT A BLIP, the way awaitCharacter and awaitAnimation already do. One 429 or one 502
+   * from the job endpoint used to reject the whole promise, and the caller answers 502 and deletes
+   * the staged folder while pixellab carries on drawing frames that are already bought. There is no
+   * recover path anywhere for the single-image animator, so that money had nowhere to go: the only
+   * way forward was to press again and pay again. Three reads in a row have to fail before it gives
+   * up, and it gives up carrying the real error rather than one invented here. */
+  let misses = 0
   for (let waited = 0; waited < 300000; waited += 5000) {
     await new Promise((r) => setTimeout(r, 5000))
-    const j = await job(id)
+    let j
+    try {
+      j = await job(id)
+      misses = 0
+    } catch (e) {
+      if (++misses >= 3) throw e
+      continue
+    }
     if (j.state === 'done') {
       if (!j.images || !j.images.length) throw new Error('animation returned no frames')
       return j.images
