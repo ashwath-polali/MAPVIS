@@ -46,7 +46,7 @@ async function tick() {
       say('linked and waiting')
       quiet = true
     }
-    return
+    return false
   }
   quiet = false
   say(`job ${job.id.slice(0, 8)} · ${job.kind}`)
@@ -80,17 +80,27 @@ async function tick() {
     await call('/api/relay/done', { id: job.id, error: String(e.message || e).slice(0, 300) }).catch(() => {})
     say(`  failed: ${String(e.message || e).slice(0, 120)}`)
   }
+  return true
 }
 
 say(`${NAME} -> ${BASE}, serving ${CAPS.join(', ')}`)
+// every claim is a request on the platform's free tier, so an idle relay asks slowly and a forgotten one stops
+const FAST_MS = 2000, IDLE_MS = 10000, BUSY_FOR_MS = 3 * 60 * 1000, GIVE_UP_MS = 30 * 60 * 1000
+let lastJobAt = Date.now()
 for (;;) {
   try {
-    await tick()
+    const got = await tick()
+    if (got) lastJobAt = Date.now()
   } catch (e) {
     // a server that is down or a laptop that lost wifi is a normal Tuesday, not
     // a reason to stop. The platform degrades on its own while this waits.
     if (!quiet) say(`cannot reach mapvis: ${String(e.message || e).slice(0, 120)}`)
     quiet = true
   }
-  await new Promise((r) => setTimeout(r, 1500))
+  const idle = Date.now() - lastJobAt
+  if (idle > GIVE_UP_MS) {
+    say(`no job for ${Math.round(idle / 60000)} minutes, stopping; run npm run relay when you generate again`)
+    process.exit(0)
+  }
+  await new Promise((r) => setTimeout(r, idle < BUSY_FOR_MS ? FAST_MS : IDLE_MS))
 }
