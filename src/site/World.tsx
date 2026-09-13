@@ -1055,7 +1055,9 @@ export default function World() {
 
   /* asked with=anchors, the one request carrying the door graph; empty stays offered for a rumour. */
   useEffect(() => {
-    fetch('/api/v1/maps?with=anchors')
+    /* mine=1: the open form of this is the game's door registry, and dressing the picker out of it
+       offered a new author every published map on the platform, anchors and all */
+    fetch('/api/v1/maps?with=anchors&mine=1')
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
       .then((j: { maps?: MapRow[] }) => setReg(new Map((j.maps || []).map((m) => [m.slug, m]))))
       .catch(() => setReg(new Map()))

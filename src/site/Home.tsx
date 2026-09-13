@@ -117,8 +117,11 @@ export default function Home() {
   // the drag in progress. A map and a folder are different things to be holding
   // and only one of them can be in the hand, so they are separate: it is what
   // decides which targets light up and what a drop means when it lands.
-  /* one world row for the whole platform, and a request that does not answer leaves the link on. */
-  const [sea, setSea] = useState(true)
+  /* THE GAME'S OCEAN IS ONE ACCOUNT'S. It was shown to everybody signed in, and behind it row 1 was
+     handed out to them as well, so a stranger's first session opened the chart on the hub and the ATC
+     island. The flag is ownership now and not "are you signed in", and a request that does not answer
+     leaves it OFF: not knowing is not a reason to offer somebody else's water. */
+  const [sea, setSea] = useState(false)
 
   const [lift, setLift] = useState('')
   const [liftF, setLiftF] = useState('')
@@ -183,8 +186,8 @@ export default function Home() {
     void pull()
     fetch('/api/world/mine')
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((j: { mine?: boolean }) => setSea(j.mine !== false))
-      .catch(() => setSea(true))
+      .then((j: { mine?: boolean; game?: boolean }) => setSea(j.game === true))
+      .catch(() => setSea(false))
   }, [user, loading])
 
   const memberOf = (slug: string) => (folders || []).filter((f) => f.maps.includes(slug)).map((f) => f.id)

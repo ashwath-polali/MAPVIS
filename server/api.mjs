@@ -157,9 +157,34 @@ const oceanOwner = () => {
     .trim()
     .toLowerCase()
 }
+/* WHO THE GAME'S OCEAN BELONGS TO, and an unset owner MUST NOT mean everybody.
+ *
+ * It did. `if (!owner) return true` handed row 1, the ocean the shipped game sails, to every account
+ * that signed in: a stranger's brand new account opened the chart and read back the hub, the ATC
+ * island and every mark on them, and any save they made would have written over it. Measured on the
+ * live database on 2026-09-13: one world row, owned by the first account, and a second account made
+ * that morning had never been given one of its own, which is only possible if this returned true for
+ * them. The deployed site has no OCEAN_OWNER set, so the fallback was the whole gate.
+ *
+ * A missing setting is not permission. The only case where nobody being configured can honestly mean
+ * "it is yours" is a single laptop with no database and therefore no accounts at all, and that is
+ * exactly what platformOn answers. With a database, an unset owner now means nobody owns the game's
+ * ocean and everyone authors their own, which fails towards keeping people apart. */
+let saidUnowned = false
 const ownedBy = (user) => {
   const owner = oceanOwner()
-  if (!owner) return true
+  if (!owner) {
+    /* said once per process, because failing closed with nothing configured looks exactly like the
+     * owner being locked out of their own ocean, and the only difference is a setting nobody can see
+     * from the screen */
+    if (platformOn() && !saidUnowned) {
+      saidUnowned = true
+      console.error(
+        '[ocean] no OCEAN_OWNER is set, so nobody holds the game ocean and every account authors its own · set OCEAN_OWNER to the address that owns it',
+      )
+    }
+    return !platformOn()
+  }
   return !!user && String(user.email || '').toLowerCase() === owner
 }
 const ownsOcean = async (req) => ownedBy(await currentUser(req))
@@ -3263,11 +3288,27 @@ async function readApi(req, res, p, url) {
   // had. Doors name a target by slug and nothing has ever been able to answer
   // whether that target exists.
   if (kind === 'maps' && !slugRaw) {
+    /* ?mine=1 IS THE AUTHORING LIST AND IT IS SCOPED. The open form below is the game's registry: a
+     * door names a target by slug and the game, which signs in as nobody, has to be able to ask
+     * whether that slug exists. Those maps are already served publicly for it to load, so listing
+     * them is not the leak.
+     *
+     * The leak was the ocean page dressing its island picker out of that same open list, so a brand
+     * new account opened the chart and was offered the hub, the ATC island and every anchor on them.
+     * An author picks from their own maps. */
+    const mineOnly = url.searchParams.get('mine') === '1'
+    let owner = ''
+    if (mineOnly) {
+      const me = await currentUser(req)
+      if (!me) return send(res, 401, { error: 'sign in to list your maps' })
+      owner = me.id
+    }
     const rows = await many(
       `select m.slug, m.title, m.w, m.h, m.base_w, m.base_h, m.updated_at,
               (select max(version) from publishes p where p.map_id = m.id) as version,
               (select count(*)::int from anchors a where a.map_id = m.id)  as anchors
-       from maps m order by m.updated_at desc`,
+       from maps m ${owner ? 'where m.owner_id = $1' : ''} order by m.updated_at desc`,
+      owner ? [owner] : [],
     )
     const maps = rows.filter((r) => r.version)
     /* ?with=anchors: a door graph over twelve islands costs thirteen requests, paid by thirty people at once on modest machines. opt-in, so the listing stays cheap */

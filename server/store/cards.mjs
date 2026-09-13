@@ -36,8 +36,13 @@ const houseCard = (ref = '') => ({ ...HOUSE_CARD, ref, house: true })
  * hub's hand is the one thing on this platform that is not public. */
 export async function mayUseHouse(user) {
   const owner = houseOwner()
-  // nothing configured is one person on one laptop, and the choice is theirs
-  if (!owner) return true
+  /* NOTHING CONFIGURED IS ONE PERSON ON ONE LAPTOP, and that is a thing platformOn can actually
+   * answer rather than something to assume. It used to return true outright, so a deployment with no
+   * owner set offered the house hand to every account that signed up, which is the second half of the
+   * same breach that handed them the game's ocean. A missing setting is not permission: with a
+   * database there are other people, so an unset owner means nobody holds the house hand rather than
+   * everybody. */
+  if (!owner) return !platformOn()
   if (!user) return false
   if (String(user.email || '').toLowerCase() === owner) return true
   if (!platformOn()) return false
