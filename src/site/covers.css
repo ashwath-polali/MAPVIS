@@ -1,0 +1,230 @@
+/* THE TRANSITION SCREEN EDITOR. One field and one press on the left, the picture in the game's own
+   frame on the right. The tokens are the site's (tokens.css), which is where this page lives. */
+
+.cvr {
+  display: grid;
+  grid-template-columns: minmax(240px, 320px) 1fr;
+  gap: 20px;
+  padding: 20px;
+  align-items: start;
+}
+@media (max-width: 860px) {
+  .cvr {
+    grid-template-columns: 1fr;
+  }
+}
+
+.cvr-side {
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+
+.cvr-field {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.cvr-field > span {
+  font: var(--fs-micro) var(--font-mono);
+  color: var(--ink-3);
+}
+.cvr-field select,
+.cvr-field input,
+.cvr-field textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 7px 8px;
+  border-radius: var(--r);
+  border: 1px solid var(--edge-ctl);
+  background: var(--raised);
+  color: var(--ink);
+  font: var(--fs-small) var(--font-mono);
+}
+.cvr-field textarea {
+  resize: vertical;
+  line-height: 1.45;
+}
+.cvr-field :is(select, input, textarea):focus-visible {
+  outline: 2px solid var(--acc);
+  outline-offset: 1px;
+}
+
+.cvr-note {
+  margin: 0;
+  font: var(--fs-micro) var(--font-mono);
+  color: var(--ink-3);
+  line-height: 1.5;
+}
+.cvr-said {
+  margin: 0;
+  font: var(--fs-micro) var(--font-mono);
+  color: var(--acc);
+}
+
+.cvr-go {
+  padding: 9px 12px;
+  border-radius: var(--r);
+  border: 1px solid var(--edge-ctl);
+  background: var(--raised);
+  color: var(--ink);
+  font: var(--fs-small) var(--font-label);
+  letter-spacing: 0.02em;
+  cursor: pointer;
+}
+.cvr-go:hover:not(:disabled) {
+  border-color: var(--acc);
+  color: var(--acc);
+}
+.cvr-go:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.cvr-x {
+  padding: 6px 10px;
+  border-radius: var(--r);
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink-3);
+  font: var(--fs-micro) var(--font-mono);
+  cursor: pointer;
+}
+.cvr-x:hover {
+  color: var(--ink);
+  border-color: var(--edge-ctl);
+}
+
+.cvr-main {
+  display: grid;
+  gap: 14px;
+  align-content: start;
+  min-width: 0;
+}
+.cvr-lab {
+  margin: 6px 0 0;
+  font: var(--fs-micro) var(--font-mono);
+  color: var(--ink-3);
+  text-transform: lowercase;
+  letter-spacing: 0.04em;
+}
+
+/* THE GAME'S OWN FRAME, and the reason a preview is worth anything: a cover is judged with the title
+   across it, because that is where the title lands. */
+.cvr-shot {
+  margin: 0;
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+.cvr-pic {
+  position: relative;
+  /* the type inside scales with the frame rather than the window, so the title reads at the size it
+     will read at wherever the game is opened */
+  container-type: inline-size;
+  aspect-ratio: 688 / 384;
+  border-radius: var(--r);
+  overflow: hidden;
+  background: #0b0d12;
+  border: 1px solid var(--line);
+  max-width: 720px;
+}
+.cvr-pic > img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  image-rendering: pixelated;
+}
+.cvr-vig {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 45%, transparent 40%, rgba(0, 0, 0, 0.55) 100%);
+  pointer-events: none;
+}
+.cvr-text {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 4%;
+  pointer-events: none;
+}
+.cvr-kicker {
+  font: clamp(6px, 1.7cqw, 11px) var(--font-mono);
+  letter-spacing: 0.08em;
+  color: rgba(255, 255, 255, 0.82);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+/* the plaque, drawn flat on purpose: the game dresses it in whichever skin is on, and guessing at
+   that skin would preview something that may not ship */
+.cvr-band {
+  background: rgba(12, 14, 20, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  border-radius: 2px;
+  padding: 3% 6%;
+  max-width: 80%;
+}
+.cvr-title {
+  font: 600 clamp(10px, 3.4cqw, 26px) var(--font-display);
+  color: #fff;
+  letter-spacing: 0.02em;
+  text-align: center;
+  display: block;
+}
+.cvr-meter {
+  width: 42%;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.cvr-meter > i {
+  display: block;
+  width: 62%;
+  height: 100%;
+  background: var(--acc);
+}
+.cvr-shot > figcaption {
+  font: var(--fs-micro) var(--font-mono);
+  color: var(--ink-3);
+}
+
+.cvr-keep {
+  display: grid;
+  gap: 8px;
+  max-width: 720px;
+}
+.cvr-row2 {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.cvr-have {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: start;
+}
+
+/* THE EXACT LINE A MEMBER TYPES, shown rather than described: a name reconstructed out of a sentence
+   is a name somebody gets wrong once. */
+.cvr-code {
+  display: block;
+  margin: 0 0 6px;
+  padding: 6px 8px;
+  border-radius: var(--r);
+  background: var(--raised);
+  border: 1px solid var(--line);
+  color: var(--acc);
+  font: var(--fs-micro) var(--font-mono);
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.cvr-empty {
+  padding: 40px 20px;
+  color: var(--ink-3);
+  font: var(--fs-small) var(--font-mono);
+}

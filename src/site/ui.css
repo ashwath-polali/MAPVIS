@@ -714,3 +714,67 @@
   font-size: var(--fs-small);
   line-height: var(--lh);
 }
+
+/* ---- what are you making ---------------------------------------------------
+   This page opened straight into the twenty-one game pieces, so the only thing it
+   could make was the one thing it showed. The chooser is the first screen now, and
+   it is a list on purpose: a third group is a row rather than a redesign. */
+
+.uk-pick {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 14px;
+  padding: 28px 20px;
+  align-content: start;
+  max-width: 900px;
+}
+.uk-card {
+  display: grid;
+  gap: 6px;
+  padding: 18px 16px;
+  text-align: left;
+  border-radius: var(--r);
+  border: 1px solid var(--edge-ctl);
+  background: var(--raised);
+  color: var(--ink);
+  cursor: pointer;
+}
+.uk-card:hover {
+  border-color: var(--acc);
+}
+.uk-card > b {
+  font: 600 var(--fs-body) var(--font-label);
+  letter-spacing: 0.01em;
+}
+.uk-card > span {
+  font: var(--fs-micro) var(--font-mono);
+  color: var(--ink-3);
+  line-height: 1.5;
+}
+/* said rather than left to be found: two cards invite the question and the honest
+   answer is that the rest is not built */
+.uk-soon {
+  grid-column: 1 / -1;
+  margin: 4px 0 0;
+  font: var(--fs-micro) var(--font-mono);
+  color: var(--ink-3);
+}
+
+.uk-head {
+  font: var(--fs-micro) var(--font-mono);
+  color: var(--ink-3);
+  letter-spacing: 0.04em;
+}
+.uk-back {
+  padding: 5px 9px;
+  border-radius: var(--r);
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink-3);
+  font: var(--fs-micro) var(--font-mono);
+  cursor: pointer;
+}
+.uk-back:hover {
+  color: var(--ink);
+  border-color: var(--edge-ctl);
+}

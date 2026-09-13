@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSession } from './session'
 import { go } from './router'
 import { displayName } from '../core/naming'
+import Covers from './Covers'
 import './ui.css'
 
 /* ---- what the server says a piece is ------------------------------------- */
@@ -98,6 +99,25 @@ const post = async (path: string, body: unknown) => {
   return j
 }
 
+/* WHAT YOU ARE MAKING, asked before anything else. This page used to open straight into the
+   twenty-one game pieces, so the only thing it could make was the one thing it showed. A group is a
+   kind of thing with its own editor and its own rules, and the list is a list on purpose: a third
+   one is a row here rather than a redesign. */
+type GroupId = 'pieces' | 'covers'
+
+const GROUPS: { id: GroupId; name: string; about: string }[] = [
+  {
+    id: 'pieces',
+    name: 'game pieces',
+    about: 'the panels, boxes, buttons and marks the whole game is dressed in, drawn once for every screen',
+  },
+  {
+    id: 'covers',
+    name: 'transition screens',
+    about: 'the screen a student looks at on the way into a map, one per map and any number of named extras',
+  },
+]
+
 type Step = 'pieces' | 'draw' | 'mark'
 
 const STEPS: { id: Step; n: number; name: string }[] = [
@@ -138,6 +158,8 @@ export default function Ui() {
    * per load busts the cache here and nowhere else. */
   const [stamp, setStamp] = useState(() => Date.now())
   const [step, setStep] = useState<Step>('pieces')
+  /* empty is the chooser, which is where the page now opens */
+  const [group, setGroup] = useState<GroupId | ''>('')
   // which of the twenty-one is armed for drawing, and which drawn piece is open
   const [armed, setArmed] = useState('')
   const [open, setOpen] = useState('')
@@ -222,6 +244,55 @@ export default function Ui() {
         : ''
 
   /* uikit rides beside app as a fence: every rule under it in ui.css is a metric and never a colour. */
+  /* THE CHOOSER. Nothing else is on screen until a group is picked, because the page's whole problem
+     was that it looked like one editor for one thing. */
+  if (!group)
+    return (
+      <div className="app uikit">
+        <header>
+          <a className="brand" href="/" title="your maps">
+            MAPVIS
+          </a>
+          <span className="uk-head">what are you making?</span>
+          <a className="helpbtn backbtn" href="/" data-tip="back to your maps">
+            ←
+          </a>
+        </header>
+        <main className="uk-pick">
+          {GROUPS.map((g) => (
+            <button key={g.id} className="uk-card" onClick={() => setGroup(g.id)}>
+              <b>{g.name}</b>
+              <span>{g.about}</span>
+            </button>
+          ))}
+          {/* said rather than left to be discovered: a chooser with two things on it invites the
+              question, and the honest answer is that the third is not built */}
+          <p className="uk-soon">More groups, and groups you name yourself, are not built yet.</p>
+        </main>
+      </div>
+    )
+
+  if (group === 'covers')
+    return (
+      <div className="app uikit">
+        <header>
+          <a className="brand" href="/" title="your maps">
+            MAPVIS
+          </a>
+          <button className="uk-back" onClick={() => setGroup('')}>
+            ← what are you making
+          </button>
+          <span className="uk-head">transition screens</span>
+          <a className="helpbtn backbtn" href="/" data-tip="back to your maps">
+            ←
+          </a>
+        </header>
+        <main>
+          <Covers maps={maps} />
+        </main>
+      </div>
+    )
+
   return (
     <div className="app uikit">
       <header>
@@ -230,6 +301,9 @@ export default function Ui() {
         <a className="brand" href="/" title="your maps">
           MAPVIS
         </a>
+        <button className="uk-back" onClick={() => setGroup('')}>
+          ← what are you making
+        </button>
         <nav className="stepper">
           {STEPS.map((s) => (
             <button

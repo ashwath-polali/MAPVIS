@@ -38,8 +38,8 @@ for (const p of built.parts) console.log(`    [${p.name}] ${p.text}`)
 console.log('')
 
 {
-  built.parts.map((p) => p.name).join(',') === 'subject,structure,craft,edge'
-    ? ok('the sentence is the author subject, the cover shape, the account hand, then the fence')
+  built.parts.map((p) => p.name).join(',') === 'subject,structure,light,colour,hand,edge'
+    ? ok('the sentence is the subject, the shape, the light, the colour, the hand, then the fence')
     : no(`the parts are ${built.parts.map((p) => p.name).join(',')}`)
 
   built.prompt.startsWith(ASK)
@@ -57,15 +57,38 @@ console.log('')
     ? ok('and it is said last as well, where a generator is least likely to have dropped it')
     : no('the fence is not repeated at the end')
 
-  built.prompt.includes(HOUSE_CARD.craft.clause)
-    ? ok('the account hand rides in whole, so a cover comes back in the island it covers')
-    : no('the style clause is missing')
+  /* THE CARD'S MAP CLAUSE IS DELIBERATELY NOT HERE, and this is the check that says so on purpose
+   * rather than by omission. A style card is read off a MAP, so its clause names an isometric
+   * projection and a desaturated muted palette. Held against the four covers the game already ships
+   * (public/art/ui/loading-port, -islands, -maw, -voyage), that contradicts every one of them twice:
+   * all four look ACROSS a scene from eye level, and all four are saturated. A cover built with the
+   * map clause would come back looking like a map. */
+  !built.prompt.includes('isometric')
+    ? ok('a cover is never asked for a map projection, because not one shipped cover has one')
+    : no('the cover asks for isometric, which no cover the game ships is')
+  !built.prompt.includes('desaturated') && built.prompt.includes('rich saturated colour')
+    ? ok('and it asks for saturated colour, because a map is flat so placements read on it and nothing is placed on a cover')
+    : no('the cover asks for a map palette')
+  built.prompt.includes(HOUSE_CARD.craft.outline)
+    ? ok('what does carry across from the card is the outline, which is what makes two pictures one hand')
+    : no('the account hand is absent entirely')
 
   /* the author is never asked for a look, so nothing describing one may come from them */
   const bare = coverPrompt({ subject: ASK, card: null })
-  !bare.prompt.includes(HOUSE_CARD.craft.clause) && bare.parts.map((p) => p.name).join(',') === 'subject,structure,edge'
+  !bare.prompt.includes(HOUSE_CARD.craft.outline) && bare.parts.map((p) => p.name).join(',') === 'subject,structure,light,colour,edge'
     ? ok('with no card the hand is simply absent rather than invented')
-    : no('a hand appeared with no card')
+    : no(`a hand appeared with no card: ${bare.parts.map((p) => p.name).join(',')}`)
+
+  /* MEASURED, not asserted. One cover was drawn through this route on 2026-09-13 with no card and no
+   * style reference at all, and it came back a dusk harbour looking across the water at a low sun,
+   * foreground in shadow, three depth planes, no lettering. So the scaffold carries the look on its
+   * own and the card is an improvement on it rather than the thing holding it up. */
+  built.prompt.includes('looking across') && built.prompt.includes('eye level')
+    ? ok('the viewpoint is said in words, which is what a style image cannot carry')
+    : no('the cover does not say where it is seen from')
+  built.prompt.includes('one strong light source inside the frame')
+    ? ok('and the light is in the frame, which is what every shipped cover has and no map does')
+    : no('the cover asks for no light source')
 
   coverPrompt({ subject: '   ', card: HOUSE_CARD }).prompt === ''
     ? ok('and nothing typed asks for nothing, so an empty press cannot spend')
@@ -141,20 +164,36 @@ console.log('')
 // ---- and the author sees the game's frame -----------------------------------
 
 {
-  const app = read('src/App.tsx')
-  app.includes("const COVER_KICKER = 'E N T E R I N G'") ? ok("the preview says the game's own word over the picture") : no('the preview has no kicker')
-  app.includes('cvr-band') && app.includes('coverTitle.toUpperCase()')
-    ? ok("and draws the title band over it, so a cover is judged with the title where the title lands")
+  /* ITS OWN EDITOR, linked to a map by a dropdown. It was a seventh step of the map editor first, and
+   * that was the wrong shelf: a cover is a kind of thing rather than a stage of finishing a map, and
+   * the page a person goes to when they want to make one is /ui. Ruled by Ash 2026-09-13. */
+  const cov = read('src/site/Covers.tsx')
+  cov.includes("const KICKER = 'E N T E R I N G'") ? ok("the preview says the game's own word over the picture") : no('the preview has no kicker')
+  cov.includes('cvr-band') && cov.includes('title.toUpperCase()')
+    ? ok('and draws the title band over it, so a cover is judged with the title where the title lands')
     : no('the preview is a bare picture')
-  app.includes("{ id: 'cover', n: 6, name: 'cover' }") ? ok('and it is a step of its own, between the assets and the export') : no('there is no cover step')
+  cov.includes('<select value={slug}') ? ok('and the map it belongs to is picked from a dropdown') : no('there is no way to say which map it is for')
 
-  const css = read('src/app.css')
+  const app = read('src/App.tsx')
+  !app.includes("{ id: 'cover'") && !app.includes('coverPanel')
+    ? ok('and the map editor no longer carries a cover step, so there is one place to find it')
+    : no('the cover is still a step of the map editor as well')
+
+  /* the chooser, which is what the page was missing: it opened straight into the twenty-one game
+   * pieces, so the only thing it could make was the one thing it showed */
+  const ui = read('src/site/Ui.tsx')
+  ui.includes("const GROUPS:") && ui.includes("id: 'covers'") && ui.includes("id: 'pieces'")
+    ? ok('/ui asks what you are making first, and transition screens is one of the answers')
+    : no('/ui still opens straight into the game pieces')
+  ui.includes('GROUPS.map') ? ok('and the groups are a list, so a third is a row rather than a redesign') : no('the groups are hardcoded into the markup')
+
+  const css = read('src/site/covers.css')
   css.includes('.cvr-pic') && css.includes('aspect-ratio: 688 / 384')
     ? ok('shown at the shape it ships at, so nothing is judged in the wrong frame')
     : no('the preview is not the bundle shape')
-  !css.includes('var(--sunk)') || !css.slice(css.indexOf('---- the cover step')).includes('var(--sunk)')
-    ? ok("and dressed in the editor's own tokens rather than the world page's, which resolve to nothing here")
-    : no('the cover step uses tokens that do not exist in the editor')
+  css.includes('container-type: inline-size')
+    ? ok('and the title scales with the frame rather than the window, the way it will in the game')
+    : no('the preview type does not scale with its frame')
 }
 
 console.log(bad ? `\n${bad} problem(s).` : '\na map carries the screen it is entered through, and the author only ever says what it shows.')

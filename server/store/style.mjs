@@ -218,12 +218,27 @@ export function fitCanvas({ w, h }) {
 export const COVER_SCAFFOLD = {
   title: 'cover',
   /* the widest frame under the ceiling with both sides even: 688 x 384 is 264,192 against 265,000,
-   * and it is the shape the game shows a cover in */
+   * and it is the shape the game shows a cover in. The four covers the game already ships are
+   * 400x224, the same 1.79 to 1. */
   canvas: { w: 688, h: 384 },
+  /* READ OFF THE FOUR COVERS THE GAME ALREADY SHIPS, not invented: loading-port, loading-islands,
+   * loading-maw and loading-voyage in the game's public/art/ui. Every one of them looks ACROSS a
+   * place toward a horizon from about eye level, with a foreground, a subject in the middle and
+   * distance behind it. None of them is seen from above. */
   structure:
-    'one wide painted scene of the place named above, seen from a little way off so the whole of it reads at a glance, ' +
+    'one wide scenic view looking across the place named above toward a distant horizon, from eye level or a little above, ' +
     'filling the frame corner to corner with no transparent space and nothing cut off at the edges, ' +
-    'a clear foreground, middle and distance, and one place for the eye to rest near the middle',
+    'a dark detailed foreground at the bottom edge, the subject standing clear in the middle distance, ' +
+    'open sky across the upper third',
+  /* AND THE LIGHT, which is what makes those four read as a held breath rather than a screenshot: in
+   * every one the source is IN the picture, low and warm, with the foreground dropped into shadow
+   * against it. */
+  light:
+    'one strong light source inside the frame, low and warm, with a bright core and long reflections, ' +
+    'the foreground dropped into deep shadow so the middle distance reads brightly against it',
+  /* rich and not muted, which is the one place a cover parts company with a map: a map is painted
+   * flat and desaturated so placements read on top of it, and nothing is ever placed on a cover */
+  colour: 'rich saturated colour, strong contrast between the warm lit side and the cool shadowed side, deep clean darks',
   /* said twice over and last, because it is the instruction a generator drops first and a cover with
    * a title painted into it cannot be used at all */
   extra:
@@ -237,10 +252,22 @@ export const COVER_SCAFFOLD = {
 export function coverPrompt({ subject, card, max = 1400 }) {
   const sub = tidy(subject)
   if (!sub) return { prompt: '', card: null, parts: [], canvas: COVER_SCAFFOLD.canvas }
+  /* THE CARD'S CLAUSE IS NOT USED HERE, and that is the whole difference between a cover and a map.
+   * A style card is read off a MAP, so its clause names an isometric projection and a desaturated
+   * muted palette: correct for something a character walks on and placements sit on top of, and
+   * exactly wrong for a picture that is looked at for two seconds. Held against the four covers the
+   * game already ships, a clause like that contradicts every one of them twice over.
+   *
+   * What survives is the hand that does carry across: the outline discipline, which is what makes
+   * two pictures look drawn by the same person. The projection, the light and the saturation come
+   * from the scaffold, because those three are what make a transition screen one. */
+  const hand = card && card.craft && card.craft.outline ? card.craft.outline : ''
   const parts = [
     { name: 'subject', text: sub },
     { name: 'structure', text: COVER_SCAFFOLD.structure },
-    card && card.craft && card.craft.clause ? { name: 'craft', text: card.craft.clause } : null,
+    { name: 'light', text: COVER_SCAFFOLD.light },
+    { name: 'colour', text: COVER_SCAFFOLD.colour },
+    hand ? { name: 'hand', text: hand } : null,
     /* last, and it repeats the no-words rule the scaffold already made, because the game writes the
      * title over this picture and a painted one underneath it reads as a mistake nobody can fix */
     { name: 'edge', text: COVER_SCAFFOLD.extra + ', no border, no frame, no user interface' },

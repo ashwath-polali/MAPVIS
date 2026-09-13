@@ -94,7 +94,7 @@ import { matchToPalette, sampleMapPalette } from './core/palette'
 import * as api from './api'
 import { Icon, type IconName } from './ui/icons'
 
-type StepId = 'load' | 'cut' | 'levels' | 'test' | 'assets' | 'cover' | 'export'
+type StepId = 'load' | 'cut' | 'levels' | 'test' | 'assets' | 'export'
 
 const STEPS: { id: StepId; n: number; name: string }[] = [
   { id: 'load', n: 1, name: 'load' },
@@ -102,15 +102,13 @@ const STEPS: { id: StepId; n: number; name: string }[] = [
   { id: 'levels', n: 3, name: 'levels' },
   { id: 'test', n: 4, name: 'test' },
   { id: 'assets', n: 5, name: 'assets' },
-  /* the screen a student looks at on the way in, drawn after the map it is a cover for and before it
-     ships with it */
-  { id: 'cover', n: 6, name: 'cover' },
-  { id: 'export', n: 7, name: 'export' },
+  { id: 'export', n: 6, name: 'export' },
 ]
 
-/* THE WORD THE GAME SAYS OVER EVERY COVER, spaced by hand there and copied here so the preview is the
-   frame a student sees rather than a picture on its own. src/app/transitions.tsx draws it. */
-const COVER_KICKER = 'E N T E R I N G'
+/* THE TRANSITION SCREEN A MAP IS ENTERED THROUGH IS NOT A STEP HERE. It was, and it was in the wrong
+   place: a cover is its own kind of thing rather than a stage of finishing a map, so it is its own
+   editor at /ui under "transition screens" and picks its map from a dropdown. The map still carries
+   it, and the export still ships it. See src/site/Covers.tsx. */
 
 // the groups that exist even when empty, so placing has somewhere to aim
 const SUGGESTED_GROUPS = ['trees', 'people', 'smoke', 'effects', 'props']
@@ -774,16 +772,6 @@ export default function App() {
   const [lifeBusy, setLifeBusy] = useState(false)
   const [lifeNote, setLifeNote] = useState('')
   /* what the pixels do standing still; life moves the placement. the server prices it, never a list here. */
-  /* the cover step. `made` is what the last press drew and has not been kept yet, so nothing is ever
-     written until the author says so, and `bust` is what makes a replaced picture actually redraw. */
-  const [coverAsk, setCoverAsk] = useState('')
-  const [coverName, setCoverName] = useState('')
-  const [coverMade, setCoverMade] = useState<string>('')
-  const [coverBusy, setCoverBusy] = useState('')
-  const [coverHas, setCoverHas] = useState<{ cover: boolean; covers: string[] }>({ cover: false, covers: [] })
-  const [coverBust, setCoverBust] = useState(0)
-  const [coverSaid, setCoverSaid] = useState('')
-
   const [animOpen, setAnimOpen] = useState(false)
   const [animAsk, setAnimAsk] = useState('')
   const [animBusy, setAnimBusy] = useState(false)
@@ -939,9 +927,7 @@ export default function App() {
     } else if (s === 'assets') {
       // the cut preview is what the game gets, and the assets live on top of it
       e.setView({ cutPreview: true, mask: true })
-    } else if (s === 'export' || s === 'cover') {
-      /* the cover step shows the finished map behind its own panel, because the picture being asked
-         for is a cover FOR that map and the author is looking at the thing they are describing */
+    } else if (s === 'export') {
       e.setView({ cutPreview: true, mask: true })
     } else {
       e.setView({ cutPreview: false, mask: true })
@@ -3176,101 +3162,6 @@ export default function App() {
     [push],
   )
 
-  // ---- the cover: the screen a student looks at on the way into this map ----
-  /* what this map already carries, asked when the step opens. It is the store that answers, because
-     the bytes are the record: a column could say a cover exists that nobody can fetch. */
-  const coverLoad = useCallback(async () => {
-    const e = edRef.current
-    if (!e || !e.sceneId) return
-    try {
-      setCoverHas(await api.coversOf(e.sceneId))
-    } catch {
-      /* no platform behind it, or the map has never been saved; the step still opens */
-      setCoverHas({ cover: false, covers: [] })
-    }
-  }, [])
-
-  useEffect(() => {
-    if (step === 'cover') void coverLoad()
-  }, [step, coverLoad, sceneKey])
-
-  /* ONE GENERATION, on the press and never before it. The prompt is assembled on the server out of
-     the account's hand and the cover scaffold, so the author types what the screen shows and nothing
-     else. What comes back is held in hand until they keep it. */
-  const doCoverGen = useCallback(async () => {
-    const e = edRef.current
-    if (!e) return
-    const ask = coverAsk.trim()
-    if (!ask) {
-      push('say what the screen should show')
-      return
-    }
-    setCoverBusy('drawing')
-    setCoverSaid('')
-    try {
-      const r = await api.coverGen(ask)
-      const started = Date.now()
-      /* the same poll the painting step runs, and the same ceiling: a cover is one generation and
-         lands in about the time one map candidate does */
-      for (;;) {
-        const s = await api.jobState(r.job.id)
-        if (s.state === 'done' && s.images && s.images[0]) {
-          setCoverMade(s.images[0])
-          setCoverSaid(`drawn · ${r.w}x${r.h}`)
-          break
-        }
-        if (s.state === 'failed') throw new Error(s.error || 'it did not come back')
-        if (Date.now() - started > 300000) throw new Error('it did not come back within five minutes')
-        await new Promise((res) => setTimeout(res, 2500))
-      }
-    } catch (err) {
-      push('could not draw the cover · ' + String(err instanceof Error ? err.message : err).slice(0, 90))
-    } finally {
-      setCoverBusy('')
-    }
-  }, [coverAsk, push])
-
-  /* keeping it. A code name makes it an extra that python calls; no name makes it this map's own,
-     which every door and every sail into the map shows with nothing naming it. */
-  const doCoverKeep = useCallback(async () => {
-    const e = edRef.current
-    if (!e || !coverMade) return
-    const name = coverName.trim().toLowerCase()
-    if (name && !/^[a-z][a-z0-9_]{0,47}$/.test(name)) {
-      push('a code name starts with a letter and holds only letters, numbers and underscores')
-      return
-    }
-    setCoverBusy('keeping')
-    try {
-      const r = await api.coverSave(e.sceneId, coverMade, name || undefined)
-      setCoverHas({ cover: r.cover, covers: r.covers })
-      setCoverBust(Date.now())
-      setCoverMade('')
-      setCoverName('')
-      setCoverSaid('')
-      push(name ? `kept as ${name} · call it with enter("${e.sceneId}", cover="${name}")` : 'kept as this map\'s cover')
-    } catch (err) {
-      push('could not keep it · ' + String(err instanceof Error ? err.message : err).slice(0, 90))
-    } finally {
-      setCoverBusy('')
-    }
-  }, [coverMade, coverName, push])
-
-  const doCoverRemove = useCallback(
-    async (name: string) => {
-      const e = edRef.current
-      if (!e) return
-      try {
-        const r = await api.coverRemove(e.sceneId, name || undefined)
-        setCoverHas({ cover: r.cover, covers: r.covers })
-        setCoverBust(Date.now())
-        push(name ? `${name} removed` : 'the map\'s own cover removed')
-      } catch (err) {
-        push('could not remove it · ' + String(err instanceof Error ? err.message : err).slice(0, 90))
-      }
-    },
-    [push],
-  )
   const applyCrop = useCallback(
     async (id: string, r: { x: number; y: number; w: number; h: number }) => {
       const e = edRef.current
@@ -7457,119 +7348,10 @@ export default function App() {
     </>
   )
 
-  /* THE COVER STEP. One sentence in, one picture back, kept or thrown away. The author never says how
-     it should look: the hand comes off their style card and the shape off the cover scaffold, both on
-     the server, so what they type is only ever what the screen SHOWS. */
-  const coverTitle = (st?.sceneId || 'this map').replace(/[-_]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
-
-  /* the picture inside the frame the game draws round it: the kicker, the plaque and the bar are the
-     ones in src/app/transitions.tsx, so what the author judges is what a student sees rather than a
-     bare painting that turns out to have its subject under the title. */
-  const CoverShot = ({ src, label }: { src: string; label: string }) => (
-    <figure className="cvr-shot">
-      <div className="cvr-pic">
-        <img src={src} alt="" draggable={false} />
-        <div className="cvr-vig" />
-        <div className="cvr-text">
-          <div className="cvr-kicker">{COVER_KICKER}</div>
-          <div className="cvr-band">
-            <span className="cvr-title">{coverTitle.toUpperCase()}</span>
-          </div>
-          <div className="cvr-meter">
-            <i />
-          </div>
-        </div>
-      </div>
-      <figcaption>{label}</figcaption>
-    </figure>
-  )
-
-  const coverPanel = !has ? (
-    needPainting
-  ) : (
-    <>
-      <div className="panel-cap">the screen a student sees on the way in</div>
-      <Sec>what it shows</Sec>
-      <textarea
-        className="cvr-ask"
-        rows={3}
-        value={coverAsk}
-        placeholder="the ATC lab at dusk, the harbor below"
-        onChange={(e) => setCoverAsk(e.target.value)}
-      />
-      {/* the one thing worth saying about what NOT to type: the picture carries no words, because the
-          game writes the name over it */}
-      <div className="lawhint">say what it shows · the hand and the shape are already yours · it carries no words</div>
-      <div className="manyrow">
-        <button className="abtn" onClick={() => void doCoverGen()} disabled={!!coverBusy || !coverAsk.trim()}>
-          {coverBusy === 'drawing' ? 'drawing…' : 'draw it · 1 generation'}
-        </button>
-        {coverMade && (
-          <button className="abtn tiny" data-tip="throw this one away and keep what is already there" onClick={() => setCoverMade('')}>
-            discard
-          </button>
-        )}
-      </div>
-
-      {coverMade && (
-        <>
-          <Sec>keep it as</Sec>
-          <CoverShot src={coverMade} label={coverSaid || 'not kept yet'} />
-          <label className="cvr-name">
-            <span>code name · leave empty for this map&apos;s own</span>
-            <input
-              value={coverName}
-              placeholder=""
-              onChange={(e) => setCoverName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') void doCoverKeep()
-              }}
-            />
-          </label>
-          {coverName.trim() ? (
-            <div className="cvr-code">
-              enter(&quot;{st?.sceneId}&quot;, cover=&quot;{coverName.trim().toLowerCase()}&quot;)
-            </div>
-          ) : (
-            <div className="lawhint">with no name it is this map&apos;s own, shown on every door and every sail in</div>
-          )}
-          <button className="abtn" onClick={() => void doCoverKeep()} disabled={!!coverBusy}>
-            {coverBusy === 'keeping' ? 'keeping…' : 'keep it'}
-          </button>
-        </>
-      )}
-
-      <Sec>this map carries</Sec>
-      {!coverHas.cover && !coverHas.covers.length && <div className="lawhint">nothing yet · the game falls back to its own painted cover</div>}
-      {coverHas.cover && (
-        <div className="cvr-row">
-          <CoverShot src={api.coverUrl(st!.sceneId, undefined, coverBust)} label="this map&apos;s own" />
-          <button className="arow-x" data-tip="remove it" onClick={() => void doCoverRemove('')}>
-            <Icon name="x" />
-          </button>
-        </div>
-      )}
-      {coverHas.covers.map((n) => (
-        <div className="cvr-row" key={n}>
-          <CoverShot src={api.coverUrl(st!.sceneId, n, coverBust)} label={n} />
-          <button className="arow-x" data-tip="remove it" onClick={() => void doCoverRemove(n)}>
-            <Icon name="x" />
-          </button>
-        </div>
-      ))}
-      {coverHas.covers.map((n) => (
-        <div className="cvr-code" key={'c-' + n}>
-          enter(&quot;{st?.sceneId}&quot;, cover=&quot;{n}&quot;)
-        </div>
-      ))}
-      <Keys lines={['one sentence · one generation · nothing is spent until you press draw']} />
-    </>
-  )
   const panels: Record<StepId, ReactNode> = {
     load: loadPanel,
     cut: cutPanel,
     levels: levelsPanel,
-    cover: coverPanel,
     test: testPanel,
     assets: assetsPanel,
     export: exportPanel,
