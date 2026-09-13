@@ -8,6 +8,9 @@
 //
 // awaitAnimation takes its two readers as options, so every case below runs against a scripted account
 // rather than a real one. Nothing here touches the network.
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { awaitAnimation } from '../pixellab.mjs'
 
 let bad = 0
@@ -16,6 +19,8 @@ const no = (m) => {
   bad++
   console.log(`  FAIL  ${m}`)
 }
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 
 const EIGHT = ['south', 'north', 'east', 'west', 'south-east', 'south-west', 'north-east', 'north-west']
 
@@ -176,6 +181,70 @@ try {
   }
 } catch (e) {
   no('the checks themselves threw: ' + String(e && e.stack ? e.stack.split('\n')[0] : e))
+}
+
+// ---- a still that becomes an animation -------------------------------------
+// The other half of animating, and the one with no character in it: an ordinary
+// asset is one png, and animating it replaces that png with a folder of frames
+// under the same name. Two things have to follow it across, and each failed.
+{
+  const ts = (await import('typescript')).default
+  const src = fs.readFileSync(path.join(ROOT, 'src/core/editor.ts'), 'utf8')
+  const cut = src.slice(src.indexOf('export function itemMatch'), src.indexOf('export class Editor'))
+  const js = ts.transpileModule(cut, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText
+  const { itemMatch, placementIsOf } = await import('data:text/javascript;base64,' + Buffer.from(js).toString('base64'))
+
+  const LIB = '/work/a-map/library/'
+  const still = LIB + 'palm.png'
+  const animated = { kind: 'animated', frames: [LIB + 'palm/0.png', LIB + 'palm/1.png'], fps: 6 }
+  const m = itemMatch(animated)
+
+  m.key === LIB + 'palm/' ? ok('an animated item is keyed on the folder its frames live in') : no(`the key is ${m.key}`)
+  m.wasStill === still ? ok('and it knows the still it replaced, derived off that folder') : no(`the still was read as ${m.wasStill}`)
+
+  /* THE PLACEMENT THAT WAS ALREADY ON THE MAP. It went down while the item was
+   * one png, so it is static and holds that url. The png is deleted moments
+   * after the frames land, so a placement that does not follow points at
+   * nothing: it draws nothing, and reloading does not help, because the dead url
+   * is what was saved into the document. */
+  placementIsOf({ kind: 'static', src: still }, m)
+    ? ok('a placement put down before the animation is recognised as the same thing')
+    : no('a placement of the old still was not matched, so it would keep a url with no file under it')
+
+  placementIsOf({ kind: 'animated', frames: [LIB + 'palm/0.png'] }, m)
+    ? ok('and so is one placed after it, by its frames')
+    : no('an animated placement was not matched')
+
+  /* nothing else may be swept up with it: `palm` and `palm-trimmed` share a
+   * prefix, and an in-place edit leaves both in the library */
+  !placementIsOf({ kind: 'static', src: LIB + 'palm-trimmed.png' }, m)
+    ? ok('while a different item whose name starts the same is left alone')
+    : no('palm-trimmed was matched as palm')
+  !placementIsOf({ kind: 'animated', frames: [LIB + 'palm-trimmed/0.png'] }, m)
+    ? ok('and so is its animated form')
+    : no('an animated palm-trimmed was matched as palm')
+
+  const s = itemMatch({ kind: 'static', src: still })
+  s.wasStill === '' ? ok('a still item derives no folder, having none') : no('a still invented a folder')
+  placementIsOf({ kind: 'static', src: still }, s) ? ok('and matches its own placements') : no('a still did not match itself')
+
+  !placementIsOf({ kind: 'static', src: still }, itemMatch({ kind: 'animated', frames: [] }))
+    ? ok('and an item with no frames matches nothing rather than every placement on the map')
+    : no('an item with no frames swept up a placement')
+}
+
+// ---- and the library row the server writes for it ---------------------------
+// pushItem reads the disk to decide what a row is. During a swap the loose png
+// and the new folder both exist, because the png is only deleted once the folder
+// is whole. Reading the png first records a still with no frames, the png is then
+// deleted, and the library is left calling an animated thing a still.
+{
+  const store = fs.readFileSync(path.join(ROOT, 'server/store/platform.mjs'), 'utf8')
+  const head = store.slice(store.indexOf('export async function pushItem'), store.indexOf('const folder = path.join(lib, name)'))
+  const folderWins = head.includes('!folderFirst && fs.existsSync(still)')
+  folderWins
+    ? ok('the frame folder is believed over a png of the same name, which is only ever a half-finished swap')
+    : no('pushItem still reads the loose png first, so an animated item is recorded as a still with no frames')
 }
 
 console.log(bad ? `\n${bad} problem(s).` : '\na heading that fails costs that heading and nothing else.')

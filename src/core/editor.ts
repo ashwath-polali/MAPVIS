@@ -342,6 +342,32 @@ function legsOf(p: MapPath): [Pt, Pt][] {
   return out
 }
 
+/* WHICH PLACEMENTS BELONG TO A LIBRARY ITEM. Two plain functions, at module
+ * level and exported, because this rule has now broken animation twice and a
+ * rule that can only be exercised by opening a map with a canvas in front of it
+ * is a rule nobody checks. They take shapes rather than the real types so the
+ * pair can be lifted out and run on their own.
+ *
+ * The hard case is a still that has become an animation. It is the same thing
+ * under the same name, but it has moved from `library/palm.png` to
+ * `library/palm/0.png`, so a url match alone misses every placement of it. They
+ * then keep pointing at a png that is deleted moments later: nothing is drawn,
+ * and a reload does not help because the dead url is what was saved. */
+export function itemMatch(item: { kind: string; src?: string; frames?: string[] }): { key: string; wasStill: string } {
+  const first = item.frames && item.frames[0]
+  const key = item.kind === 'animated' ? (first ? first.slice(0, first.lastIndexOf('/') + 1) : '') : item.src || ''
+  // the folder and the still it replaced differ by one slash, so it is derived
+  // rather than guessed at or passed in beside it
+  const wasStill = item.kind === 'animated' && key ? key.slice(0, -1) + '.png' : ''
+  return { key, wasStill }
+}
+
+export function placementIsOf(a: { kind: string; src?: string; frames?: string[] }, m: { key: string; wasStill: string }): boolean {
+  if (!m.key) return false
+  if (a.kind === 'animated') return !!(a.frames && a.frames[0] && a.frames[0].startsWith(m.key))
+  return a.src === m.key || (!!m.wasStill && a.src === m.wasStill)
+}
+
 export class Editor {
   doc = new MaskDoc(1, 1)
   /* THE BODY THIS MAP IS DRAWN FOR, read off the document rather than held here. A default held on the editor and never assigned again describes every map as an 18px character at 34 px/s over ground squashed 0.72, island and room alike. It belongs to the map, so it rides the save, the undo and the reopen. */
@@ -2412,22 +2438,23 @@ export class Editor {
       this.touched()
       return list.length
     }
-    const key =
-      item.kind === 'animated'
-        ? item.frames && item.frames[0]
-          ? item.frames[0].slice(0, item.frames[0].lastIndexOf('/') + 1)
-          : ''
-        : item.src || ''
-    if (!key) return 0
-    const mine = (a: PlacedAsset) =>
-      a.kind === 'animated' ? !!(a.frames && a.frames[0] && a.frames[0].startsWith(key)) : a.src === key
-    const list = this.doc.assets.filter(mine)
+    const m = itemMatch(item)
+    if (!m.key) return 0
+    const list = this.doc.assets.filter((a) => placementIsOf(a, m))
     if (!list.length) return 0
     this.doc.snap()
     for (const a of list) {
       if (item.kind === 'animated') {
+        /* the kind moves with the frames. Leaving it static keeps the renderer
+         * reading `src`, so the thing stands still on a list of frames it now
+         * carries, which is the half-converted state that reads as "it animated
+         * and then stopped". */
+        a.kind = 'animated'
         a.frames = item.frames ? item.frames.slice() : []
         a.fps = item.fps || 8
+        // the still it was placed as no longer exists, and a src beside frames
+        // is a second answer to which pixels this is
+        if (a.src) delete a.src
       } else {
         a.src = item.src
       }

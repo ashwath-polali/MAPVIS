@@ -438,9 +438,22 @@ export async function pushItem(slug, name, workDir) {
     return { w: b.readUInt32BE(16), h: b.readUInt32BE(20) }
   }
 
+  /* THE FOLDER WINS OVER THE LOOSE PNG WHEN BOTH ARE THERE, and both are there
+   * for the length of one swap. Turning a still into an animation writes the
+   * frame folder, pushes, and only then deletes the png, so that the original
+   * is still standing if the write dies halfway. Reading the png first during
+   * that window records the row as a still with no frames, the png is deleted a
+   * moment later, and the library is left calling an animated thing a still
+   * that points at bytes nobody has. Nothing is animated again until the map is
+   * reconciled by hand.
+   *
+   * A frame folder and a png of the same name is never a resting state, so the
+   * folder is the newer of the two and the one to believe. */
+  const folderFirst = fs.existsSync(path.join(lib, name))
+
   // a still
   const still = path.join(lib, `${name}.png`)
-  if (fs.existsSync(still)) {
+  if (!folderFirst && fs.existsSync(still)) {
     const buf = fs.readFileSync(still)
     await s.put(keys.libStill(id, name), buf, 'image/png')
     const { w, h } = size(still)
