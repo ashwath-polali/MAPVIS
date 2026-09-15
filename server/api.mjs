@@ -3051,12 +3051,22 @@ async function route(req, res, p, url) {
             .filter((n) => n.toLowerCase().endsWith('.png'))
             .map((n) => n.slice(0, -4).toLowerCase())
             .filter(isCoverName)
-            .sort()
           for (const n of extraNames) extras[`covers/${n}.png`] = fs.readFileSync(path.join(coverDir, n + '.png'))
         } catch {
           /* a map with no extra covers, which is nearly all of them */
         }
-        const coverPng = png('cover.png')
+        let coverPng = png('cover.png')
+        // the store answers for whatever the disk does not hold, because a deploy has no writable disk and a cover kept there would otherwise never reach a bundle
+        const held = await coversOf(id).catch(() => ({ cover: false, covers: [] }))
+        if (!coverPng && held.cover) coverPng = await readCover(id).catch(() => null)
+        for (const n of held.covers) {
+          if (!isCoverName(n) || extras[`covers/${n}.png`]) continue
+          const buf = await readCover(id, n).catch(() => null)
+          if (!buf) continue
+          extras[`covers/${n}.png`] = buf
+          extraNames.push(n)
+        }
+        extraNames = [...new Set(extraNames)].sort()
         /* SAID IN map.json AS WELL AS SHIPPED, because a reader should be able to ask whether this
          * map has a cover without fetching a png to find out. */
         const mapJson = {
