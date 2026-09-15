@@ -170,6 +170,21 @@ console.log('')
   pkg.includes('verify-cover.mjs') && read('.github/workflows/ci.yml').includes('verify:local')
     ? ok('and this check runs on every push, rather than only when somebody remembers it')
     : no('verify-cover is not in the pass the runner runs')
+
+  /* WHAT IT WAS ASKED FOR AND WHOSE HAND DREW IT, kept beside the picture because a png says neither
+   * and both are wanted later: the sentence answers "what did I type to get that", and the hand is
+   * the only way a file that has left the platform can be shown to be the same hand as the rest. */
+  keys.coverNotes('M1') === 'maps/M1/covers.json' ? ok('the record sits beside the pictures') : no(`the record key is ${keys.coverNotes('M1')}`)
+  !keys.coverNotes('M1').startsWith(keys.coversPrefix('M1'))
+    ? ok('and outside the covers/ prefix, so listing the extras never returns it as one')
+    : no('the record would be listed as a cover')
+  api.includes("'covers.json': notesJson") ? ok('and it ships in the bundle as its own file') : no('the record does not ship')
+  api.includes('notes.cover = note') && api.includes('notes.named[name] = note')
+    ? ok('with one entry for the map’s own and one per code name')
+    : no('the record does not separate the default from the extras')
+  api.includes("...(notesJson ? { 'covers.json': notesJson } : {})") && !api.includes('coverNotes: notes')
+    ? ok("while map.json's own shape does not change, so nothing on the game side has to learn a new field")
+    : no('map.json grew a field for this')
 }
 
 // ---- and the author sees the game's frame -----------------------------------
@@ -195,6 +210,39 @@ console.log('')
   cov.includes('if (!dead) setHas(c)')
     ? ok('and a stale answer cannot overwrite the current one, so the panel cannot contradict the strip')
     : no('a slow reply for the previous map can still overwrite the current one')
+
+  /* THE HAND HAD TO REACH THE PRESS AND DID NOT. The server resolves a card from the key it is given
+   * and this editor sent none, so every cover was bought with no style card and no reference
+   * painting: the one thing the author should not have to say was the one thing nobody said. */
+  cov.includes('.styles()') && cov.includes('api.coverGen(words, styleKey, forSlug)')
+    ? ok('the hand reaches the press, which is the whole of what an author does not have to type')
+    : no('a cover is still generated with no style card at all')
+  cov.includes('setStyleKey(mapStyle || fallback')
+    ? ok("and the map's own hand is the default, because a cover for an island should be drawn by whoever drew it")
+    : no('the hand does not default to the map that is being covered')
+
+  /* A JOB TAKES MINUTES AND THE STRIP IS ONE CLICK. A picture bought for the harbour was written
+   * onto whichever island happened to be selected when it landed, and the money was already gone. */
+  cov.includes('type Made = { src: string; slug: string') && cov.includes('api.coverSave(made.slug, made.src')
+    ? ok('a picture is kept on the map it was pressed for, whatever the strip is showing when it lands')
+    : no('a generation in flight can still be written onto another map')
+
+  // the rule every other paid press in this tool follows: one press says what it costs and the second spends it
+  cov.includes("armed !== 'draw'") && cov.includes('this spends 1 generation')
+    ? ok('and the press that spends money is armed first, like every other paid press here')
+    : no('a generation is one unguarded click')
+  cov.includes("armed !== key") && cov.includes("'yes, remove it'")
+    ? ok('while removing one takes two presses too, since nothing can bring it back')
+    : no('remove is one click on a hard delete')
+
+  /* the game reads the cover argument as one namespace holding two different things: an OCCASION it
+   * owns, and a name a map carries. A cover called by an occasion ships and can never be shown. */
+  cov.includes("RESERVED = new Set(['ceremony', 'passing'])")
+    ? ok('the two words the game already spends on that argument are refused as code names')
+    : no('a cover could be named for an occasion the game handles itself')
+
+  // the record is shown where it was asked for, since the first question anybody asks a picture is what was typed to get it
+  cov.includes('asked for: ') ? ok('and a kept cover says the sentence it came from') : no('a kept cover cannot say what it was asked for')
 
   const app = read('src/App.tsx')
   !app.includes("{ id: 'cover'") && !app.includes('coverPanel')
