@@ -1,19 +1,11 @@
-// A* over a walkable plane.
-//
-// The elevation is not a cost, it is a gate: a step is legal when the level
-// difference is inside a tolerance and illegal otherwise. That is the same rule
-// the editor walks by, and a search that used elevation as a weight instead
-// would happily route a character up a cliff slowly.
+// A* over a walkable plane where elevation is a gate and not a cost: a step is legal when the level difference is inside a tolerance, the same rule the editor walks by, because weighting elevation instead would happily route a character up a cliff slowly
 
 import { IndexHeap } from './heap.js'
 
 const N8 = [[1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1], [1, 1, Math.SQRT2], [1, -1, Math.SQRT2], [-1, 1, Math.SQRT2], [-1, -1, Math.SQRT2]]
 const N4 = [[1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1]]
 
-/* octile, which is the exact cost of a diagonal-allowed grid walk with no
- * obstacles. Euclidean underestimates and makes the search open far more nodes
- * than it needs; manhattan overestimates on a diagonal grid and stops being
- * admissible, so the path it finds is not the shortest. */
+/* octile is the exact cost of a diagonal-allowed grid walk with no obstacles, where euclidean underestimates and opens far more nodes than needed and manhattan overestimates on a diagonal grid, stops being admissible, and returns a path that is not the shortest */
 export function octile(ax, ay, bx, by) {
   const dx = Math.abs(ax - bx)
   const dy = Math.abs(ay - by)
@@ -58,8 +50,7 @@ export function astar(levels, w, h, start, goal, { tolerance = 10, diagonal = tr
       const nl = levels[ni]
       if (nl === 0) continue
       if (Math.abs(nl - cl) > tolerance) continue
-      // a diagonal that cuts a corner passes through two blocked pixels the
-      // walk law would have stopped at, so both orthogonals have to be open
+      // a diagonal that cuts a corner passes through two blocked pixels the walk law would have stopped at, so both orthogonals have to be open
       if (dx !== 0 && dy !== 0) {
         if (levels[cy * w + nx] === 0 || levels[ny * w + cx] === 0) continue
       }
@@ -84,8 +75,7 @@ function trace(from, goal, w) {
   return out.reverse()
 }
 
-/* a path with every point that lies on the straight line between its neighbours
- * dropped, which is what makes a route readable rather than a pixel list */
+/* a path with every point lying on the straight line between its neighbours dropped, which is what makes a route readable rather than a pixel list */
 export function straighten(path) {
   if (path.length < 3) return path.slice()
   const out = [path[0]]

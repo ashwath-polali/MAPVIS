@@ -1,9 +1,4 @@
-// The error diffusion kernels, by name.
-//
-// Each one is a list of [dx, dy, weight] and a divisor. They differ in how far
-// the error travels and how much of it goes straight down: a kernel that pushes
-// a lot downward smooths gradients and smears edges, and one that keeps it close
-// keeps edges and leaves visible texture.
+// the error diffusion kernels by name, each a list of [dx, dy, weight] and a divisor: a kernel that pushes a lot of error downward smooths gradients and smears edges, one that keeps it close keeps edges and leaves visible texture
 
 export const FLOYD_STEINBERG = {
   name: 'floyd-steinberg',
@@ -11,9 +6,7 @@ export const FLOYD_STEINBERG = {
   points: [[1, 0, 7], [-1, 1, 3], [0, 1, 5], [1, 1, 1]],
 }
 
-/* only three quarters of the error is diffused at all, which is what gives it
- * the clean flat areas it is known for and also what makes it lose the darkest
- * and lightest ends of a ramp */
+/* only three quarters of the error is diffused at all, which is what gives the clean flat areas and also what loses the darkest and lightest ends of a ramp */
 export const ATKINSON = {
   name: 'atkinson',
   divisor: 8,
@@ -68,8 +61,7 @@ export const SIERRA_LITE = {
   points: [[1, 0, 2], [-1, 1, 1], [0, 1, 1]],
 }
 
-/* one row of error and nothing downward at all, so vertical edges stay exactly
- * where they were. The one to use on a sprite whose silhouette matters. */
+/* one row of error and nothing downward at all, so vertical edges stay exactly where they were, the one to use when a sprite's silhouette matters */
 export const FALSE_FLOYD = {
   name: 'false-floyd',
   divisor: 8,

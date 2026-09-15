@@ -1,8 +1,6 @@
 // checks the refusals as hard as the successes, because it seemed to work is worthless in security code
 import http from 'node:http'
-// solo mode treats an unauthenticated request as one named account, which is
-// exactly what this file is here to prove cannot happen on a host. Cleared
-// before anything is imported, because env() caches on first read.
+// solo mode treats an unauthenticated request as one named account, which this file exists to prove cannot happen on a host, and it is cleared before any import because env() caches on first read
 delete process.env.MAPVIS_SOLO
 process.env.MAPVIS_NO_SOLO = '1'
 const { api } = await import('../api.mjs')
@@ -114,7 +112,7 @@ try {
   const anon = await call('/api/me')
   anon.json.user === null ? ok('no cookie is simply signed out, not an error') : no('no cookie errored')
 
-  // a session past its expiry must not work even though the row still exists
+  // an expired session must not work even though its row still exists
   await q(`update sessions set expires_at = now() - interval '1 day' where user_id = $1`, [up.json.user.id])
   const stale = await call('/api/me', { headers: { cookie: `mapvis_session=${aliceTok}` } })
   stale.json.user === null ? ok('an expired session is refused even though its row is still there') : no('an expired session still worked')
@@ -170,9 +168,7 @@ try {
       ? no("another account may edit somebody else's map")
       : ok('another account may not edit a map it does not own')
 
-    /* The one that matters. Every write route takes a map id out of its own
-     * body, so an account that simply TYPES someone else's slug must be
-     * stopped at the door rather than trusted to only ask for its own. */
+    /* the one that matters: every write route takes a map id out of its own body, so an account that simply types someone else's slug has to be stopped at the door rather than trusted to ask only for its own */
     const before = await one('select doc_sha, updated_at from maps where slug = $1', ['hub'])
     const raid = await call('/api/doc', {
       method: 'POST',

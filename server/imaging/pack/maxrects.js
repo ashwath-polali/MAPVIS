@@ -1,9 +1,4 @@
-// MaxRects bin packing, which is what puts every frame of a map on one sheet.
-//
-// The free space is kept as a list of maximal rectangles rather than a tree, so
-// a rectangle that becomes usable when two neighbours are freed is found without
-// a merge pass. It packs tighter than a shelf or a skyline at the cost of the
-// pruning below being O(n squared) in the free list.
+// MaxRects bin packing puts every frame of a map on one sheet, keeping free space as a list of maximal rectangles rather than a tree so space freed by two neighbours is found without a merge pass, packing tighter than a shelf or skyline at the cost of pruning being O(n squared) in the free list
 
 export const HEURISTIC = {
   shortSide: 'short-side',
@@ -81,9 +76,7 @@ export class MaxRects {
   }
 }
 
-/* the rectangle is cut out of a free one, leaving up to four maximal pieces.
- * Returns false when they do not overlap at all, so the caller keeps the
- * original rather than replacing it with copies of itself. */
+/* the rectangle is cut out of a free one leaving up to four maximal pieces, and returns false when they do not overlap at all so the caller keeps the original rather than replacing it with copies of itself */
 function splitFree(free, rect, out) {
   if (rect.x >= free.x + free.w || rect.x + rect.w <= free.x || rect.y >= free.y + free.h || rect.y + rect.h <= free.y) return false
 
@@ -98,8 +91,7 @@ function splitFree(free, rect, out) {
   return true
 }
 
-/* any free rectangle wholly inside another is not maximal and only costs time
- * on every later search */
+/* any free rectangle wholly inside another is not maximal and only costs time on every later search */
 function prune(free) {
   for (let i = 0; i < free.length; i++) {
     for (let j = i + 1; j < free.length; j++) {
@@ -118,9 +110,7 @@ function prune(free) {
 
 const inside = (a, b) => a.x >= b.x && a.y >= b.y && a.x + a.w <= b.x + b.w && a.y + a.h <= b.y + b.h
 
-/* biggest first, which is the ordering that matters far more than the heuristic:
- * inserting small rectangles early fragments the free list before the large ones
- * arrive and they then do not fit at all */
+/* biggest first, an ordering that matters far more than the heuristic, because inserting small rectangles early fragments the free list and the large ones then do not fit at all */
 export function packAll(items, width, height, opts = {}) {
   const bin = new MaxRects(width, height, opts)
   const order = items

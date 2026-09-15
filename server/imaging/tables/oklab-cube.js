@@ -1,16 +1,4 @@
-// The sRGB to OKLab cube, and trilinear lookup into it.
-//
-// Converting a colour properly is three linearisations, two matrix multiplies
-// and three cube roots. Over a 688 by 384 painting that is 264,192 of each, and
-// a palette match does it again for every candidate. Interpolating a 33 step
-// cube is three multiplies and eight reads. Measured against the exact
-// conversion over 17,760 samples the worst error is 0.0072 and it is in the
-// deepest shadows, where the transfer function bends hardest; everywhere else
-// it is an order of magnitude smaller than that.
-//
-// 33 steps rather than 17 or 65 on purpose: 17 is visibly wrong in the deep
-// shadows where the transfer function bends hardest, and 65 is eight times the
-// bytes for a difference nothing downstream can measure.
+// sRGB to OKLab by trilinear lookup, because exact conversion is three cube roots per pixel and a 688 by 384 painting is 264,192 of them. Worst error over 17,760 samples is 0.0072, in the deepest shadows. 33 steps: 17 bands the shadows, 65 is eight times the bytes for nothing measurable.
 
 import { SLICE as S00 } from './oklab/slice-00.js'
 import { SLICE as S01 } from './oklab/slice-01.js'
@@ -85,18 +73,14 @@ const SLICES = [
   S32,
 ]
 
-/* one entry, with no interpolation. The caller wants this when the colour is
- * already on the lattice, which is every colour in a palette generated from a
- * quantiser that snapped to it. */
+/* one entry with no interpolation, for a colour already on the lattice, which is every colour a quantiser snapped there */
 export function cubeAt(ri, gi, bi) {
   const s = SLICES[bi]
   const i = (gi * CUBE_GRID + ri) * 3
   return [s[i], s[i + 1], s[i + 2]]
 }
 
-/* trilinear: the eight lattice corners around the colour, weighted by how far
- * into the cell it sits. Nearest-corner instead of this is four times faster
- * and banding is visible in a ramp at that error. */
+/* trilinear over the eight lattice corners around the colour, weighted by how far into the cell it sits, because nearest-corner is four times faster and bands visibly in a ramp */
 export function oklabOf(rgb) {
   const fr = Math.max(0, Math.min(255, rgb[0])) / STEP
   const fg = Math.max(0, Math.min(255, rgb[1])) / STEP
@@ -132,9 +116,7 @@ export function oklabOf(rgb) {
   return out
 }
 
-/* squared distance between two colours in OKLab, read off the cube. This is the
- * one a quantiser calls per pixel per candidate, so it does no allocation the
- * caller can avoid. */
+/* squared OKLab distance between two colours, called per pixel per candidate by a quantiser, so it allocates nothing the caller can avoid */
 export function distanceSq(a, b) {
   const x = oklabOf(a)
   const y = oklabOf(b)

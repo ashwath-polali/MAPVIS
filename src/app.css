@@ -1,55 +1,18 @@
-/* One dark surface, one accent, five steps.
- *
- * The accent is an iris blue-violet on purpose: it is the one hue family the
- * map's own data never uses (levels are red through pink, the cut is magenta,
- * occluders are lilac on canvas), so accent always means "this is the tool
- * talking", never "this is map data". Motion is CSS only, 150-200ms.
- */
+/* one dark surface, one accent, five steps, and motion is CSS only at 150 to 200ms. the accent is a hue the map's own data never uses, so an accent stroke always means the tool talking and never map data. */
 
 :root {
-  /* THE TOOL AND THE PLATFORM ARE ONE PIECE OF SOFTWARE NOW.
-   *
-   * These were a warm grey and an iris violet, chosen when the editor was the
-   * only screen anybody saw. It now opens from a dashboard, so walking between
-   * them should not feel like changing applications.
-   *
-   * Same surfaces as the site, same type. The accent moves from iris to a cool
-   * verdigris for the reason the iris was picked in the first place: it is a
-   * hue the MAP never contains. Levels are red through pink, the cut is
-   * magenta, occluders are lilac. Nothing painted is this green, so an accent
-   * stroke always means the tool talking and never map data.
-   *
-   * SIX THINGS THIS FILE DELIBERATELY DOES NOT DECIDE. --ink, --dim, --edge,
-   * --acc and both font stacks are tokens, declared once in tokens.css. Declared
-   * here as well they would silently win every disagreement with the site,
-   * because this sheet loads last. What is left below is the tool's own
-   * surfaces, which the site genuinely does not share. */
+  /* the accent is a verdigris because nothing on a map is that green, levels are red through pink, the cut magenta, occluders lilac, so an accent stroke is always the tool talking. --ink, --dim, --edge, --acc and both font stacks stay in tokens.css, or they win, this sheet loads last. */
   --bg: #0a0c0f;
   --panel: #10141a;
   --raised: #161c24;
-  /* THE EDITOR'S CHROME SPEAKS THE SAME TWO COLOURS THE OCEAN DOES.
-   *
-   * This was green for everything, and the ocean was gold for everything, so
-   * two screens one click apart disagreed about what an armed control looks
-   * like. tokens.css already settled the line and neither surface was reading
-   * it: gold is the tool SAYING something (the tool you have armed, the row you
-   * have selected, the step you are on, the one line of instruction), green is
-   * the tool REPORTING something (running, finished, published, walkable, ok).
-   *
-   * THE CANVAS KEEPS GREEN AND THAT IS NOT A SECOND ACCENT. The hue on the
-   * painting is picked against the painting: levels are red through pink, the
-   * cut is magenta, occluders are lilac, and this island's own sand is gold, so
-   * a gold spawn box on the hub's beach would be invisible. tokens.css carves
-   * that out by name. Chrome and canvas are answering different questions. */
+  /* gold is the tool saying something, the armed tool, the selected row, the step you are on, and green is the tool reporting, running, finished, published, walkable, ok. the canvas keeps green because gold is invisible on this island's sand, and tokens.css carves that out by name. */
   --acc: var(--acc-tool);
   --acc-soft: color-mix(in srgb, var(--acc-tool) 14%, transparent);
   --acc-ink: var(--acc-tool-ink);
   /* what the tool reports, and the hue the canvas marks its own work in */
   --ok: var(--acc-live);
   --stage: #06080b;
-  /* the board a painting lies on. The canvas fills the document rectangle with
-     the same value in core/editor.ts, so the margin a grow added reads as spare
-     board rather than as a hole in the map. */
+  /* the board a painting lies on, the same value core/editor.ts fills the document rectangle with, so the margin a grow added reads as spare board rather than a hole in the map. */
   --board: #0e1319;
   /* a shadow, and the six places that each wrote #00000088 for it */
   --drop: rgba(0, 0, 0, 0.53);
@@ -60,19 +23,10 @@
   --seam: rgba(0, 0, 0, 0.4);
   --font-ui: var(--font-label);
 
-  /* One left line for the whole side panel, declared here and read by every
-     rule that touches it. The panel keeps its own gutter and every block
-     inside steps in by the same amount, so the line lands at --pan-gut plus
-     --pan-in, 16px from the panel edge. There are only two ways to sit on it:
-     bare text starts its glyphs there, and a thing with a resting frame puts
-     its border there. Change these two rather than any single rule: per-rule
-     padding lands text at 12, 16, 20 and 22 down one 272px column and nothing
-     reads straight. */
+  /* one left line for the whole side panel, at --pan-gut plus --pan-in, 16px from the panel edge. change these two rather than per-rule padding, which landed text at 12, 16, 20 and 22 down one 272px column. */
   --pan-gut: 12px;
   --pan-in: 4px;
-  /* a fold at the foot of a panel is bare text until the pointer arrives. Its
-     words sit on the line and its hover shape is grown outward by this, rather
-     than the words being shoved in by padding you cannot see at rest. */
+  /* a fold at the foot of a panel is bare text at rest, so its hover shape grows outward by this instead of padding you cannot see shoving the words in. */
   --pan-pill: 8px;
 }
 
@@ -84,15 +38,7 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-/* THE TOOL OWNS THE WINDOW. THE SITE DOES NOT.
- *
- * These were bare html/body rules, which was right when this file was the only
- * stylesheet and the editor was the only screen. A landing page and a dashboard
- * now share the document, and a locked 100% height with hidden overflow makes a
- * page that cannot scroll.
- *
- * Shell writes data-view onto the body, so the tool keeps exactly the surface it
- * always had and nothing else inherits it. */
+/* the tool owns the window and the site does not: a locked 100% height with hidden overflow makes a page that cannot scroll, so these hang off body[data-view='editor']. */
 body[data-view='editor'] {
   height: 100%;
   background: var(--bg);
@@ -117,10 +63,7 @@ button:disabled {
   opacity: 0.4;
   cursor: var(--cur-no);
 }
-/* Chromium gives every button 1px 6px of its own padding, and the small square
-   icon buttons never declare any, so a 20px box was really 6px of room holding
-   a 16px glyph. They centre it, so it looked deliberate while sitting over its
-   own border. Their size is the width and height, nothing else. */
+/* chromium gives every button 1px 6px of its own padding, so a 20px icon button was 6px of room round a 16px glyph, centred and sitting over its own border. size here is width and height, nothing else. */
 .tbtn,
 .lifedot,
 .grp-eye,
@@ -148,10 +91,7 @@ input:focus {
   outline: none;
   border-color: var(--acc);
 }
-/* the accent border is enough for a mouse click, but a keyboard user gets no
-   border at all on a range or a checkbox, so the ring comes back for them.
-   input:focus above outranks the global :focus-visible, which is why this
-   needs its own rule rather than inheriting one. */
+/* a keyboard user gets no border at all on a range or a checkbox, so the ring comes back for them, and input:focus above outranks the global :focus-visible, which is why this needs its own rule. */
 input:focus-visible {
   outline: 2px solid var(--acc);
   outline-offset: 2px;
@@ -270,31 +210,14 @@ header .meta {
 
 /* ---- the two columns -------------------------------------------------- */
 
-/* SCOPED TO THE TOOL. This was a bare `main` rule, which was harmless while the
-   editor was the only screen and is not now: the home page's <main> inherited
-   flex, its grid became a flex item, and a grid that is a flex item shrinks to
-   its content instead of filling the row. Two thirds of that page rendered
-   black with the cards squeezed into 690px of a 1350px window. */
+/* scoped to the tool: as a bare `main` rule the home page's <main> inherited flex, its grid became a flex item and shrank to its content, leaving the cards in 690px of a 1350px window. */
 body[data-view='editor'] main {
   display: flex;
   min-height: 0;
 }
 
-/* the gutter half of the left line. The other half is --pan-in, carried by
-   every block in here. Both are at the top of this file. */
-/* A PANEL THAT CARRIES ON PAST THE WINDOW HAS TO SAY SO.
- *
- * Measured on step 4: 1073px of content inside 690px, and the last block in the
- * column, the keys fold, sat below the fold with nothing on screen admitting
- * there was one. A row half cut by the bottom edge reads as a clipped layout
- * rather than as a list that continues, and the panel's own scrollbar is 8px of
- * --edge against --panel, which is 1.2:1 and is not a signal.
- *
- * The fade is painted by the panel itself rather than by an overlay, so it
- * cannot land on top of a control and eat its clicks, and it turns itself off
- * at the end of the scroll because a permanent gradient over the last row says
- * there is more when there is not. `mask` and not a gradient background,
- * because the rows underneath are opaque and would paint straight over it. */
+/* the gutter half of the left line, the other half is --pan-in, carried by every block in here. */
+/* a panel that carries on past the window has to say so: 1073px of content inside 690px hid the last block, and an 8px scrollbar of --edge on --panel is 1.2:1, not a signal. the panel paints the fade itself so it cannot eat clicks, and `mask` not a gradient, because the opaque rows paint over one. */
 .panel {
   width: 272px;
   flex: 0 0 272px;
@@ -303,17 +226,12 @@ body[data-view='editor'] main {
   border-right: var(--hair) solid var(--edge);
   display: flex;
   flex-direction: column;
-  /* NO GAP, and it is worth 110px on the tallest step. Every child was pushed
-     6px off the one above, which turned a list of rows that already carry a
-     hairline under each of them into a column of floating slabs, and charged
-     the panel 6px twenty times over for the privilege. A row's own padding is
-     what separates it from the next row; a block that needs air asks for it. */
+  /* gap 0, worth 110px on the tallest step: 6px charged twenty times turned rows that already carry a hairline under each into floating slabs, so a block that needs air asks for it. */
   gap: 0;
   overflow-y: auto;
   animation: panel-in 180ms ease;
 }
-/* the blocks that are not rows still want to breathe, so they say so here
-   rather than every child paying for it */
+/* the blocks that are not rows still want air, asked for here rather than every child paying for it. */
 .panel > .chips,
 .panel > .walkcfg,
 .panel > .doorform,
@@ -331,11 +249,7 @@ body[data-view='editor'] main {
     transform: translateY(6px);
   }
 }
-/* The panel is a scrolling flex column, and a flex child shrinks before it
-   overflows. So a tall block (the effect tuner, a long library) got squeezed
-   under its own content instead of making the panel taller, and there was
-   nothing to scroll to: the parts below simply had no height. Nothing in here
-   shrinks; the panel grows and scrolls, which is what a side panel does. */
+/* the panel is a scrolling flex column and a flex child shrinks before it overflows, so a tall block got squeezed under its own content with nothing to scroll to. nothing in here shrinks, the panel grows and scrolls. */
 .panel > * {
   flex-shrink: 0;
 }
@@ -357,11 +271,7 @@ body[data-view='editor'] main {
   color: var(--dim);
   font: var(--fs-fine)/1.4 var(--font-mono);
 }
-/* THE SAME EMPTY STATE THE REST OF THE APP DRAWS. It was a bare centred stack
-   with 42px of padding: no mark, no line saying what would fill it, and its
-   words at the bottom of the ramp. `.nothing` in tokens.css is the shared
-   shape and this is the editor saying it, so a panel with nothing in it reads
-   the same here as it does out on the ocean. */
+/* the shared empty state, `.nothing` in tokens.css, so a panel with nothing in it reads the same here as it does out on the ocean. */
 .panel-empty {
   display: grid;
   gap: 10px;
@@ -383,10 +293,7 @@ body[data-view='editor'] main {
   line-height: var(--lh);
 }
 
-/* a row: one action or one tool, a big target with a plain sentence under.
-   It carries a background when hovered or on, so it is a framed thing and its
-   edge belongs on the line with every card. It was full bleed at 12, four
-   pixels left of the segments and counts it stacks with. */
+/* a row is one action or one tool: a big target with a plain sentence under, and because it carries a background when hovered or on, its edge belongs on the line with every card. */
 .row {
   display: flex;
   align-items: flex-start;
@@ -439,17 +346,7 @@ body[data-view='editor'] main {
   line-height: var(--lh);
 }
 
-/* ---- the rail: one skin for every range in the tool ---------------------
-   The native control is a 33px grey capsule in chromium, because a range here
-   inherits the text input's border, padding and background. It reads as a form
-   field. Every slider in the tool is a knob you drag while watching the map, so
-   it gets drawn as a rail and a handle instead.
-
-   The filled part is the only piece a browser will not work out on its own.
-   Firefox hands it over through ::-moz-range-progress. Webkit has no such part
-   and never will, so the caller writes the position into --pct and the gradient
-   reads it. Without --pct the rail is simply unfilled, which is honest rather
-   than wrong. */
+/* one rail skin for every range: a native range inherits the text input's frame and reads as a 33px grey form field. firefox fills through ::-moz-range-progress, webkit has no such part, so the caller writes position into --pct and the gradient reads it, and without --pct the rail sits unfilled. */
 input[type='range'] {
   --rail: 4px;
   --knob: 14px;
@@ -457,8 +354,7 @@ input[type='range'] {
   appearance: none;
   width: 100%;
   min-width: 0;
-  /* the box is the drag target, and 20px is a comfortable one. The rail is
-     drawn 4px tall inside it, so the extra height costs nothing visually. */
+  /* the box is the drag target and 20px is a comfortable one, with the rail drawn 4px tall inside it, so the extra height costs nothing visually. */
   height: 20px;
   margin: 0;
   padding: 0;
@@ -483,8 +379,7 @@ input[type='range']::-moz-range-progress {
   border-radius: var(--r-round);
   background: var(--acc);
 }
-/* webkit centres nothing for you once the thumb is unstyled: the negative
-   margin is what puts the handle on the rail instead of under it */
+/* webkit centres nothing for you once the thumb is unstyled, so the negative margin is what puts the handle on the rail instead of under it. */
 input[type='range']::-webkit-slider-thumb {
   -webkit-appearance: none;
   width: var(--knob);
@@ -525,8 +420,7 @@ input[type='range']:disabled {
 }
 
 /* sliders, fields */
-/* the left indent lands the slider under the words of the row above it, past
-   that row's own inset and its icon, so it reads as belonging to that row */
+/* the left indent lands the slider under the words of the row above it, past that row's own inset and its icon, so it reads as belonging to that row. */
 .slider {
   display: grid;
   gap: 3px;
@@ -561,10 +455,7 @@ input[type='range']:disabled {
   font-family: var(--font-mono);
 }
 
-/* the compact tool row in levels. Six fixed 36px buttons and five gaps came to
-   244px inside a column that is 239px once the panel scrolls, so the row ran
-   out the side. Equal share of whatever the column is, and the icons stay
-   centred at any width. */
+/* the compact tool row in levels: six fixed 36px buttons and five gaps came to 244px inside a 239px column, so each takes an equal share of whatever width there is. */
 .toolrow {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));
@@ -593,25 +484,11 @@ input[type='range']:disabled {
   border-color: var(--acc);
   color: var(--acc);
 }
-/* THE TIP IS WHERE THE STANDING PROSE WENT, so it has to be able to hold a
-   sentence. It was `white-space: nowrap`, which was right while every tip was
-   two words on a 22px button and wrong the moment a row's description moved in
-   here: a ninety character sentence drawn on one line is 480px wide in a 272px
-   column and half of it leaves the window. It wraps now, at a width that puts
-   the longest description in the tool on three lines.
-
-   It is also the only tooltip in the tool. The three lists were carrying a
-   native `title` as well, holding a verbatim copy of their own visible text, so
-   the browser drew a second box under this one repeating what was on screen. */
+/* the tip holds a sentence, so it wraps: nowrap drew a ninety character description 480px wide in a 272px column and half of it left the window. it is the only tooltip in the tool, and a native `title` alongside draws a second box repeating the visible text. */
 [data-tip] {
   position: relative;
 }
-/* A TIP WIDER THAN THE THING IT HANGS OFF ANCHORS TO THE BLOCK, NOT THE BOX.
-   The panel scrolls, so its overflow-x computes to auto and it clips: a 200px
-   sentence centred on a 70px number field at 16px from the panel edge lost its
-   first two words off the left. These two controls are the only ones in the
-   tool narrower than their own tip, so they hand the anchoring up to the row
-   they sit in, which is the full width of the panel and always has room. */
+/* a tip wider than the thing it hangs off anchors to the block, not the box: the panel's overflow-x computes to auto and clips, so a 200px sentence centred on a 70px field lost its first two words off the left. these two hand anchoring up to the full width row. */
 .walkcfg,
 .anchkinds {
   position: relative;
@@ -642,9 +519,7 @@ input[type='range']:disabled {
   pointer-events: none;
 }
 
-/* the level chips: large, named, keyed. A 1fr track is min-content wide at
-   its floor, so a longer level name or a wider system font pushed the pair
-   past the panel instead of shortening the name. */
+/* the level chips: a 1fr track is min-content wide at its floor, so a longer level name or a wider system font pushed the pair past the panel instead of shortening the name. */
 .chips {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -699,11 +574,7 @@ input[type='range']:disabled {
   gap: 8px;
   padding: 12px var(--pan-in) 4px;
 }
-/* --ok and not --acc, because this is the tool REPORTING a measurement it took
-   off the map, not the tool saying which thing you have armed. The footer
-   already draws the same number in the same green a step below, and the two
-   disagreeing about the colour of one figure was the whole reason the accent
-   law got written down. */
+/* --ok and not --acc, because this is the tool reporting a measurement it took off the map rather than saying which thing is armed, and the footer draws the same number in the same green a step below. */
 .walkpct {
   font: 600 var(--fs-figure)/1 var(--font-mono);
   color: var(--ok);
@@ -835,8 +706,7 @@ input[type='range']:disabled {
   background: var(--ok);
 }
 
-/* a section header. Every panel groups its rows under one of these, so the
-   eye learns one shape instead of six. */
+/* a section header: every panel groups its rows under one of these, so the eye learns one shape. */
 .asec {
   padding: 10px var(--pan-in) 3px;
   color: var(--dim);
@@ -848,8 +718,7 @@ input[type='range']:disabled {
   padding-top: 2px;
 }
 
-/* the keys line: one collapsed row at the foot of a panel, open it if you
-   want the list. It replaces the standing block of shortcut text. */
+/* the keys line, one collapsed row at the foot of a panel in place of a standing block of shortcut text. */
 .keys {
   margin-top: auto;
   padding-top: 8px;
@@ -874,11 +743,7 @@ input[type='range']:disabled {
 .keys summary::-webkit-details-marker {
   display: none;
 }
-/* THE MARKER IS THE SAME CARET EVERY OTHER FOLD IN THIS APP USES, and not a
-   bare ⌘. That is the Mac command key, on a tool most people open on Windows
-   and on machines with no command key at all, so it names a key they do not have. It is also a font's
-   idea of a symbol, at whatever weight the font feels like, sitting next to
-   twenty drawn marks. */
+/* the marker is the same caret every other fold uses, not a bare command symbol, which names a key most machines here do not have and is a font's idea of a mark next to twenty drawn ones. */
 .keys summary::after {
   content: '';
   flex: none;
@@ -906,8 +771,7 @@ input[type='range']:disabled {
 
 /* assets step */
 
-/* the two halves of the assets panel: place what exists, or make something
-   new. Nothing is hidden, it is one press away. */
+/* the two halves of the assets panel: place what exists, or make something new, one press apart. */
 .seg.tabs {
   margin: 2px var(--pan-in) 6px;
 }
@@ -916,16 +780,7 @@ input[type='range']:disabled {
   text-transform: lowercase;
 }
 
-/* the selection inspector: what is selected, and every number about it
-   typeable. It sits above both halves, because it is about the map, not
-   about which half you are in.
-
-   Everything in here is built to survive any panel width rather than tuned to
-   one. It rendered clean at 272px and broke on a wider system font, which is
-   the same bug as a narrower panel: a fixed track plus a child that refuses to
-   shrink. So every grid track is minmax(0, ...), every child gets min-width 0,
-   long labels clip with an ellipsis, and the button rows wrap instead of
-   running out the side. It holds from 240px to 400px. */
+/* the selection inspector sits above both halves because it is about the map, not which half you are in. every grid track is minmax(0, ...) and every child min-width 0, so it holds from 240px to 400px instead of breaking on a wider system font. */
 .insp {
   display: grid;
   gap: 6px;
@@ -940,9 +795,7 @@ input[type='range']:disabled {
 .insp > * {
   min-width: 0;
 }
-/* Thumbnail and name on the first line, the two action pills on the second.
- * They shared a line until the pills gained words, and at 272px the name was
- * the thing that lost, which is the one part of that row you cannot do without. */
+/* thumbnail and name on the first line, the two action pills on the second: sharing a line cost the name at 272px once the pills gained words. */
 .insp-head {
   display: flex;
   align-items: center;
@@ -995,22 +848,15 @@ input[type='range']:disabled {
   outline: none;
   border-color: var(--acc);
 }
-/* two columns while two fit and one when they do not, so the numbers never
-   decide to overlap instead of stacking */
+/* two columns while two fit and one when they do not, so the numbers stack rather than overlap. */
 .numgrid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
   gap: 4px 6px;
   min-width: 0;
 }
-/* grid children default to min-width auto, so an input refuses to shrink under
-   its own content and the number gets clipped: every level of this needs the
-   min-width 0 escape or the digits run under the next column */
-/* A FIELD'S NAME SITS ABOVE ITS INPUT, in mono micro, the way the ocean and the
-   surfaces pages set one. Two tools in one product cannot disagree about where
-   a caption goes, and a caption to the left of the box lives in a 38px column
-   that clips "hip out" to "hip o…" at every window width. Above also gives the
-   number the whole cell to be right-aligned in. */
+/* grid children default to min-width auto, so every level of this needs the min-width 0 escape or the input refuses to shrink and the digits run under the next column. */
+/* a field's name sits above its input in mono micro, the way the rest of the product sets one: to the left it lives in a 38px column that clips "hip out" to "hip o…", and above gives the number the whole cell to be right-aligned in. */
 .numf {
   display: grid;
   gap: 3px;
@@ -1031,12 +877,7 @@ input[type='range']:disabled {
   font: var(--fs-small) var(--font-mono);
   text-align: right;
 }
-/* the browser's own up/down arrows, which nobody here designed and which cost
-   13px of every number field in the tool. That is a third of the shot form's
-   zoom box: 1.00 measured 66px of content inside 53px of field and rendered as
-   "1.(" with the last digit sliced in half. The field commits on enter and on
-   blur, so the arrows were never how a number got in. Same un-appearance the
-   range and colour inputs above already take. */
+/* no spin buttons: they cost 13px of every number field, so 1.00 was 66px of content inside 53px and rendered as "1.(" with the last digit sliced, and the field commits on enter and on blur so the arrows were never how a number got in. */
 .numf input[type='number']::-webkit-inner-spin-button,
 .numf input[type='number']::-webkit-outer-spin-button {
   -webkit-appearance: none;
@@ -1066,8 +907,7 @@ input[type='range']:disabled {
 .insp .actrow {
   padding: 0;
 }
-/* what the clipboard holds. It outlives the painting, so it is not part of
-   the inspector and does not vanish with the selection. */
+/* what the clipboard holds: it outlives the painting, so it is not part of the inspector and does not vanish with the selection. */
 .clipline {
   display: flex;
   align-items: center;
@@ -1090,30 +930,18 @@ input[type='range']:disabled {
   flex: 0 0 auto;
   padding: 4px 10px;
 }
-/* ---- the asset column ---------------------------------------------------
-   Three parts, in order: the make strip, one context zone, a small foot. The
-   zone shows exactly ONE thing, so whatever you are doing gets the whole
-   column instead of a squeezed slice of it. */
+/* the asset column: the make strip, one context zone, a small foot, and the zone shows exactly one thing so that thing gets the whole column. */
 .make {
   display: grid;
-  /* a grid with no declared column gets one implicit track whose floor is
-     min-content, so the widest child decided how wide the strip was and the
-     panel grew a sideways scrollbar under it. The track is the fix, the same
-     one .fxpanel already carries. */
+  /* a grid with no declared column gets one implicit track whose floor is min-content, so the widest child decided the strip's width and the panel grew a sideways scrollbar; the track is the fix. */
   grid-template-columns: minmax(0, 1fr);
   gap: 6px;
   min-width: 0;
   padding: 0 0 8px;
   border-bottom: var(--hair) solid var(--edge);
 }
-/* Four options on one line wanted 268px in a column that is 239px, and neither
-   share-out works: an equal quarter is 41px of text room against a 46px label,
-   and sizing each to its own words simply overflows. Two rows of two is the
-   only version where every label fits at its natural size with room to spare.
-   width:100% was 8px of the overflow by itself, because .seg keeps 4px of
-   margin on each side; stretching into the track is what it wanted. */
-/* .seg.makewhat, not .makewhat: .seg is declared further down this file with
-   display:flex at the same weight, so a single class here loses to it. */
+/* four options on one line wanted 268px in a 239px column and an equal quarter is 41px of text room against a 46px label, so two rows of two. width:100% was 8px of that overflow, because .seg keeps 4px of margin each side. */
+/* .seg.makewhat and not .makewhat: .seg is declared further down this file with display:flex at the same weight, so a single class here loses to it. */
 .seg.makewhat {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1122,8 +950,7 @@ input[type='range']:disabled {
 .makewhat .seg-opt {
   min-width: 0;
 }
-/* the sparkle and the box it opens. One round button on the selected thing,
-   and everything else appears only after it is pressed. */
+/* the sparkle and the box it opens: one round button on the selected thing, and everything else appears only after it is pressed. */
 .lifedot {
   display: grid;
   place-items: center;
@@ -1207,16 +1034,7 @@ input[type='range']:disabled {
 .lifeline .abtn {
   flex: 0 0 auto;
 }
-/* Saying what a library item should DO. Same box as the life one, and it
-   borrows the make strip's field and primary button outright, because it asks
-   the same question and spends the same money: one line of free text, the price
-   under it, one armed press.
-
-   Those two carry the panel's own --pan-in inset themselves, since out there
-   they sit directly on the column. In here they are inside the inspector card,
-   which has already stepped in once and added its 8px of padding, so left
-   unzeroed they step in twice and the button runs past the card's right edge.
-   Zero the side insets and let both fill the card's track. */
+/* this borrows the make strip's field and primary button, which carry their own --pan-in side inset, so it is zeroed here: inside the inspector card they step in twice and the button runs past the card's right edge. */
 .animbox {
   display: grid;
   gap: 4px;
@@ -1241,16 +1059,12 @@ input[type='range']:disabled {
   font-size: var(--fs-micro);
   line-height: var(--lh);
 }
-/* the button keeps the one height it has everywhere else, so a price, a clock
-   and a two-line label all measure the same and the card never jumps */
+/* the button keeps the one height it has everywhere else, so a price, a clock and a two-line label all measure the same and the card never jumps. */
 .animbox .genrow {
   margin: 0;
 }
-/* the two halves of the account: props and people. They are different things
-   in pixellab and behave differently here, so the browser says which. */
-/* same shape as the make strip's: width:100% plus .seg's own side margins put
-   this 8px past its column. Stretching into the track is what it wanted, and
-   the zeroed side margins line it up with the find box above it. */
+/* the two halves of the account, props and people: different things in pixellab that behave differently here, so the browser says which. */
+/* same shape as the make strip's: width:100% plus .seg's own side margins put this 8px past its column, so it stretches into the track, and the zeroed side margins line it up with the find box above. */
 .seg.acctabs {
   width: auto;
   margin: 2px 0 4px;
@@ -1307,10 +1121,7 @@ input[type='range']:disabled {
   min-width: 0;
   padding: 2px 0 4px;
 }
-/* a count on its own line: a label, a rail and the number. Used twice, by the
-   fill count and by the variant count, and they read the same on purpose.
-   The number track is minmax rather than a flat 2ch, so a two-digit count at a
-   wider system font takes the room it needs instead of clipping a digit. */
+/* a count on its own line, used by the fill count and the variant count so they read the same. the number track is minmax rather than a flat 2ch, so a two-digit count at a wider system font does not clip a digit. */
 .fillnum {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) minmax(2ch, auto);
@@ -1378,15 +1189,8 @@ input[type='range']:disabled {
   font-size: var(--fs-micro);
   font-variant-numeric: tabular-nums;
 }
-/* groups as one wrapping line of chips, not a stacked list with nested rows.
-   The rule runs the full column like the make strip's does and the chips sit
-   in on the line, so a chip edge and "nothing placed yet" start where every
-   other block in the panel starts. */
-/* TWO ACROSS, and a grid rather than a wrapping row. The chip grew a second
-   half for the layer's condition, and at the 229px this column actually gets
-   two of them missed fitting by five pixels, so every layer took its own line
-   and the strip went from two rows to four. auto-fit holds two while two fit
-   and drops to one in a narrower window. */
+/* groups as one wrapping line of chips rather than a stacked list, with the rule running the full column so a chip edge starts where every other block in the panel starts. */
+/* two across, and a grid rather than a wrapping row: at the 229px this column gets, two chips carrying the layer's condition missed fitting by five pixels and the strip went from two rows to four, so auto-fit holds two while two fit. */
 .grpstrip {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(104px, 1fr));
@@ -1412,9 +1216,7 @@ input[type='range']:disabled {
   cursor: var(--cur-do);
 }
 .grpchip svg {
-  /* it cannot shrink. The chip is a flex item in a fixed cell now, and a
-     shrinkable mark squeezed the eye down to a dot on whichever layer had the
-     longest name. */
+  /* it cannot shrink: as a shrinkable flex item the eye squeezed down to a dot on whichever layer had the longest name. */
   flex: 0 0 auto;
   width: 12px;
   height: 12px;
@@ -1431,17 +1233,14 @@ input[type='range']:disabled {
   color: var(--dim);
   font-size: var(--fs-fine);
 }
-/* the layer's two targets share one pill outline, the way a library tile and
-   its own delete share one wrapper: hiding is a thing you do while you work,
-   the condition is authored and ships. */
+/* the layer's two targets share one pill outline, because hiding is something you do while you work and the condition is authored and ships. */
 .grpwrap {
   display: inline-flex;
   align-items: stretch;
   min-width: 0;
   border: var(--hair) solid var(--edge);
   border-radius: var(--r-round);
-  /* the second half's lit background has to stop at the pill's own curve, or
-     it squares off the right end of every chip that carries a condition */
+  /* the second half's lit background has to stop at the pill's own curve, or it squares off the right end of every chip that carries a condition. */
   overflow: hidden;
 }
 .grpwrap .grpchip {
@@ -1466,8 +1265,7 @@ input[type='range']:disabled {
   color: var(--acc);
   background: var(--raised);
 }
-/* lit when the layer already carries one, so a condition is visible from the
-   strip instead of only from inside the field that set it */
+/* lit when the layer already carries a condition, so it reads from the strip instead of only from inside the field that set it. */
 .grpwhen.has {
   color: var(--acc);
 }
@@ -1476,9 +1274,7 @@ input[type='range']:disabled {
   background: var(--acc-soft);
 }
 
-/* THE FACES A PLACEMENT CAN WEAR, and the number beside each one is the index
-   `art` actually stores. Both are shown because a round switches on the number
-   and python asks by the name, and an author has to be able to see the pair. */
+/* the faces a placement can wear, with the index `art` actually stores beside each: a round switches on the number and python asks by the name, so an author has to see the pair. */
 .lookrows {
   display: grid;
   gap: 3px;
@@ -1518,8 +1314,7 @@ input[type='range']:disabled {
   font: var(--fs-fine) var(--font-mono);
 }
 
-/* many at once: the arranging verbs, on the set. Rows wrap rather than squeeze,
-   so a narrow panel drops a button to the next line instead of clipping it. */
+/* many at once, the arranging verbs on the set: rows wrap rather than squeeze, so a narrow panel drops a button to the next line instead of clipping it. */
 .insp.many .insp-head {
   justify-content: space-between;
 }
@@ -1551,11 +1346,7 @@ input[type='range']:disabled {
   padding: 5px 8px;
   font-size: var(--fs-fine);
 }
-/* A CONTROL THAT DESTROYS SOMETHING LOOKS LIKE IT AT REST.
-   This was neutral until a pointer was already on it, which is the same defect
-   /world's "remove the_hub" had and the same fix world.css:552 carries: the wax
-   at rest, the lit edge once reached for. A control that reveals what it is
-   after the hand has arrived has told you too late. */
+/* a control that destroys something looks like it at rest: neutral until the pointer is already on it tells you too late, so the wax sits at rest and the edge lights once reached for, the fix world.css:552 carries. */
 .abtn.danger {
   color: var(--acc-stop-lit);
   border-color: color-mix(in srgb, var(--acc-stop) 55%, transparent);
@@ -1585,11 +1376,8 @@ input[type='range']:disabled {
   white-space: nowrap;
 }
 
-/* box-the-area, and what the model wrote after looking. Both sit between the
-   ask and the spend, so nothing here shouts: the reading is the quiet step. */
-/* 4px in on each side, like every segment and every count above it. It was
-   full bleed, so the box button was the one control in the strip whose edges
-   did not line up with the rest. */
+/* box-the-area, and what the model wrote after looking: both sit between the ask and the spend, so nothing here shouts, the reading is the quiet step. */
+/* 4px in on each side, like every segment and every count above it: full bleed made the box button the one control in the strip whose edges did not line up. */
 .areabtn {
   width: auto;
   margin: 0 var(--pan-in) 2px;
@@ -1599,10 +1387,7 @@ input[type='range']:disabled {
   border-color: var(--acc-tool);
   color: var(--acc-tool-lit);
 }
-/* flex, not a two-column grid: with no stop button the second track was still
-   there as an empty column plus its gap, so the generate button sat 14px short
-   of the panel and off the strip's right edge. A flex row simply has one child
-   when there is one child. */
+/* flex, not a two-column grid: with no stop button the second track was still an empty column plus its gap, so the generate button sat 14px short of the panel and off the strip's right edge. */
 .genrow {
   display: flex;
   align-items: stretch;
@@ -1620,11 +1405,7 @@ input[type='range']:disabled {
   flex: 0 0 auto;
   padding: 0 14px;
 }
-/* what the tool saw in what just came back, under the button that drew it.
-   Quiet on purpose: it is advice, the thing is already in the library, and it
-   must never look like the panel is refusing to go on. It sits on the same
-   left line as the button and the words wrap rather than being clipped, since
-   a reason cut in half is worse than no reason. */
+/* what the tool saw in what just came back, under the button that drew it: quiet, because it is advice and the thing is already in the library, and the words wrap since a reason cut in half is worse than no reason. */
 .saidline {
   display: flex;
   align-items: baseline;
@@ -1633,8 +1414,7 @@ input[type='range']:disabled {
   margin: 0 var(--pan-in);
   padding: 2px 0;
 }
-/* a job that is running is the tool REPORTING, so it is green. Gold is the
-   thing you armed, and nobody armed the router thinking. */
+/* a job that is running is the tool reporting, so it is green: gold is the thing you armed, and nobody armed the router thinking. */
 .saidlook {
   color: var(--ok);
   font: var(--fs-fine)/1.4 var(--font-mono);
@@ -1646,15 +1426,11 @@ input[type='range']:disabled {
   font: var(--fs-fine)/1.4 var(--font-mono);
   overflow-wrap: anywhere;
 }
-/* a miss reads warm, not red. Red is the colour this panel uses for delete and
-   for an armed confirm, and nothing here is either: every candidate is still
-   keepable and the next press is still free. */
+/* a miss reads warm, not red: red is delete and an armed confirm, and here every candidate is still keepable and the next press is still free. */
 .saidline .saidwhy.miss {
   color: var(--acc-tool-lit);
 }
-/* named through the line, not on its own, because .abtn further down the file
-   hands every button flex: 1 1 76px and a bare class here loses to it. The
-   sentence takes the room; the button takes its own words. */
+/* named through the line and not on its own, because .abtn further down the file hands every button flex: 1 1 76px and a bare class here loses to it. */
 .saidline .saidgo {
   flex: 0 0 auto;
   padding: 2px 8px;
@@ -1665,8 +1441,7 @@ input[type='range']:disabled {
   display: grid;
   gap: 4px;
   min-width: 0;
-  /* the same inset the inspector and the tuner carry: all three are the one
-     zone card, and the plan was the only one whose edge sat at the panel */
+  /* the same inset the inspector and the tuner carry: all three are the one zone card, and the plan was the only one whose edge sat at the panel. */
   margin: 2px var(--pan-in) 6px;
   padding: 8px 10px;
   border: var(--hair) solid var(--edge);
@@ -1709,10 +1484,7 @@ input[type='range']:disabled {
   font-size: var(--fs-fine);
   line-height: var(--lh);
 }
-/* the gate between variant one and the rest. Same box as the plan card, in the
-   accent outline, because this one is a question with money behind it. What
-   landed sits above the two buttons and what the rest would cost sits under
-   them, so the answer is decided by looking rather than by remembering. */
+/* the gate between variant one and the rest, in the accent outline because it is a question with money behind it: what landed sits above the two buttons and what the rest would cost sits under them. */
 .gatebox {
   border-color: var(--acc);
   animation: panel-in 160ms ease;
@@ -1739,17 +1511,14 @@ input[type='range']:disabled {
   padding: 4px 0 0;
 }
 
-/* the record of what the author typed, shut by default behind one small line.
-   Open, it scrolls rather than growing the panel: forty asks must cost the same
-   height as six. */
+/* the record of what was typed, shut by default behind one small line: open, it scrolls rather than growing the panel, so forty asks cost the same height as six. */
 .askwrap {
   display: grid;
   gap: 2px;
   min-width: 0;
   margin: 6px var(--pan-in) 0;
 }
-/* another fold that is bare text at rest, so the words go on the line and the
-   hover shape is pulled back out from under them */
+/* another fold that is bare text at rest, so the words go on the line and the hover shape is pulled back out from under them. */
 .asktoggle {
   justify-self: start;
   margin-left: calc(0px - var(--pan-pill));
@@ -1860,9 +1629,7 @@ input[type='range']:disabled {
 .grp.open .grp-name {
   color: var(--acc);
 }
-/* the track again: an undeclared column is max-content wide, so one long asset
-   name took the whole list off the right edge with it. The name already knows
-   how to ellipsis, it was never given a width small enough to have to. */
+/* the track again: an undeclared column is max-content wide, so one long asset name took the whole list off the right edge, and the name already knows how to ellipsis, it was never given a width small enough to have to. */
 .arows {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -1985,8 +1752,7 @@ input[type='range']:disabled {
 .lib.on .lib-name {
   color: var(--acc);
 }
-/* the facing picker, laid out the way a compass is. The middle cell is empty
-   because there is no such thing as facing nowhere. */
+/* the facing picker, laid out the way a compass is, with the middle cell empty because there is no such thing as facing nowhere. */
 .facerow {
   display: flex;
   align-items: center;
@@ -2014,10 +1780,7 @@ input[type='range']:disabled {
   font-size: var(--fs-small);
   line-height: 1;
 }
-/* one dot on a row whose art moves. A walk cycle and a still are both kind
-   'static' when they are a set of headings, so without this the list showed a
-   walker and a statue as the same thing. Corner, not inline, so it never
-   competes with the name for width. */
+/* one dot on a row whose art moves: a walk cycle and a still are both kind 'static' as a set of headings, so without this the list showed a walker and a statue as the same thing, and it is in the corner so it never competes with the name for width. */
 .lib-moves {
   position: absolute;
   top: 6px;
@@ -2039,11 +1802,7 @@ input[type='range']:disabled {
   font-size: var(--fs-fine);
 }
 
-/* a section header with one quiet action on its right. The action is the way
-   out of generating, so it sits where the eye already is. Its words come in on
-   the left line through .asec's own padding, so only the right side needs
-   saying here: the link sat flush with the panel while every card beside it
-   stopped four pixels short. */
+/* a section header with one quiet action on its right, the way out of generating, where the eye already is. .asec's own padding lands the words on the left line, so only the right side needs saying: the link sat flush with the panel while every card beside it stopped four pixels short. */
 .sechead {
   display: flex;
   align-items: baseline;
@@ -2079,13 +1838,10 @@ input[type='range']:disabled {
   background: var(--acc-soft);
 }
 
-/* the objects already on the account. Same grid shape as the library, because
-   it is the same act: pick one, then the map. It is the cheap half of this
-   step, so its foot says plainly that nothing in here spends. */
+/* the objects already on the account, in the library's grid because it is the same act, pick one then the map, and its foot says plainly that nothing in here spends. */
 .accpanel {
   display: grid;
-  /* min-width:0 caps the box, not the implicit track inside it, so a wide
-     child still grew the column. Same missing track as .make and .fxpanel. */
+  /* min-width:0 caps the box, not the implicit track inside it, so a wide child still grew the column, the same missing track as .make and .fxpanel. */
   grid-template-columns: minmax(0, 1fr);
   gap: 6px;
   min-width: 0;
@@ -2148,8 +1904,7 @@ input[type='range']:disabled {
   flex: 0 0 auto;
   padding: 4px 10px;
 }
-/* the library lives in a capped frame and scrolls inside it, so a long
-   library never pushes the generate section off the panel */
+/* the library lives in a capped frame and scrolls inside it, so a long library never pushes the generate section off the panel. */
 .libpanel {
   max-height: 220px;
   overflow-y: auto;
@@ -2172,8 +1927,7 @@ input[type='range']:disabled {
 .libwrap .lib {
   width: 100%;
 }
-/* the two corner affordances: delete for good on the right, reopen the
-   effect's knobs on the left. Hover only, so a full library reads as art. */
+/* the two corner affordances, delete for good on the right and the effect's knobs on the left, hover only so a full library reads as art. */
 .lib-x,
 .lib-edit {
   position: absolute;
@@ -2225,8 +1979,7 @@ input[type='range']:disabled {
   border: var(--hair) solid var(--acc-stop-edge);
   height: 20px;
 }
-/* the generate section's segmented selectors: type, then how many. The on
-   state speaks the same accent language as the chips and tool buttons. */
+/* the generate section's segmented selectors, type then how many, with the on state speaking the same accent language as the chips and tool buttons. */
 .seg {
   display: flex;
   gap: 2px;
@@ -2253,19 +2006,13 @@ input[type='range']:disabled {
 .segrow .seg:last-child {
   margin-right: 4px;
 }
-/* The narrow one is the SECOND segment, not the last one. When the row holds a
-   single segment that segment is also :last-child, so it took the 84px meant
-   for its neighbour and "moving" hung 14px outside its own border. Addressing
-   the neighbour directly means a lone segment always gets the whole row. */
+/* the narrow one is the second segment, not the last one: a lone segment is also :last-child, so it took the 84px meant for its neighbour and "moving" hung 14px outside its own border. */
 .segrow .seg + .seg {
   flex: 0 0 84px;
 }
 .seg-opt {
   flex: 1 1 0;
-  /* a flex item will not shrink under its own text unless it is told it may,
-     and a button that will not shrink draws its label straight out of the
-     segment. Shrink, then clip: a squeezed label is recoverable, an escaped
-     one is the bug he screenshotted. */
+  /* a flex item will not shrink under its own text unless it is told it may, and a button that will not shrink draws its label straight out of the segment: shrink then clip, because a squeezed label is recoverable and an escaped one is a bug. */
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2286,18 +2033,7 @@ input[type='range']:disabled {
   border-color: var(--acc);
   color: var(--acc);
 }
-/* The words on this button are a cost sentence, not a verb, and at 272px half
-   of them need two lines. The run label wanted 233px in a 199px box, wrapped,
-   took the button from 37.5px to 57px and shoved the panel down 19.5px the
-   moment it was pressed. A panel that jumps when you press its main button
-   reads cheap.
-
-   So two lines are reserved inside the height the button already had, rather
-   than the height being allowed to follow the label. The type is tightened to
-   pay for them, which suits a line that is a price rather than a shout: one
-   line centres, two lines fill, and the button measures the same before,
-   during and after a run. overflow guards the case nobody has written yet;
-   the longest label in the tool clears three lines by a quarter. */
+/* the words on this button are a cost sentence, not a verb: the run label wanted 233px in a 199px box, wrapped, took the button from 37.5px to 57px and shoved the panel down 19.5px on press, so two lines are reserved inside the height the button already had. */
 .genbtn {
   width: calc(100% - var(--pan-in) * 2);
   height: 38px;
@@ -2319,16 +2055,8 @@ input[type='range']:disabled {
   background: color-mix(in srgb, var(--panel) 85%, transparent);
 }
 
-/* ---- the effect engine: the live preview and its knobs ------------------
-   Nothing in here costs anything, so the panel is a workbench rather than a
-   confirm: the animation plays while the sliders move, and the two buttons at
-   the bottom are the only moment anything is written. */
-/* The tuning panel measured 41px WIDER than the space it sits in: a grid whose
-   column defaults to min-content, inside a column that is really 231px after
-   the panel's own padding and its scrollbar, not the 272px the panel is
-   nominally wide. Every child spilled off the right edge together, which is
-   why the toggle read "own co" and the frame row read "12 frames | 1". The
-   fix is the track, not any one child. */
+/* the effect engine, the live preview and its knobs: nothing in here costs anything, the animation plays while the sliders move, and the two buttons at the bottom are the only moment anything is written. */
+/* the tuning panel measured 41px wider than the space it sits in: a grid column defaults to min-content, and the real column is 231px after the panel's padding and scrollbar rather than the nominal 272px, so every child spilled off the right together. the fix is the track, not any one child. */
 .fxpanel {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -2337,12 +2065,7 @@ input[type='range']:disabled {
   padding: 8px 6px 6px;
   min-width: 0;
   max-width: 100%;
-  /* No overflow:hidden here. It stops the sliders spilling sideways and it also
-     clips everything below the preview: the tuning controls and the keep buttons
-     render, inside the box, unreachable, with nothing to scroll because the box
-     itself is the wrong height. The
-     sideways fix is the minmax track and the min-width:0 below; clipping was
-     never doing that work. */
+  /* no overflow:hidden here: it also clips everything below the preview, so the tuning controls and the keep buttons render unreachable with nothing to scroll. the sideways fix is the minmax track and the min-width:0 below. */
   border: var(--hair) solid var(--edge);
   border-radius: var(--r-soft);
   background: var(--raised);
@@ -2411,9 +2134,7 @@ input[type='range']:disabled {
   border-radius: var(--r-tight);
   border: var(--hair) solid var(--seam);
 }
-/* whose colours the effect is made of. A thing made OF the place takes the
-   painting's; a thing with its own identity brings its own, and then the ramp
-   itself has to be reachable, so the strip becomes swatches you can open. */
+/* whose colours the effect is made of: a thing made of the place takes the painting's, a thing with its own identity brings its own, and then the ramp itself has to be reachable, so the strip becomes swatches you can open. */
 .fxwhose {
   margin: 2px 4px 3px;
 }
@@ -2442,8 +2163,7 @@ input[type='range']:disabled {
 .fxslider {
   padding: 0 6px 4px;
 }
-/* the panel is open on something that already exists on disk: say so, because
-   one of the two buttons writes over it */
+/* the panel is open on something that already exists on disk, and says so, because one of the two buttons writes over it. */
 .fxedit {
   margin: 0 4px 2px;
   padding: 4px 8px;
@@ -2453,10 +2173,7 @@ input[type='range']:disabled {
   color: var(--acc);
   font: var(--fs-fine)/1.4 var(--font-mono);
 }
-/* What the confirmed translation will actually draw. It is the WHOLE prompt,
-   which now runs to sixty or eighty words, so it gets its own capped frame and
-   scrolls: nothing is hidden before a spend, and nothing pushes the confirm
-   button off the panel either. */
+/* the whole prompt the confirmed translation will draw, sixty or eighty words now, in its own capped frame that scrolls: nothing hidden before a spend, and nothing pushing the confirm button off the panel. */
 .gen-will {
   display: block;
   max-height: 132px;
@@ -2474,8 +2191,7 @@ input[type='range']:disabled {
   background: var(--edge);
   border-radius: var(--r);
 }
-/* a written effect that renders but does not wrap. Quiet on purpose: it is a
-   fact about the loop, not a refusal, and he may not care on a slow drift. */
+/* a written effect that renders but does not wrap: quiet, because it is a fact about the loop and not a refusal, and on a slow drift it may not matter. */
 .fxwarn {
   margin: 4px 4px 0;
   padding: 4px 8px;
@@ -2485,8 +2201,7 @@ input[type='range']:disabled {
   color: var(--acc-tool-lit);
   font: var(--fs-fine)/1.4 var(--font-mono);
 }
-/* the recipe fold: what was written for this ask, read-only, so the panel is
-   not a black box. There is no editor here on purpose. */
+/* the recipe fold: what was written for this ask, read-only, so the panel is not a black box, and there is no editor here on purpose. */
 .fxrecipe {
   display: grid;
   gap: 4px;
@@ -2523,14 +2238,7 @@ input[type='range']:disabled {
 }
 
 /* ---- the doors (test step): the inline form and the event rows --------- */
-/* A bare `display: grid` sizes its one column off the widest thing in it, so
-   any row that cannot be squeezed drags the whole form past the panel edge.
-   The route form's "add a mark on a waypoint" button is nowrap, so its
-   min-content is the whole sentence: unchecked it makes the form 270px inside
-   a 228px box, shoves the panel content 26px left and cuts "CHECK THE GROUND"
-   down to "HECK THE GROUND" with a sideways scrollbar under it. Both lines are
-   needed and they stop different things: the track cannot grow past the form,
-   and a row cannot grow past the track. .evrows below carries the same pair. */
+/* a bare `display: grid` sizes its one column off the widest thing in it, so the nowrap "add a mark on a waypoint" button made the form 270px inside a 228px box and grew a sideways scrollbar. both lines are needed: the track cannot grow past the form, a row cannot grow past the track. */
 .doorform {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -2562,12 +2270,7 @@ input[type='range']:disabled {
   flex: 1 0 100%;
   font: var(--fs-micro) var(--font-mono);
 }
-/* one mark: the two strings that name it, which waypoint it sits on, and a
-   remove. TWO LINES, because four controls across a 228px form gave the
-   identifier 63px and `mark_1` came out as "mark". The identifier leads on its
-   own line for the reason it leads in the anchor form above: it is the string a
-   member types in python, and the label under it is only what a player reads.
-   What each field is for lives on the field, on hover. */
+/* one mark: the strings that name it, the waypoint it sits on, and a remove. two lines, because four controls across a 228px form gave the identifier 63px and `mark_1` came out as "mark"; the identifier leads because it is the string typed in python, the label is what a player reads. */
 .markrow {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
@@ -2594,11 +2297,7 @@ input[type='range']:disabled {
   min-width: 36px;
   text-align: center;
 }
-/* THE RADIUS, TYPED. It replaced a read-only number the moment the ceiling went
-   from 64 to 512: stepping to 300 two pixels at a time is 150 presses. Wide
-   enough for three digits, which is the largest value that fits. The spinners
-   go, because at 20px high nobody can hit them and the two buttons either side
-   already do that job. */
+/* the radius, typed: the ceiling went from 64 to 512 and stepping to 300 two pixels at a time is 150 presses. wide enough for three digits, and the spinners go because at 20px high nobody can hit them. */
 .doorrad .radnum {
   width: 52px;
   padding: 3px 4px;
@@ -2636,9 +2335,7 @@ input[type='range']:disabled {
   border-color: var(--acc);
   color: var(--acc);
 }
-/* the two fields you point at instead of typing: a label, a wide button saying
-   what is set or what to do next, and an x to put it back. Same row shape as
-   the radius above so the form reads as one column of properties. */
+/* the two fields you point at instead of typing: a label, a wide button saying what is set or what to do next, and an x to put it back, in the same row shape as the radius above. */
 .anchspot {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -2646,9 +2343,7 @@ input[type='range']:disabled {
   gap: 3px 6px;
   min-width: 0;
 }
-/* the caption spans the whole width above the control, which is where every
-   other caption in the product sits. A 52px column beside it was the third
-   label position in one form. */
+/* the caption spans the whole width above the control, where every other caption in the product sits: a 52px column beside it was the third label position in one form. */
 .anchspot > span {
   grid-column: 1 / -1;
   font: var(--fs-micro) var(--font-mono);
@@ -2675,16 +2370,14 @@ input[type='range']:disabled {
   border-color: var(--acc);
   color: var(--acc);
 }
-/* armed: the map is waiting for a click, so the button says so and looks like
-   every other armed control in the tool rather than merely being pressed */
+/* armed: the map is waiting for a click, so the button says so and looks like every other armed control in the tool rather than merely being pressed. */
 .anchspot .mbtn.wide.on {
   border-color: var(--acc);
   background: color-mix(in srgb, var(--acc) 16%, var(--panel));
   color: var(--ink);
   font-family: var(--font-ui);
 }
-/* nothing set reads as prose, because "the middle of it" is a description of
-   the default and not a value somebody chose */
+/* nothing set reads as prose, because "the middle of it" describes the default rather than a value somebody chose. */
 .anchspot .mbtn.wide:not(.on) {
   font-family: var(--font-mono);
 }
@@ -2697,14 +2390,7 @@ input[type='range']:disabled {
   font: var(--fs-micro) var(--font-mono);
   color: var(--ink-3);
 }
-/* the six numbers describing the body, in the same auto-fit grid the placement
-   inspector uses for its transform, so the two number blocks in this tool read
-   as the same kind of thing.
-
-   THREE ACROSS IN THE PANEL AND TWO IN THE NARROWER SHOT FORM, which is what
-   auto-fit is for. The floor was 92px, so the panel took two columns and the
-   six body numbers ate three rows of a rail that was already 383px over its
-   height. 70px is the width of the widest caption, "offset x", at 10px mono. */
+/* the six body numbers, in the auto-fit grid the placement inspector uses, three across in the panel and two in the narrower shot form. a 92px floor gave the panel two columns and three rows on a rail already 383px over its height; 70px is the widest caption, "offset x", at 10px mono. */
 .walkcfg {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(70px, 1fr));
@@ -2712,14 +2398,11 @@ input[type='range']:disabled {
   min-width: 0;
   margin: 2px var(--pan-in) 4px;
 }
-/* the side margin is the panel's row gutter, and a form has already spent it
-   in its own padding. Kept indoors it was charged twice and took 8px off the
-   two number columns inside the shot form, which is where the digits went. */
+/* the side margin is the panel's row gutter and a form has already spent it in its own padding: kept indoors it was charged twice and took 8px off the two number columns inside the shot form. */
 .doorform .walkcfg {
   margin: 2px 0 0;
 }
-/* one row per occluder: the id, its baseline, and an x. The id is small and
-   monospaced because it is the number written into the occluders png. */
+/* one row per occluder, the id, its baseline and an x, with the id monospaced because it is the number written into the occluders png. */
 .occrows {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -2742,8 +2425,7 @@ input[type='range']:disabled {
 .occrow:hover {
   border-color: var(--edge);
 }
-/* the selected one is the one the baseline field and the delete are about, and
-   before there was a selection the answer was always "whichever was last" */
+/* the selected one is what the baseline field and the delete are about, and before there was a selection the answer was always whichever was last. */
 .occrow.sel {
   border-color: var(--acc);
   background: color-mix(in srgb, var(--acc) 10%, transparent);
@@ -2772,8 +2454,7 @@ input[type='range']:disabled {
   border-radius: var(--r);
   font: var(--fs-fine) var(--font-mono);
 }
-/* the map's own key/values. Two columns, the key in the machine face because
-   a reader picks it up by that exact string. */
+/* the map's own key/values, two columns, the key in the machine face because a reader picks it up by that exact string. */
 .metarows {
   display: grid;
   gap: 3px;
@@ -2802,15 +2483,9 @@ input[type='range']:disabled {
   gap: 4px;
 }
 
-/* ---- the named collections: a set, a rack, a variant set -----------------
-   Three lists in the same form the anchor, the route and the shot already use,
-   so nothing here invents a fourth row shape. What each one adds is only the
-   part that is genuinely different: a member is one string, a slot carries a
-   number that must never move, and a variant member carries which of them is
-   showing. */
+/* the named collections, a set, a rack and a variant set, in the row form the anchor, the route and the shot already use: a member is one string, a slot carries a number that must never move, and a variant member carries which of them is showing. */
 
-/* one anchor inside a set. The name is the whole row, because that string is
-   the entire content of a membership. */
+/* one anchor inside a set: the name is the whole row, because that string is the entire content of a membership. */
 .memrow {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -2825,11 +2500,7 @@ input[type='range']:disabled {
   font-size: var(--fs-fine);
 }
 
-/* ONE SLOT: a grip, its number, and the anchor under it. The number is an
-   <em> and not an input on purpose, and this is the one place in the tool
-   where read-only is the feature: `hook[3]` means the third hook for the life
-   of the map, so a rack that let anybody type over 3 would break the only
-   promise it makes. */
+/* one slot: a grip, its number, and the anchor under it. the number is an <em> and not an input, because `hook[3]` means the third hook for the life of the map, and a rack that let anybody type over 3 would break the only promise it makes. */
 .rackrow {
   display: grid;
   grid-template-columns: auto auto minmax(0, 1fr) auto;
@@ -2879,9 +2550,7 @@ input[type='range']:disabled {
   border-color: var(--acc);
 }
 
-/* ONE STATE of a variant set. Two lines, for the reason a mark row is two: the
-   name is a python string and gets its own line rather than 60px of a 228px
-   form, and the placement it draws sits under it in the machine face. */
+/* one state of a variant set, two lines like a mark row: the name is a python string and gets its own line rather than 60px of a 228px form, and the placement it draws sits under it in the machine face. */
 .varrow {
   display: grid;
   grid-template-columns: auto minmax(0, 1fr) auto;
@@ -2894,9 +2563,7 @@ input[type='range']:disabled {
   padding: 4px 6px;
   font: var(--fs-fine) var(--font-mono);
 }
-/* which one is showing to start. A dot rather than a native radio, because it
-   turns all the way off and a radio group cannot: nothing showing is a state
-   an author chooses. */
+/* which one is showing to start, a dot rather than a native radio, because it turns all the way off and a radio group cannot: nothing showing is a state an author chooses. */
 .vardot {
   width: 12px;
   height: 12px;
@@ -2920,26 +2587,14 @@ input[type='range']:disabled {
   font: var(--fs-micro) var(--font-mono);
   color: var(--dim);
 }
-/* a long label and a long address on one line: a door named "The Old Quarry →
-   old-quarry" pushes the whole list 26px past the panel and grows a sideways
-   scrollbar on the test step. */
+/* a long label and a long address on one line: a door named "The Old Quarry → old-quarry" pushes the whole list 26px past the panel and grows a sideways scrollbar on the test step. */
 .evrows {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 2px;
   padding: 2px 0;
 }
-/* TWO ROW GRAMMARS IN THIS TOOL AND NOT THREE. An ACTION row (.row) is a thing
-   you press. A DATA row (.evrow) is a thing you have made, and pressing it
-   opens it. They are different, so they are allowed to look different.
-
-   What they are not allowed to do is start their words in two different places.
-   Left alone they do: an action row puts its label at x=59 behind a 26px
-   bordered tile, and a data row puts its label at x=43 behind a bare Unicode
-   glyph with no tile at all, in a different face, down the same 272px column.
-   Two lists, one gutter. A data row wears the same tile, drawn quieter
-   because it is describing rather than offering, and the text lands on the same
-   line. */
+/* two row grammars and not three: an action row (.row) is a thing you press, a data row (.evrow) is a thing you have made. an action row lands its label at x=59 and a data row at x=43 down the same 272px column, so a data row wears the same tile, quieter, and both start in one place. */
 .evrow {
   display: flex;
   align-items: center;
@@ -2961,10 +2616,7 @@ input[type='range']:disabled {
   background: var(--acc-soft);
   box-shadow: inset 2px 0 0 var(--acc);
 }
-/* the tile on a data row is quieter than the tile on an action row: an action
-   row is offering to do something, this one is only saying what kind of thing
-   the row is. It keeps the size, because the size is what puts both lists'
-   words on the same line. */
+/* the tile on a data row is quieter because the row is only saying what kind of thing it is rather than offering to do something, and it keeps the size, since the size is what puts both lists' words on the same line. */
 .evrow .row-ic {
   border-radius: var(--r);
   background: transparent;
@@ -2976,17 +2628,7 @@ input[type='range']:disabled {
   border-color: var(--acc);
   color: var(--acc);
 }
-/* the row is two lines because one line could not hold both. At 162px the
-   metadata was eaten on the right and nothing gave it back: "the_maw_mouth ·
-   pa…" does not say which anchor the shot hangs on, and the only way to find
-   out was to click every row. The name owns the top line, the address sits
-   under it smaller.
-
-   TWO FACES, because the two lines say different kinds of thing. The top line
-   is what the door is CALLED and it is set in the label face; the line under
-   it is the python identifier and where the door goes, and those are
-   addresses, so they stay mono. A row that is mono throughout makes
-   `the_maw_mouth` look like the door's name rather than its address. */
+/* two lines because one could not hold both: at 162px "the_maw_mouth · pa…" never said which anchor the shot hangs on. the name owns the top line in the label face, and the identifier and where the door goes stay mono under it, or `the_maw_mouth` reads as the name rather than the address. */
 .ev-name {
   flex: 1;
   min-width: 0;
@@ -3053,10 +2695,7 @@ input[type='range']:disabled {
   touch-action: none;
   cursor: var(--cur-draw);
 }
-/* EXCEPT WHERE NOTHING IS DRAWN. The export step is a picture of the bundle
-   about to be written and no press on it does anything, and it wore the same
-   crosshair as the cut brush. The reticle is the token for a surface you survey
-   rather than one you draw on, which is what this canvas is here. */
+/* except where nothing is drawn: no press on the export canvas does anything, so it takes the survey reticle rather than the cut brush's crosshair. */
 .stage[data-step='export'] canvas {
   cursor: var(--cur-survey);
 }
@@ -3147,10 +2786,7 @@ footer .hint {
 }
 
 /* ---- the selected placement's action row (step 5) ---------------------- */
-/* a row of actions that wraps onto a second line rather than running out the
-   side of the panel. A label like "match to the map" is wider than a third of
-   272px, and the width it takes depends on the machine's font, which is how
-   this row broke on his screen and not on mine. */
+/* a row of actions that wraps onto a second line rather than running out the side of the panel: a label like "match to the map" is wider than a third of 272px, and the width it takes depends on the machine's font, so it broke on one screen and not another. */
 .actrow {
   display: flex;
   flex-wrap: wrap;
@@ -3158,11 +2794,7 @@ footer .hint {
   min-width: 0;
   padding: 2px 4px;
 }
-/* the basis is what decides when the row wraps, and it is small enough that
-   three still sit on one line in a 272px panel. Below that they wrap. The
-   label itself wraps inside the button rather than being clipped, because
-   these buttons carry data-tip and an overflow:hidden would cut the tooltip
-   off at the button's own edge. */
+/* the basis decides when the row wraps, and it is small enough that three still sit on one line in a 272px panel. the label wraps inside the button rather than being clipped, because these carry data-tip and an overflow:hidden would cut the tooltip off at the button's own edge. */
 .abtn {
   position: relative;
   flex: 1 1 76px;
@@ -3178,14 +2810,12 @@ footer .hint {
   overflow-wrap: anywhere;
   transition: all 160ms ease;
 }
-/* a disabled button lit up on hover exactly like a live one, which is the
-   worst thing a spend control can do: it says press me while refusing. */
+/* a disabled button lit up on hover exactly like a live one, which is the worst thing a spend control can do: it says press me while refusing. */
 .abtn:hover:not(:disabled) {
   border-color: var(--acc);
   color: var(--acc);
 }
-/* the reach half of the pair whose rest half is up at .abtn.danger. Both are
-   needed: at rest it says what it is, reached for it says it is armed. */
+/* the reach half of the pair whose rest half is at .abtn.danger: at rest it says what it is, reached for it says it is armed. */
 .abtn.danger:hover:not(:disabled) {
   border-color: var(--acc-stop-edge);
   color: var(--acc-stop-lit);
@@ -3239,11 +2869,7 @@ footer [data-tip]:hover::after {
   bottom: calc(100% + 5px);
 }
 
-/* ---- the style card and the palette lock (step 5) ----------------------
-   Two quiet pieces. The style line says what every ask is about to carry, and
-   it is read once per painting, so it never asks for anything. The compare
-   rows show the raw take beside the matched one; nothing in either costs a
-   generation, which is why neither wears the armed red the spend buttons do. */
+/* the style card and the palette lock on step 5: the style line says what every ask is about to carry and is read once per painting, and the compare rows show the raw take beside the matched one. nothing in either costs a generation, so neither wears the armed red. */
 .styleline {
   display: flex;
   align-items: flex-start;
@@ -3286,8 +2912,7 @@ footer [data-tip]:hover::after {
   justify-content: center;
   gap: 10px;
 }
-/* the candidates after they have been looked at: the chosen one is outlined,
-   every other row is one click away, and nothing is decided until a button */
+/* the candidates after they have been looked at: the chosen one is outlined, every other row is one click away, and nothing is decided until a button. */
 .plrow.pickable {
   padding: 4px;
   border: var(--hair) solid transparent;
@@ -3320,18 +2945,14 @@ footer [data-tip]:hover::after {
 .pllook {
   padding: 2px 4px;
 }
-/* the look said none of these answer the ask. It sits above the rows because
-   nothing is chosen in that case, in the same warm colour the line under the
-   button uses, and every row below it is still keepable. */
+/* the look said none of these answer the ask, so it sits above the rows because nothing is chosen, in the warm colour the line under the button uses, and every row below it is still keepable. */
 .plmiss {
   color: var(--acc-tool-lit);
   font: var(--fs-fine)/1.4 var(--font-mono);
   overflow-wrap: anywhere;
 }
 
-/* ---- the review loop: the tool judging its own render, in the open ------
-   Quiet by design. It is not a result, it is the tool saying what it already
-   did, and the buttons underneath are still the only thing that decides. */
+/* the review loop, the tool judging its own render in the open: it is not a result, it is the tool saying what it already did, and the buttons underneath are still the only thing that decides. */
 .fxlook {
   display: flex;
   align-items: baseline;
@@ -3380,15 +3001,7 @@ footer [data-tip]:hover::after {
 }
 
 
-/* ---- the help panel -----------------------------------------------------
- *
- * One overlay, a column of sections down the left and the list of what each
- * one can do on the right. It is a reference rather than a tour, so nothing
- * animates in, nothing is paged, and the whole list is scrollable from the
- * moment it opens.
- *
- * It closes on the backdrop as well as on the button, because it is a thing
- * you open mid-task to check one answer and then get out of. */
+/* the help panel: one overlay, sections down the left and what each one can do on the right. a reference rather than a tour, so nothing animates in and nothing is paged, and it closes on the backdrop as well as the button, because you open it mid-task for one answer. */
 .helpbtn {
   width: 26px;
   height: 26px;
@@ -3434,8 +3047,7 @@ footer [data-tip]:hover::after {
   padding: 12px 14px;
   border-bottom: var(--hair) solid var(--line);
 }
-/* .abtn stretches to its container by default, which is right everywhere else
- * it is used and wrong on a header where it sits next to a title */
+/* .abtn stretches to its container by default, which is right everywhere else it is used and wrong on a header where it sits next to a title. */
 .help-head .abtn {
   flex: 0 0 auto;
   width: auto;
@@ -3474,10 +3086,7 @@ footer [data-tip]:hover::after {
 .help-sec:hover {
   color: var(--ink);
 }
-/* the pair the panel's own lists already use, and it was two raw whites here.
-   A selected thing is gold at the alpha --acc-soft names and a hovered one is
-   gold at 6 per cent, so selection and hover say the same thing whether they
-   happen in a list of doors or in the help sheet. */
+/* the pair the panel's own lists already use, not two raw whites: selected is gold at the alpha --acc-soft names and hovered is gold at 6 per cent, so selection and hover say the same thing in a list of doors or in the help sheet. */
 .help-sec.on {
   color: var(--ink);
   background: var(--acc-soft);
@@ -3569,14 +3178,7 @@ footer [data-tip]:hover::after {
 }
 
 
-/* ---- moves / becomes ----------------------------------------------------
- *
- * These two were round icon buttons of the same size sitting next to each
- * other, and the first question anyone asked was which was which. Fair:
- * one is behaviour and free, the other draws a picture and spends, and nothing
- * about a sparkle beside a wand says that. Icons cannot carry the difference
- * between free and paid, so they carry a word instead, and the one that spends
- * carries its price the way every other spending button in the tool does. */
+/* icons cannot carry the difference between free and paid: one of these is behaviour and free, the other draws a picture and spends, so they carry a word instead and the one that spends carries its price. */
 .actpill {
   display: inline-flex;
   align-items: center;
@@ -3632,9 +3234,7 @@ footer [data-tip]:hover::after {
   border-color: var(--warn);
 }
 
-/* what an open box is for. A bare input carrying a greyed example looks like a
- * field on a form, and two of them stacked look like a form with two required
- * fields, which is not what either of them is. */
+/* what an open box is for: a bare input carrying a greyed example looks like a field on a form, and two stacked look like a form with two required fields, which is not what either of them is. */
 .boxwhat {
   font-size: var(--fs-fine);
   line-height: var(--lh);
@@ -3642,8 +3242,7 @@ footer [data-tip]:hover::after {
   margin-bottom: 1px;
 }
 
-/* the one thing a toast can offer to do about itself. Used by the in-place
- * pixel edits, which z cannot take back. */
+/* the one thing a toast can offer to do about itself, used by the in-place pixel edits, which z cannot take back. */
 .toast-act {
   margin-left: 10px;
   padding: 2px 8px;
@@ -3659,8 +3258,7 @@ footer [data-tip]:hover::after {
   background: var(--acc-soft);
 }
 
-/* who a pixel edit lands on. Sits under the edit buttons rather than beside one
- * of them, because it governs all of them. */
+/* who a pixel edit lands on: under the edit buttons rather than beside one of them, because it governs all of them. */
 .editall {
   display: flex;
   align-items: center;
@@ -3682,16 +3280,12 @@ footer [data-tip]:hover::after {
   color: var(--ink);
 }
 
-/* ---- anchors: named places, the seam with the game and with python -------
-   The name is the identity and the label is only what a player reads, so the
-   form has to make that difference obvious rather than hiding two strings in
-   two identical boxes. */
+/* anchors, named places, the seam with the game and with python: the name is the identity and the label is only what a player reads, so the form has to make that difference obvious rather than hiding two strings in two identical boxes. */
 .anchfield {
   display: grid;
   gap: 3px;
 }
-/* the same caption the ocean writes, in the same face at the same size, so a
-   form on either screen is recognisably the same form */
+/* the same caption the ocean writes, in the same face at the same size, so a form on either screen is recognisably the same form. */
 .anchfield > span {
   font: var(--fs-micro) var(--font-mono);
   color: var(--ink-3);
@@ -3701,9 +3295,7 @@ footer [data-tip]:hover::after {
   padding: 6px 9px;
   font-size: var(--fs-small);
 }
-/* the binding picker, matched to the input above it rather than to the group
-   select in the inspector, because it lives in this form and has to line up
-   with the fields around it */
+/* the binding picker is matched to the input above it rather than to the group select in the inspector, because it lives in this form and has to line up with the fields around it. */
 .anchfield select {
   width: 100%;
   min-width: 0;
@@ -3719,10 +3311,7 @@ footer [data-tip]:hover::after {
   outline: none;
   border-color: var(--acc);
 }
-/* what it is bound TO is a name code uses, so the chosen one reads in the mono
-   face like every other machine string in this tool. The options themselves are
-   drawn by the platform and cannot be styled, which is fine: the list is being
-   read, and the closed box is being checked. */
+/* what it is bound to is a name code uses, so the chosen one reads in the mono face like every other machine string. the options are drawn by the platform and cannot be styled, which is fine: the list is being read and the closed box is being checked. */
 .anchfield select.anchbind {
   font-family: var(--font-mono);
   color: var(--acc);
@@ -3733,11 +3322,7 @@ footer [data-tip]:hover::after {
   font-family: var(--font-ui);
   color: var(--dim);
 }
-/* a name is code, so it is set in the mono face the rest of the tool uses for
-   anything a machine reads. Not scoped to the door form: a placement's name is
-   the same kind of string in the same kind of field, and it earns the same
-   face. The placeholder stays in the reading face, or an empty box looks like
-   it is already holding a value. */
+/* a name is code, so it takes the mono face the tool uses for anything a machine reads, and it is not scoped to the door form because a placement's name is the same kind of string. the placeholder stays in the reading face, or an empty box looks like it is already holding a value. */
 .anchname {
   font-family: var(--font-mono);
   color: var(--acc);
@@ -3759,8 +3344,7 @@ footer [data-tip]:hover::after {
   flex-wrap: wrap;
   gap: 3px;
 }
-/* static, so the tip anchors to the row rather than to a 40px chip. The rule
-   near the top of this file says why. */
+/* static, so the tip anchors to the row rather than to a 40px chip, for the reason the rule near the top of this file gives. */
 .anchkinds .kbtn {
   position: static;
   padding: 4px 8px;
@@ -3780,9 +3364,7 @@ footer [data-tip]:hover::after {
   background: color-mix(in srgb, var(--acc) 16%, var(--panel));
   color: var(--ink);
 }
-/* the top line stopped being an identifier when displayName took over, so it
-   stopped being set in the identifier face. Mono is the technical voice in
-   this app and it belongs to the address on the line below. */
+/* the top line stopped being an identifier when displayName took over, so it stopped being set in the identifier face: mono is the technical voice here and it belongs to the address on the line below. */
 .evrow .ev-name b {
   display: block;
   overflow: hidden;
@@ -3792,50 +3374,23 @@ footer [data-tip]:hover::after {
   font-weight: 600;
   color: var(--ink);
 }
-/* ONE INK RULE FOR EVERY NAME IN EVERY LIST, which is what this rule holds to.
-   A door whose label nobody has typed drawn gold and underlined, against a
-   route and a shot two blocks down drawn white, is three lists in one column
-   saying three different things with colour. The gold underline would also be
-   the only underline in the tool, and it reads as a link to somewhere broken.
-   Nothing here is broken: the name simply has not been confirmed.
-
-   The mark stays, because a person has to be able to tell a name an author
-   typed from one this tool unpacked out of an identifier, and that split is
-   honoured on every surface. It is the shared `.guessed` in tokens.css, which
-   the ocean draws too: the words keep the list's own ink and only the dotted
-   rule under them is quiet. Not a colour, not a link, and the same one mark on
-   both screens. */
+/* one ink rule for every name in every list: gold and underlined would be the only underline in the tool and reads as a broken link. the mark stays, because a typed name must be tellable from one unpacked out of an identifier, so shared `.guessed` keeps the list's ink and quiets only the dotted rule. */
 .evrow .ev-name b.guessed {
   color: var(--ink);
 }
-/* --fs-micro and not --fs-fine, which is the size tokens.css names for exactly
-   this: "an id, a coordinate, a version, a unit. Mono, and never a sentence."
-   Martian Mono is a wide face and the extra pixel cost about four characters.
-
-   IT WRAPS AND IT DOES NOT ELLIPSISE, which is the change. Measured on the hub
-   at the 141px this column actually gets: the door line ran to 182px, the
-   route to 233 and the shot to 268, so all three were cut and what got cut was
-   the half that carried the information. The name above it may ellipsise
-   because a name is recognised from its first few letters. An address is not.
-   Each caption-and-value pair is one flex item, so a wrap can only ever land
-   between two pairs and never inside an identifier. */
+/* --fs-micro, the size tokens.css names for an id or a coordinate, and it wraps rather than ellipsising: at the 141px this column gets, the door line ran to 182px, the route to 233, the shot to 268, and what got cut carried the information. a wrap lands between pairs, never inside an identifier. */
 .evrow .ev-name i {
   display: flex;
   flex-wrap: wrap;
   column-gap: 8px;
   row-gap: 0;
-  /* --lh-tight, which is the leading tokens.css names this size for: "an id, a
-     coordinate, a version, a unit". Wrapping costs the row the height an
-     ellipsis would save: at the body leading a shot row measures 75px against
-     an action row's 47. Tight gives most of it back and cuts nothing off. */
+  /* --lh-tight, the leading tokens.css names this size for: wrapping costs the row the height an ellipsis would save, a shot row measuring 75px at body leading against an action row's 47, and tight gives most of it back and cuts nothing off. */
   line-height: var(--lh-tight);
   font-style: normal;
   font-size: var(--fs-micro);
   color: var(--dim);
 }
-/* the caption that says the mono string next to it is the code name and not a
-   second name for the thing. Label face, because it is a word rather than an
-   identifier, and --ink-off so the address stays the thing being read. */
+/* the caption that says the mono string next to it is the code name and not a second name for the thing: label face because it is a word rather than an identifier, and --ink-off so the address stays the thing being read. */
 .evrow .ev-name i em {
   font-family: var(--font-label);
   font-style: normal;
@@ -3843,26 +3398,14 @@ footer [data-tip]:hover::after {
   color: var(--ink-off);
 }
 
-/* ---- the reskin -----------------------------------------------------------
- *
- * The structure of this tool is right and none of it moves. What changes is
- * everything that decides whether it reads as software somebody made or a
- * default: the type, the weight of the rules, how a step tells you it is the
- * one you are on, and how loud the chrome is next to the painting.
- *
- * The painting is the brightest thing on screen. Everything else steps back.
- */
+/* the reskin: the structure does not move, only the type, the weight of the rules, how a step says it is the one you are on, and how loud the chrome is next to the painting. the painting is the brightest thing on screen. */
 
-/* Archivo Narrow is a label face and needs its tracking opened up at small
-   sizes or it reads as a wall. Numbers stay in the mono, always, so a
-   coordinate never gets confused with a word. */
+/* Archivo Narrow is a label face and needs its tracking opened up at small sizes or it reads as a wall. numbers stay in the mono, always, so a coordinate never gets confused with a word. */
 body[data-view='editor'] {
   letter-spacing: 0.005em;
 }
 
-/* THE STEPS. Six across the top. The live one carries a rule under it and the
-   rest are quiet: a filled circle and a coloured word is the shape of a wizard,
-   and this is a route through a piece of work you can walk back along. */
+/* the steps, six across the top: the live one carries a rule under it and the rest are quiet, because a filled circle and a coloured word is the shape of a wizard and this is a route you can walk back along. */
 .step {
   position: relative;
   letter-spacing: 0.02em;
@@ -3888,8 +3431,7 @@ body[data-view='editor'] {
   }
 }
 
-/* the header wordmark matches the site's, so the two screens are obviously the
-   same product */
+/* the header wordmark matches the site's, so the two screens are obviously the same product. */
 .brandmark,
 .logo {
   font-family: var(--font-ui);
@@ -3898,31 +3440,14 @@ body[data-view='editor'] {
   font-size: var(--fs-small);
 }
 
-/* SIDE PANEL. The left rule this file is careful about stays exactly where it
-   was; only its weight changes, from a line you notice to a line you feel. */
+/* the side panel: the left rule this file is careful about stays exactly where it was, and only its weight changes, from a line you notice to a line you feel. */
 .panel,
 aside {
   background: var(--panel);
   border-right: var(--hair) solid var(--edge);
 }
 
-/* A PANEL THAT CARRIES ON PAST THE WINDOW HAS TO SAY SO.
- *
- * Measured on step 4: 1073px of content in 690px, and the last block in the
- * column, the keys fold, sat below the fold with nothing on screen admitting
- * there was one. A row cut in half by the bottom edge reads as a clipped layout
- * rather than as a list that continues, and the panel's own scrollbar is 8px of
- * --edge on --panel, which is 1.2:1 and is not a signal to anybody.
- *
- * Two backgrounds and no javascript. The first is a cover in the panel's own
- * colour pinned to the bottom of the CONTENT (`local`), the second is the
- * shadow pinned to the bottom of the BOX (`scroll`). Scrolled to the end the
- * cover sits over the shadow and there is no fade; anywhere else the cover has
- * gone off the bottom and the shadow shows. So the mark is present exactly when
- * there is more to read, which is the whole of what it has to say.
- *
- * It cannot swallow a click the way an absolutely positioned overlay would, and
- * that matters here: the thing under it is usually a button. */
+/* two backgrounds and no javascript: a cover in the panel's own colour pinned to the bottom of the content (`local`) and the shadow pinned to the bottom of the box (`scroll`), so the mark shows exactly when there is more to read. an overlay would swallow the click on the button under it. */
 .panel {
   background:
     linear-gradient(var(--panel), var(--panel)) bottom / 100% 22px local no-repeat,
@@ -3930,9 +3455,7 @@ aside {
     var(--panel);
 }
 
-/* A ROW is the tool's main unit and was a rounded card. Cards stack into a
-   sheet of boxes; a row with a hairline under it stacks into a list, which is
-   what this actually is. */
+/* a row is the tool's main unit and was a rounded card: cards stack into a sheet of boxes, a row with a hairline under it stacks into a list, which is what this actually is. */
 .row {
   border-radius: 0;
   border: 0;
@@ -3960,15 +3483,13 @@ aside {
   color: var(--dim);
 }
 
-/* THE STAGE. The painting gets a true black surround and a checker that sits
-   far enough back to read as absence rather than as pattern. */
+/* the stage: the painting gets a true black surround and a checker that sits far enough back to read as absence rather than as pattern. */
 .stage,
 .canvaswrap {
   background: var(--stage);
 }
 
-/* the status bar along the foot: quieter, mono, and it stops competing with
-   the map for attention */
+/* the status bar along the foot: quieter, mono, and it stops competing with the map for attention. */
 .foot,
 .statusbar {
   font-family: var(--font-mono);
@@ -3978,9 +3499,7 @@ aside {
   border-top: var(--hair) solid var(--edge);
 }
 
-/* Buttons lose their pill. A tool this dense reads better with square edges:
-   round corners at 12px are a decoration nobody asked for and they fight the
-   pixel grid the whole app is drawn on. */
+/* buttons lose their pill: round corners at 12px are a decoration nobody asked for and they fight the pixel grid the whole app is drawn on. */
 .abtn,
 .mbtn,
 .tbtn,
@@ -4004,8 +3523,7 @@ body[data-view='editor'] :focus-visible {
   outline-offset: 1px;
 }
 
-/* scrollbars stop being the one thing on screen that looks like an operating
-   system rather than like this program */
+/* scrollbars stop being the one thing on screen that looks like an operating system rather than like this program. */
 body[data-view='editor'] * {
   scrollbar-width: thin;
   scrollbar-color: var(--edge) transparent;
@@ -4025,16 +3543,13 @@ body[data-view='editor'] *::-webkit-scrollbar-track {
   background: transparent;
 }
 
-/* THE ASK BOX. Its hint was sitting in the column beside the textarea, so on a
-   272px panel it wrapped one word per line down the right hand side and read as
-   a broken layout rather than a note. It goes above the box, full width, where
-   a caption belongs. */
+/* the ask box: its hint sat in the column beside the textarea, so on a 272px panel it wrapped one word per line down the right hand side and read as a broken layout, and it goes above the box, full width, where a caption belongs. */
 .field:has(.field-desc) {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 5px;
 }
-/* the note reads BEFORE the box it describes, and spans the panel */
+/* the note reads before the box it describes, and spans the panel */
 .field:has(.field-desc) .field-desc {
   order: -1;
   grid-column: 1;
@@ -4048,8 +3563,7 @@ body[data-view='editor'] *::-webkit-scrollbar-track {
   min-width: 0;
 }
 
-/* the back arrow beside help. Same box, same weight, so the top right corner
-   reads as one pair rather than a button and a link. */
+/* the back arrow beside help, same box and same weight, so the top right corner reads as one pair rather than a button and a link. */
 .backbtn {
   display: inline-grid;
   place-items: center;
@@ -4072,9 +3586,7 @@ body[data-view='editor'] *::-webkit-scrollbar-track {
   color: var(--ink);
 }
 
-/* A PAINTING YOU ALREADY HAVE. The file input itself is invisible; the label is
-   the button, so the whole row is one target and nothing looks like a browser
-   default in the middle of a tool. */
+/* a painting you already have: the file input itself is invisible and the label is the button, so the whole row is one target and nothing looks like a browser default in the middle of a tool. */
 .openfile {
   cursor: var(--cur-do);
 }
@@ -4103,9 +3615,7 @@ body[data-view='editor'] *::-webkit-scrollbar-track {
   color: var(--acc);
 }
 
-/* THE HAND, ON THE FIRST STEP. A row of choices and not a dropdown: there are
-   two or three of them, they are the first decision a map asks for, and a
-   dropdown hides the fact that there is a choice at all. */
+/* the hand, on the first step: a row of choices and not a dropdown, because there are two or three of them, they are the first decision a map asks for, and a dropdown hides that there is a choice at all. */
 .stylepick {
   display: flex;
   flex-wrap: wrap;
@@ -4132,15 +3642,13 @@ body[data-view='editor'] *::-webkit-scrollbar-track {
   color: var(--ink);
   border-color: var(--edge-lit);
 }
-/* the live one carries the accent, the same way the live step does, because
-   this is a state and not a press */
+/* the live one carries the accent, the same way the live step does, because this is a state and not a press. */
 .stylebtn.on {
   color: var(--ink);
   background: var(--acc-soft);
   border-color: var(--acc);
 }
-/* which card is the granted one, said quietly: it is a fact about the card and
-   not a warning about it */
+/* which card is the granted one, said quietly: a fact about the card and not a warning about it. */
 .stylebtn-tag {
   font-size: var(--fs-micro);
   letter-spacing: 0.04em;
@@ -4148,8 +3656,7 @@ body[data-view='editor'] *::-webkit-scrollbar-track {
   color: var(--acc);
   opacity: 0.85;
 }
-/* the prompt that will be sent, shut by default. Open it and it wraps rather
-   than scrolling sideways, because it is prose and reading it is the point. */
+/* the prompt that will be sent, shut by default, and open it wraps rather than scrolling sideways, because it is prose and reading it is the point. */
 .willdraw {
   margin: 0 0 8px;
   font-size: var(--fs-fine);

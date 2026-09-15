@@ -230,10 +230,7 @@ async function putItem(mapId, name, kind, o) {
   )
 }
 
-// ---- the faces each library item wears -------------------------------------
-
-// Done after the whole library, because a face hangs off a library_items row
-// and that row has to exist first.
+// the faces each library item wears, done after the whole library because a face hangs off a library_items row and that row has to exist first
 let faces = 0
 if (!DRY && fs.existsSync(path.join(dir, 'states'))) {
   const { pushStates } = await import('../store/platform.mjs')

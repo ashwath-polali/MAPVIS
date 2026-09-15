@@ -1,9 +1,4 @@
-// The five png row filters, and the heuristic for choosing between them.
-//
-// A png stores each row filtered by one of five predictors, and the choice is
-// per row. Pixel art compresses dramatically better under the right one: a flat
-// area under Sub is a row of zeroes, and the same row under None is a row of
-// distinct bytes that deflate has to encode.
+// the five png row filters and the per row choice between them, because pixel art compresses far better under the right one: a flat area under Sub is a row of zeroes, and the same row under None is distinct bytes deflate has to encode
 
 export const NONE = 0
 export const SUB = 1
@@ -11,9 +6,7 @@ export const UP = 2
 export const AVERAGE = 3
 export const PAETH = 4
 
-/* the predictor from the spec: whichever of left, above and upper-left is
- * closest to their combined estimate. It is the one that handles a diagonal
- * edge, which is most of a pixel-art outline. */
+/* the predictor from the spec, whichever of left, above and upper-left is closest to their combined estimate, which is the one that handles a diagonal edge, most of a pixel-art outline */
 export function paeth(a, b, c) {
   const p = a + b - c
   const pa = Math.abs(p - a)
@@ -75,9 +68,7 @@ export function unfilterRow(type, row, prev, bpp) {
   return out
 }
 
-/* the minimum sum of absolute differences, treating bytes as signed. It is the
- * heuristic the spec itself suggests and it is within a percent or two of
- * trying all five through the actual compressor, for a fraction of the time. */
+/* minimum sum of absolute differences with bytes read as signed, the heuristic the spec suggests, within a percent or two of trying all five through the real compressor for a fraction of the time */
 export function chooseFilter(row, prev, bpp) {
   let best = NONE
   let bestScore = Infinity
@@ -96,8 +87,7 @@ export function chooseFilter(row, prev, bpp) {
   return best
 }
 
-/* png interlacing, which nothing here writes but a reader has to understand.
- * Seven passes, each a different lattice over the image. */
+/* png interlacing, which nothing here writes but a reader has to understand, seven passes each a different lattice over the image */
 export const ADAM7 = [
   { x: 0, y: 0, dx: 8, dy: 8 },
   { x: 4, y: 0, dx: 8, dy: 8 },

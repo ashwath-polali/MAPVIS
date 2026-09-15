@@ -1,9 +1,4 @@
-// The stand-point reach law on both sides of the wire, with no database and no bucket, so a stranger can run it on a fresh clone.
-
-//   node server/db/verify-stand.mjs
-
-// Two on the hub ended up 60 and 214 pixels from their anchor. The browser holds the rule in src/core/mask.ts and the server
-// keeps its own copy in maps.mjs, because putDoc is reachable by a hand-written POST, so this runs both against each other.
+// the stand-point reach law on both sides of the wire, no database and no bucket so it runs on a fresh clone: two on the hub ended up 60 and 214 pixels from their anchor, and putDoc takes a hand-written POST, so src/core/mask.ts and the server copy in maps.mjs are checked against each other
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -55,9 +50,7 @@ for (let deg = 0; deg < 360; deg++) {
     const p = clampStand(400, 400, want, 18)
     const got = Math.hypot(p[0] - 400, p[1] - 400)
     worst = Math.max(worst, got)
-    // a point a pixel or more inside is only ever rounded. One sitting ON the
-    // boundary may round outward and then be pulled back onto it, which is the
-    // rule working rather than a shove, so it is not counted here.
+    // a point a pixel or more inside is only ever rounded, while one sitting on the boundary may round outward and be pulled back onto it, which is the rule working rather than a shove, so it is not counted here
     if (d <= 35 && Math.hypot(p[0] - want[0], p[1] - want[1]) > 0.71) shoved++
     const q = serverClamp(400, 400, want, 18)
     if (String(p) !== String(q)) no(`the two copies disagree at ${deg} degrees, ${d}px: browser ${p}, server ${q}`)

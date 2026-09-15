@@ -69,13 +69,10 @@ export const ISLAND_STATES = [
   'completed',
 ]
 
-/* the two spellings that reached the database before the survey, kept so that
- * reopening the ocean does not quietly turn every reserved slot into misty */
+/* the two state spellings that reached the database first, kept so that reopening the ocean does not quietly turn every reserved slot into misty */
 const STATE_WAS = { rumoured: 'rumour', in_season: 'active' }
 
-/* what the water is, where it is not an island. Same vocabulary the walkable
- * mask cannot answer, because the mask answers a question about feet and a
- * ship is not a walker. */
+/* what the water is where there is no island, a question the walkable mask cannot answer because the mask is about feet and a ship is not a walker */
 export const SEA_KINDS = ['sailable', 'shallow', 'forbidden', 'mist', 'ambience']
 
 /* everything on the water is a berth and this list is a filter rather than a second type; approach is never a kind because it only means anything relative to the berth it hangs on */
@@ -97,8 +94,7 @@ export function cleanPlace(p) {
   const discover = Math.max(0, num(p.discover, pre ? num(p.release, 520) : 520))
   return {
     name: p.name,
-    /* the roster id, which is a different string from the address above and is
-     * how the game finds this slot at all */
+    /* the roster id, a different string from the name above and how the game finds this slot at all */
     ...(isPlaceId(p.place) ? { place: p.place } : {}),
     map: typeof p.map === 'string' ? p.map.slice(0, 60) : '',
     title: typeof p.title === 'string' ? p.title.slice(0, 120) : '',
@@ -108,8 +104,7 @@ export function cleanPlace(p) {
     h: Math.max(1, num(p.h, 64)),
     state,
     discover,
-    // held in memory well past the radius that discovered it, or the bundle is
-    // dropped and re-fetched every time the hull drifts back across one circle
+    // release sits well past the radius that discovered it, or the bundle is dropped and re-fetched every time the hull drifts back across the circle
     release: pre || num(p.release, 0) <= discover ? discover * 2 : num(p.release),
     ...(p.meta && typeof p.meta === 'object' && !Array.isArray(p.meta) ? { meta: p.meta } : {}),
   }
@@ -118,8 +113,7 @@ export function cleanPlace(p) {
 /* one free-standing array with `island` as a field, and a bad name is dropped rather than corrected because bending it invents an address nothing in the author's code calls */
 export function cleanMark(m) {
   if (!m || !isName(m.name)) return null
-  // absent rather than zeroed: (0,0) is a real position on the ocean, so a point
-  // with no coordinates is not a point
+  // absent rather than zeroed: (0,0) is a real position on the ocean, so a point with no coordinates is not a point
   if (!isFinite(Number(m.x)) || !isFinite(Number(m.y))) return null
   return {
     name: m.name,
@@ -128,14 +122,9 @@ export function cleanMark(m) {
     x: num(m.x),
     y: num(m.y),
     ...(m.facing ? { facing: String(m.facing).slice(0, 16) } : {}),
-    /* the heading as an angle, degrees clockwise from north, which is what a berth actually needs: a
-     * coastline does not run at a multiple of forty-five to suit the eight words. Rounded to whole
-     * degrees, because a tenth of a degree over a forty-six pixel hull is a tenth of a pixel and only
-     * makes the document noisy. `facing` rides beside it as the nearest word so nothing that reads a
-     * word has to learn anything. */
+    /* the heading in degrees clockwise from north, because a coastline does not run at a multiple of 45 to suit the eight words; rounded to whole degrees, since a tenth of a degree over a 46 pixel hull is a tenth of a pixel, and `facing` rides beside it as the nearest word */
     ...(isFinite(Number(m.bearing)) ? { bearing: ((Math.round(num(m.bearing)) % 360) + 360) % 360 } : {}),
-    // how close counts as arrived, so sailing to a berth is not an exact-pixel
-    // test on a hull that moves in floats. Absent leaves it to the caller.
+    // how close counts as arrived, so sailing to a berth is not an exact pixel test on a hull that moves in floats, and absent leaves it to the caller
     ...(isFinite(Number(m.r)) ? { r: Math.max(0, num(m.r)) } : {}),
     ...(m.label ? { label: String(m.label).slice(0, 120) } : {}),
     /* not validated against the roster here, because cleanMark runs one row at a time and cannot see the places; checkWorld warns instead */
@@ -160,21 +149,17 @@ export function cleanRegion(r) {
   return {
     name: r.name,
     kind: SEA_KINDS.includes(r.kind) ? r.kind : 'sailable',
-    // two opposite corners, the same order and the same min/max tolerance the
-    // anchor rect settled on, so one reader shape serves both
+    // two opposite corners, the same order and the same min/max tolerance the anchor rect settled on, so one reader shape serves both
     rect: r.rect.map((n) => num(n)),
     ...(r.label ? { label: String(r.label).slice(0, 120) } : {}),
   }
 }
 
-/* Takes an optional pinned client so the read, the version decision and the
- * write inside saveWorld are one atomic unit under one advisory lock. With no
- * client it is the pool, which is what every plain reader wants. */
+/* takes an optional pinned client so the read, the version decision and the write inside saveWorld are one atomic unit under one lock; with no client it is the pool */
 export async function getWorld(client, id = GAME_WORLD) {
   const run = client ? (t, p) => client.query(t, p) : q
   const w = (await run('select id, pub_id, w, h, places, regions, marks, home, version, updated_at from world where id = $1', [id])).rows[0] || null
-  // updatedAt 0 on an ocean nobody has written, so the save precondition reads
-  // "there is nothing here to be stale against" rather than refusing the first save
+  // updatedAt 0 on an ocean nobody has written, so the save precondition has nothing to be stale against rather than refusing the first save
   if (!w) return { id, pubId: '', w: 4096, h: 4096, places: [], regions: [], marks: [], home: '', version: 1, updatedAt: 0 }
   return {
     /* the id and the pub id ride along to save a second round trip, and neither reaches the game because composition() is a different shape */
@@ -229,15 +214,12 @@ export async function composition(id = GAME_WORLD) {
           x: p.x + (pb ? pb.ox + pb.w / 2 : p.w / 2),
           y: p.y + (pb ? pb.oy + pb.h / 2 : p.h / 2),
         },
-        // the painted extent, which is what a distance is measured against.
-        // Taking it off the canvas is 41 percent too generous on the hub, in the
-        // direction that discovers an island before it is on screen.
+        // the painted extent, which is what a distance is measured against: taking it off the canvas is 41 percent too generous on the hub, so an island is discovered before it is on screen
         footprint: pb ? { w: pb.w, h: pb.h } : { w: p.w, h: p.h },
         /* sent whenever the painting is not the whole canvas, because absent means centred to the game and an origin of 0,0 is legitimate */
         ...(m && pb && (pb.w !== m.w || pb.h !== m.h || pb.ox || pb.oy) ? { origin: { x: pb.ox, y: pb.oy } } : {}),
         ...(m ? { canvas: { w: m.w, h: m.h } } : {}),
-        // what this map really costs, so the budget stops charging every island
-        // the same invented ninety-four and dropping ones it should have kept
+        // what this map really costs, so the budget stops charging every island the same invented ninety-four and dropping ones it should have kept
         ...(m ? { placements: m.placements || 0 } : {}),
         state: p.state,
         release: p.release,
@@ -250,9 +232,7 @@ export async function composition(id = GAME_WORLD) {
                 x: b.x,
                 y: b.y,
                 ...(BERTH_FACINGS.includes(b.facing) ? { facing: b.facing } : {}),
-                /* the exact angle beside the word. A reader that has never heard of it takes the word
-                 * and is no worse off than it was, and one that has gets the heading the author
-                 * actually set rather than the nearest of eight. */
+                /* the exact angle rides beside the word: a word-only reader is no worse off, and one that reads bearing gets the heading that was set rather than the nearest of eight */
                 ...(isFinite(Number(b.bearing)) ? { bearing: Math.round(Number(b.bearing)) } : {}),
                 ...(b.approach ? { approach: { x: b.approach.x, y: b.approach.y } } : {}),
                 ...(b.at ? { at: b.at } : {}),
@@ -277,36 +257,30 @@ export async function composition(id = GAME_WORLD) {
   }
 }
 
-/* WHICH WAY A COMPASS WORD POINTS, on the chart. y grows south, the same as
- * every raster in this tool, so north is negative y. */
-/* degrees clockwise from north into a chart vector, y growing south. The twin of vecOfBearing in
- * src/core/world.ts, and they are checked against each other rather than trusted to agree. */
+/* the compass section: y grows south like every raster in this tool, so north is negative y */
+/* degrees clockwise from north into a chart vector, y growing south; the twin of vecOfBearing in src/core/world.ts, checked against it rather than trusted to agree */
 export const vecOfBearing = (deg) => {
   const r = (Number(deg) * Math.PI) / 180
   return [Math.sin(r), -Math.cos(r)]
 }
 
-/* WHICH WAY A MARK IS REALLY POINTING, asked in one place so the chart, the coast rule and the
- * publish cannot answer it three ways. */
+/* which way a mark is really pointing, asked in one place so the chart, the coast rule and the publish cannot answer it three ways */
 export const vecOfMark = (m) => {
   if (isFinite(Number(m && m.bearing))) return vecOfBearing(Number(m.bearing))
   return FACING_VECTORS[String((m && m.facing) || '').toLowerCase()] || null
 }
 
-/* the eight words clockwise from north, which is the order a dial reads them in and NOT the order
- * FACING_VECTORS happens to be written in */
+/* the eight words clockwise from north, the order a dial reads them in and not the order FACING_VECTORS happens to be written in */
 export const WORDS_CW = ['north', 'north-east', 'east', 'south-east', 'south', 'south-west', 'west', 'north-west']
 
-/* what a mark is pointing, in degrees, whichever of the two fields it carries. Answering in degrees
- * even for a word-only mark is what lets one sentence describe both. */
+/* what a mark is pointing in degrees, whichever field it carries, because answering in degrees even for a word only mark lets one sentence describe both */
 export const bearingOf = (m) => {
   if (isFinite(Number(m && m.bearing))) return ((Math.round(Number(m.bearing)) % 360) + 360) % 360
   const i = WORDS_CW.indexOf(String((m && m.facing) || '').toLowerCase())
   return i < 0 ? 0 : i * 45
 }
 
-/* and the nearest word to an angle, so `facing` can be kept truthful beside a dial that does not
- * land on one. Rounded, so 44 degrees is north-east rather than north. */
+/* the nearest word to an angle, so `facing` stays truthful beside a dial that does not land on one, rounded so 44 degrees is north-east rather than north */
 export const nearestFacing = (deg) => WORDS_CW[Math.round((((Number(deg) % 360) + 360) % 360) / 45) % 8]
 
 export const FACING_VECTORS = {
@@ -320,50 +294,25 @@ export const FACING_VECTORS = {
   'south-west': [-0.7071, 0.7071],
 }
 
-/* WHICH WORDS ARE A HEADING AT ALL, which is every compass point rather than four. It was four
- * because the game's radOf read east, south and north and sent everything else to west without
- * saying so, so a diagonal drawn on the chart moored the hull facing somewhere it was never aimed.
- * The game turns all eight into radians now, so the reason is gone and so is the restriction: a
- * coastline does not run north to south to suit us, and half the shores on a map could not be lain
- * along at all.
- *
- * Taken off the table above rather than written out again, because two lists disagreeing is how a
- * heading becomes publishable and undrawable. It is a spelling check now and not a capability one:
- * what it stops is "norht" reaching a bundle.
- *
- * And it sits BELOW that table deliberately. A const is not hoisted, so reading it from higher up
- * the file threw on the way in and took the whole server down with it. */
+/* all eight compass points are headings, so this is a spelling check that stops `norht` reaching a bundle; derived from the table above rather than re-listed because two lists disagreeing makes a heading publishable and undrawable, and kept below that table because a const is not hoisted */
 export const BERTH_FACINGS = Object.keys(FACING_VECTORS)
 
-/* how far off straight-at-the-island still counts as pointing into it. 0.5 is
- * sixty degrees: a bow aimed anywhere inside that cone is aimed at the land, and
- * anything wider than it is lying along the shore, which is what mooring is. */
+/* how far off straight at the island still counts as pointing into it: 0.5 is sixty degrees, a bow inside that cone is aimed at the land and anything wider is lying along the shore, which is mooring */
 export const INTO_COAST = 0.5
 
-/* A BERTH WHOSE BOW IS IN THE LAND. The facing is the heading the hull holds
- * once she is tied up, so it must not point at the island she is tied to.
- *
- * Measured against the direction from the berth to the island's middle, not
- * against its box: a box test refuses a berth lying along a shore simply for
- * being beside it, and a dock is always beside it. What this can see is the
- * footprint the world document carries, so a berth deep inside a bay is judged
- * against the island as a whole and not against the water it actually sits in.
- * That is the one case where a hand is better than this, and it says so. */
+/* a berth whose bow is in the land: facing is the heading the hull holds once tied up, so it must not point at the island it is tied to, measured against the direction to the island's middle rather than its box because a box test refuses any berth lying along a shore and a dock is always beside one */
 export function facingIntoCoast(mark, place, map) {
   if (!mark || !place) return null
-  /* the angle when the author set one, the word when they did not: a berth on a dial is the normal
-   * case now and judging it by the nearest of eight would refuse a heading nobody chose */
+  /* the angle when one was set, the word when it was not, because judging a dial berth by the nearest of eight would refuse a heading nobody chose */
   const v = vecOfMark(mark)
   if (!v) return null
-  /* the painting's middle, the same point checkWorld measures a berth's reach
-   * from, so the two answers cannot disagree about where the island is */
+  /* the painting's middle, the same point checkWorld measures a berth's reach from, so the two answers cannot disagree about where the island is */
   const cx = place.x + (map && map.paint_w > 0 ? map.paint_ox + map.paint_w / 2 : (map ? map.w : place.w) / 2)
   const cy = place.y + (map && map.paint_h > 0 ? map.paint_oy + map.paint_h / 2 : (map ? map.h : place.h) / 2)
   const dx = cx - mark.x
   const dy = cy - mark.y
   const d = Math.hypot(dx, dy)
-  // tied up exactly on the middle of its own island is a different fault, and
-  // there is no direction to measure from a point with no distance
+  // tied up exactly on the middle of its own island is a different fault, and there is no direction to measure from a point with no distance
   if (d < 1) return null
   const dot = (v[0] * dx + v[1] * dy) / d
   return dot > INTO_COAST ? { dot, degrees: Math.round((Math.acos(Math.min(1, dot)) * 180) / Math.PI) } : null
@@ -395,9 +344,7 @@ export function checkWorld(doc, slugs = [], maps = new Map()) {
       problems.push(
         `"${p.name}" holds the map "${p.map}" and still reads as a rumour · the game refuses the whole composition over this, so pick a state it has really reached`,
       )
-    /* AN ISLAND THE GAME CANNOT ADDRESS. It looks a slot up by its place id and
-     * counts exposure by the same id, so one without it is never discovered, has
-     * no programmes, and reads misty for the whole run with nothing said. */
+    /* an island the game cannot address: a slot is looked up by its place id and exposure counted by the same id, so one without it is never discovered and reads misty with nothing said */
     if (p.map && !p.place)
       warnings.push(`"${p.name}" carries no place id, so the game has no id to discover it or count a visit under`)
     /* one chart unit is one painting pixel, so a place's box has to be its map's canvas or every point aimed at it lands elsewhere */
@@ -418,28 +365,13 @@ export function checkWorld(doc, slugs = [], maps = new Map()) {
         warnings.push(
           `"${b.name}" ties up ${Math.round(d)} out from "${p.name}", which is only discovered at ${p.discover}, so the dock is offered before the island is`,
         )
-      /* THE BOW IN THE LAND, and it says so rather than refusing.
-       *
-       * It was a refusal, and the refusal was wrong often enough to be worse than the fault. All this
-       * knows about "the island" is ONE POINT, the middle of the painting, so it reads any heading
-       * inside a sixty degree cone of that point as aimed at the coast. A berth at the end of a jetty
-       * that jUts out from the island is the ordinary case and it breaks the model completely: lying
-       * along that jetty, which is what mooring alongside one IS, points almost exactly back at the
-       * middle. The hub's own berth is 2 degrees off it, over open water the whole length of the hull,
-       * and the save was refused.
-       *
-       * Doing this properly means asking the walkable mask whether the bow ends up on land, which is
-       * a per-pixel question about a png this function is not given and cannot fetch. Until it is, the
-       * honest arbiter is the author: the ghost hull is drawn to size at the real heading for exactly
-       * that reason, and a warning tells them what the geometry looks like without overruling what
-       * they can see. */
+      /* the bow in the land warns rather than refuses: all this knows of the island is one point, the middle of the painting, so a berth lying along a jetty points almost back at it and the hub's own berth was refused at 2 degrees off; the real test is whether the walkable mask has land under the bow */
       const into = facingIntoCoast(b, p, mm)
       if (into)
         warnings.push(
           `"${b.name}" is aimed ${Math.round(bearingOf(b))}°, which is ${into.degrees}° off straight at the middle of "${p.name}" · that is the heading the hull holds once she is tied up, so check the ghost is lying along the shore and not into it`,
         )
-      /* named rather than dropped in cleanMark, because a facing that quietly disappears still moors
-       * the hull somewhere and says nothing about why it is not where it was drawn */
+      /* named rather than dropped in cleanMark, because a facing that quietly disappears still moors the hull somewhere and never says why it is not where it was drawn */
       if (b.facing && !BERTH_FACINGS.includes(b.facing))
         warnings.push(
           `"${b.name}" is aimed ${b.facing}, which is not a compass point · a hull tying up there will point west`,
@@ -470,8 +402,7 @@ export function checkWorld(doc, slugs = [], maps = new Map()) {
       warnings.push(
         `"${m.name}" carries a run-in and is not the berth its island docks at, so nothing will ever steer through it · put the run-in on the dock itself`,
       )
-    // no bounds test here either, for the same reason a place has none: the sea
-    // the game sails is centred on the hub and runs negative in both directions
+    // no bounds test here either, for the same reason a place has none: the sea the game sails is centred on the hub and runs negative in both directions
     /* the yardstick is the whole ocean's diagonal, so only a point left behind after its islands were deleted can trip it */
     const nearest = doc.places.length ? Math.min(...doc.places.map((p) => Math.hypot(m.x - p.x, m.y - p.y))) : Infinity
     if (nearest > diag)
@@ -502,8 +433,7 @@ export async function saveWorld(input, client, id = GAME_WORLD) {
     places: Array.isArray(input?.places) ? input.places.map(cleanPlace).filter(Boolean) : was.places,
     regions: Array.isArray(input?.regions) ? input.regions.map(cleanRegion).filter(Boolean) : was.regions,
     marks: stated ? input.marks.map(cleanMark).filter(Boolean) : was.marks,
-    // silence keeps what is there, the same argument marks makes, so a page that
-    // has never heard of a home slot cannot clear one by saving
+    // silence keeps what is there, the same argument marks makes, so a page that has never heard of a home slot cannot clear one by saving
     home: typeof input?.home === 'string' ? (isName(input.home) ? input.home : '') : was.home,
   }
   /* the stamp is a write precondition, because locking makes a write atomic and does not stop a stale tab winning; not version, which deliberately does not move for a title or a berth */
@@ -513,8 +443,7 @@ export async function saveWorld(input, client, id = GAME_WORLD) {
     e.problems = [why]
     throw e
   }
-  // the paint columns come too, because checkWorld measures a berth from the
-  // painting's centre, which is the point the game measures every radius from
+  // the paint columns come too, because checkWorld measures a berth from the painting's centre, which is the point the game measures every radius from
   const rows = (await run('select slug, w, h, paint_w, paint_h, paint_ox, paint_oy from maps')).rows
   const slugs = rows.map((r) => r.slug)
   const { problems, warnings } = checkWorld(doc, slugs, new Map(rows.map((r) => [r.slug, r])))
@@ -550,8 +479,7 @@ export async function saveWorld(input, client, id = GAME_WORLD) {
      returning id, pub_id, updated_at`,
     [doc.w, doc.h, JSON.stringify(doc.places), JSON.stringify(doc.regions), JSON.stringify(doc.marks), doc.home, version, id],
   )
-  // the new stamp goes back with the document, or the page has nothing to send
-  // on the next save and the precondition above can never fire
+  // the new stamp goes back with the document, or the page has nothing to send on the next save and the precondition above can never fire
   return {
     ...doc,
     id: wrote.rows[0].id,

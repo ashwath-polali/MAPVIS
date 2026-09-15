@@ -1,8 +1,4 @@
-// CRC-32 and Adler-32, the two checksums a png needs.
-//
-// Both tables are built once on first use rather than written out, because a
-// 256 entry table transcribed by hand is a table with a typo in it and the
-// symptom is a file that every decoder rejects with no clue which byte.
+// CRC-32 and Adler-32, the two checksums a png needs, with both tables built on first use rather than written out, because a hand-transcribed 256 entry table has a typo in it and the symptom is a file every decoder rejects with no clue which byte
 
 let crcTable = null
 
@@ -23,9 +19,7 @@ export function crc32(bytes, seed = 0) {
   return (c ^ 0xffffffff) >>> 0
 }
 
-/* the modulo is applied every 5552 bytes rather than every byte: that is the
- * largest run that cannot overflow a 32 bit accumulator, and doing it per byte
- * roughly halves the throughput for no benefit */
+/* the modulo runs every 5552 bytes, the longest run that cannot overflow a 32 bit accumulator, and doing it per byte roughly halves throughput for no benefit */
 export function adler32(bytes) {
   let a = 1
   let b = 0
@@ -46,8 +40,7 @@ export function crcOfString(s) {
   return crc32(new TextEncoder().encode(s))
 }
 
-/* a short stable id from any bytes, which is what names a cached derivative so
- * two identical inputs land on the same file */
+/* a short stable id from any bytes, so two identical inputs name the same cached derivative */
 export function shortHash(bytes, length = 8) {
   const a = crc32(bytes)
   const b = adler32(bytes)

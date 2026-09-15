@@ -36,8 +36,7 @@ export type IconName =
   | 'align-vc'
   | 'align-b'
 
-/* the six align marks: a rule, and two bars sitting against it, which is the
- * one drawing everyone already reads without a label */
+/* the six align marks: a rule with two bars sitting against it, the one drawing everyone already reads without a label */
 const alignH = (rule: number, a: [number, number], b: [number, number]) => (
   <>
     <path d={`M${rule} 2 L${rule} 14`} opacity="0.55" />
@@ -165,9 +164,7 @@ const D: Record<IconName, ReactNode> = {
       <path d="M6.5 5.8a3.4 3.4 0 016.6 1" />
     </>
   ),
-  /* the ocean page: swell with an island sitting in it. `wave` is water on its
-   * own and already means "the sea is animating here" in the editor, so the
-   * link to the chart needed the land in it to say which of the two it is. */
+  /* the ocean page: swell with an island sitting in it, because `wave` is water on its own and already means the sea is animating here, so the link to the chart needed the land in it */
   ocean: (
     <>
       <path d="M4.1 6.9c1-2.6 2.3-3.9 3.9-3.9s2.9 1.3 3.9 3.9z" />
@@ -175,9 +172,7 @@ const D: Record<IconName, ReactNode> = {
       <path d="M2.4 12.5c1.4 0 1.4-1.3 2.8-1.3s1.4 1.3 2.7 1.3 1.4-1.3 2.8-1.3 1.4 1.3 2.7 1.3" />
     </>
   ),
-  /* A ROUTE: a line with its waypoints on it and a head where it ends. Drawn
-   * rather than set as a raw ⤳, which is a glyph from a font and does not belong
-   * beside the pictograms in this set. */
+  /* a route: a line with its waypoints on it and a head where it ends, drawn rather than the raw ⤳, which is a glyph from a font and does not belong beside the pictograms in this set */
   route: (
     <>
       <path d="M2.6 11.8c2.6 0 2.2-4.4 4.8-4.4s2.2 3 4.4 3" />
@@ -186,8 +181,7 @@ const D: Record<IconName, ReactNode> = {
       <path d="M13.4 10.4l-1.9-1 .3 2.2z" fill="currentColor" stroke="none" />
     </>
   ),
-  /* A SHOT: the same camera body and lens stub the canvas draws for a framing,
-   * so the row and the mark on the map are recognisably one thing. */
+  /* a shot: the same camera body and lens stub the canvas draws for a framing, so the row and the mark on the map are recognisably one thing */
   shot: (
     <>
       <rect x="2.6" y="5.4" width="8.4" height="6.2" rx="1" />
@@ -195,17 +189,14 @@ const D: Record<IconName, ReactNode> = {
       <circle cx="5.2" cy="8.5" r="1.1" />
     </>
   ),
-  /* A TIMING MARK on a route: the ring the canvas draws round a named waypoint,
-   * with the line running through it. */
+  /* a timing mark on a route: the ring the canvas draws round a named waypoint, with the line running through it */
   mark: (
     <>
       <path d="M2.4 8h2.6M11 8h2.6" />
       <circle cx="8" cy="8" r="2.9" />
     </>
   ),
-  /* A TRIGGER: a point, and the ripple it fires when something reaches it. It
-   * is its own mark rather than borrowing `sparkle`, which already means
-   * "remove specks" two steps away. */
+  /* a trigger: a point and the ripple it fires when something reaches it, its own mark rather than `sparkle`, which already means remove specks two steps away */
   trigger: (
     <>
       <circle cx="8" cy="8" r="1.4" fill="currentColor" stroke="none" />

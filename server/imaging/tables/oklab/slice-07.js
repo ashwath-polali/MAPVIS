@@ -1,11 +1,4 @@
-// OKLab for every sampled colour whose blue axis sits at step 7 of 32.
-//
-// Read as 33 rows of 33 entries: the row is the green step and the entry
-// within it is the red step. Three numbers per entry, L then a then b.
-//
-// Slice 7 of 33. The whole cube is about a megabyte of text, which is
-// the one file nobody wants to open, so it is stored a blue step at a time and
-// the reader in ../oklab-cube.js stitches them back together.
+// OKLab at blue step 7 of 32, 33 green rows of 33 red entries, L then a then b. the cube is split one file per blue step because it is about a megabyte of text, and ../oklab-cube.js stitches it back.
 
 export const BLUE_STEP = 7
 

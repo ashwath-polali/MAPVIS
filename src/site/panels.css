@@ -2,9 +2,7 @@
 
 /* ---- the lead: the newest map, across the whole width -------------------- */
 
-/* A height, not an aspect ratio. With both, max-height wins and the element
-   narrows to keep the ratio, so the banner stopped two thirds across the page
-   while the grid under it ran the full width. */
+/* a height, not an aspect ratio, because with both, max-height wins and the element narrows to keep the ratio, stopping the banner two thirds across the page while the grid under it ran full width */
 .lead {
   position: relative;
   display: block;
@@ -29,8 +27,7 @@
 .lead:hover img {
   transform: scale(1.03);
 }
-/* the words sit IN the painting, so the darkening is part of the picture
-   rather than a panel laid on top of it */
+/* the words sit in the painting, so the darkening is part of the picture rather than a panel laid on top of it */
 .lead::after {
   content: '';
   position: absolute;
@@ -45,13 +42,7 @@
   align-content: center;
   gap: 7px;
   padding: 0 clamp(20px, 4vw, 52px);
-  /* NOT A ch MEASURE, and it was 46ch. `ch` is the width of a zero in the
-     element's own font, and this box had no font of its own: the document
-     carried none, so it was measuring in Times New Roman like everything else.
-     Setting one stack globally narrowed every ch by a third at a stroke,
-     because Archivo Narrow is condensed, and the map's name started breaking
-     at its hyphen. A box holding a 2.4rem heading and a 10px mono readout has
-     no single character measure anyway, so it is given a width. */
+  /* not a ch measure, because ch is the width of a zero in the element's own font and setting one stack globally narrowed every ch by a third when Archivo Narrow is condensed, breaking the map name at its hyphen, and a box with a 2.4rem heading and a 10px mono readout has no single character measure */
   max-width: min(440px, 46%);
 }
 .lead-when {
@@ -348,8 +339,7 @@
   color: var(--ink-3);
 }
 
-/* A PREFERENCE ROW: a name on the left, the control on the right. One row shape
- * so a second preference cannot arrive with its own spacing. */
+/* a preference row, a name on the left and the control on the right, one row shape so a second preference cannot arrive with its own spacing */
 .pref {
   display: flex;
   align-items: center;
@@ -359,12 +349,7 @@
   font-size: var(--fs-body);
 }
 
-/* Two words in a track, not an icon and not a sliding knob, and it is the
- * .walk-cam grammar from the walk panel on purpose: a switch drawn as a shape
- * has to be learned, and one of the two states of a mute icon is a picture of
- * silence that people read as "press to silence". The words cannot be misread.
- * Kept as two buttons rather than one that flips, so a screen reader is told
- * which state is chosen instead of being handed a verb. */
+/* two words in a track rather than an icon or a sliding knob, the same grammar as .walk-cam, because a shape has to be learned and one state of a mute icon reads as press to silence, and two buttons rather than one that flips tells a screen reader which state is chosen */
 .pref-sw {
   display: flex;
   gap: 2px;
@@ -398,9 +383,7 @@
   outline-offset: 1px;
 }
 
-/* two notes stack under this row, the standing fact and the browser's state.
-   Scoped to a section that has a preference in it rather than written as
-   .sheet-note + .sheet-note, which would reach into the key blocks as well. */
+/* two notes stack under this row, scoped to a section with a preference in it rather than .sheet-note + .sheet-note, which would reach into the key blocks as well */
 .pref ~ .sheet-note {
   margin-top: 8px;
 }
@@ -582,10 +565,7 @@
   color: var(--ink-2);
 }
 
-/* ---- one loading mark, everywhere -----------------------------------------
-   Four squares walking a ring on the pixel grid. It replaced a soft ink blot
-   that bled outward, which was slow, apologetic, and the wrong shape for a
-   tool made entirely of hard pixels. */
+/* one loading mark everywhere: four squares walking a ring on the pixel grid, because the soft ink blot it replaced was slow and the wrong shape for a tool made of hard pixels */
 .pixload {
   position: relative;
   width: 22px;
@@ -626,10 +606,7 @@
 }
 .key-top .dot { margin-left: auto; }
 
-/* ---- walking --------------------------------------------------------------
-   The stage is the whole screen under the bar, not a boxed 16:9
-   panel with a video-player triangle in the middle of it, which made a map
-   look like a clip of a map. */
+/* walking: the stage is the whole screen under the bar, not a boxed 16:9 panel with a video-player triangle, which made a map look like a clip of a map */
 .walk {
   position: relative;
   display: grid;
@@ -675,8 +652,7 @@
 }
 .walk-hint .on { color: #e6e9ee; }
 
-/* the camera switch, sitting in the middle of the hint bar. Two words rather
- * than an icon, because nobody has to learn what a word means. */
+/* the camera switch sits in the middle of the hint bar, two words rather than an icon because nobody has to learn what a word means */
 .walk-cam {
   display: flex;
   gap: 2px;

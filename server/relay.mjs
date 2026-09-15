@@ -36,8 +36,7 @@ let quiet = false
 const say = (m) => console.log(`[relay] ${m}`)
 
 async function tick() {
-  // Claiming and heartbeating are the same call. A relay that is asking for
-  // work is by definition alive, so there is no second timer to forget.
+  // claiming and heartbeating are the same call, so a relay asking for work is by definition alive and there is no second timer to forget
   const lend = E.PIXELLAB_TOKEN && claims % 400 === 0 ? { pixellab: E.PIXELLAB_TOKEN } : {}
   claims++
   const { job } = await call('/api/relay/claim', { name: NAME, caps: CAPS, ...lend })
@@ -69,8 +68,7 @@ async function tick() {
     const raw = await viaCli(prompt, 300000)
     let text = raw
     try {
-      // the cli wraps its answer; unwrapping here means the server sees one
-      // shape whichever provider replied
+      // the cli wraps its answer, and unwrapping here means the server sees one shape whichever provider replied
       const j = JSON.parse(raw)
       if (typeof j.result === 'string') text = j.result
     } catch {}
@@ -92,8 +90,7 @@ for (;;) {
     const got = await tick()
     if (got) lastJobAt = Date.now()
   } catch (e) {
-    // a server that is down or a laptop that lost wifi is a normal Tuesday, not
-    // a reason to stop. The platform degrades on its own while this waits.
+    // a server that is down or a laptop that lost wifi is normal and not a reason to stop, the platform degrades on its own while this waits
     if (!quiet) say(`cannot reach mapvis: ${String(e.message || e).slice(0, 120)}`)
     quiet = true
   }

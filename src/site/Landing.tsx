@@ -65,9 +65,7 @@ export default function Landing() {
     return () => clearInterval(t)
   }, [])
 
-  /* Scroll, keys and touch all mean the same thing: one step. The page itself
-   * never scrolls, so the wheel is captured rather than followed, and a
-   * threshold keeps a trackpad's momentum from firing six stops at once. */
+  /* scroll, keys and touch all mean one step, and since the page itself never scrolls the wheel is captured rather than followed, with a threshold to keep a trackpad's momentum from firing six stops at once */
   useEffect(() => {
     const step = (d: number) => {
       paused.current = Date.now() + 9000

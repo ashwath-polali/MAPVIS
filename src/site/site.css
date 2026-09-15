@@ -1,43 +1,10 @@
-/* MAPVIS, the platform.
- *
- * THE IDEA: the site is not a page with maps on it. It is a chart you travel
- * across. Scrolling is exploration, the nav is a compass, loading is ink
- * spreading into paper, and every surface is either the night sea you are
- * sailing or the vellum you are drawing on. A tool for making maps should feel
- * like one, and nothing about that reads as a template.
- *
- * WHAT IT REFUSES, on purpose, because these are the tells:
- *   no centred hero over a purple gradient
- *   no three feature cards in a row
- *   no glassmorphic floating panels
- *   no Inter, no Poppins, no Montserrat
- *   no "Get Started"
- *   nothing perfectly symmetrical
- *
- * Art comes from PixelLab. This file draws no pictures; it holds the surface,
- * the type, the light and the motion, and gets out of the way.
- */
+/* MAPVIS, the platform: a chart you travel across rather than a page with maps on it, refusing the tells on purpose, no centred hero on a purple gradient, no three feature cards, no glassmorphic panels, no Inter or Poppins or Montserrat, no Get Started, nothing perfectly symmetrical */
 
-/* ---- type -----------------------------------------------------------------
- * Fraunces is an old-style serif with a WONK axis and real optical sizing, so a
- * headline can be genuinely strange at 90px and stay readable at 14. It is the
- * engraved title on a chart.
- *
- * Archivo Narrow is the label face for the same reason cartographers used
- * condensed type: names have to fit between a coastline and a mountain.
- *
- * Martian Mono is the technical voice. It is what a coordinate, an anchor name
- * and a line of a member's python are set in, and it is deliberately odd enough
- * that code never reads as body text.
- */
+/* type: Fraunces is the display serif, a WONK axis and real optical sizing so it stays strange at 90px and readable at 14; Archivo Narrow labels because names have to fit between a coastline and a mountain; Martian Mono is code and coordinates, odd enough never to read as body text */
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght,SOFT,WONK@0,9..144,300..900,0..100,0..1;1,9..144,300..900,0..100,0..1&family=Archivo+Narrow:ital,wght@0,400..700;1,400..700&family=Martian+Mono:wght@300..700&display=swap');
 
 :root {
-  /* ---- the sea, the paper, and the light --------------------------------
-   * Two worlds. You are either out on the water at dusk, or at the desk with
-   * a lamp on. Every page is one or the other and never a blend, which is what
-   * keeps the whole thing from turning into grey product design.
-   */
+  /* the sea and the paper: a page is either out on the water at dusk or at the desk with a lamp on, never a blend, which is what keeps the whole thing from turning into grey product design */
   --void: #070b11; /* deepest night water */
   --depth: #0c1420; /* the sea */
   --shoal: #14202e; /* shallows, raised surfaces */
@@ -48,15 +15,7 @@
   --iron: var(--ink-paper); /* iron gall ink */
   --iron-soft: var(--ink-paper-2); /* ink, thinned */
 
-  /* Gold is the accent everywhere, and it is chosen the same way the editor
-     chose its iris: it is a hue a MAP never contains. Painted islands are
-     green, sand, stone and water; a gold line always means the tool talking.
-
-     THE HEXES MOVED TO tokens.css and these four are now the site's own words
-     for them. They were the same three golds the editor was writing as
-     #d8a657 and #d9bb55 out of its own head, which is how one accent became
-     three that nearly match. --acc-tool is the token; gold is what the chart
-     calls it. */
+  /* gold is the accent because it is a hue a map never contains, so a gold line always means the tool talking; the hexes live in tokens.css and these four are only the site's names for them, after one accent became three near-matching golds hand-written as d8a657 and #d9bb55 */
   --gold: var(--acc-tool);
   --gold-lit: var(--acc-tool-lit);
   --gold-deep: var(--acc-tool-deep);
@@ -65,9 +24,7 @@
   --verdigris: var(--acc-live); /* aged copper: a thing that is alive or working */
   --wax: var(--acc-stop); /* sealing wax: a warning, a refusal */
 
-  /* ONE WHITE. This was #d8e3ee here and #e6e9ee in app.css, so walking from
-     /world to /edit changed what "text" meant by a whole step of lightness and
-     neither file knew the other existed. */
+  /* one white: this was #d8e3ee here and #e6e9ee in app.css, so walking from /world to /edit changed what text meant by a whole step of lightness */
   --ink-on-sea: var(--ink);
   --dim-on-sea: var(--ink-3);
   --ink-on-paper: var(--ink-paper);
@@ -77,17 +34,14 @@
   --font-label: 'Archivo Narrow', 'Segoe UI', system-ui, sans-serif;
   --font-mono: 'Martian Mono', ui-monospace, Consolas, monospace;
 
-  /* Motion. Nothing bounces. A chart moves the way a heavy sheet of paper
-     moves: it resists, then settles, and it never overshoots. */
+  /* nothing bounces: a chart moves the way a heavy sheet of paper moves, it resists, then settles, and it never overshoots */
   --ease-paper: cubic-bezier(0.22, 0.61, 0.24, 1);
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --t-fast: 180ms;
   --t: 340ms;
   --t-slow: 900ms;
 
-  /* the site's engraved border, which is a gold-tinted line rather than the
-     grey --line the tool uses. 22% of gold on the sea measured 1.4:1 and
-     disappeared, so it is mixed against --edge instead of against nothing. */
+  /* the site's engraved border is a gold-tinted line rather than the grey --line the tool uses, and 22% of gold on the sea measured 1.4:1 and disappeared, so it is mixed against --edge instead of against nothing */
   --rule: var(--hair) solid color-mix(in srgb, var(--gold) 30%, var(--edge));
   --rule-paper: var(--hair) solid color-mix(in srgb, var(--iron) 26%, transparent);
 }
@@ -104,18 +58,12 @@
   -webkit-font-smoothing: antialiased;
 }
 
-/* The hero chart is rotated and hangs off the right edge on purpose, which is
-   what stops the composition sitting in a neat box. overflow-x on .site does
-   nothing about it, because the BODY is the scroll container, so the clip has
-   to go there. `clip` rather than `hidden` so position:fixed children, which is
-   the compass, are not turned into a new containing block. */
+/* the hero chart is rotated and hangs off the right edge, and the body is the scroll container so the clip has to go here, with `clip` rather than `hidden` so a position:fixed compass is not turned into a new containing block */
 body[data-view='site'] {
   overflow-x: clip;
 }
 
-/* a surface at the desk rather than out at sea. Auth and the code view use it,
-   and the switch is total: paper takes ink-coloured text, its own rules, its
-   own shadows. */
+/* a surface at the desk rather than out at sea, and the switch is total: paper takes ink-coloured text, its own rules and its own shadows */
 .paper {
   --ink: var(--ink-on-paper);
   --dim: var(--dim-on-paper);
@@ -123,9 +71,7 @@ body[data-view='site'] {
   color: var(--ink);
 }
 
-/* THE GRAIN. One tiny tiling noise, at very low opacity, over everything.
-   It is the single cheapest thing that stops a dark screen looking like a
-   CSS gradient, because real paper and real water are never flat. */
+/* one tiny tiling noise at very low opacity over everything, the cheapest thing that stops a dark screen looking like a CSS gradient */
 .grain::after {
   content: '';
   position: fixed;
@@ -172,8 +118,7 @@ body[data-view='site'] {
   font-size: clamp(1.35rem, 2.2vw, 1.9rem);
 }
 
-/* A LABEL, the way a chart labels a bay: small, spaced, and never shouting.
-   Used for every eyebrow, every section marker, every field name. */
+/* a label the way a chart labels a bay, small and spaced and never shouting, used for every eyebrow, section marker and field name */
 .label {
   font-family: var(--font-label);
   font-size: var(--fs-fine);
@@ -226,10 +171,7 @@ body[data-view='site'] {
   flex: none;
 }
 
-/* ---- links and buttons ---------------------------------------------------
- * No pills. A button here is an engraved plate or a line of type with a rule
- * under it that draws itself on hover.
- */
+/* links and buttons, and no pills: a button here is an engraved plate or a line of type with a rule under it that draws itself on hover */
 
 .plate {
   --plate-ink: var(--gold-lit);
@@ -305,19 +247,9 @@ body[data-view='site'] {
   transform-origin: left;
 }
 
-/* ---- motion primitives ---------------------------------------------------
- * Scroll-driven, no library. The whole site's reactivity is these three rules
- * plus pointer parallax, which is a few lines of javascript that only writes
- * custom properties and never touches layout.
- */
+/* motion primitives, scroll-driven and no library: these three rules plus pointer parallax, which only writes custom properties and never touches layout */
 
-/* Something that resolves as it comes into view, the way land does out of fog.
- *
- * TWO SELECTORS, and the second one is the whole point: the observer watches
- * the SECTION, not every line inside it, because a hundred observers on one
- * page is a hundred callbacks per scroll. So a .rise lifts either when it is
- * itself seen, or when any ancestor has been. Writing only the first is how
- * every line of copy on the landing page rendered at opacity 0. */
+/* two selectors, because the observer watches the section and not every line inside it, a hundred observers on one page being a hundred callbacks per scroll, so a .rise lifts when it is itself seen or when any ancestor has been; writing only the first left every line of copy at opacity 0 */
 .rise {
   opacity: 0;
   transform: translateY(28px);
@@ -366,19 +298,7 @@ body[data-view='site'] {
   }
 }
 
-/* ---- the cursor ----------------------------------------------------------
- * A survey reticle rather than an arrow, drawn as an svg data url so it costs
- * no request. It is the first thing anybody notices and the cheapest signal
- * that this was made by somebody rather than assembled. The svg itself now
- * lives in tokens.css as --cur-survey, so the two canvases and this page draw
- * the same reticle.
- *
- * IT IS NO LONGER ON BUTTONS AND LINKS. It was on `.site button, .site a`, so
- * the one signal that says "this is a chart you survey" was also on every
- * thing you press, which drains it of meaning and makes a button read as
- * scenery. Controls take `pointer` from the shared convention in tokens.css.
- * A chart takes it by being a .chart.
- */
+/* the cursor is a survey reticle, an svg data url kept in tokens.css as --cur-survey, and it is off buttons and links because the signal that says this is a chart you survey drains if it is also on everything you press, so controls take pointer */
 .site {
   cursor: var(--cur-survey);
 }
@@ -389,8 +309,7 @@ body[data-view='site'] {
   width: min(1240px, 100% - 10vw);
   margin-inline: auto;
 }
-/* Asymmetric on purpose. A centred column with everything stacked in it is the
-   single loudest tell, so content sits on a 12 column field and is placed. */
+/* asymmetric on purpose, because a centred column with everything stacked in it is the single loudest tell, so content sits on a 12 column field and is placed */
 .field {
   display: grid;
   grid-template-columns: repeat(12, 1fr);
@@ -405,9 +324,7 @@ body[data-view='site'] {
   }
 }
 
-/* Air between sections, but not a hallway. 170px top and bottom put 340px of
-   nothing between two legs whose art is already tall, which reads as a page
-   that has run out of things to say rather than as breathing room. */
+/* air between sections but not a hallway: 170px top and bottom put 340px of nothing between two legs whose art is already tall, which reads as a page that has run out of things to say */
 .sec {
   position: relative;
   padding: clamp(64px, 8vh, 110px) 0;

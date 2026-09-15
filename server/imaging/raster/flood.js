@@ -1,17 +1,11 @@
-// Flood fill and connected components.
-//
-// Both walk the same way and both are iterative on purpose. A recursive fill
-// over a 264,192 pixel plane blows the stack somewhere around the twelfth
-// thousand pixel, and it does it on the largest region rather than the smallest,
-// so it always fails on the one that mattered.
+// flood fill and connected components, both iterative on purpose, because a recursive fill over a 264,192 pixel plane blows the stack around the twelfth thousand pixel and does it on the largest region rather than the smallest, so it always fails on the one that mattered
 
 import { Plane } from './plane.js'
 
 const N4 = [[1, 0], [-1, 0], [0, 1], [0, -1]]
 const N8 = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]
 
-/* a scanline fill: it takes whole runs at a time rather than one pixel, which
- * on a painting of large flat areas is an order of magnitude fewer pushes */
+/* a scanline fill, taking whole runs at a time rather than one pixel, which on a painting of large flat areas is an order of magnitude fewer pushes */
 export function floodFill(plane, sx, sy, value, { tolerance = 0 } = {}) {
   const target = plane.get(sx, sy)
   if (Math.abs(target - value) <= tolerance) return { filled: 0, plane }
@@ -45,9 +39,7 @@ export function floodFill(plane, sx, sy, value, { tolerance = 0 } = {}) {
   return { filled, plane: out }
 }
 
-/* every distinct region, labelled. Two passes with union-find rather than one
- * pass with a relabel, because relabelling on a spiral shape means walking the
- * whole plane again per merge. */
+/* every distinct region, labelled, two passes with union-find rather than one pass with a relabel, because relabelling on a spiral shape means walking the whole plane again per merge */
 export function components(plane, { connectivity = 8, threshold = 1 } = {}) {
   const nb = connectivity === 4 ? N4 : N8
   const labels = new Int32Array(plane.w * plane.h).fill(-1)
@@ -105,8 +97,7 @@ export function components(plane, { connectivity = 8, threshold = 1 } = {}) {
   return { labels, count: sizes.length, sizes }
 }
 
-/* everything but the biggest region removed, which is how a mask with stray
- * specks becomes one island */
+/* everything but the biggest region removed, which is how a mask with stray specks becomes one island */
 export function largestOnly(plane, opts) {
   const { labels, sizes } = components(plane, opts)
   if (!sizes.length) return plane.clone()
@@ -117,8 +108,7 @@ export function largestOnly(plane, opts) {
   return out
 }
 
-/* holes filled: flood from outside, and anything the flood did not reach that
- * is also empty was enclosed */
+/* holes filled: flood from outside, and anything empty the flood did not reach was enclosed */
 export function fillHoles(plane, threshold = 1) {
   const outside = new Plane(plane.w, plane.h)
   const stack = []

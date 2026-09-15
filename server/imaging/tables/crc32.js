@@ -1,7 +1,4 @@
-// The CRC-32 table for the IEEE polynomial, 0xedb88320 reflected.
-//
-// Written out rather than built on first use so that a worker which only ever
-// checksums one small buffer does not pay for 2,048 shifts before it starts.
+// the CRC-32 table for the IEEE polynomial 0xedb88320 reflected, written out rather than built on first use so a worker that checksums one small buffer does not pay 2,048 shifts before it starts.
 
 export const CRC32_TABLE = new Uint32Array([
   0x00000000, 0x77073096, 0xee0e612c, 0x990951ba, 0x076dc419, 0x706af48f,

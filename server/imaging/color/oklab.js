@@ -1,9 +1,4 @@
-// OKLab and OKLCh, which is what this library blends and ramps in.
-//
-// Lab was fitted to small colour differences and it is not uniform over large
-// ones: its blue is badly placed, so a blue-to-white ramp in Lab swings through
-// purple. OKLab is fitted to the whole range, and the straight line between two
-// of its colours stays the colour an author expected the whole way.
+// OKLab and OKLCh, what this library blends and ramps in, because Lab was fitted to small colour differences and places blue badly, so a blue to white ramp in Lab swings through purple where a straight line in OKLab stays the colour expected the whole way
 
 import { toLinear, toSRGB, clamp255 } from './srgb.js'
 
@@ -71,16 +66,14 @@ export function oklchToOklab(lch) {
 export const rgbToOklch = (rgb) => oklabToOklch(rgbToOklab(rgb))
 export const oklchToRGB = (lch) => oklabToRGB(oklchToOklab(lch))
 
-/* the mix an author means by "halfway between these two". In OKLab, so the
- * midpoint of two saturated colours stays saturated. */
+/* the mix meant by halfway between these two, done in OKLab so the midpoint of two saturated colours stays saturated */
 export function mix(a, b, t) {
   const x = rgbToOklab(a)
   const y = rgbToOklab(b)
   return oklabToRGB([x[0] + (y[0] - x[0]) * t, x[1] + (y[1] - x[1]) * t, x[2] + (y[2] - x[2]) * t])
 }
 
-/* a ramp of n steps, ends included. What a shading row on a sprite wants, and
- * the reason it is here rather than in lab.js. */
+/* a ramp of n steps with both ends included, what a shading row on a sprite wants, and the reason it lives here rather than in lab.js */
 export function ramp(a, b, n) {
   if (n < 2) return [a.slice()]
   const out = []
@@ -88,8 +81,7 @@ export function ramp(a, b, n) {
   return out
 }
 
-/* lightness moved without touching hue or how colourful it is, which is what
- * "the same colour, one step darker" has to mean on a ramp */
+/* lightness moved without touching hue or how colourful it is, which is what the same colour one step darker has to mean on a ramp */
 export function lighten(rgb, amount) {
   const lab = rgbToOklab(rgb)
   return oklabToRGB([Math.max(0, Math.min(1, lab[0] + amount)), lab[1], lab[2]])

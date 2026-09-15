@@ -57,9 +57,7 @@ async function viaKey(key, prompt, timeoutMs, images = []) {
       .filter((c) => c.type === 'text')
       .map((c) => c.text)
       .join('')
-    // the cli wraps its answer in an envelope and every caller unwraps that
-    // shape, so this hands back the same one rather than teaching ten callers
-    // a second format
+    // the cli wraps its answer in an envelope and every caller unwraps that shape, so this hands back the same one rather than teaching ten callers a second format
     return JSON.stringify({ result: text })
   } finally {
     clearTimeout(t)
@@ -79,8 +77,7 @@ async function viaRelay(userId, prompt, timeoutMs, images = [], jobKey = '', pat
 
   const job = await one(
     `insert into jobs (user_id, kind, provider, payload) values ($1,'planner','claude',$2::jsonb) returning id`,
-    // the host's own paths for those images, in order, so the laptop that
-    // claims this can put the bytes where the prompt says they are
+    // the host's own paths for those images, in order, so the laptop that claims this can put the bytes where the prompt says they are
     [userId, JSON.stringify({ prompt, images, paths, key: jobKey })],
   )
 
@@ -97,11 +94,7 @@ async function viaRelay(userId, prompt, timeoutMs, images = [], jobKey = '', pat
   throw new NoPlanner('relay')
 }
 
-// ---- the local cli ---------------------------------------------------------
-
-// What MAPVIS has always done, kept for a machine that is running the tool and
-// the cli at once. On a host there is no cli to spawn, which is the harder half
-// of why hosting forces this whole module to exist.
+// the local cli, what MAPVIS has always done, kept for a machine running the tool and the cli at once, because a host has no cli to spawn and that is the harder half of why hosting forces this module to exist
 export function viaCli(prompt, timeoutMs, onProcess) {
   return new Promise((resolve, reject) => {
     let ps
@@ -150,23 +143,20 @@ export function viaCli(prompt, timeoutMs, onProcess) {
 // ---- the one call the rest of the server makes -----------------------------
 
 export async function ask({ user, prompt, timeoutMs = 240000, images = [], paths = [], jobKey = '', onProcess }) {
-  // With no accounts configured at all this is still the local tool it always
-  // was, so the cli answers and nothing changed.
+  // with no accounts configured at all this is still the local tool it always was, so the cli answers and nothing changed
   if (!user) return viaCli(prompt, timeoutMs, onProcess)
 
   const how = await keyFor(user.id, 'claude')
   if (how?.mode === 'key') return viaKey(how.key, prompt, timeoutMs, images)
   if (how?.mode === 'relay') {
-    // a relay on this very machine is just the cli, and going out to the
-    // database and back to reach a process sitting right here would be silly
+    // a relay on this very machine is just the cli, and going out to the database and back to reach a process sitting right here would be silly
     if (localRelay()) return viaCli(prompt, timeoutMs, onProcess)
     return viaRelay(user.id, prompt, timeoutMs, images, jobKey, paths)
   }
   throw new NoPlanner('none')
 }
 
-// Whether a caller should even try, so a feature that cannot degrade can say so
-// before spending anything.
+// whether a caller should even try, so a feature that cannot degrade can say so before spending anything
 export async function plannerReady(user) {
   if (!user) return true
   const how = await keyFor(user.id, 'claude')

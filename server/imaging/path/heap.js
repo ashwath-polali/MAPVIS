@@ -1,8 +1,4 @@
-// A binary heap, because every search in this folder needs one.
-//
-// The obvious open set is an array with a linear scan for the minimum, which is
-// O(n) per pop against O(log n) here. On a 264,192 pixel plane that difference
-// is the whole running time.
+// a binary heap, because every search in this folder needs one: an array with a linear scan for the minimum is O(n) per pop against O(log n) here, and on a 264,192 pixel plane that difference is the whole running time
 
 export class MinHeap {
   constructor(scoreOf) {
@@ -71,8 +67,7 @@ export class MinHeap {
   }
 }
 
-/* a heap over integer keys with a flat score array beside it, which is what the
- * grid searches use: no object per node and no closure call per comparison */
+/* a heap over integer keys with a flat score array beside it, which is what the grid searches use: no object per node and no closure call per comparison */
 export class IndexHeap {
   constructor(scores) {
     this.scores = scores

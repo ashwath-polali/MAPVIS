@@ -19,16 +19,13 @@ type MapRow = {
   library: number
   placements: number
   published: number | null
-  /* whose hand drew it. Empty on every map made before there was a choice, and
-   * on every map drawn under Other, which is not a fault and is not marked. */
+  /* whose hand drew it, empty on maps made before there was a choice and on maps drawn under Other, which is not a fault and is not marked */
   style?: string | null
   style_title?: string | null
   kind?: string | null
 }
 
-// A map may be in more than one of these at once, which is why the control on
-// a card is a checkbox list rather than a dropdown. maps holds slugs, in the
-// order they were dragged into this folder.
+// a map may be in more than one folder at once, which is why the control on a card is a checkbox list and not a dropdown; maps holds slugs in the order they were dragged in
 type Folder = { id: string; name: string; maps: string[] }
 
 const when = (iso: string) => {
@@ -39,19 +36,13 @@ const when = (iso: string) => {
   const d = Math.round(s / 86400)
   return d < 30 ? d + ' days ago' : new Date(iso).toLocaleDateString()
 }
-/* The working copy first, because it is the live one, and the published bundle
- * behind it. The comment that stood here promised that pair and the line under it
- * only ever asked for /work/, so a map whose painting never reached the store read
- * "no painting yet" with nothing behind it and no way to find out why. A published
- * map always carries its own painting in its bundle, so that is the second chance. */
+/* the working copy first because it is the live one, and the published bundle behind it as the second chance: asking only for /work/ leaves a map whose painting never reached the store reading no painting yet with nothing behind it */
 const shot = (m: MapRow) => `/work/${m.slug}/scene.png`
 
 const published = (m: MapRow): string | null =>
   m.published ? `/api/v1/maps/${encodeURIComponent(m.slug)}/file/${m.published}/scene.png` : null
 
-/* Wired as onError rather than as a chain, because an <img> src has to be one
- * synchronous string. Once only: without the guard a missing bundle swaps the src
- * back and forth for ever and every swap is another request. */
+/* wired as onError rather than as a chain because an <img> src has to be one synchronous string, and once only because without the guard a missing bundle swaps the src back and forth for ever, a request per swap */
 const fallBack = (m: MapRow) => (e: { currentTarget: HTMLImageElement }) => {
   const next = published(m)
   if (!next || e.currentTarget.dataset.fell) return
@@ -80,8 +71,7 @@ const writeOrder = (ids: string[]) => {
   try {
     localStorage.setItem(FORDER, JSON.stringify(ids))
   } catch {
-    // private browsing has no storage. The order is then whatever the server
-    // sent, which is a worse answer and not a broken one.
+    // private browsing has no storage, so the order falls back to whatever the server sent, which is worse and not broken
   }
 }
 const inFolderOrder = (list: Folder[], seq: string[]) => {
@@ -90,9 +80,7 @@ const inFolderOrder = (list: Folder[], seq: string[]) => {
   return [...list].sort((a, b) => (at.get(a.id) ?? 1e9) - (at.get(b.id) ?? 1e9))
 }
 
-// which half of a tile the pointer is on decides which side of it the dragged
-// thing lands, which is the only way a drop between two tiles can be aimed
-// without a separate gap to hit
+// which half of a tile the pointer is on decides which side the dragged thing lands on, the only way to aim a drop between two tiles without a separate gap to hit
 const half = (e: DragEvent<HTMLElement>) => {
   const r = e.currentTarget.getBoundingClientRect()
   return e.clientX < r.left + r.width / 2
@@ -105,22 +93,15 @@ export default function Home() {
   const [settings, setSettings] = useState(false)
   const [doomed, setDoomed] = useState<MapRow | null>(null)
 
-  // null means the folders api did not answer, and the page renders without any
-  // of it. Every read below has to survive that, so nothing dereferences this
-  // without checking.
+  // null means the folders api did not answer and the page renders without any of it, so every read below has to survive that and nothing dereferences it unchecked
   const [folders, setFolders] = useState<Folder[] | null>(null)
   const [order, setOrder] = useState<string[]>([])
   const [fOrder, setFOrder] = useState<string[]>(readOrder)
   const [sel, setSel] = useState<string>('')
   const [picking, setPicking] = useState('')
   const [naming, setNaming] = useState(false)
-  // the drag in progress. A map and a folder are different things to be holding
-  // and only one of them can be in the hand, so they are separate: it is what
-  // decides which targets light up and what a drop means when it lands.
-  /* THE GAME'S OCEAN IS ONE ACCOUNT'S. It was shown to everybody signed in, and behind it row 1 was
-     handed out to them as well, so a stranger's first session opened the chart on the hub and the ATC
-     island. The flag is ownership now and not "are you signed in", and a request that does not answer
-     leaves it OFF: not knowing is not a reason to offer somebody else's water. */
+  // the drag in progress, two states because a map and a folder are different things to hold and only one can be in the hand: it decides which targets light up and what a drop means
+  /* the game's ocean belongs to one account, so the flag is ownership and not are you signed in: it was once shown to everybody signed in and handed them row 1, and a request that does not answer leaves it off */
   const [sea, setSea] = useState(false)
 
   const [lift, setLift] = useState('')
@@ -178,9 +159,7 @@ export default function Home() {
     }
   }, [user, loading])
 
-  // Folders are their own request on purpose. Hanging them off /api/my-maps
-  // would mean an error in a preference takes the list of somebody's work down
-  // with it, and the list of work is the entire point of this page.
+  // folders are their own request on purpose, so an error in a preference cannot take the list of somebody's work down with it
   useEffect(() => {
     if (loading || !user) return
     void pull()
@@ -200,8 +179,7 @@ export default function Home() {
     void post('/api/folders/set', { map: slug, folders: next })
   }
 
-  // one gesture in the picker is one request here, so a create that lands and a
-  // set that does not can never leave a folder nobody asked for
+  // one gesture in the picker is one request here, so a create that lands and a set that does not can never leave a folder nobody asked for
   const make = async (name: string, slug?: string) => {
     const clean = name.trim()
     if (!clean) return
@@ -217,9 +195,7 @@ export default function Home() {
     void post('/api/folders/rename', { folder: id, name: clean })
   }
 
-  // the folder goes, the maps in it do not. They are back on the top level the
-  // moment this returns, which is why it does not ask twice the way deleting a
-  // map does: there is nothing here to lose.
+  // the folder goes, the maps in it do not: they are back on the top level the moment this returns, so it does not ask twice the way deleting a map does
   const scrap = (id: string) => {
     setFolders((fs) => (fs || []).filter((f) => f.id !== id))
     if (sel === id) setSel('')
@@ -232,15 +208,12 @@ export default function Home() {
   )
   const ranked = useMemo(() => inFolderOrder(folders || [], fOrder), [folders, fOrder])
   const folder = ranked.find((f) => f.id === sel) || null
-  // every slug that lives in at least one folder, so the top level can leave it
-  // out. A map in two folders is filed once as far as this is concerned.
+  // every slug that lives in at least one folder, so the top level can leave it out; a map in two folders is filed once as far as this is concerned
   const filed = useMemo(() => new Set((folders || []).flatMap((f) => f.maps)), [folders])
 
   const shown = useMemo(() => {
     if (folder) return inOrder(found.filter((m) => folder.maps.includes(m.slug)), folder.maps)
-    // a search reaches into folders, because you typed a name and not a place,
-    // and a map you cannot find because you filed it is the failure this page
-    // exists to avoid
+    // a search reaches into folders, because you typed a name and not a place, and a map you cannot find because you filed it is the failure this page exists to avoid
     if (q) return inOrder(found, order)
     return inOrder(found.filter((m) => !filed.has(m.slug)), order)
   }, [found, folder, filed, order, q])
@@ -248,8 +221,7 @@ export default function Home() {
   /* the lead map stays in the grid too, since pulling it out left it missing from its own list. */
   const lead = !q && !folder ? shown[0] : undefined
 
-  // the tiles, at the top level only. Inside a folder there is nothing to show:
-  // folders do not nest, so the grid there is maps and only maps.
+  // the tiles, at the top level only: folders do not nest, so the grid inside a folder is maps and only maps
   const tiles = folders && !q && !folder ? ranked : []
 
   /* reorder writes the whole visible sequence, so it is off while searching; a folder drop is one write. */
@@ -269,9 +241,7 @@ export default function Home() {
     void post('/api/folders/order', { folder: folder ? folder.id : null, maps: seq })
   }
 
-  // folders move among folders and nothing else, so this cannot produce a
-  // sequence with a map in it and the folders-first rule holds by construction
-  // rather than by being checked afterwards
+  // folders move among folders and nothing else, so the folders-first rule holds by construction rather than by being checked afterwards
   const moveFolder = (from: string, to: string, before: boolean) => {
     if (from === to) return
     const seq = ranked.map((f) => f.id)
@@ -459,11 +429,9 @@ export default function Home() {
           m={doomed}
           onClose={() => setDoomed(null)}
           onGone={() => {
-            // dropped from the list here rather than refetched, so the card
-            // cannot flash back while the request settles
+            // dropped from the list here rather than refetched, so the card cannot flash back while the request settles
             setMaps((all) => (all || []).filter((x) => x.id !== doomed.id))
-            // the membership row went with it in the database; this keeps the
-            // counts in the rail honest without another round trip
+            // the membership row went with it in the database, so this keeps the counts in the rail honest without another round trip
             setFolders((fs) => (fs || []).map((f) => ({ ...f, maps: f.maps.filter((s) => s !== doomed.slug) })))
             setDoomed(null)
           }}
@@ -494,8 +462,7 @@ function Lead({ m, onDelete }: { m: MapRow; onDelete: () => void }) {
           <span>{m.anchors} named</span>
           {m.published != null && <span>v{m.published}</span>}
         </div>
-        {/* two ways in, because the newest map is the one you are most likely
-            to want to either carry on with OR go and stand in */}
+        {/* two ways in, because the newest map is the one you are most likely to want to carry on with or to go and stand in */}
         <div className="lead-acts">
           <a className="lead-go" href={`/edit?id=${encodeURIComponent(m.slug)}`}>
             keep working
@@ -511,9 +478,7 @@ function Lead({ m, onDelete }: { m: MapRow; onDelete: () => void }) {
   )
 }
 
-/* Everything a card needs to take part in organising, in one optional prop.
- * Absent means the folders api did not answer, and every branch that reads it
- * falls back to the card this page has always had. */
+/* everything a card needs to take part in organising, in one optional prop; absent means the folders api did not answer and every branch that reads it falls back to the plain card */
 type Org = {
   folders: Folder[]
   mine: string[]
@@ -536,21 +501,17 @@ function Card({ m, onDelete, org }: { m: MapRow; onDelete: () => void; org?: Org
   return (
     <article
       className={'card' + (org?.mark ? ' drop-' + org.mark : '') + (org?.lifted ? ' lifted' : '')}
-      /* not while the picker is open: a draggable ancestor swallows the mouse
-         down that would otherwise be a caret landing in the name field */
+      /* not while the picker is open: a draggable ancestor swallows the mouse down that would otherwise be a caret landing in the name field */
       draggable={!!org && !org.open}
       onDragStart={(e) => {
         if (!org) return
         e.dataTransfer.effectAllowed = 'move'
-        // a payload as well as the component's own state, because a drag carrying
-        // nothing is one some browsers refuse to start
+        // a payload as well as the component's own state, because some browsers refuse to start a drag that carries nothing
         e.dataTransfer.setData('text/plain', m.slug)
         org.onLift()
       }}
       onDragEnd={() => org?.onDone()}
-      /* only a map lands between two maps. A folder in the hand is refused here
-         by never calling preventDefault, which is the same mechanism that keeps
-         a file dragged in off the desktop from looking droppable. */
+      /* only a map lands between two maps; a folder in the hand is refused by never calling preventDefault, the same mechanism that keeps a file dragged in off the desktop from looking droppable */
       onDragOver={(e) => {
         if (!org?.taking) return
         e.preventDefault()
@@ -558,9 +519,7 @@ function Card({ m, onDelete, org }: { m: MapRow; onDelete: () => void; org?: Org
         org.onHover(half(e))
       }}
       onDragLeave={(e) => {
-        // crossing onto the painting inside this card is not leaving the card,
-        // and without this the marker blinks off and back on every time the
-        // pointer passes over a child
+        // crossing onto the painting inside this card is not leaving the card, and without this the marker blinks off and back on every time the pointer passes over a child
         if (e.currentTarget.contains(e.relatedTarget as Node)) return
         org?.onLeave()
       }}
@@ -573,8 +532,7 @@ function Card({ m, onDelete, org }: { m: MapRow; onDelete: () => void; org?: Org
       <button className="card-bin" title={`delete ${m.slug}`} aria-label={`delete ${m.slug}`} onClick={onDelete}>
         <Trash />
       </button>
-      {/* the link and the image are draggable by default, and a link drag is
-          not the drag this card means, so both hand it up to the article */}
+      {/* the link and the image are draggable by default and a link drag is not the drag this card means, so both hand it up to the article */}
       <a className="card-art" href={`/edit?id=${encodeURIComponent(m.slug)}`} draggable={false}>
         {src ? (
           <img src={src} alt="" loading="lazy" decoding="async" draggable={false} onError={fallBack(m)} />
@@ -594,8 +552,7 @@ function Card({ m, onDelete, org }: { m: MapRow; onDelete: () => void; org?: Org
           <span>{m.placements} placed</span>
           <span className={m.anchors ? 'lit' : ''}>{m.anchors} named</span>
           {m.published != null ? <span className="lit">v{m.published}</span> : null}
-          {/* the hand, only when there was one: a map drawn as typed says
-              nothing rather than saying "none", which would read as missing */}
+          {/* the hand, only when there was one: a map drawn as typed says nothing rather than none, which would read as missing */}
           {m.style ? <span className="card-hand">{m.style_title || m.style}</span> : null}
         </div>
         <div className="card-do">
@@ -673,9 +630,7 @@ function FolderTile({
   return (
     <article
       className={'card fold' + (over ? ' over' : '') + (mark ? ' drop-' + mark : '') + (lifted ? ' lifted' : '')}
-      // a draggable ancestor swallows the mouse down that would put a caret in
-      // the name field, the same reason a card stops being draggable while its
-      // picker is open
+      // a draggable ancestor swallows the mouse down that would put a caret in the name field, the same reason a card stops being draggable while its picker is open
       draggable={!edit}
       onDragStart={(e) => {
         e.dataTransfer.effectAllowed = 'move'
@@ -1087,9 +1042,7 @@ function Trash() {
   )
 }
 
-/* THE UI GENERATOR: pieces of three different shapes on one shelf, because the
- * page makes panels, sheets of faces and bands, not one kind of thing. Stroked
- * rather than filled, to sit beside the ocean mark. */
+/* the ui generator: pieces of three shapes on one shelf, because the page makes panels, sheets of faces and bands, and stroked rather than filled to sit beside the ocean mark */
 function KitIcon() {
   return (
     <svg

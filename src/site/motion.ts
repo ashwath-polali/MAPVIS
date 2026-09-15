@@ -1,9 +1,7 @@
 /* Reactivity without a library: everything writes a custom property or toggles a class and nothing animates from javascript, so the work stays on the compositor and a modest machine keeps its frames. */
 import { useEffect, useRef, useState } from 'react'
 
-/* Reveal on arrival. One shared observer for the whole page rather than one per
- * element, because a landing page has a hundred of these and a hundred
- * observers is a hundred callbacks on every scroll. */
+/* reveal on arrival, with one shared observer for the whole page rather than one per element, because a landing page has a hundred of these and a hundred observers is a hundred callbacks on every scroll */
 let io: IntersectionObserver | null = null
 const seen = new WeakSet<Element>()
 
@@ -18,8 +16,7 @@ function observer() {
         io!.unobserve(e.target)
       }
     },
-    // fire a little before the element is fully in view, so it has finished
-    // resolving by the time the reader's eye actually reaches it
+    // fire a little before the element is fully in view, so it has finished resolving by the time the reader's eye actually reaches it
     { rootMargin: '0px 0px -12% 0px', threshold: 0.08 },
   )
   return io
@@ -79,8 +76,7 @@ export function usePointer<T extends HTMLElement = HTMLDivElement>(strength = 1)
   return ref
 }
 
-/* How far down the page we are, 0..1, written as --scroll on <html> so any
- * rule anywhere can read it. Used by the compass needle and the sea. */
+/* how far down the page we are, 0..1, written as --scroll on <html> so any rule anywhere can read it, and used by the compass needle and the sea */
 export function useScrollProgress() {
   useEffect(() => {
     let raf = 0
@@ -104,9 +100,7 @@ export function useScrollProgress() {
   }, [])
 }
 
-/* Type it out, the way a name gets written onto a chart. Used sparingly: on the
- * hero line and nowhere else, because a page where everything types is a page
- * nobody can read. */
+/* type it out the way a name gets written onto a chart, used on the hero line and nowhere else because a page where everything types is a page nobody can read */
 export function useTyped(text: string, on: boolean, speed = 34) {
   const [out, setOut] = useState('')
   useEffect(() => {
@@ -126,9 +120,7 @@ export function useTyped(text: string, on: boolean, speed = 34) {
   return out
 }
 
-/* The grain. Generated once into a data url rather than shipped as a file, so
- * there is no request and no asset to lose. Real paper and real water are never
- * flat, and this is the cheapest thing that says so. */
+/* the grain, generated once into a data url rather than shipped as a file so there is no request and no asset to lose, because real paper and real water are never flat */
 export function installGrain() {
   if (document.documentElement.style.getPropertyValue('--grain-url')) return
   const n = 180

@@ -2,8 +2,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { cleanLife, lifeAt, separate, type Life } from '../core/life'
 
-/* THE SAME DEPTH RULE THE EDITOR AND THE GAME USE, so a map is drawn in one order wherever it
- * is drawn. Where it stands, plus the author's nudge, and no nudge is the plain y-sort. */
+/* the same depth rule the editor and the game use, so a map draws in one order everywhere: where it stands plus the author's nudge, and no nudge is plain y-sort */
 const zOf = (p: { z?: number }) => (Number.isFinite(Number(p.z)) ? Number(p.z) : 0)
 
 type Placed = {
@@ -21,9 +20,7 @@ type Placed = {
   fps?: number
   dirs?: Record<string, string[]>
   life?: unknown
-  /* WHICH OF TWO OVERLAPPING THINGS IS IN FRONT, written by move-forward and move-back in the
-   * editor. Added to the sort key and never to the position. Absent on nearly every placement
-   * and on every bundle published before it existed. */
+  /* which of two overlapping things is in front, written by move-forward and move-back, added to the sort key and never to the position, and absent on nearly every placement and on every bundle published before it existed */
   z?: number
 }
 
@@ -45,9 +42,7 @@ const img = (src: string) =>
     i.src = src
   })
 
-/* Fetch with a ceiling on how many are in flight. A bundle is eight hundred
- * small pngs and firing them all at once buries the first paint under its own
- * tail. */
+/* fetch with a ceiling on how many are in flight, because a bundle is eight hundred small pngs and firing them all at once buries the first paint under its own tail */
 async function pool<T, R>(items: T[], n: number, fn: (t: T) => Promise<R>) {
   const out: R[] = []
   let i = 0
@@ -124,11 +119,9 @@ export function LivingMap({
         if (dead) return
         const box = mount.current!.getBoundingClientRect()
         const dpr = Math.min(2, window.devicePixelRatio || 1)
-        // integer zoom, always: a painted pixel must land on whole screen
-        // pixels or the whole thing turns to mush
+        // integer zoom, always: a painted pixel must land on whole screen pixels or the whole thing turns to mush
         const pick = fill === 'cover' ? Math.max : Math.min
-        // measured against the LAND, so a painting with a lot of transparent
-        // margin still arrives filling the window
+        // measured against the land, so a painting with a lot of transparent margin still arrives filling the window
         const z = Math.max(1, Math.round(pick(box.width / land.w, box.height / land.h)))
         const w = meta.w * z
         const h = meta.h * z
@@ -142,8 +135,7 @@ export function LivingMap({
         g.imageSmoothingEnabled = false
         g.clearRect(0, 0, box.width, box.height)
 
-        // the island breathes very slowly across the frame. Slow enough that
-        // nobody catches it moving, fast enough that the screen is never still.
+        // the island breathes very slowly, slow enough that nobody catches it moving and fast enough that the screen is never still
         const t = (now - t0) / 1000
         const wob = drift ? { x: Math.sin(t * 0.06) * 14, y: Math.cos(t * 0.045) * 9 } : { x: 0, y: 0 }
         // centre the LAND in the window, not the canvas the land sits inside
@@ -155,9 +147,7 @@ export function LivingMap({
         // every placement, y-sorted so a figure in front of a hut is in front
         const now2 = t
         const pts: Array<{ x: number; y: number; r: number }> = []
-        /* d is the DEPTH and y is where it is drawn, and they are two numbers now rather
-         * than one, because a nudge changes what a thing is drawn in front of and never
-         * where it is drawn. */
+        /* d is the depth and y is where it is drawn, two numbers rather than one, because a nudge changes what a thing is drawn in front of and never where it is drawn */
         const frame: Array<{ r: Ready; x: number; y: number; d: number; a: number; face: string; flip: boolean }> = []
         for (const r of live) {
           let dx = 0
@@ -176,8 +166,7 @@ export function LivingMap({
           frame.push({ r, x: r.p.x + dx, y: r.p.y + dy, d: r.p.y + dy + zOf(r.p), a: alpha, face, flip })
           pts.push({ x: r.p.x + dx, y: r.p.y + dy, r: 3 })
         }
-        // the same push-apart the editor and the game use, so a crowd here
-        // stands the way it stands there
+        // the same push-apart the editor and the game use, so a crowd here stands the way it stands there
         separate(pts, meta.yScale ?? 0.72, 1)
         frame.forEach((f, i) => {
           f.d += pts[i].y - f.y
@@ -212,8 +201,7 @@ export function LivingMap({
       }
       raf = requestAnimationFrame(draw)
 
-      // pointer parallax, gentle, applied to the whole island rather than to
-      // layers, because the island IS one painting
+      // pointer parallax, gentle, applied to the whole island rather than to layers, because the island is one painting
       const onMove = (e: PointerEvent) => {
         if (!drift) return
         px = (e.clientX / window.innerWidth - 0.5) * -26
@@ -221,8 +209,7 @@ export function LivingMap({
       }
       window.addEventListener('pointermove', onMove, { passive: true })
 
-      // now wake it up. Placements that move come first, so the island starts
-      // living before it finishes furnishing.
+      // placements that move are woken first, so the island starts living before it finishes furnishing
       const list: Placed[] = (await (await fetch(`${base}assets.json`)).json()).assets || []
       const order = [...list].sort((a, b) => (b.life ? 1 : 0) - (a.life ? 1 : 0))
       await pool(order, 8, async (p) => {

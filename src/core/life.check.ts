@@ -7,8 +7,7 @@ const ok = (name: string, pass: boolean, detail = '') => {
   console.log(`${pass ? 'ok  ' : 'FAIL'} ${name}${detail ? '   ' + detail : ''}`)
 }
 
-// one tile is 32 painting pixels, so the crab's +-4 tiles is +-128px and its
-// 2.6-4.2 tiles/sec is 83-134 px/sec
+// one tile is 32 painting pixels, so the crab's +-4 tiles is +-128px and its 2.6-4.2 tiles/sec is 83-134 px/sec
 const crab = cleanLife({
   kind: 'wander',
   range: 128,
@@ -211,9 +210,7 @@ ok(
   `worst state change ${worstSeam.toFixed(3)}px at t=${worstSeamT.toFixed(0)}s`,
 )
 
-// and it has to have gone somewhere: a sequence that closes its round by
-// standing still would pass everything above and be the dance this file exists
-// to refuse
+// it has to have gone somewhere, because a sequence that closes its round standing still would pass everything above and be the dance this file exists to refuse
 const r0 = lifeAt(troll, 5, th)
 const r5 = lifeAt(troll, 5 + ROUND * 5, th)
 ok(
@@ -373,9 +370,7 @@ ok(
   `${un}/20000 frames off, worst ${uw.toFixed(2)}px, against ${upn} with no round`,
 )
 
-/* and the anchor walking with the round must not have cost the continuity the
- * sequence work bought. Same three seams as the troll below, on the fenced
- * walker, where the anchor is the thing that moves. */
+/* the anchor walking with the round must not cost the continuity the sequence bought, so the same three seams run on the fenced walker where the anchor moves */
 let fWorst = 0
 for (let i = 0; i < 20000; i++) {
   const a = lifeAt(fencedSeq, i * 0.016, fh, onPath)
@@ -461,9 +456,7 @@ const trace = (l: Life, h: { x: number; y: number }, n: number): string => {
   }
   return (g >>> 0).toString(16).padStart(8, '0')
 }
-// a moored boat and a circling gull, so the two kinds the crab and the gull do
-// not cover are under the same guard. The boat leans as well, which is the only
-// thing that puts a non-zero rot in the trace.
+// a moored boat and a circling gull guard the two kinds the crab and the gull do not cover, and the boat's lean is the only non-zero rot in the trace
 const boat = cleanLife({ kind: 'drift', driftX: 3, driftY: 1.5, period: 5.5, rock: 4, rockRate: 0.3, seed: 21 }) as Life
 const circler = cleanLife({ kind: 'orbit', period: 17, radiusX: 60, radiusY: 22, bob: 2, bobRate: 2.5, seed: 5 }) as Life
 const golden: [string, Life, { x: number; y: number }, string][] = [
@@ -591,9 +584,7 @@ ok(
   `asked 12-24 / 5 / 200 px/s, drew ${px[0].toFixed(1)} / ${px[1].toFixed(1)} / ${px[2].toFixed(1)}`,
 )
 
-/* and the position is not the last moving state's own. That is the shape of the
- * bug rather than a symptom of it: if the sum has been replaced, the answer IS
- * that state's position, exactly, on every frame. */
+/* the position must not be the last moving state's own, because if the sum has been replaced the answer is that state's position exactly, on every frame */
 const lastMover = (boxed.states as NonNullable<Life['states']>).length - 1
 let sameAsLast = 0
 for (let i = 0; i < 20000; i++) {
@@ -637,8 +628,7 @@ const nAlone = (sp: number, seed: number) =>
 const NR = 40
 const nLive = (t: number) => (((t % NR) + NR) % NR < 22 ? 0 : 1)
 
-/* one sweep, every reading taken off it. `want` picks which state's live windows
- * to read, or null for the whole round. */
+/* one sweep, every reading taken off it, and `want` picks which state's live windows to read or null for the whole round */
 const readRound = (l: Life, h: { x: number; y: number }, want: number | null, t0: number, n: number) => {
   let dist = 0
   let movT = 0
@@ -667,9 +657,7 @@ const readRound = (l: Life, h: { x: number; y: number }, want: number | null, t0
     hix = Math.max(hix, x)
     loy = Math.min(loy, y)
     hiy = Math.max(hiy, y)
-    /* sitting EXACTLY on an edge is the hold biting. A walk that merely arrives
-     * near one lands on a real number and misses it, so this counts the hold and
-     * not the walk. */
+    /* sitting exactly on an edge is the hold biting, because a walk that merely arrives near one lands on a real number and misses it */
     if (
       Math.abs(x - NBOX.x) < 1e-9 ||
       Math.abs(x - (NBOX.x + NBOX.w)) < 1e-9 ||
@@ -681,8 +669,7 @@ const readRound = (l: Life, h: { x: number; y: number }, want: number | null, t0
       dist += d
       movT += 0.016
       movN++
-      // bob is 0 on this fixture, so a moving frame that covers nothing is
-      // genuinely pinned rather than at the top of a hop
+      // bob is 0 on this fixture, so a moving frame that covers nothing is genuinely pinned rather than at the top of a hop
       if (d < 1e-9) pinned++
       run = 0
     } else {
@@ -731,9 +718,7 @@ for (const [h, where] of [
     )
   }
 }
-/* The band is wide on the fast state for the same reason the older reading above
- * says: a 16ms frame that straddles the end of a leg counts the whole frame and
- * only part of the travel, which costs a 120 more than it costs a 15. */
+/* the band is wide on the fast state because a 16ms frame that straddles the end of a leg counts the whole frame and only part of the travel, which costs a 120 more than it costs a 15 */
 ok(
   'every state of a boxed round draws the speed IT asked for',
   worstSlow[0] > 13.5 && worstSlow[1] < 16.5 && worstFast[0] > 105 && worstFast[1] < 132,
@@ -991,8 +976,7 @@ ok(
 
 // ---- the round, sample by sample -----------------------------------------
 console.log('\nthe round, which state is live at each sample:')
-// worked out here rather than asked of lifeAt, so the table is a second opinion
-// on the division rather than a printout of the same walk
+// worked out here rather than asked of lifeAt, so the table is a second opinion on the division rather than a printout of the same walk
 const liveState = (t: number): number => {
   const st = troll.states as NonNullable<Life['states']>
   let p = ((t % ROUND) + ROUND) % ROUND

@@ -5,9 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { env } from '../db/env.mjs'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
-/* the same directory the api writes its scratch to, so MAPVIS_WORK moves both
- * or neither: a host with a read-only filesystem needs every writer pointed at
- * the one writable place. */
+/* the same directory the api writes its scratch to, so MAPVIS_WORK moves both or neither, because a read-only filesystem needs every writer pointed at the one writable place */
 const workDir = () => env().MAPVIS_WORK || path.join(ROOT, 'work')
 
 const TYPES = { '.png': 'image/png', '.json': 'application/json', '.txt': 'text/plain' }
@@ -18,8 +16,7 @@ let cached = null
 export function store() {
   if (cached) return cached
   const E = env()
-  // meter UNDER the cache on purpose: a memo hit never reaches the bucket, so
-  // counting it would trip the ceiling on reads that cost nothing
+  // meter under the cache on purpose, because a memo hit never reaches the bucket and counting it would trip the ceiling on reads that cost nothing
   return (cached = memo(meter(E.S3_ACCESS_KEY_ID && E.S3_ENDPOINT ? s3Store(E) : localStore())))
 }
 
@@ -92,8 +89,7 @@ function memo(b) {
     const v = mem.get(k)
     if (v) { mem.delete(k); held -= v.length }
   }
-  // a prefix write invalidates everything under it, which is what delPrefix and
-  // a copy into a folder both do
+  // a prefix write invalidates everything under it, which is what delPrefix and a copy into a folder both do
   const dropPrefix = (p) => { for (const k of [...mem.keys()]) if (k.startsWith(p)) drop(k) }
 
   return {
@@ -118,8 +114,7 @@ function memo(b) {
     async put(key, body, contentType) {
       drop(key)
       const r = await b.put(key, body, contentType)
-      // after the write lands, so a failed put never records a sha for bytes
-      // that are not there
+      // after the write lands, so a failed put never records a sha for bytes that are not there
       await announce('put', key, body)
       return r
     },
@@ -139,17 +134,14 @@ function memo(b) {
       drop(to)
       dropPrefix(to)
       const r = await b.copy(from, to)
-      // the bytes are not in hand here, so the tag is forgotten rather than
-      // rewritten and the next read recomputes it
+      // the bytes are not in hand here, so the tag is forgotten rather than rewritten and the next read recomputes it
       await announce('del', to)
       return r
     },
   }
 }
 
-// A key is a posix path under the bucket. Never absolute, never containing a
-// traversal segment, because on the local backend it becomes a real filesystem
-// path and on S3 it becomes a name that would be permanently awkward.
+// a key is a posix path under the bucket, never absolute and never holding a traversal segment, because locally it becomes a real filesystem path and on S3 a permanently awkward name
 function clean(key) {
   const k = String(key || '').replace(/\\/g, '/').replace(/^\/+/, '')
   if (!k || k.split('/').some((s) => s === '..' || s === '.')) throw new Error(`bad key: ${key}`)
@@ -196,9 +188,7 @@ function s3Store(E) {
           Key: k,
           Body: body,
           ContentType: contentType || typeOf(k),
-          // a published bundle is version-scoped and never rewritten, so the
-          // cdn in front of it should keep it forever. Everything else is the
-          // author's working copy and must not be cached at all.
+          // a published bundle is version-scoped and never rewritten so the cdn keeps it forever, everything else is the working copy and must not be cached at all
           CacheControl: k.startsWith('publish/') ? 'public, max-age=31536000, immutable' : 'no-cache',
         }),
       )
@@ -221,8 +211,7 @@ function s3Store(E) {
       }
     },
 
-    // Returns [{ key, bytes }]. Pages through, because a map's library can be
-    // hundreds of frames and S3 caps a page at 1000.
+    // returns [{ key, bytes }] and pages through, because a map's library can be hundreds of frames and S3 caps a page at 1000
     async list(prefix) {
       const { m, c } = await lib()
       const out = []
@@ -334,8 +323,7 @@ export const keys = {
   planes: (mapId) => `maps/${mapId}/planes.png`,
   scene: (mapId) => `maps/${mapId}/scene.png`,
   mask: (mapId, role) => `maps/${mapId}/${role}.png`,
-  /* the transition screen a map is entered through, and the extra ones python calls by name. Beside
-   * the masks rather than under library/, because a cover is never placed on anything. */
+  /* the transition screen a map is entered through, plus the extra ones python calls by name, beside the masks rather than under library/ because a cover is never placed on anything */
   cover: (mapId) => `maps/${mapId}/cover.png`,
   coverNamed: (mapId, name) => `maps/${mapId}/covers/${name}.png`,
   coversPrefix: (mapId) => `maps/${mapId}/covers/`,

@@ -7,9 +7,7 @@ import pg from 'pg'
 const HERE = path.dirname(fileURLToPath(import.meta.url))
 const ROOT = path.resolve(HERE, '..', '..')
 
-// A three-line .env reader, because one dependency for KEY=value is silly.
-// Everything after the first = is the value, so a connection string with an =
-// in its query survives.
+// a three-line .env reader rather than a dependency for KEY=value, and everything after the first = is the value so a connection string with an = in its query survives
 export function env() {
   const out = { ...process.env }
   const f = path.join(ROOT, '.env')

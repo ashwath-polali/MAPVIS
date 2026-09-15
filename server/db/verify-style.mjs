@@ -1,13 +1,4 @@
-// The prompt a map is drawn from, for every kind and both choices, with nothing bought.
-
-//   node server/db/verify-style.mjs
-
-// The brief's own proof: the hand is not something to be judged by looking at a generation, it is the
-// words the router writes, and those can be read here for free. Everything below is string work.
-//
-// What it holds to: the subject the person typed comes first and survives whole; a kind adds what the
-// engine needs and never a noun the person would have typed; the craft sentence appears only when a
-// card was chosen; and two people typing the same kind get the same scaffold around different words.
+// checks the prompt a map is drawn from, for every kind and both choices, with nothing bought: run node server/db/verify-style.mjs. the typed subject opens the prompt and survives whole, a kind adds what the engine needs and never a noun, and the craft sentence appears only when a card was chosen
 import { mapPrompt, kindOf, SCAFFOLDS, KINDS, HOUSE_CARD, styleStamp, fitCanvas, AREA_CEILING, STYLE_OPTIONS } from '../store/style.mjs'
 
 let bad = 0
@@ -28,8 +19,7 @@ for (const kind of KINDS) {
 
   house.kind === kind ? ok(`"${subject}" reads as a ${kind}`) : no(`a ${kind} was read as "${house.kind}"`)
 
-  // the subject is the only part the person typed, so it opens the prompt and
-  // is not paraphrased on the way through
+  // the subject is the only part the person typed, so it opens the prompt and is not paraphrased on the way through
   house.prompt.startsWith(subject) ? ok(`  the ${kind}'s own words open the prompt`) : no(`the ${kind} prompt does not open with the subject`)
   other.prompt.startsWith(subject) ? ok(`  and open it under Other too`) : no(`Other moved the subject on a ${kind}`)
 
@@ -67,8 +57,7 @@ for (const kind of KINDS) {
   a.prompt.includes(shared) && b.prompt.includes(shared) ? ok('while both stand on the one island scaffold') : no('the scaffold differed')
 }
 
-/* THE SCAFFOLD MUST NOT DESCRIBE A PLACE. A noun in it is how every island comes
- * back as the same island, which is the exact failure the brief names. */
+/* the scaffold must not describe a place, because a noun in it is how every island comes back as the same island */
 {
   const SUBJECTS = ['lighthouse', 'palm', 'harbour', 'village', 'temple', 'market', 'tavern', 'castle', 'forest', 'volcano', 'hut', 'ship']
   const leaks = []
@@ -79,8 +68,7 @@ for (const kind of KINDS) {
   leaks.length === 0 ? ok('no scaffold names a thing a person would have typed themselves') : no(`a scaffold describes a subject: ${leaks.join(', ')}`)
 }
 
-/* and it must not carry a palette either, or Other stops being the prompt as
- * typed and quietly becomes a second hand */
+/* and it must not carry a palette either, or Other stops being the prompt as typed and quietly becomes a second hand */
 {
   const COLOURS = ['warm', 'desaturated', 'muted', 'sandy', 'terracotta', 'olive', 'golden', 'amber']
   const leaks = []
@@ -96,8 +84,7 @@ for (const kind of KINDS) {
 {
   const isl = mapPrompt({ subject: 'an island', card: HOUSE_CARD }).prompt
   const asks = (text, what) => text.includes(what)
-  /* the coast has to be transparent or the engine has nowhere to draw its own
-   * ocean, and a painted sea sits dead beside a moving one */
+  /* the coast has to be transparent or the engine has nowhere to draw its own ocean, and a painted sea sits dead beside a moving one */
   asks(isl, 'transparent') ? ok('an island asks for a transparent surround') : no('an island did not ask for transparency')
   asks(isl, 'shallow water') ? ok('and for the shallows that only the painting can hold') : no('an island lost its shallows')
   asks(isl, 'dock') || asks(isl, 'jetty') ? ok('and for somewhere to arrive') : no('an island has nowhere to land')

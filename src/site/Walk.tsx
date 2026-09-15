@@ -5,8 +5,7 @@ import { Walker, canStand, defaultCfg, type WalkCfg } from '../core/walk'
 import type { MaskDoc } from '../core/mask'
 
 type Rect = [number, number, number, number]
-/* THE SAME DEPTH RULE THE EDITOR AND THE GAME USE, so a map is drawn in one order wherever it
- * is drawn. Where it stands, plus the author's nudge, and no nudge is the plain y-sort. */
+/* the same depth rule the editor and the game use, so a map is drawn in one order wherever it is drawn: where it stands plus the author's nudge, and no nudge is the plain y-sort */
 const zOf = (p: { z?: number }) => (Number.isFinite(Number(p.z)) ? Number(p.z) : 0)
 
 type Placed = {
@@ -29,9 +28,7 @@ type Placed = {
   life?: unknown
   /* [ox, oy, rx, ry] base ellipse in painting pixels from the anchor; an older bundle carries none. */
   foot?: number[]
-  /* WHICH OF TWO OVERLAPPING THINGS IS IN FRONT, written by move-forward and move-back in the
-   * editor. Added to the sort key and never to the position. Absent on nearly every placement
-   * and on every bundle published before it existed. */
+  /* which of two overlapping things is in front, written by move-forward and move-back in the editor: added to the sort key and never to the position, and absent on nearly every placement and on every bundle published before it existed */
   z?: number
 }
 /* one drawable: either a rectangle in the sheet, or its own image */
@@ -81,8 +78,7 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
         if (dead) return
         if (!scene) throw new Error('the painting would not load')
 
-        // the levels plane, read once. A canvas readback per frame is a stall
-        // on every step.
+        // the levels plane, read once, because a canvas readback per frame is a stall on every step
         let lv: Uint8ClampedArray | null = null
         if (levels) {
           const lc = document.createElement('canvas')
@@ -175,9 +171,7 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
             if (set.length) frames[h] = set
           }),
         )
-        // the standing south frame is the one charH measures, exactly as the rig does
-        // 1 is never used: with no frames at all the draw takes its capsule
-        // fallback and never reaches the scale.
+        // the standing south frame is the one charH measures, exactly as the rig does, and the 1 is never used because with no frames at all the draw takes its capsule fallback and never reaches the scale
         const stand = frames.south?.[0] || Object.values(frames)[0]?.[0]
         const drawnH = stand ? stand.feet - stand.top + 1 : 1
 
@@ -213,8 +207,7 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
           const f = p.foot
           if (!f) return { x, y, r }
           if (!(f[2] > 0) || !(f[3] > 0)) return null
-          // r is kept sane rather than zero so anything that reads it without
-          // knowing about rx and ry still gets a circle roughly the right size
+          // r is kept sane rather than zero so anything that reads it without knowing about rx and ry still gets a circle roughly the right size
           return { x: x + f[0], y: y + f[1], r: f[2], rx: f[2], ry: f[3] }
         }
 
@@ -222,12 +215,9 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
         const docLike = { lvlAt: (x: number, y: number) => at(x, y), markHit: () => {} } as unknown as MaskDoc
         const standable = (x: number, y: number) => canStand(docLike, cfg, x, y)
         const bareStand = standable
-        // "is somebody already there", read after a step rather than folded into
-        // the floor: the floor has to stay still or lifeAt stops being pure
+        // is somebody already there, read after a step rather than folded into the floor, because the floor has to stay still or lifeAt stops being pure
         const occupied = bodyAt(solids, yScale)
-        /* Where the ground actually is, measured once off the levels plane.
-         * Everything on screen is framed against this rather than against the
-         * canvas the ground happens to sit inside. */
+        /* where the ground actually is, measured once off the levels plane, so everything on screen is framed against this rather than against the canvas the ground happens to sit inside */
         /* an unstandable spawn freezes him, so it is a hint: search out to the nearest standable pixel. */
         const roomy = (x: number, y: number) =>
           standable(x, y) &&
@@ -237,9 +227,7 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
           standable(x, y + 1)
         const settle = (x: number, y: number, reach = 96) => {
           if (roomy(x, y)) return { x, y }
-          // two passes outward: somewhere with elbow room first, then anywhere
-          // standable at all. Landing hard against a wall is technically legal
-          // and reads as being stuck, because half the directions refuse.
+          // two passes outward, somewhere with elbow room first and then anywhere standable at all, because landing hard against a wall is legal and reads as being stuck when half the directions refuse
           let any: { x: number; y: number } | null = null
           for (let r = 1; r <= reach; r++)
             for (let a = 0; a < 360; a += 5) {
@@ -248,8 +236,7 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
               if (roomy(nx, ny)) return { x: nx, y: ny }
               if (!any && standable(nx, ny)) any = { x: nx, y: ny }
             }
-          // nothing within reach is standable, so leave the hint alone rather
-          // than teleporting somebody to a corner of the canvas
+          // nothing within reach is standable, so leave the hint alone rather than teleporting somebody to a corner of the canvas
           return any || { x, y }
         }
         ;({ x: px, y: py } = settle(px, py))
@@ -362,9 +349,7 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
           }
         })()
 
-        // Which way the walker faces is now Walker's own dirFrom, off the same squash,
-        // so the picked view matches the editor's walk test rather than a second
-        // rounding of the same angle.
+        // which way the walker faces comes from Walker's own dirFrom, off the same squash, so the picked view matches the editor's walk test rather than a second rounding of the same angle
 
         let last = performance.now()
         const draw = (now: number) => {
@@ -461,8 +446,7 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
               alpha = s.alpha
               face = s.facing
               flip = s.flip
-              // whether the legs should be going THIS instant, which is not the
-              // same as whether this thing is capable of moving at all
+              // whether the legs should be going this instant, which is not the same as whether this thing is capable of moving at all
               gait = s.moving
             }
             return { v, alpha, face, flip, gait, moves: !!v.life }
@@ -478,8 +462,7 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
           for (let i = 0; i < pts.length; i++)
             if (shown[i].moves) pts[i] = { ...pts[i], x: pts[i].x + push[i].dx, y: pts[i].y + push[i].dy }
 
-          /* y here is the sort key and nothing else, the drawn position being read off pts,
-           * so the author's nudge belongs in it directly. */
+          /* y here is the sort key and nothing else, the drawn position being read off pts, so the author's nudge belongs in it directly */
           const order: Array<{ y: number; go: () => void }> = shown.map((s, i) => ({
             y: pts[i].y + zOf(s.v.p),
             go: () => {
@@ -523,8 +506,7 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
               const rows = fr.feet + 1
               const dw = fr.img.width * ts * zoom
               const dh = rows * ts * zoom
-              // the editor's contact shadow, which is most of what sells him as
-              // standing on the ground rather than hovering over it
+              // the editor's contact shadow, which is most of what sells a figure as standing on the ground rather than hovering over it
               g.save()
               g.fillStyle = 'rgba(6,10,14,0.35)'
               g.beginPath()
@@ -627,9 +609,7 @@ export function Walk({ slug, version }: { slug: string; version: number }) {
   )
 }
 
-/* Four squares walking a ring, on the pixel grid. It belongs to this app in a
- * way a spinning arc does not, and it is the same mark used everywhere else
- * something is loading. */
+/* four squares walking a ring on the pixel grid, the same loading mark used everywhere else here rather than a spinning arc */
 export function Loading() {
   return (
     <div className="pixload" aria-hidden>

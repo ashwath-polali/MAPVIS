@@ -1,13 +1,4 @@
-// What an eight-way animation does when one of the eight fails, with no api key and nothing bought.
-
-//   node server/db/verify-animate.mjs
-
-// An eight-way ask is eight background jobs, each paid for on its own. The question this file exists to
-// settle is what happens to the seven that drew when the eighth does not, because the answer used to be
-// "they are abandoned" and the person saw two and a half minutes of waiting and no frames.
-//
-// awaitAnimation takes its two readers as options, so every case below runs against a scripted account
-// rather than a real one. Nothing here touches the network.
+// what an eight-way animation does when one of the eight fails, run by node server/db/verify-animate.mjs with scripted readers so nothing touches the network. each job is paid for on its own, and the seven that drew used to be abandoned when the eighth failed, after two and a half minutes of waiting.
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -24,8 +15,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '.
 
 const EIGHT = ['south', 'north', 'east', 'west', 'south-east', 'south-west', 'north-east', 'north-west']
 
-/* an account that draws the headings it was told to draw and fails the rest. Frame urls carry the group
- * name so `known` can tell them from whatever the character already had. */
+/* an account that draws the headings it was told to and fails the rest, with the group name in the frame urls so `known` can tell them from what the character already had */
 function account({ draws, group = 'motion-test', failWith = 'content policy' }) {
   const jobs = {}
   EIGHT.forEach((dir, i) => {
@@ -67,9 +57,7 @@ const run = (acc, opts = {}) =>
 const dirsOf = (detail) => (detail.animations[0].directions || []).map((d) => d.direction)
 
 try {
-  // ---- the reported failure, exactly ---------------------------------------
-  // Seven headings drew and one did not. Before this was fixed the wait threw on
-  // the first failed job and every one of the seven was abandoned.
+  // the reported failure, exactly: seven headings drew and one did not, and the wait used to throw on the first failed job and abandon all seven
   {
     const drew = EIGHT.filter((d) => d !== 'north-west')
     const notes = []
@@ -91,10 +79,7 @@ try {
       : no(`the failure reason did not reach the caller: ${JSON.stringify(notes)}`)
   }
 
-  // ---- the floor -----------------------------------------------------------
-  // Four is the same floor the library holds a view set to, and it is enforced
-  // downstream in newGroupDirs rather than here, so the wait still hands back
-  // what it has and lets that one refuse.
+  // the floor: four is the floor a view set holds to, enforced downstream in newGroupDirs rather than here, so the wait still hands back what it has and lets that one refuse
   {
     const notes = []
     const detail = await run(account({ draws: ['south', 'north', 'east', 'west'] }), { notes })
@@ -112,9 +97,7 @@ try {
       : no('a single heading was lost')
   }
 
-  // ---- nothing drew at all -------------------------------------------------
-  // This is the only shape that should throw, and it has to carry the reason
-  // pixellab gave rather than a message this file invented.
+  // nothing drew at all, the only shape that should throw, and it has to carry the reason pixellab gave rather than a message this file invented
   {
     let threw = ''
     try {
@@ -132,14 +115,11 @@ try {
     const t0 = Date.now()
     const detail = await run(account({ draws: EIGHT }))
     dirsOf(detail).length === 8 ? ok('a clean eight-way run returns all eight') : no('a clean run lost headings')
-    // the poll only reads jobs every sixth tick, so a run that is ready on the
-    // first read must never have asked about a job at all
+    // the poll only reads jobs every sixth tick, so a run that is ready on the first read must never have asked about a job at all
     Date.now() - t0 < 200 ? ok('and returns on the first read without polling a single job') : no('a clean run waited for the job poll')
   }
 
-  // ---- a job that never settles is still a timeout -------------------------
-  // Narrowing what the wait holds out for must not turn a hung job into a silent
-  // success: with one still running there is a heading that may yet arrive.
+  // a job that never settles is still a timeout: narrowing what the wait holds out for must not turn a hung job into a silent success, because a still running job is a heading that may yet arrive
   {
     const acc = account({ draws: ['south', 'north', 'east'] })
     const stuck = { ...acc, readJob: async (id) => (id === 'job-7' ? { state: 'running' } : acc.readJob(id)) }
@@ -183,10 +163,7 @@ try {
   no('the checks themselves threw: ' + String(e && e.stack ? e.stack.split('\n')[0] : e))
 }
 
-// ---- a still that becomes an animation -------------------------------------
-// The other half of animating, and the one with no character in it: an ordinary
-// asset is one png, and animating it replaces that png with a folder of frames
-// under the same name. Two things have to follow it across, and each failed.
+// a still that becomes an animation, the half with no character in it: an ordinary asset is one png, and animating it replaces that png with a folder of frames under the same name, and two things have to follow it across
 {
   const ts = (await import('typescript')).default
   const src = fs.readFileSync(path.join(ROOT, 'src/core/editor.ts'), 'utf8')
@@ -202,11 +179,7 @@ try {
   m.key === LIB + 'palm/' ? ok('an animated item is keyed on the folder its frames live in') : no(`the key is ${m.key}`)
   m.wasStill === still ? ok('and it knows the still it replaced, derived off that folder') : no(`the still was read as ${m.wasStill}`)
 
-  /* THE PLACEMENT THAT WAS ALREADY ON THE MAP. It went down while the item was
-   * one png, so it is static and holds that url. The png is deleted moments
-   * after the frames land, so a placement that does not follow points at
-   * nothing: it draws nothing, and reloading does not help, because the dead url
-   * is what was saved into the document. */
+  /* a placement put down while the item was one png is static and holds that url, and the png is deleted moments after the frames land, so a placement that does not follow draws nothing and a reload does not help, because the dead url is what was saved into the document */
   placementIsOf({ kind: 'static', src: still }, m)
     ? ok('a placement put down before the animation is recognised as the same thing')
     : no('a placement of the old still was not matched, so it would keep a url with no file under it')
@@ -215,8 +188,7 @@ try {
     ? ok('and so is one placed after it, by its frames')
     : no('an animated placement was not matched')
 
-  /* nothing else may be swept up with it: `palm` and `palm-trimmed` share a
-   * prefix, and an in-place edit leaves both in the library */
+  /* nothing else may be swept up with it: `palm` and `palm-trimmed` share a prefix, and an in-place edit leaves both in the library */
   !placementIsOf({ kind: 'static', src: LIB + 'palm-trimmed.png' }, m)
     ? ok('while a different item whose name starts the same is left alone')
     : no('palm-trimmed was matched as palm')
@@ -232,27 +204,20 @@ try {
     ? ok('and an item with no frames matches nothing rather than every placement on the map')
     : no('an item with no frames swept up a placement')
 
-  /* AND ALL OF IT THE OTHER WAY ROUND, because animating is reversible now: there is a button that
-   * takes the movement off a thing and leaves a still where the folder of frames was. Every
-   * placement of it is holding frame urls under a folder that has just been deleted, so if the match
-   * finds none of them they keep those urls and draw nothing at all. Same three symptoms as before,
-   * same silence, opposite direction. */
+  /* and all of it the other way round, because taking the movement off leaves a still where the folder of frames was: every placement is holding frame urls under a folder that has just been deleted, so a match that finds none of them keeps those urls and draws nothing */
   const flat = itemMatch({ kind: 'static', src: still })
   flat.wasFolder === LIB + 'palm/' ? ok('a still knows the folder of frames it replaced') : no(`the folder was read as ${flat.wasFolder}`)
   placementIsOf({ kind: 'animated', frames: [LIB + 'palm/0.png', LIB + 'palm/1.png'] }, flat)
     ? ok('so a placement that was animated is recognised when the animation comes off')
     : no('a placement of the frames was not matched, so it would keep urls with no files under them')
   placementIsOf({ kind: 'static', src: still }, flat) ? ok('and one that was never animated still matches') : no('a still placement stopped matching its own still')
-  /* the prefix trap, in this direction too: `palm` and `palm-trimmed` both exist after an in-place
-   * edit, and a match on the bare name without the slash would sweep the second one up */
+  /* the prefix trap in this direction too: `palm` and `palm-trimmed` both exist after an in-place edit, and a match on the bare name without the slash would sweep the second one up */
   !placementIsOf({ kind: 'animated', frames: [LIB + 'palm-trimmed/0.png'] }, flat)
     ? ok('while an animated palm-trimmed is left alone, the slash being what separates them')
     : no('palm-trimmed was swept up by palm')
   !placementIsOf({ kind: 'static', src: LIB + 'palm-trimmed.png' }, flat) ? ok('and so is a still one') : no('a still palm-trimmed was matched as palm')
 
-  /* and the KIND has to move back with it. A placement left animated on a frames list whose folder
-   * is gone is the invisible asset all over again: the renderer reads frames for an animated
-   * placement and never looks at src. */
+  /* and the kind has to move back with it, because a placement left animated on a frames list whose folder is gone is the invisible asset again: the renderer reads frames for an animated placement and never looks at src */
   const ed = fs.readFileSync(path.join(ROOT, 'src/core/editor.ts'), 'utf8')
   const branch = ed.slice(ed.indexOf('refreshPlacementsOf(item: LibItem)'), ed.indexOf('  refreshPlacementsOf(item: LibItem)') + 2600)
   branch.includes("a.kind = 'static'") && branch.includes('if (a.frames) delete a.frames')

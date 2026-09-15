@@ -26,9 +26,7 @@ export const one = async (text, params) => (await q(text, params)).rows[0] || nu
 
 export const many = async (text, params) => (await q(text, params)).rows
 
-// Run fn inside a transaction on a single client. Rolls back on any throw, so
-// a half-written map cannot exist: either every row and blob reference lands or
-// none of them do.
+// runs fn in a transaction on a single client and rolls back on any throw, so a half-written map cannot exist: every row and blob reference lands or none do
 export async function tx(fn) {
   const c = await db().connect()
   try {

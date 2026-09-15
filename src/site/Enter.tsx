@@ -54,8 +54,7 @@ export default function Enter() {
 
         <div className="enter-sheet">
           <div className="sheet-head">
-            {/* the eyebrow says something the heading does not: repeating it word
-                for word is the shape of a template rather than of a page */}
+            {/* the eyebrow says something the heading does not, because repeating it word for word is the shape of a template rather than of a page */}
             <h1 className="d3">{isNew ? 'Create an account' : 'Sign in'}</h1>
             <p className="aside">
               {isNew
@@ -118,8 +117,7 @@ export default function Enter() {
   )
 }
 
-/* A field is a label above a line, with the rule drawing itself as you focus
- * it. No boxes: a box is a form control, a line is a place to write. */
+/* a field is a label above a line, the rule drawing itself on focus, and no box, because a box is a form control while a line is a place to write */
 function Field({ label, hint, children }: { label: string; hint?: string; children: React.ReactNode }) {
   return (
     <label className="wfield">

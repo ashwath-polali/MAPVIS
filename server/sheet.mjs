@@ -21,9 +21,7 @@ function crc32(buf) {
 
 const CHANNELS = { 0: 1, 2: 3, 3: 1, 4: 2, 6: 4 }
 
-/* One png as flat rgba. Handles the shapes these two sources actually write:
- * the client's canvas.toDataURL (8-bit rgba) and pixellab's own files (8-bit
- * rgba or palette). Interlaced files are refused rather than half-read. */
+/* one png as flat rgba, covering only what the two sources write, 8-bit rgba from canvas.toDataURL and 8-bit rgba or palette from pixellab; interlaced is refused rather than half-read */
 export function decodePNG(buf) {
   if (buf.length < 8 || buf.readUInt32BE(0) !== 0x89504e47) throw new Error('not a png')
   let pos = 8
@@ -83,8 +81,7 @@ export function decodePNG(buf) {
       cur[i] = v & 255
     }
   }
-  // every sample as one byte, whatever the file's bit depth was: 16 keeps the
-  // high half, anything under 8 is unpacked, and a palette index stays an index
+  // every sample as one byte whatever the file's bit depth was: 16 keeps the high half, under 8 is unpacked, and a palette index stays an index
   const vals = new Uint8Array(w * h * ch)
   if (depth === 8) {
     for (let y = 0; y < h; y++) for (let i = 0; i < w * ch; i++) vals[y * w * ch + i] = flat[y * stride + i]
@@ -145,9 +142,7 @@ function chunk(type, data) {
   return Buffer.concat([head, data, crc])
 }
 
-/* Flat rgba back out as an 8-bit rgba png, every scanline filter 0. A sheet is
- * a few hundred kilobytes of flat colour and it is read once, so there is no
- * reason to search filters. */
+/* flat rgba back out as an 8-bit rgba png with every scanline filter 0, because a sheet is a few hundred kilobytes of flat colour read once and searching filters buys nothing */
 export function encodePNG(w, h, rgba) {
   const src = Buffer.from(rgba.buffer, rgba.byteOffset, rgba.length)
   const raw = Buffer.alloc((w * 4 + 1) * h)
@@ -168,11 +163,7 @@ export function encodePNG(w, h, rgba) {
   ])
 }
 
-// ---- the sheet ------------------------------------------------------------
-
-// the field the frames sit on. Mid-grey on purpose: a white sheet loses pale
-// smoke and a black one loses a dark rim, and both of those are exactly the
-// thing being judged.
+// the sheet: frames sit on mid-grey on purpose, because a white field loses pale smoke and a black one loses a dark rim, and both are the thing being judged
 const BG = [122, 122, 122]
 // the rule between cells, so frames can be counted and a cell's edge is visible
 const RULE = [86, 86, 86]

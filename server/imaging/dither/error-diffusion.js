@@ -1,9 +1,4 @@
-// Error diffusion against a fixed palette.
-//
-// The error is carried in LINEAR light and not in eight-bit values. Diffusing
-// the encoded difference pushes too much error in the shadows and not enough in
-// the highlights, and the visible result is a dark area that goes blotchy while
-// a bright one stays banded.
+// error diffusion against a fixed palette, carrying the error in linear light and never in eight-bit values, because diffusing the encoded difference pushes too much error into the shadows and too little into the highlights, so a dark area goes blotchy while a bright one stays banded
 
 import { KERNELS, FLOYD_STEINBERG } from './kernels.js'
 import { cachedMatcher } from '../quantize/kdtree.js'
@@ -23,8 +18,7 @@ export function diffuse(rgba, w, h, palette, { kernel = FLOYD_STEINBERG, serpent
   }
 
   for (let y = 0; y < h; y++) {
-    // every other row read backwards, so the error does not all drift to one
-    // side and leave a visible lean across a large flat area
+    // every other row read backwards, so the error does not all drift one way and leave a visible lean across a large flat area
     const flip = serpentine && (y & 1) === 1
     for (let n = 0; n < w; n++) {
       const x = flip ? w - 1 - n : n
@@ -72,8 +66,7 @@ function clamp01(v) {
   return v < 0 ? 0 : v > 1 ? 1 : v
 }
 
-/* no diffusion at all, which is the honest baseline every dither should be
- * compared against before anybody claims one looks better */
+/* no diffusion at all, the honest baseline any dither has to be compared against */
 export function nearest(rgba, palette) {
   const match = cachedMatcher(palette)
   const out = new Uint8ClampedArray(rgba.length)

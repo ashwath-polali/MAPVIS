@@ -30,11 +30,7 @@ const WORK_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 
 const sha = (b) => crypto.createHash('sha256').update(b).digest('hex')
 
-// ---- the planes ------------------------------------------------------------
-
-// lvl, occ and cut are one byte per pixel each. As r, g and b of a png they
-// compress the way image data does rather than the way base64 does: measured on
-// the hub, 1,720 KB of base64 becomes 9.5 KB, lossless.
+// the planes: lvl, occ and cut are one byte per pixel each, and as r, g and b of a png they compress the way image data does rather than the way base64 does, measured on the hub at 1,720 KB of base64 down to 9.5 KB, lossless
 export function planesToPNG(w, h, lvl, occ, cut) {
   const n = w * h
   const rgba = Buffer.alloc(n * 4)
@@ -146,9 +142,7 @@ async function keepLostAuthoring(mapId, wasAssets, nowAssets) {
   }
 }
 
-// Takes exactly what mask.ts serialize() produced. Returns which halves were
-// actually written, so the caller (and the doctor, and anyone reading a log)
-// can see the skipping working rather than trusting that it does.
+// takes exactly what mask.ts serialize() produced, and returns which halves were actually written so the skipping can be seen rather than trusted
 export async function putDoc(mapId, docString) {
   const d = JSON.parse(docString)
   const w = d.w | 0
@@ -179,10 +173,7 @@ export async function putDoc(mapId, docString) {
     wrote.push(`planes ${(png.length / 1024).toFixed(1)}kb`)
   }
 
-  // Everything the row holds, hashed as one thing. Compared against the stored
-  // hash rather than against md5(assets::text) in the query, because jsonb
-  // renormalises key order on the way in and never matches the string the
-  // server holds.
+  // everything the row holds hashed as one thing, compared against the stored hash and never md5(assets::text) in the query, because jsonb renormalises key order on the way in and never matches the string the server holds
   /* the map's own properties ride the document so there is one save beat, and the defaults are walk.ts defaultCfg() so an older tab writes back what it already had */
   const wk = d.walk && typeof d.walk === 'object' ? d.walk : {}
   const pr = d.props && typeof d.props === 'object' ? d.props : {}
@@ -195,9 +186,7 @@ export async function putDoc(mapId, docString) {
     yScale: num(wk.yScale, 0.72),
     near: Math.round(num(wk.near, 10)),
   }
-  /* WHERE THE PAINT IS, STATED. Four finite numbers or nothing, and nothing is
-   * the normal answer: publish scans the bytes that ship and beats a typed
-   * number. paint_set is what stops that scan overwriting a correction. */
+  /* where the paint is, stated: four finite numbers or nothing, and nothing is the normal answer because publish scans the bytes that ship and beats a typed number, while paint_set is what stops that scan overwriting a correction */
   const paint =
     Array.isArray(pr.paint) && pr.paint.length === 4 && pr.paint.every((n) => Number.isFinite(Number(n)))
       ? pr.paint.map((n) => Math.round(Number(n)))
@@ -260,9 +249,7 @@ export async function putDoc(mapId, docString) {
     .filter((k) => k.pts.length >= 3)
     .slice(0, 12)
 
-  /* IN THE SHA OR IT NEVER SAVES. A field left out of this list is a field the
-   * four-second autosave decides is unchanged, so drawing a route and nothing
-   * else would write nothing at all and the work would be gone on reload. */
+  /* in the sha or it never saves: a field left out of this list is a field the four-second autosave calls unchanged, so drawing a route and nothing else would write nothing at all and the work would be gone on reload */
   const rowSha = sha(
     JSON.stringify([
       w, h, d.base?.w ?? w, d.base?.h ?? h, d.base?.ox ?? 0, d.base?.oy ?? 0, d.spawn, d.assetNext, walk, props, occs,
@@ -341,9 +328,7 @@ export async function putDoc(mapId, docString) {
     wrote.push(`doc ${(assetsJson.length / 1024).toFixed(1)}kb`)
   }
 
-  // Events are the pre-anchor contract and still ride in the document. They are
-  // mirrored into the anchors table rather than living there twice, so the
-  // editor keeps working while the naming UI is built.
+  // events are the pre-anchor contract and still ride in the document, mirrored into the anchors table rather than living there twice so the editor keeps working while the naming UI is built
   if (Array.isArray(d.events)) {
     const n = await syncEventsToAnchors(mapId, d.events, walk.charH)
     if (n) wrote.push(`${n} anchor(s)`)
@@ -434,16 +419,12 @@ export async function getDoc(mapId) {
     rackNext: (Array.isArray(m.racks) ? m.racks : []).reduce((a, r) => Math.max(a, Number(r.id) || 0), 0) + 1,
     variants: Array.isArray(m.variants) ? m.variants : [],
     variantNext: (Array.isArray(m.variants) ? m.variants : []).reduce((a, v) => Math.max(a, Number(v.id) || 0), 0) + 1,
-    /* the document calls them `groups` and the column is `asset_groups`, because
-     * GROUPS is a sql keyword and the schema now also has anchor sets to be
-     * confused with. The rename lives here, at the one boundary that crosses. */
+    /* the document calls them `groups` and the column is `asset_groups`, because groups is a sql keyword and the schema now also has anchor sets to be confused with, so the rename lives at this one boundary that crosses */
     groups: Array.isArray(m.asset_groups) ? m.asset_groups : [],
   })
 }
 
-// ---- events and anchors, the bridge between the two contracts ---------------
-
-// a derived name is flagged derived:true, because a name a member writes python against has to be one a human actually picked
+// events and anchors, the bridge between the two contracts: a derived name is flagged derived:true, because a name python gets written against has to be one a human actually picked
 /* mirror means mirror: everything in the document is upserted by name and any row it no longer has is deleted, or a renamed anchor lingers in the api forever */
 export async function syncEventsToAnchors(mapId, anchors, charH = 18) {
   const { anchorName } = await import('./crypto.mjs')
@@ -453,8 +434,7 @@ export async function syncEventsToAnchors(mapId, anchors, charH = 18) {
 
     for (const a of anchors) {
       if (!a || !Number.isFinite(Number(a.x))) continue
-      // a document written before anchors existed has a label and no name, so
-      // one is derived here and flagged, exactly as the editor would
+      // a document written before anchors existed has a label and no name, so one is derived here and flagged, exactly as the editor would
       const derived = !/^[a-z][a-z0-9_]{0,47}$/.test(String(a.name || ''))
       const name = derived ? anchorName(a.label || `${a.kind || a.type || 'door'}_${a.id}`) : a.name
       if (seen.has(name)) continue
@@ -532,8 +512,7 @@ export async function syncEventsToAnchors(mapId, anchors, charH = 18) {
   })
 }
 
-/* Back out in the document's own shape. Every kind comes back, not only doors,
- * because the editor holds the whole list. */
+/* back out in the document's own shape, and every kind comes back rather than only doors, because the editor holds the whole list */
 export async function eventsFromAnchors(mapId) {
   const rows = await many(
     `select name, kind, x, y, r, rect, poly, stand, to_slug, to_anchor, placement_id, facing, label, meta
@@ -543,20 +522,16 @@ export async function eventsFromAnchors(mapId) {
   return rows.map((a, i) => ({
     id: a.meta?.docId ?? i + 1,
     name: a.name,
-    // lifted back onto the field it was typed into, so the two can never
-    // disagree about what the author wrote. mask.ts migrateEvent does the same
-    // lift, and this is the half that runs before the browser sees the document.
+    // lifted back onto the field it was typed into so the two can never disagree about what the author wrote, matching mask.ts migrateEvent, and this is the half that runs before the browser sees the document
     ...(typeof a.meta?.when === 'string' && a.meta.when ? { when: a.meta.when } : {}),
-    // and the same lift for the area mode, so a reopened map shows the shape the
-    // author chose rather than whichever of the two stored shapes is guessed at
+    // the same lift for the area mode, so a reopened map shows the shape the author chose rather than whichever of the two stored shapes is guessed at
     ...(['circle', 'rect', 'poly'].includes(a.meta?.shape) ? { shape: a.meta.shape } : {}),
     kind: a.kind,
     x: a.x,
     y: a.y,
     r: a.r,
     ...(a.rect ? { rect: a.rect } : {}),
-    // the shape the author walked round, back in the document's own shape so
-    // reopening a map shows the area they drew instead of the box it sits in
+    // the shape the author walked round, back in the document's own shape so a reopened map shows the area they drew instead of the box it sits in
     ...(a.poly ? { poly: a.poly } : {}),
     ...(a.stand ? { stand: a.stand } : {}),
     to: a.to_slug || '',

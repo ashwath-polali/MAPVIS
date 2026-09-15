@@ -6,11 +6,9 @@ export interface HelpEntry {
   what: string
   /* one line, read at a glance while scanning the list */
   gist: string
-  /* the presses in order. Short lines; a step that needs a paragraph is two
-   * steps that have not been separated yet. */
+  /* the presses in order, short lines, because a step that needs a paragraph is two steps not yet separated */
   how: string[]
-  /* the part worth knowing that is not obvious from the steps. Optional on
-   * purpose: most entries do not have one, and inventing them is padding. */
+  /* the part worth knowing that the steps do not show, optional because most entries do not have one and inventing them is padding */
   note?: string
 }
 

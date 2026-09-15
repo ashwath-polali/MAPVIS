@@ -1,8 +1,4 @@
-// Convolution, separable where the kernel allows it.
-//
-// A 9x9 kernel over a 688x384 painting is 21 million multiplies. The same blur
-// done as one horizontal pass and one vertical pass is 4.7 million, and the two
-// give the same answer for any kernel that is the outer product of a 1D one.
+// convolution, separable where the kernel allows it: a 9x9 kernel over a 688x384 painting is 21 million multiplies against 4.7 million for one horizontal pass plus one vertical, and the two agree for any kernel that is the outer product of a 1D one
 
 export function convolve1D(src, w, h, kernel, horizontal) {
   const out = new Float32Array(src.length)
@@ -12,8 +8,7 @@ export function convolve1D(src, w, h, kernel, horizontal) {
       let acc = 0
       for (let k = 0; k < kernel.length; k++) {
         const d = k - r
-        // the edge is clamped rather than wrapped or zeroed: wrapping bleeds
-        // the far side of a sprite into it, and zeroing darkens the border
+        // the edge is clamped, not wrapped or zeroed, because wrapping bleeds the far side of a sprite in and zeroing darkens the border
         const sx = horizontal ? Math.min(w - 1, Math.max(0, x + d)) : x
         const sy = horizontal ? y : Math.min(h - 1, Math.max(0, y + d))
         acc += src[sy * w + sx] * kernel[k]
@@ -67,8 +62,7 @@ export const SOBEL_Y = [-1, -2, -1, 0, 0, 0, 1, 2, 1]
 export const LAPLACIAN = [0, 1, 0, 1, -4, 1, 0, 1, 0]
 export const SHARPEN = [0, -1, 0, -1, 5, -1, 0, -1, 0]
 
-/* gradient magnitude, which is where an outline is. Used to find the edge of a
- * painted region before anybody traces it by hand. */
+/* gradient magnitude, which is where an outline is, used to find the edge of a painted region before anybody traces it by hand */
 export function sobel(src, w, h) {
   const gx = convolve2D(src, w, h, SOBEL_X, 3)
   const gy = convolve2D(src, w, h, SOBEL_Y, 3)

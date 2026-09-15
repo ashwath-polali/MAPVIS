@@ -22,8 +22,7 @@ await new Promise((r) => server.listen(PORT, '127.0.0.1', r))
 const hit = (path) => fetch(`http://127.0.0.1:${PORT}${path}`)
 
 try {
-  // the registry the game has never had. A door names a target by slug and
-  // nothing has ever been able to answer whether that target exists.
+  // the registry the game has never had: a door names its target by slug, and nothing until now could answer whether that target exists
   const reg = await (await hit('/api/v1/maps')).json()
   const mine = reg.maps?.find((m) => m.slug === slug)
   mine ? ok(`registry lists ${slug} at v${mine.version}, ${mine.anchors} anchor(s)`) : no('registry did not list the map')

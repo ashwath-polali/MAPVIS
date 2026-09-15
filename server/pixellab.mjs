@@ -21,9 +21,7 @@ export function token() {
   const mine = currentPixellabKey()
   if (mine) return mine
   if (cached) return cached
-  // env() and not process.env: .env is read into a merged object and never
-  // exported into the process, so reading process.env here finds nothing on a
-  // laptop and generation fails as though no key were set.
+  // use env() and not process.env: .env is read into a merged object and never exported into the process, so process.env finds nothing here and generation fails as though no key were set
   const E = env()
   if (E.PIXELLAB_TOKEN) return (cached = E.PIXELLAB_TOKEN)
   try {
@@ -136,8 +134,7 @@ export const UI_GATES = [
 
 export function fitUi(w, h) {
   const want = Math.max(1, Number(w) || 256) / Math.max(1, Number(h) || 256)
-  // nearest gate by ratio, because the caller asked for a shape rather than for
-  // one of five names and should get the closest legal one
+  // nearest gate by ratio, because the caller asked for a shape rather than one of five names and should get the closest legal one
   const [, maxW, maxH] = UI_GATES.reduce((best, g) => (Math.abs(Math.log(g[0] / want)) < Math.abs(Math.log(best[0] / want)) ? g : best))
   const k = Math.min(1, maxW / Math.max(1, w), maxH / Math.max(1, h))
   return {
@@ -165,9 +162,7 @@ export function uiAssetBody({ description, width = 256, height = 256, palette, e
     description: say.slice(0, 2000),
     /* only ever probe this api by omitting a REQUIRED field: `image_size: {}` defaults to 256x256, draws and is charged for, which cost 40 generations */
     image_size: { width: size.width, height: size.height },
-    // chrome sits on top of a map, so it is cut out for the same reason every
-    // map object is: anything opaque behind it is a rectangle of somebody
-    // else's idea of a background painted over the island
+    // chrome sits on top of a map, so it is cut out like every map object: anything opaque behind it paints a rectangle of somebody else's background over the island
     no_background: true,
   }
   if (palette) req.color_palette = String(palette).slice(0, 200)
@@ -222,9 +217,7 @@ export async function uiAsset(ask) {
       return {
         b64: (await fetchPNG(j.image_url)).toString('base64'),
         uiAssetId: String(id),
-        // off the request that was actually sent rather than off what the caller
-        // asked for, because uiAssetBody fits the canvas to an aspect gate and
-        // 688x512 leaves here as 600x448
+        // measured off the request that was actually sent rather than off the ask, because uiAssetBody fits the canvas to an aspect gate and 688x512 leaves here as 600x448
         width: Number(j.size?.width) || req.image_size.width,
         height: Number(j.size?.height) || req.image_size.height,
       }
@@ -245,8 +238,7 @@ export function fitSheet(w, h) {
   const down = Math.min(1, maxW / W, maxH / H)
   let width = Math.max(16, Math.min(maxW, Math.round(W * down)))
   let height = Math.max(16, Math.min(maxH, Math.round(H * down)))
-  // and up over the one-image line, because under it the answer is a grid of
-  // variants rather than the one canvas the face cut is arithmetic against
+  // round up over the one-image line, because below it the answer is a grid of variants rather than the one canvas the face cut is arithmetic against
   const long = Math.max(width, height)
   if (long < SHEET_ONE_IMAGE) {
     const up = SHEET_ONE_IMAGE / long
@@ -256,9 +248,7 @@ export function fitSheet(w, h) {
   return { width, height }
 }
 
-/* Split from the post for the reason uiAssetBody is: the dry run has to be able
- * to show what would be sent without sending it, and a second copy of the
- * assembly would prove nothing about the copy that spends. */
+/* split from the post so the dry run can show what would be sent without sending it, since a second copy of the assembly would prove nothing about the copy that spends */
 export function sheetBody({ description, width = 384, height = 384, styleImage, styleOptions, seed }) {
   const say = String(description || '').trim()
   if (!say) throw new Error('a sheet needs a description')
@@ -281,9 +271,7 @@ export async function sheetImage(ask) {
   const out = await call('POST', '/v2/generate-image-v2', req)
   const id = out.background_job_id
   if (!id) throw new Error('the sheet was queued without a job to collect it from')
-  // the same five minute ceiling and five second tick every other generation in
-  // this file waits on, through the job() and collect() that already exist for
-  // this exact route rather than a third client beside them
+  // the same five minute ceiling and five second tick every other generation in this file waits on, reusing job() and collect() rather than adding a third client beside them
   for (let waited = 0; waited < 300000; waited += 5000) {
     await new Promise((r) => setTimeout(r, 5000))
     const j = await job(id)
@@ -293,13 +281,10 @@ export async function sheetImage(ask) {
     return {
       b64: j.images[0],
       jobId: String(id),
-      // off the request that was actually sent, because fitSheet moves a canvas
-      // and the face cut is measured against the picture rather than the ask
+      // measured off the request that was actually sent, because fitSheet moves a canvas and the face cut is measured against the picture rather than the ask
       width: req.image_size.width,
       height: req.image_size.height,
-      // more than one means the canvas fell under the one-image line and this is
-      // a grid of variants of one mark. fitSheet makes that impossible, and the
-      // count is reported rather than assumed away.
+      // more than one means the canvas fell under the one-image line and this is a grid of variants of one mark; fitSheet makes that impossible and the count is reported rather than assumed away
       count: j.images.length,
     }
   }
@@ -345,22 +330,16 @@ export async function characterState({ characterId, edit, name, seed, size }) {
   }
   if (name) req.state_name = String(name).slice(0, 100)
   if (seed != null) req.seed = seed
-  // only for an edit that genuinely needs more room, wings or a raised weapon.
-  // Absent, the state keeps the source's canvas, which is what keeps a swap
-  // from jumping size mid-round.
+  // only for an edit that genuinely needs more room, wings or a raised weapon; absent, the state keeps the source's canvas, which is what keeps a swap from jumping size mid-round
   if (size && size.w && size.h) req.override_frame_size = { width: size.w, height: size.h }
   const out = await call('POST', '/v2/create-character-state', req)
   const id = out.character_id
   if (!id) throw new Error('the state was queued without an id to collect it from')
-  /* what it actually cost, carried back rather than assumed. The schema does
-   * not price this endpoint anywhere and the docs do not either, so the only
-   * honest source is the usage the call itself answers with. */
+  /* what it actually cost, carried back rather than assumed: neither the schema nor the docs price this endpoint, so the only honest source is the usage the call answers with */
   try {
     return { characterId: id, usage: out.usage || null, detail: await awaitCharacter(id) }
   } catch (e) {
-    /* the state is bought and it exists under this id. Losing the id with the
-     * error is what makes a timeout unrecoverable rather than merely slow, so
-     * it rides out on the error for the caller to record. */
+    /* the state is bought and exists under this id, so the id rides out on the error; losing it is what makes a timeout unrecoverable rather than merely slow */
     e.characterId = id
     throw e
   }
@@ -393,8 +372,7 @@ const QUADRUPEDS = ['bear', 'cat', 'dog', 'horse', 'lion']
 const wait = (ms) => new Promise((r) => setTimeout(r, ms))
 const stateOf = (o) => String((o && (o.status || o.state)) || '').toLowerCase()
 
-// proportions travel as an object over the wire but the ui holds the preset as
-// a json string, so take either and let a broken string mean "no opinion"
+// proportions travel as an object over the wire but the ui holds the preset as a json string, so take either and let a broken string mean no opinion
 function asProportions(p) {
   if (!p) return null
   if (typeof p === 'object') return p
@@ -406,8 +384,7 @@ function asProportions(p) {
   }
 }
 
-// answers the character id, which exists the moment the post returns even
-// though the rotations take minutes. Pass it to awaitCharacter.
+// answers the character id, which exists the moment the post returns even though the rotations take minutes; pass it to awaitCharacter
 export async function createCharacter({
   description,
   size = 48,
@@ -427,8 +404,7 @@ export async function createCharacter({
   const m = mode === 'pro' || mode === 'v3' ? mode : 'standard'
   // the schema caps standard and pro at 128 and only v3 reaches 256
   const px = Math.max(16, Math.min(m === 'v3' ? 256 : 128, Math.round(Number(size) || 48)))
-  // a quadruped is a skeleton pick, not a description: there are five and the
-  // endpoint fits the one it is named to the frames it drew
+  // a quadruped is a skeleton pick, not a description: there are five and the endpoint fits the one it is named to the frames it drew
   let tpl = 'mannequin'
   if (bodyType === 'quadruped') {
     tpl = String(template || '')
@@ -444,15 +420,13 @@ export async function createCharacter({
     view: v,
     template_id: tpl,
   }
-  // every one of the four create routes carries seed. Two variants of one ask
-  // are only reliably different when the noise they start from is.
+  // every one of the four create routes carries seed, and two variants of one ask are only reliably different when the noise they start from is
   if (seed != null) req.seed = seed
   let route
   if (m === 'pro') {
     route = '/v2/create-character-pro'
     req.no_background = true
-    // pro ignores the style hints and reads the eight sprites of a character
-    // already on the account instead
+    // pro ignores the style hints and reads the eight sprites of a character already on the account instead
     if (styleCharacterId) req.style_character_id = String(styleCharacterId)
   } else if (m === 'v3') {
     route = '/v2/create-character-v3'
@@ -480,8 +454,7 @@ export async function awaitCharacter(characterId, { timeoutMs = 600000 } = {}) {
   if (!characterId) throw new Error('no character to wait on')
   const every = 5000
   let misses = 0
-  // rotation_urls is documented as null until the status says completed, so a
-  // completed answer with nothing in it gets a couple of ticks before it counts
+  // rotation_urls is documented as null until the status says completed, so a completed answer with nothing in it gets a couple of ticks before it counts
   let empty = 0
   for (let waited = 0; waited < timeoutMs; waited += every) {
     await wait(every)
@@ -497,8 +470,7 @@ export async function awaitCharacter(characterId, { timeoutMs = 600000 } = {}) {
     if (DEAD.includes(st)) throw new Error(String(d.error || d.message || 'the character failed').slice(0, 200))
     const rot = d.rotation_urls && typeof d.rotation_urls === 'object' ? d.rotation_urls : {}
     const got = Object.values(rot).filter((u) => typeof u === 'string' && u).length
-    // four real headings is finished whatever the status word turns out to be,
-    // and a four-direction character has exactly four
+    // four real headings is finished whatever the status word turns out to be, and a four-direction character has exactly four
     if (got >= 4) return d
     if (DONE.includes(st) && ++empty >= 3) throw new Error('the character finished with no rotations')
   }
@@ -544,16 +516,13 @@ export async function animateCharacterAction({ characterId, action, frameCount =
   return startAnimation(req, want, req.animation_name)
 }
 
-// both modes answer the same way and are waited on the same way, so the post
-// and the handle it turns into are written once. group is what awaitAnimation
-// matches the frames by: the template's id, or the name a written one was given.
+// both modes post and are waited on the same way, so it is written once; group is what awaitAnimation matches the frames by, the template's id or the name a written one was given
 async function startAnimation(req, want, group) {
   const out = await call('POST', '/v2/animate-character', req)
   const jobIds = Array.isArray(out.background_job_ids) ? out.background_job_ids.filter(Boolean) : []
   const going = Array.isArray(out.directions) && out.directions.length ? out.directions.map((k) => String(k).toLowerCase()) : want
   if (!jobIds.length && !going.length) throw new Error('the animation did not start')
-  // the reply says which jobs and which headings but not which group, so the
-  // group's name is carried on the handle for awaitAnimation to recognise it by
+  // the reply says which jobs and which headings but not which group, so the group's name rides on the handle for awaitAnimation to recognise it by
   return { ...out, jobIds, directions: going, templateAnimationId: group }
 }
 
@@ -576,19 +545,7 @@ function framesByDir(detail, tpl, known) {
 }
 
 /* the character is polled rather than the jobs, one read a tick, and `known` is needed because an animation group can come back unnamed, so on a character that already moves the wait would end on the OLD motion */
-/* ONE DIRECTION FAILING MUST NOT THROW AWAY THE OTHERS. An eight-way ask is
- * eight background jobs, each bought separately. Ending the wait on the first
- * failure abandons every heading that did draw, and they are already paid for:
- * it reads to the person as a two and a half minute wait that produced nothing.
- *
- * So a failure narrows what the wait is holding out for instead of ending it.
- * The wait ends when every job has settled, and hands back whatever landed;
- * newGroupDirs fills the missing headings from their standing rotation and
- * refuses below four, which is where the real floor belongs. Only a run where
- * EVERY job failed throws, because then there is genuinely nothing to collect.
- *
- * `readDetail` and `readJob` are injected so the partial-failure path can be
- * exercised without buying a generation to do it. */
+/* one failed direction must not throw away the others: an eight-way ask is eight separately bought jobs, so a failure narrows the wait instead of ending it and only an all-failed run throws; readDetail and readJob are injected to exercise that without buying a generation */
 export async function awaitAnimation(
   characterId,
   handle,
@@ -612,8 +569,7 @@ export async function awaitAnimation(
       continue
     }
     const got = framesByDir(d, tpl, known)
-    // with no list to check against, four headings is the same floor the
-    // library import holds a view set to
+    // with no list to check against, four headings is the same floor the library import holds a view set to
     const ready = want.length ? want.every((k) => got[k]) : Object.keys(got).length >= 4
     if (ready) return d
 
@@ -634,10 +590,7 @@ export async function awaitAnimation(
       }
       // nothing drew, so waiting longer cannot change the answer
       if (failed.size >= jobIds.length) throw new Error(String([...failed.values()][0] || 'a direction failed').slice(0, 200))
-      /* some drew and some did not. Nothing is still running, so the set in
-       * hand is the final one: hand it back rather than holding out for a
-       * heading whose job is already dead. The caller re-reads and falls back
-       * to recovery if the detail has not caught up yet. */
+      /* some drew and some did not, and nothing is still running, so the set in hand is the final one: hand it back rather than holding out for a heading whose job is already dead */
       if (failed.size && states.every(([, s]) => s.state !== 'running')) return d
     }
   }
@@ -656,14 +609,7 @@ export async function animate({ base64, action, frameCount = 8, seed }) {
   const out = await call('POST', '/v2/animate-with-text-v3', req)
   const id = out.background_job_id
   if (!id) throw new Error('animate returned no job id')
-  /* typical generation time is 30-180 seconds; give it five minutes.
-   *
-   * AND RIDE OUT A BLIP, the way awaitCharacter and awaitAnimation already do. One 429 or one 502
-   * from the job endpoint used to reject the whole promise, and the caller answers 502 and deletes
-   * the staged folder while pixellab carries on drawing frames that are already bought. There is no
-   * recover path anywhere for the single-image animator, so that money had nowhere to go: the only
-   * way forward was to press again and pay again. Three reads in a row have to fail before it gives
-   * up, and it gives up carrying the real error rather than one invented here. */
+  /* typical generation is 30-180 seconds so the ceiling is five minutes; one 429 or 502 must not reject, because the caller then answers 502 and deletes the staged folder while bought frames keep drawing and the single-image animator has no recover path, so three reads in a row have to fail first */
   let misses = 0
   for (let waited = 0; waited < 300000; waited += 5000) {
     await new Promise((r) => setTimeout(r, 5000))
@@ -724,8 +670,7 @@ export async function job(id) {
   return { state: 'running' }
 }
 
-// the image payload sits at a different depth depending on the model, so walk
-// the response for anything that looks like a png in base64
+// the image payload sits at a different depth depending on the model, so walk the response for anything that looks like a png in base64
 function collect(o, acc = [], depth = 0) {
   if (depth > 8) return acc
   if (Array.isArray(o)) {

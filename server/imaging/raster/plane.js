@@ -1,8 +1,4 @@
-// A single channel plane, which is what every mask in this tool actually is.
-//
-// The editor's cut, its levels and its occluders are all one byte per pixel over
-// the same grid. Carrying them as rgba quadruples wastes three quarters of the
-// memory and makes every loop below four times longer than it has to be.
+// a single channel plane, one byte per pixel: the cut, the levels and the occluders all share one grid, and carrying them as rgba wastes three quarters of the memory and makes every loop below four times longer
 
 export class Plane {
   constructor(w, h, fill = 0) {
@@ -18,8 +14,7 @@ export class Plane {
     return p
   }
 
-  /* out of bounds reads answer 0 rather than undefined, because every kernel
-   * below runs off the edge and a branch per tap costs more than the clamp */
+  /* out of bounds reads answer 0 rather than undefined, because every kernel below runs off the edge and a branch per tap costs more than the clamp */
   get(x, y) {
     if (x < 0 || y < 0 || x >= this.w || y >= this.h) return 0
     return this.data[y * this.w + x]
@@ -45,8 +40,7 @@ export class Plane {
     return n
   }
 
-  /* the tightest box holding anything non-zero, which is what a trim needs and
-   * what a footprint is measured from */
+  /* the tightest box holding anything non-zero, which is what a trim needs and what a footprint is measured from */
   bounds(threshold = 1) {
     let x0 = this.w
     let y0 = this.h
@@ -70,9 +64,7 @@ export class Plane {
     return out
   }
 
-  /* the alpha channel of an rgba buffer, lifted out. Collision read from a
-   * sprite's own alpha is the cheapest mask there is and it is always in
-   * register with the picture. */
+  /* the alpha channel of an rgba buffer lifted out, the cheapest mask there is and always in register with the picture */
   static alphaOf(rgba, w, h) {
     const p = new Plane(w, h)
     for (let i = 0, j = 0; i < rgba.length; i += 4, j++) p.data[j] = rgba[i + 3]

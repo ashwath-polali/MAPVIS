@@ -1,53 +1,23 @@
-/* THE UI GENERATOR, wearing the map editor's chrome.
- *
- * WHY THIS FILE IS SHORT. The page is built out of app.css: `.app`, `header`,
- * `.brand`, `.stepper`, `.panel`, `.asec`, `.row`, `.insp`, `.seg`, `.numf`,
- * `.abtn`, `.anchfield`, `.stage` and `footer` are the editor's own classes and
- * this page uses them unchanged. Two pages that copy each other's numbers drift;
- * two pages that share a stylesheet cannot.
- *
- * So what is here is only the things the editor has no equivalent of: a checker
- * to see transparency against, a rectangle drawn at a canvas's true proportion,
- * the four-edge overlay, and the stretch preview. Every value below is a token.
- *
- * THE PAGE THIS REPLACES was a landing page: a Fraunces hero, three paragraphs
- * of prose and grey cards. There is no display face anywhere in this file, and
- * no block of running text on the screen, on purpose.
- */
+/* the ui generator wearing the map editor's chrome: the page reuses app.css classes unchanged so the two cannot drift, so only what the editor has no equivalent of is here, the checker, a rectangle at a canvas's true proportion, the four edge overlay and the stretch preview */
 
-/* ---- the few metrics this page needs and the editor does not ---------------
- *
- * Scoped under .uikit, which /ui puts beside .app. Both pages are one .app, so
- * an unscoped rule here would follow a reader from /ui to /edit and stay for
- * every page after it: ui.css is loaded once and never unloaded. Metrics
- * only. A colour under this selector would be the second look this whole file
- * is written to prevent. */
+/* metrics this page needs and the editor does not, scoped under .uikit because ui.css is loaded once and never unloaded, so an unscoped rule would follow a reader from /ui to /edit: metrics only, never a colour */
 
-/* A BUTTON THAT WILL NOT FIT THREE ACROSS TAKES ITS OWN LINE.
-   .abtn is flex 1 1 76px so three sit in the editor's 272 px rail, and "call it
-   measured" is the widest label on this page: it wrapped to two lines and stood
-   a row taller than the two beside it. Basis 100% wraps the rest under it
-   instead of squeezing all three. */
+/* a button that will not fit three across takes its own line: .abtn is flex 1 1 76px so three sit in the editor's 272 px rail, and "call it measured" wrapped to two lines, so basis 100% wraps the rest under it instead of squeezing all three */
 .uikit .abtn.own-line {
   flex: 1 1 100%;
 }
 
-/* the address beside the words in the mark inspector's head. Not flexible, so
-   the name is what gets an ellipsis when the panel is narrow: losing half of
-   `plaque_hang` costs the one string a member types into python. */
+/* the address in the mark inspector's head, not flexible so the name takes the ellipsis instead: half of `plaque_hang` is the one string a member types into python */
 .uikit .insp-code {
   flex: 0 0 auto;
   font-size: var(--fs-micro);
   color: var(--ink-3);
 }
 
-/* the move that fills an empty panel, under the fact that it is empty. Same
-   pairing .nothing makes on the ocean: what is missing, then what press fixes
-   it, the second one quieter than the first. */
+/* the move that fills an empty panel, under the fact that it is empty: what is missing then what press fixes it, the second quieter, the same pairing .nothing makes on the ocean */
 .uikit .ui-empty-do {
   color: var(--ink-off);
-  /* 30ch of a narrow face is about 170 px, which broke "the art" onto a fourth
-     line inside a rail 215 px wide. The panel's own padding is the measure. */
+  /* 30ch of a narrow face is about 170 px, which broke "the art" onto a fourth line inside a rail 215 px wide, so the panel's own padding is the measure */
   max-width: none;
 }
 .uikit .panel-empty {
@@ -58,18 +28,7 @@
   color: var(--ink-2);
 }
 
-/* ---- one gallery, one card ------------------------------------------------
- *
- * Two grids of pickable things live on this page: what the account has drawn,
- * and the twenty-one kinds of piece it could draw. They had two card designs and
- * had already begun to drift, so there is one card and a modifier for how much
- * room the art gets.
- *
- * THE CARD IS THE EDITOR'S LIBRARY TILE, ENLARGED. `.acc` in app.css is the
- * tool's existing answer to "a grid of pickable things with pictures on them":
- * a hairline in --edge, a --bg well for the art, the name under it and the
- * accent on the border of the one you hovered or armed. Nothing here invents a
- * second answer, it just gives that one more room. */
+/* one gallery and one card for both grids of pickable things, because two card designs had already begun to drift: the card is `.acc`, the editor's library tile from app.css, given more room by a modifier and nothing else */
 .ui-gal {
   display: flex;
   flex-direction: column;
@@ -79,26 +38,19 @@
   padding: 14px;
   overflow-y: auto;
 }
-/* THE FLOOR IS THE WIDEST DIAGRAM PLUS EVERYTHING AROUND IT: 144, the art
-   well's 5 a side, the card's 6 a side and the two hairlines. It is not a
-   number that looked right. Below it the box holding the diagram gets clamped,
-   and while nothing breaks (the box carries no border and the drawing inside it
-   letterboxes) a 688 wide piece stops being honest to the 384 beside it, which
-   is the one thing the single divisor is for. */
+/* the 168px floor is the widest diagram at 144 plus the art well's 5 a side, the card's 6 a side and the two hairlines: below it the diagram box clamps and a 688 wide piece stops being honest against the 384 beside it, which is what the single divisor is for */
 .ui-gal-set {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
   align-content: start;
   gap: 8px;
 }
-/* the shelf of real art. A generated piece is worth looking at, so it gets more
-   than twice the room a diagram of one does. */
+/* the shelf of real art: a generated piece gets more than twice the room a diagram of one does */
 .ui-gal-set.wide {
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
   gap: 12px;
 }
-/* the tier heading over each group. The stage is not the rail, so the rail's
-   gutter does not apply and the first one does not want a gap above it. */
+/* the tier heading over each group: the stage is not the rail, so the rail's gutter does not apply and the first heading wants no gap above it */
 .ui-gal .asec {
   padding: 12px 2px 5px;
 }
@@ -123,9 +75,7 @@
   border-color: var(--acc);
   background: var(--acc-soft);
 }
-/* ONE HEIGHT FOR EVERY CARD and the art fitted inside it. Sized by its own
-   aspect ratio instead, a 448 square sits a hundred pixels taller than the 688
-   by 384 beside it and no two cards on a row line up. */
+/* one height for every card with the art fitted inside: sized by its own aspect ratio a 448 square sits a hundred pixels taller than the 688 by 384 beside it and no two cards on a row line up */
 .ui-card-art {
   display: grid;
   place-items: center;
@@ -165,11 +115,7 @@
   font-size: var(--fs-micro);
   color: var(--ink-3);
 }
-/* HOW FAR ALONG THE PIECE IS, ON THE CARD AND ON THE RAIL ROW.
-   Below the name rather than beside it, because it is a sentence and the meta
-   line beside the name is a measurement. Quiet by default: on a finished shelf
-   the ordinary case is "measured", and a shelf that shouts about every piece
-   being fine is a shelf nobody reads. */
+/* how far along the piece is, below the name because it is a sentence and the meta beside the name is a measurement, and quiet by default because a shelf that shouts about every piece being fine is a shelf nobody reads */
 .ui-made {
   display: flex;
   align-items: center;
@@ -183,8 +129,7 @@
   width: 5px;
   height: 5px;
   border-radius: var(--r-round);
-  /* unmeasured is the DEFAULT state, so it gets a hollow dot rather than a
-     colour that reads as an alarm. A piece nobody has marked yet is normal. */
+  /* unmeasured is the default state, so a hollow dot rather than a colour that reads as an alarm */
   border: var(--hair) solid var(--ink-off);
 }
 .ui-made.done {
@@ -201,31 +146,18 @@
 .ui-made.bad {
   color: var(--acc-stop-lit);
 }
-/* the rail row stacks its lines, so the state sits under them and takes the
-   row's own left edge rather than the card's inner padding */
+/* the rail row stacks its lines, so the state sits under them and takes the row's own left edge rather than the card's inner padding */
 .row-tx .ui-made {
   padding: 1px 0 0;
 }
 
-/* a spend that produced nothing, or one still in flight. The card stays either
-   way, because a generation that vanished is worse than one that says so. */
+/* a spend that produced nothing, or one still in flight: the card stays either way, because a generation that vanished is worse than one that says so */
 .ui-void {
   font: var(--fs-fine) var(--font-mono);
   color: var(--ink-off);
 }
 
-/* ---- transparency, seen ---------------------------------------------------
- *
- * Every piece of chrome in this game is drawn on transparency, so a piece on a
- * flat dark fill gives no way at all to tell a hole from a black pixel. The
- * checker is the only way that reads. Two board tones and nothing brighter, so
- * the art stays the loudest thing on the stage.
- *
- * BELOW .ui-card-art AND NOT ABOVE IT, and this cost a silent bug. `background`
- * is a shorthand, so a later `background: var(--bg)` on the well set
- * background-image back to none and quietly deleted the checker off every card
- * that had asked for one. Same specificity, later rule wins, nothing in the
- * console. */
+/* chrome is drawn on transparency, so only a checker tells a hole from a black pixel, and this rule stays below .ui-card-art: `background` is a shorthand, so a later `background: var(--bg)` on the well set background-image to none and silently deleted the checker */
 .ui-check {
   background-color: var(--board);
   background-image: linear-gradient(45deg, var(--stage) 25%, transparent 25%),
@@ -236,19 +168,7 @@
   background-position: 0 0, 0 8px, 8px -8px, -8px 0;
 }
 
-/* ---- what a type is, drawn ------------------------------------------------
- *
- * A season token is 24 pixels across and the generator will not draw anything
- * under 192 a side, which is why six of the twenty-one are sheets. The only way
- * to feel that is to see a 384 square beside a 688 by 384, so every diagram box
- * on this page is scaled by ONE divisor and is honest against every other.
- *
- * TWO INKS AND NO MORE. --edge-ctl is the boundary of a thing you could operate
- * and --ink-edge is named in tokens.css as a glyph that carries meaning without
- * being read, which is exactly what every mark in here is. Gold appears on the
- * one card that is armed and nowhere else: twenty-one gold-tinted rectangles was
- * the tool shouting a fact nobody armed, and it is what the old canvas outline
- * did. */
+/* what a type is, drawn: a season token is 24 pixels across and the generator will not draw under 192 a side, which is why six of the twenty-one are sheets, so every diagram box is scaled by one divisor, in two inks and no more, with gold only on the card that is armed */
 .ui-dia-box {
   display: block;
   flex: 0 0 auto;
@@ -260,8 +180,7 @@
   width: 100%;
   height: 100%;
 }
-/* the stroke is pinned to css pixels, so a 688 wide diagram and a 384 wide one
-   carry the same weight of line instead of the wide one drawing at half */
+/* the stroke is pinned to css pixels, so a 688 wide diagram and a 384 wide one carry the same weight of line instead of the wide one drawing at half */
 .ui-dia [class] {
   vector-effect: non-scaling-stroke;
 }
@@ -271,8 +190,7 @@
   stroke: var(--edge-ctl);
   stroke-width: 1;
 }
-/* something that is not there yet: an empty socket, a face that is off, the
-   entry a rail has room for and has not been given */
+/* something that is not there yet: an empty socket, a face that is off, the entry a rail has room for and has not been given */
 .ui-dia .g {
   fill: none;
   stroke: var(--edge-ctl);
@@ -280,8 +198,7 @@
   stroke-dasharray: 4 3;
   opacity: 0.7;
 }
-/* a rule the tool draws rather than an edge of the piece: the line a tab sits
-   on, the seam between two frames of a strip */
+/* a rule the tool draws rather than an edge of the piece: the line a tab sits on, the seam between two frames of a strip */
 .ui-dia .s {
   fill: none;
   stroke: var(--ink-edge);
@@ -291,8 +208,7 @@
 .ui-dia .m {
   fill: var(--ink-edge);
 }
-/* a run of type, drawn as a bar because at a fifth of size a word is noise and
-   what the diagram is saying is where the words go */
+/* a run of type, drawn as a bar because at a fifth of size a word is noise and what the diagram is saying is where the words go */
 .ui-dia .t {
   fill: var(--ink-off);
 }
@@ -300,15 +216,11 @@
 .ui-dia .p {
   fill: var(--raised);
 }
-/* a painted silhouette INSIDE the piece rather than a mark drawn on it. It has
-   to sit under everything, because on a cover plate the title, the bar and the
-   fact are the surface and the land behind them is the picture. */
+/* a painted silhouette inside the piece rather than a mark drawn on it, and it sits under everything because on a cover plate the land behind the title is the picture */
 .ui-dia .d {
   fill: var(--line);
 }
-/* a hole punched through a mark, so five season tokens are five pictures rather
-   than five identical discs. Both fill and stroke, because it is used on a
-   closed shape and on an open line. */
+/* a hole punched through a mark, so five season tokens are five pictures rather than five identical discs: fill and stroke both, because it is used on a closed shape and on an open line */
 .ui-dia .o {
   fill: var(--bg);
   stroke: var(--bg);
@@ -321,8 +233,7 @@
   stroke: var(--acc);
 }
 
-/* the diagram riding in a row's 26px icon slot, where a picture of the piece is
-   better still and takes the same room */
+/* the diagram riding in a row's 26px icon slot, where a picture of the piece is better still and takes the same room */
 .row-ic .ui-dia {
   width: 20px;
   height: 20px;
@@ -333,23 +244,12 @@
   max-height: 22px;
   image-rendering: pixelated;
 }
-/* THE RAIL BEFORE ANYTHING IS ARMED. One line saying what is not here and one
-   at the foot saying what a press costs. It is tokens.css's .sparse argument in
-   the editor's own classes: content at the top and a floor at the bottom reads
-   as a place with a job, where content at the top and six hundred pixels of
-   nothing under it reads as a page that failed to load.
-
-   ITS OWN CLASS AND NOT :last-child. .panel and .panel-foot are the editor's,
-   and the editor's foot happens to have a sibling under it today. A rule that
-   depends on that is a rule that breaks the editor's cut panel the first time
-   somebody moves the fold. */
+/* the rail before anything is armed gets a floor at the bottom, because content at the top over six hundred pixels of nothing reads as a page that failed to load: its own class and not :last-child, since the editor's panel-foot has a sibling under it and that rule would break the cut panel */
 .panel > .panel-foot.ui-foot {
   margin-top: auto;
 }
 
-/* what is armed, above its own controls. Centred rather than top-aligned like a
-   list row, because it is one line and a button rather than a label and a
-   sentence, and the button decides the height. */
+/* what is armed, above its own controls, centred rather than top aligned because it is one line and a button and the button decides the height */
 .ui-armed {
   align-items: center;
   margin-bottom: 4px;
@@ -372,10 +272,7 @@
   grid-template-rows: minmax(0, 1fr) auto;
   overflow: hidden;
 }
-/* RELATIVE, because the naming popover is absolute and the nearest positioned
-   ancestor was otherwise .stage: the popover hung off the bottom of the stage
-   and covered the stretch previews, which is the one thing on screen it is
-   asking you to look away from. */
+/* relative, because the naming popover is absolute and the nearest positioned ancestor was otherwise .stage, so the popover hung off the bottom of the stage and covered the stretch previews */
 .ui-board {
   position: relative;
   display: grid;
@@ -401,9 +298,7 @@
   image-rendering: pixelated;
   pointer-events: none;
 }
-/* A PIECE THAT IS NOT DRAWN YET STILL TAKES ITS MARKS. The frame is the right
-   size whether or not a picture has arrived, so a redraw keeps every rectangle
-   instead of the marking waiting on the art. */
+/* a piece that is not drawn yet still takes its marks: the frame is the right size whether or not a picture has arrived, so a redraw keeps every rectangle */
 .ui-art-void {
   position: absolute;
   inset: 0;
@@ -417,8 +312,7 @@
   pointer-events: none;
 }
 
-/* the nine, shading as the four lines move: the corners never scale, the edges
-   repeat along one axis, and the middle is the paper */
+/* the nine, shading as the four lines move: the corners never scale, the edges repeat along one axis, and the middle is the paper */
 .ui-nine {
   position: absolute;
   pointer-events: none;
@@ -429,8 +323,7 @@
 .ui-nine[data-part='edge'] {
   background: color-mix(in srgb, var(--acc-tool) 9%, transparent);
 }
-/* the middle is the one of the nine that has to stay readable, because the drawn
-   paper is what the edges are being measured against */
+/* the middle is the one of the nine that has to stay readable, because the drawn paper is what the edges are being measured against */
 .ui-nine[data-part='mid'] {
   background: color-mix(in srgb, var(--stage) 18%, transparent);
 }
@@ -449,8 +342,7 @@
   bottom: 0;
   width: var(--hair);
 }
-/* the four things the hand grabs, wider than the line they carry, because a one
-   pixel target is not a target */
+/* the four things the hand grabs, wider than the line they carry, because a one pixel target is not a target */
 .ui-grip {
   position: absolute;
   display: grid;
@@ -493,12 +385,7 @@
   margin-bottom: auto;
 }
 
-/* A MARK HAS TO BE VISIBLE ON ANY PAINTING, and a one pixel salmon line on a
-   brown plaque is not. Every rectangle carries a dark halo outside it and a dark
-   line inside it, so the hue only has to beat the halo rather than beat whatever
-   art happens to be under it.
-   The two that are not drawn things read differently: a face is a CUT, so it
-   wears the cut layer's own magenta, and a press is a hit area, so it is dashed. */
+/* a mark has to be visible on any painting and a one pixel salmon line on a brown plaque is not, so every rectangle carries a dark halo outside and a dark line inside and the hue only has to beat the halo: a face wears the cut layer's magenta and a press is dashed because it is a hit area */
 .ui-rect {
   position: absolute;
   border: var(--hair) solid var(--acc-mark);
@@ -562,17 +449,8 @@
   cursor: nwse-resize;
 }
 
-/* ---- the slice, working ---------------------------------------------------
- *
- * The failure this whole record exists to end is one painting squashed into
- * whatever box the element happens to be, and one preview at one size cannot
- * show a corner deforming. Three aspect ratios, drawn with the same
- * border-image rule the game will run, so this is the game's behaviour rather
- * than a drawing of it. It sits under the art because that is where the hand
- * is: drag an edge and the same edge redraws a glance below. */
-/* A FIXED HEIGHT, so the board above it does not resize every time an edge
-   moves. The art's zoom is computed off the board, and a tray that grew with
-   the slice made the picture being measured jump under the hand. */
+/* the slice, working: one preview at one size cannot show a corner deforming, so three aspect ratios are drawn with the same border-image rule the game runs, and it sits under the art because that is where the hand is */
+/* a fixed height, because the art's zoom is computed off the board and a tray that grew with the slice made the picture being measured jump under the hand */
 .ui-tray {
   display: flex;
   align-items: flex-end;
@@ -593,8 +471,7 @@
   justify-items: center;
   flex: 0 0 auto;
 }
-/* the fitted box holds the scaled one's footprint, because a transform does not
-   change layout and three overlapping previews is what that looks like */
+/* the fitted box holds the scaled one's footprint, because a transform does not change layout and three overlapping previews is what that looks like */
 .ui-prev-fit {
   position: relative;
 }
@@ -608,12 +485,7 @@
   color: var(--ink-3);
 }
 
-/* ---- naming a rectangle that has just been dragged -------------------------
- *
- * It is not a region until it has a name, because the name is the address a
- * member's python holds and `region_3` is a promise nobody made. Over the stage
- * rather than in the rail: the hand is on the art and the rectangle it just drew
- * is the thing being talked about. */
+/* naming a rectangle just dragged: it is not a region until it has a name, because the name is the address a member's python holds and `region_3` is a promise nobody made, and it sits over the stage because that is where the hand is */
 .ui-naming {
   position: absolute;
   left: 50%;
@@ -636,8 +508,7 @@
 
 /* ---- small things the editor has no name for ------------------------------ */
 
-/* the swatch that ties a mark's row in the rail to its rectangle on the art.
-   Same idiom as the level chips, where the swatch is the canvas colour. */
+/* the swatch tying a mark's row in the rail to its rectangle on the art, the same idiom as the level chips where the swatch is the canvas colour */
 .ui-sw {
   width: 15px;
   height: 15px;
@@ -675,8 +546,7 @@
   word-break: break-all;
 }
 
-/* the description box. The editor has no multi-line field, and this is the one
-   place a person writes a sentence rather than a value. */
+/* the description box: the editor has no multi-line field and this is the one place a person writes a sentence rather than a value */
 .anchfield textarea {
   width: 100%;
   min-width: 0;
@@ -694,9 +564,7 @@
   border-color: var(--acc);
 }
 
-/* a block of controls that is not a row and not a field: a number grid, a
-   segment, a pair. It steps in by the panel's own left line like everything
-   else in there, so nothing invents a fourth indent. */
+/* a block of controls that is neither a row nor a field, stepped in by the panel's own left line so nothing invents a fourth indent */
 .ui-block {
   display: grid;
   gap: 6px;
@@ -706,8 +574,7 @@
   margin: 0;
 }
 
-/* a refusal, in the words of the thing refusing. --acc-stop-lit and not
-   --acc-stop, which is under the text floor and is a fill colour only. */
+/* a refusal in the words of the thing refusing, in --acc-stop-lit and not --acc-stop, which is under the text floor and is a fill colour only */
 .ui-err {
   margin: 6px var(--pan-in) 0;
   color: var(--acc-stop-lit);
@@ -715,15 +582,9 @@
   line-height: var(--lh);
 }
 
-/* ---- what are you making ---------------------------------------------------
-   This page opened straight into the twenty-one game pieces, so the only thing it
-   could make was the one thing it showed. The chooser is the first screen now, and
-   it is a list on purpose: a third group is a row rather than a redesign. */
+/* the chooser is the first screen rather than the twenty-one pieces, and it is a list on purpose so a third group is a row rather than a redesign */
 
-/* THE CONTENT LIVES IN A DIV INSIDE main, NOT ON IT. The page carries
-   body[data-view='editor'] main { display: flex }, which outranks a class, so styling main itself
-   left it a flex row: the cards went down the left in one column and the note sat out to the right of
-   them. Both times. */
+/* the content lives in a div inside main, not on main: body[data-view='editor'] main { display: flex } outranks a class, so styling main itself left a flex row with the cards in one column and the note out to the right */
 .uk-hold,
 .uk-pick {
   flex: 1 1 auto;
@@ -734,15 +595,13 @@
   display: grid;
   gap: 14px;
   padding-top: 44px;
-  /* START, not stretch: a stretched grid turned two cards into two eight-hundred-pixel columns with
-     the words stranded at the top and the bottom of each. */
+  /* start, not stretch: a stretched grid turned two cards into two eight hundred pixel columns with the words stranded at the top and the bottom of each */
   align-content: start;
   justify-items: start;
   padding: 28px 20px;
   max-width: 900px;
 }
-/* the cards are their own grid so the note below cannot be auto-placed into a third column, which is
-   exactly where it landed when it was a child of this one */
+/* the cards are their own grid so the note below cannot be auto-placed into a third column, which is exactly where it landed when it was a child of this one */
 .uk-ask {
   margin: 0 0 6px;
   font: 400 var(--fs-lead) var(--font-display);
@@ -768,8 +627,7 @@
   background: var(--raised);
   color: var(--ink);
   cursor: pointer;
-  /* a card is a door, so it lifts a little when the pointer is on it rather than only changing a
-     hairline: on a dark page a border colour alone is almost no feedback at all */
+  /* a card is a door, so it lifts a little when the pointer is on it rather than only changing a hairline: on a dark page a border colour alone is almost no feedback at all */
   transition: border-color 120ms ease, transform 120ms ease, background 120ms ease;
 }
 .uk-card:hover {
@@ -790,8 +648,7 @@
   color: var(--ink-3);
   line-height: 1.5;
 }
-/* said rather than left to be found: two cards invite the question and the honest
-   answer is that the rest is not built */
+/* said rather than left to be found: two cards invite the question and the honest answer is that the rest is not built */
 .uk-soon {
   margin: 2px 0 0;
   font: var(--fs-micro) var(--font-mono);
@@ -799,8 +656,7 @@
 }
 
 .uk-head {
-  /* takes the slack, so whatever trails it sits at the right edge the way every other header here
-     has its meta */
+  /* takes the slack, so whatever trails it sits at the right edge the way every other header here has its meta */
   margin-right: auto;
   font: var(--fs-micro) var(--font-mono);
   color: var(--ink-3);
@@ -820,10 +676,7 @@
   border-color: var(--edge-ctl);
 }
 
-/* THE GROUP CARD IS THE DASHBOARD'S CARD. .card, .card-art, .card-say, .card-nums all come from
-   arrive.css, which main.tsx loads for the whole product, so this adds the arrangement of the
-   pictures inside the frame and nothing else. A second card language on a third page is how a
-   product stops looking like one product. */
+/* the group card is the dashboard's card: .card, .card-art, .card-say and .card-nums come from arrive.css which main.tsx loads for the whole product, so this adds only the arrangement of the pictures inside the frame */
 .uk-group {
   cursor: pointer;
 }
@@ -855,13 +708,9 @@
   height: 100%;
   object-fit: cover;
 }
-/* THE PIECES ARE NOT ONE PICTURE, so they are laid out as what they are: three of the things this
-   account has actually drawn, resting on the dark the game rests them on, at their own size rather
-   than stretched to fill a frame they were never cut for. */
-/* THE PIECES ARE NOT ONE PICTURE. Four of them, close together and larger, reading as a kit resting
-   on the dark the game rests them on. Sparse and small read as a loading state. */
-/* the kit sits ON something, because chrome is drawn to be laid over a scene and a piece floating on
-   the page's own black has no edges at all */
+/* the pieces are not one picture, so they lie at their own size rather than stretched to fill a frame they were never cut for */
+/* four pieces, close together and larger, reading as a kit resting on the dark the game rests them on, because sparse and small read as a loading state */
+/* the kit sits on something, because chrome is drawn to be laid over a scene and a piece floating on the page's own black has no edges at all */
 .uk-art-pieces {
   align-content: center;
   justify-items: center;

@@ -53,13 +53,7 @@ export interface PlacedAsset {
   dirs?: Record<string, string[]>
   x: number
   y: number
-  /* WHICH OF TWO OVERLAPPING THINGS IS IN FRONT, and nothing else. Added to y to sort
-   * and never to place, so bringing a lamp forward over a puddle does not lift the lamp
-   * off the ground. Absent, which is nearly everything, means sort purely by where it
-   * stands. A bias rather than a layer number on purpose: a person walking past a tree
-   * still has to pass behind it and then in front of it, and a layer number would freeze
-   * that. See Editor.order.
-   */
+  /* which of two overlapping things draws in front, added to y for sorting only so nothing lifts off the ground; absent means sort by where it stands, and a bias beats a layer number that would freeze a walker passing behind a tree and then in front of it */
   z?: number
   scale: number
   sx: number
@@ -67,12 +61,9 @@ export interface PlacedAsset {
   rot: number
   fx: boolean
   fy: boolean
-  /* how this one MOVES, if it does. Data, not frames: see core/life.ts for why
-   * travel cannot be baked into an animation. Absent means it stands still,
-   * which is almost everything. */
+  /* how this one moves, if it does. data and never frames, see core/life.ts; absent means it stands still, which is almost everything */
   life?: Life | null
-  /* the extra appearances a sequence switches to, index 1 and up. Absent on
-   * everything that does not change. */
+  /* the extra appearances a sequence switches to, index 1 and up, absent on everything that does not change */
   looks?: AssetLook[]
   /* WHAT LOOK 0 IS CALLED. It cannot live on AssetLook because look 0 is the placement's own src/frames/dirs, so without this an author could name the boulder and not the troll it turns back into. */
   lookName?: string
@@ -132,26 +123,20 @@ export function lookNames(a: {
   return out.some((n) => n) ? out : []
 }
 
-/* look 0 is the placement itself, so index 1 is looks[0]. That off-by-one lives
- * here and nowhere else. */
+/* look 0 is the placement itself, so index 1 is looks[0], and that off-by-one lives here and nowhere else */
 export const lookOf = (a: PlacedAsset, i: number): AssetLook =>
   i > 0 && a.looks && a.looks[i - 1]
     ? a.looks[i - 1]
     : { kind: a.kind, src: a.src, frames: a.frames, fps: a.fps, dirs: a.dirs }
 
 /* A placement name is legal python and is never the shape of a machine id. The game resolves a reference against names AND ids, so allowing `a55` would let one string mean two objects on one map. */
-/* TYPE FIRST, and that is not pedantry. String(undefined) is "undefined",
- * which passes the pattern, so an unnamed placement exported as literally named
- * `undefined` and two of them collided on one map. Found by exporting one. */
+/* type first: String(undefined) is the text undefined and passes the pattern, so an unnamed placement exported as literally named `undefined` and two of them collided on one map */
 export const isPlacementName = (s: unknown): s is string =>
   typeof s === 'string' && /^[a-z][a-z0-9_]{0,47}$/.test(s) && !/^a[0-9]+$/.test(s)
 
-// an asset from an older save or bundle: before the transform fields only
-// `scale` existed, so absent ones fill in as the identity transform. Mutates
-// and returns the same object so array.map keeps references stable.
+// an asset from an older save or bundle: before the transform fields only `scale` existed, so absent ones fill in as the identity transform, and it mutates and returns the same object so array.map keeps references stable
 export function migrateAsset(a: PlacedAsset): PlacedAsset {
-  // a name that is not legal is not a name. Dropped rather than corrected, so
-  // nothing downstream can be handed a string a person did not actually type.
+  // a name that is not legal is not a name, dropped rather than corrected so nothing downstream is handed a string a person did not type
   if (typeof a.name !== 'string' || !isPlacementName(a.name)) delete a.name
   const s = Number(a.scale) > 0 ? Number(a.scale) : 0.25
   if (!(Number(a.sx) > 0)) a.sx = s
@@ -163,15 +148,13 @@ export function migrateAsset(a: PlacedAsset): PlacedAsset {
   /* THE FACE NAMES, DROPPED RATHER THAN CORRECTED: a name a person did not type is one their python will miss on. The look itself is never removed, because art counts through the slots and dropping one shifts every later face down. */
   if (!isLookName(a.lookName)) delete a.lookName
   for (const L of a.looks || []) if (L && !isLookName(L.name)) delete L.name
-  // an opaque string MAPVIS never reads. Whitespace-only is nothing, because a
-  // condition of " " would refuse a placement for ever with nothing to read
+  // an opaque string MAPVIS never reads, and whitespace-only is nothing because a condition of one space would refuse a placement for ever with nothing to read
   if (typeof a.when !== 'string' || !a.when.trim()) delete a.when
   else a.when = a.when.trim().slice(0, 240)
   return a
 }
 
-// the short human name of a placement: the png's basename, or the frame
-// folder's name for an animated one
+// the short human name of a placement: the png's basename, or the frame folder's name for an animated one
 export const assetLabel = (a: PlacedAsset): string => {
   const f = a.src || (a.frames && a.frames[0]) || ''
   const parts = f.split('/')
@@ -192,8 +175,7 @@ export const ANCHOR_SHAPES: AnchorShape[] = ['circle', 'rect', 'poly']
 
 export interface MapAnchor {
   id: number
-  /* author-typed, unique in this map, shaped like a python identifier so a typo
-   * is caught where it is written instead of failing silently at runtime */
+  /* author-typed, unique in this map, shaped like a python identifier so a typo is caught where it is written instead of failing silently at runtime */
   name: string
   kind: AnchorKind
   x: number
@@ -211,12 +193,9 @@ export interface MapAnchor {
   ring?: [number, number]
   /* door only: the map this leads to */
   to: string
-  /* door only: WHICH anchor in that map you arrive at. Without it every door
-   * into a map drops the player on its single global spawn, so three connected
-   * rooms all land you on the same tile no matter which way you came in. */
+  /* door only: which anchor in that map you arrive at, because without it every door into a map drops the player on its single global spawn */
   toAnchor?: string
-  /* when set, this anchor follows that placement instead of holding still, so
-   * dragging an npc takes its post with it and the name survives the edit */
+  /* when set, this anchor follows that placement instead of holding still, so dragging an npc takes its post with it and the name survives the edit */
   placement?: string
   /* post only: the heading whatever stands here faces */
   facing?: string
@@ -231,9 +210,7 @@ export interface MapAnchor {
 /* Kept so nothing that still says MapEvent has to change. */
 export type MapEvent = MapAnchor
 
-/* A name that is legal to type in python. Also used to derive a starting point
- * for a door that only ever had a label, which is every door made before
- * anchors existed. */
+/* a name that is legal to type in python, also used to derive a starting point for a door that only ever had a label */
 export function anchorName(s: string): string {
   const n = String(s || '')
     .toLowerCase()
@@ -273,8 +250,7 @@ export function simplifyPoly(pts: [number, number][], tol: number): [number, num
   const keep = new Array<boolean>(pts.length).fill(false)
   keep[0] = true
   keep[pts.length - 1] = true
-  // an explicit stack rather than recursion, because a long drag on a slow map
-  // is thousands of samples and a blown call stack loses the whole shape
+  // an explicit stack rather than recursion, because a long drag is thousands of samples and a blown call stack loses the whole shape
   const stack: [number, number][] = [[0, pts.length - 1]]
   while (stack.length) {
     const [a, b] = stack.pop() as [number, number]
@@ -340,9 +316,7 @@ export function migratePath(p: MapPath): MapPath | null {
   return {
     id: Math.round(Number(p.id)) || 0,
     name: p.name,
-    /* every route saved before kind existed was drawn by somebody laying a line
-     * on the ground, so walk is the honest reading of it and not merely the
-     * first entry in the list */
+    /* every route saved before kind existed was drawn by laying a line on the ground, so walk is the honest reading of it and not merely the first entry in the list */
     kind: (PATH_KINDS as string[]).includes(p.kind) ? p.kind : 'walk',
     points,
     closed: !!p.closed,
@@ -353,9 +327,7 @@ export function migratePath(p: MapPath): MapPath | null {
   }
 }
 
-/* A saved shot, made safe. A framing has to resolve to somewhere, so one that
- * names neither an anchor nor a point is dropped. Zoom is clamped rather than
- * refused: an author who typed 0 meant "close", not "divide by zero". */
+/* a saved shot made safe: one that names neither an anchor nor a point is dropped, and zoom is clamped rather than refused because a typed 0 meant close, not divide by zero */
 export function migrateFraming(f: MapFraming): MapFraming | null {
   if (!f || !isAnchorName(f.name)) return null
   const anchor = typeof f.anchor === 'string' && isAnchorName(f.anchor) ? f.anchor : ''
@@ -370,9 +342,7 @@ export function migrateFraming(f: MapFraming): MapFraming | null {
     dx: isFinite(Number(f.dx)) ? Math.round(Number(f.dx)) : 0,
     dy: isFinite(Number(f.dy)) ? Math.round(Number(f.dy)) : 0,
     zoom,
-    // carried, never invented: a shot from before this field existed has no
-    // canvas behind it any more, and guessing one would ship a wrong camera
-    // that looks authored
+    // carried, never invented: a shot from before this field existed has no canvas behind it any more, and guessing one would ship a wrong camera that looks authored
     ...(isFinite(Number(f.overFit)) && Number(f.overFit) > 0
       ? { overFit: Math.min(16, Math.max(0.05, Number(f.overFit))) }
       : {}),
@@ -388,9 +358,7 @@ export const ANCHOR_META_RESERVED = ['when', 'shape', 'derived', 'docId', 'shots
 export const STAND_REACH_BODIES = 2
 export const standReach = (charH: number) => Math.max(1, Math.round(charH)) * STAND_REACH_BODIES
 
-/* The nearest legal stand point to the one asked for. Truncated toward the
- * anchor rather than rounded, because rounding a point that sits exactly on the
- * limit can put it back outside and this has to be able to promise it did not. */
+/* the nearest legal stand point to the one asked for, truncated toward the anchor rather than rounded because rounding a point that sits exactly on the limit can put it back outside */
 export function clampStand(
   x: number,
   y: number,
@@ -426,9 +394,7 @@ export function migrateEvent(e: MapAnchor & { type?: string }, charH = defaultCf
   if (typeof e.toAnchor !== 'string' || !e.toAnchor) delete e.toAnchor
   if (typeof e.placement !== 'string' || !e.placement) delete e.placement
   if (typeof e.facing !== 'string' || !e.facing) delete e.facing
-  /* two numbers or nothing: half a point is not a place to stand. Held to
-   * STAND_REACH_BODIES here as well as at the setter, because a document
-   * written before the rule existed carries points that break it. */
+  /* two numbers or nothing, because half a point is not a place to stand, and held to STAND_REACH_BODIES here as well as at the setter since an older document carries points that break it */
   if (Array.isArray(e.stand) && e.stand.length === 2 && e.stand.every((n) => isFinite(Number(n))))
     e.stand = clampStand(e.x, e.y, [Number(e.stand[0]), Number(e.stand[1])], charH)
   else delete e.stand
@@ -529,8 +495,7 @@ export const MAP_CLASSES: MapClass[] = ['island', 'room', 'hall']
 
 /* Everything about the map that is not pixels and not a named point. title was a real column machine-filled with the slug and dropped before the export; class was known and never said; meta is the author's own bag and there was no map-level one. islandId HAS NO READER YET: the game declares it and never reads it, and the only binding is still a row in member-islands.json plus a deploy. MAPVIS emitting a field is not the consumer having a reader. */
 export interface MapProps {
-  /* what a player reads. The id is what code addresses, the same split anchors
-   * make between name and label, and for the same reason. */
+  /* what a player reads, where the id is what code addresses, the same split anchors make between name and label */
   title: string
   class: MapClass
   /* the subject this map is about, joining it to whatever code answers for that subject */
@@ -560,14 +525,12 @@ export interface MapPath {
   id: number
   /* author-typed, unique in this map, python-shaped, exactly like an anchor's */
   name: string
-  /* walk unless it says otherwise, because a route drawn by a person clicking
-   * ground is a walk until they say it is a boat */
+  /* walk unless it says otherwise, because a route drawn by clicking ground is a walk until it is called a boat */
   kind: PathKind
   points: [number, number][]
   /* a patrol returns to its first point; an approach does not */
   closed: boolean
-  /* whether walking it backwards is legal. A one-way route is the default,
-   * because a sail line into a berth is not a line out of one. */
+  /* whether walking it backwards is legal, one-way by default because a sail line into a berth is not a line out of one */
   twoWay: boolean
   /* the heading to hold on arrival, same vocabulary as an anchor's facing */
   facing?: string
@@ -583,8 +546,7 @@ export interface MapFraming {
   anchor: string
   x?: number
   y?: number
-  /* where the camera sits relative to what it is looking at, so the same shot
-   * restages at a different anchor and still frames the same way */
+  /* where the camera sits relative to what it is looking at, so the same shot restages at a different anchor and still frames the same way */
   dx: number
   dy: number
   zoom: number
@@ -598,14 +560,11 @@ export interface MapFraming {
 /* A NAMED SET OF ANCHORS, read rather than assumed. Without one nothing groups anchors and no call takes more than a single anchor string, so a reader wanting five steles hard-codes five and neither side can say whether that is all of them. Membership, not order; a rack below is the ordered one. An empty set is kept, because iterating it yields nothing, which is a correct answer. */
 export interface MapAnchorSet {
   id: number
-  /* author-typed, python-shaped, and unique across sets AND racks. See
-   * freeCollectionName in editor.ts for why those two share one tally. */
+  /* author-typed, python-shaped, unique across sets and racks, see freeCollectionName in editor.ts for why those two share one tally */
   name: string
   /* what a person reads, the same split anchors make between name and label */
   label?: string
-  /* anchor names. Not ids: an anchor's id is a document counter that does not
-   * survive being deleted and placed again, and the name is the only thing a
-   * member's python can hold. */
+  /* anchor names, not ids: an id is a document counter that does not survive being deleted and placed again, and the name is the only thing python can hold */
   members: string[]
   meta?: Record<string, unknown>
 }
@@ -624,8 +583,7 @@ export interface MapRack {
   name: string
   label?: string
   slots: RackSlot[]
-  /* the next slot number this rack will hand out. Stored rather than computed
-   * from the highest one present, so a number is never reused after a delete. */
+  /* the next slot number this rack will hand out, stored rather than computed from the highest one present so a number is never reused after a delete */
   slotNext: number
   meta?: Record<string, unknown>
 }
@@ -679,11 +637,9 @@ export function migrateRack(r: MapRack): MapRack | null {
   }
 }
 
-/* ONE STATE OF A VARIANT SET: a word, and the placement that is showing while
- * that word is the answer. */
+/* one state of a variant set: a word, and the placement showing while that word is the answer */
 export interface MapVariant {
-  /* what python sets. Folded through the same rule every other name in this
-   * tool goes through, because one namespace shape beats four. */
+  /* what python sets, folded through the same rule every other name in this tool goes through because one namespace shape beats four */
   name: string
   /* WHICH PLACEMENT, BY ITS AUTHOR NAME and never by its id: the id is a counter that does not survive a delete and a re-place. The game resolves both, so the name is the half that stays true. */
   placement: string
@@ -737,12 +693,9 @@ export function migrateVariantSet(v: MapVariantSet): MapVariantSet | null {
 /* A GROUP OF PLACEMENTS, WHICH WAS ALREADY A STRING AND NOW HAS A ROW, so there is somewhere to say something ABOUT one. It matters for one field so far: a dozen placements sharing a condition, where copying the string onto each means the thirteenth is added without it. The name IS the group string; a second identity would let a placement point at a group renamed out from under it. */
 export interface MapGroup {
   name: string
-  /* what a person reads. The group string itself is what the panel shows today
-   * and it is often a machine word like `props`. */
+  /* what a person reads, because the group string itself is what the panel shows today and it is often a machine word like `props` */
   label?: string
-  /* the condition every placement in this group inherits. Same contract as
-   * PlacedAsset.when: MAPVIS declares it, python decides what it means, and a
-   * placement's own `when` wins where it has one. */
+  /* the condition every placement in this group inherits, same contract as PlacedAsset.when: MAPVIS declares it, python decides what it means, and a placement's own `when` wins */
   when?: string
 }
 
@@ -806,8 +759,7 @@ export function variantsOntoMeta(
   meta?: Record<string, unknown>,
 ): Record<string, unknown> | undefined {
   const mine = variants.filter((v) => v.anchor === anchor)
-  // the same clearing the shots do, for the same reason: a projection that
-  // cannot remove its own key ships a set the document no longer holds
+  // the same clearing the shots do, for the same reason: a projection that cannot remove its own key ships a set the document no longer holds
   if (!mine.length) return without(meta, 'variants')
   const set: Record<string, unknown> = {}
   for (const v of mine)
@@ -818,8 +770,7 @@ export function variantsOntoMeta(
   return { ...(meta || {}), variants: set }
 }
 
-/* only the keys that came back as real numbers, so a corrupt or hand-edited
- * save cannot put NaN into the walk law and stop a character moving at all */
+/* only the keys that came back as real numbers, so a corrupt or hand-edited save cannot put NaN into the walk law and stop a character moving at all */
 const numbersOnly = (o: Partial<WalkCfg>): Partial<WalkCfg> => {
   const out: Record<string, number> = {}
   for (const [k, v] of Object.entries(o)) if (isFinite(Number(v))) out[k] = Number(v)
@@ -844,16 +795,12 @@ export class MaskDoc {
   /* THE BODY THIS MAP IS DRAWN FOR: six numbers, written into map.json and consumed by the game. They lived on the editor as a default that was never assigned again, so every map shipped an 18px character at 34px/s on ground squashed 0.72, island or room. They belong to the document because they describe the map. */
   walk: WalkCfg = defaultCfg()
   props: MapProps = defaultProps()
-  /* routes and shots, both addressed by name and both belonging to the map for
-   * the same reason the walk contract does: they describe this painting, so one
-   * save has to carry them or they are retyped on every open */
+  /* routes and shots, addressed by name and belonging to the map like the walk contract does, because they describe this painting and one save has to carry them or they get retyped on every open */
   paths: MapPath[] = []
   pathNext = 1
   framings: MapFraming[] = []
   framingNext = 1
-  /* the named collections of anchors, which belong to the map for the same
-   * reason: they are made of this map's names and nothing outside it can hold
-   * them. A set is unordered membership, a rack is addressed positions. */
+  /* the named collections of anchors, made of this map's own names so nothing outside can hold them: a set is unordered membership, a rack is addressed positions */
   sets: MapAnchorSet[] = []
   setNext = 1
   racks: MapRack[] = []
@@ -937,9 +884,7 @@ export class MaskDoc {
   undo() {
     const h = this.hist.pop()
     if (!h) return false
-    // a boundary growth is one z away like everything else: when the snapshot
-    // was taken at another size, the whole document re-lays at that size.
-    // Same-size undos deliberately do NOT touch spawn/occs, exactly as before.
+    // a boundary growth is one z away like everything else: when the snapshot was taken at another size the whole document re-lays at that size, and same-size undos deliberately do not touch spawn or occs
     if (h.w !== this.W || h.h !== this.H) {
       this.W = h.w
       this.H = h.h
@@ -1447,8 +1392,7 @@ export class MaskDoc {
           this.occNext =
             Number(d.occNext) > 0 ? Math.round(Number(d.occNext)) : this.occs.reduce((m, o) => Math.max(m, o.id), 0) + 1
         }
-        // kept outlines, sanitised the way an anchor's poly is: three points is
-        // the floor, because two are a line and a line fills nothing
+        // kept outlines, sanitised the way an anchor's poly is, with three points the floor because two are a line and a line fills nothing
         if (Array.isArray(d.stencils)) {
           this.stencils = d.stencils
             .filter((k) => k && isFinite(Number(k.id)) && Array.isArray(k.pts) && k.pts.length >= 3)
@@ -1485,9 +1429,7 @@ export class MaskDoc {
           Number(d.framingNext) > 0
             ? Math.round(Number(d.framingNext))
             : this.framings.reduce((m, f) => Math.max(m, f.id), 0) + 1
-        /* the same treatment for the two collections, and for the same reason: a
-         * set naming something that is not an anchor name at all, or a rack with
-         * two hooks numbered 3, has to come back as data or not at all. */
+        /* the same treatment for the two collections: a set naming something that is not an anchor name, or a rack with two hooks numbered 3, has to come back as data or not at all */
         this.sets = Array.isArray(d.sets) ? d.sets.map(migrateAnchorSet).filter((s): s is MapAnchorSet => !!s) : []
         this.setNext =
           Number(d.setNext) > 0 ? Math.round(Number(d.setNext)) : this.sets.reduce((m, s) => Math.max(m, s.id), 0) + 1

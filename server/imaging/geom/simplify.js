@@ -1,14 +1,8 @@
-// Two ways to throw points away without changing the shape.
-//
-// A hand-traced outline arrives with a point per pointer event, which is
-// hundreds for a shape whose corners number six. Every consumer walks the list,
-// so the cost is paid on every read forever.
+// two ways to throw points away without changing the shape, worth it because a hand-traced outline arrives with a point per pointer event, hundreds for a six corner shape, and every consumer walks the list on every read
 
 import { distToSegment, dist } from './vec.js'
 
-/* Douglas-Peucker keeps the point furthest from the chord and recurses. It
- * preserves corners exactly, which is what a building outline needs, and it can
- * leave long smooth curves looking faceted. */
+/* Douglas-Peucker keeps the point furthest from the chord and recurses, preserving corners exactly as a building outline needs, at the cost of leaving long smooth curves faceted */
 export function douglasPeucker(pts, tolerance) {
   if (pts.length < 3) return pts.slice()
 
@@ -36,9 +30,7 @@ export function douglasPeucker(pts, tolerance) {
   return pts.filter((_, i) => keep[i])
 }
 
-/* Visvalingam drops the point whose triangle with its neighbours is smallest,
- * repeatedly. It degrades gracefully: a shape simplified hard still looks like
- * itself, where Douglas-Peucker at a hard tolerance can collapse to a line. */
+/* Visvalingam repeatedly drops the point whose triangle with its neighbours is smallest, so a shape simplified hard still looks like itself where Douglas-Peucker at a hard tolerance can collapse to a line */
 export function visvalingam(pts, keepCount) {
   if (pts.length <= keepCount || pts.length < 3) return pts.slice()
   const live = pts.map((p, i) => ({ p, i, prev: i - 1, next: i + 1, area: 0 }))
@@ -88,8 +80,7 @@ export function dropDense(pts, minStep) {
   return out
 }
 
-/* a chain resampled to an even spacing, which is what a route wants before it
- * is walked so the steps are the same length everywhere */
+/* a chain resampled to even spacing, what a route wants before it is walked so the steps are the same length everywhere */
 export function resample(pts, step) {
   if (pts.length < 2) return pts.slice()
   const out = [pts[0].slice()]

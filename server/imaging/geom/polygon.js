@@ -1,13 +1,8 @@
-// Polygons: area, winding, containment and the things that follow from them.
-//
-// Every region an author draws arrives here as a list of points. Nothing below
-// assumes the list is closed, convex, or wound any particular way, because a
-// hand-drawn outline is none of those.
+// polygon area, winding and containment, none of which assumes the point list is closed, convex or wound any particular way, because a hand-drawn outline is none of those
 
 import { dist, sub, cross, distToSegment } from './vec.js'
 
-/* the shoelace sum. Signed, because the sign is the winding and the winding is
- * what tells a hole from a shape. */
+/* the shoelace sum, signed because the sign is the winding and the winding is what tells a hole from a shape */
 export function signedArea(pts) {
   let a = 0
   for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
@@ -41,8 +36,7 @@ export function centroid(pts) {
   return [x / (6 * a), y / (6 * a)]
 }
 
-/* ray casting. The >= on one side and < on the other is not a typo: it is what
- * stops a vertex exactly on the ray being counted twice. */
+/* ray casting, and the >= on one side with < on the other is not a typo, it stops a vertex sitting exactly on the ray being counted twice */
 export function contains(pts, p) {
   let inside = false
   for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
@@ -84,8 +78,7 @@ export function wind(pts, clockwise) {
   return isClockwise(pts) === clockwise ? pts.slice() : pts.slice().reverse()
 }
 
-/* three points in a line add nothing but a vertex to carry. Worth dropping
- * before a ring is stored, because every consumer walks it. */
+/* three points in a line add nothing but a vertex to carry, so drop them before a ring is stored because every consumer walks it */
 export function dropCollinear(pts, eps = 1e-9) {
   const out = []
   for (let i = 0; i < pts.length; i++) {

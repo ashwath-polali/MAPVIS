@@ -30,8 +30,7 @@ function fresh<T>(load: () => Promise<T>): () => Promise<T> {
         }
         if (!already && STALE.test(String((e as Error)?.message || e))) {
           window.location.reload()
-          // the reload owns the page from here; resolving would render into a
-          // document that is on its way out
+          // the reload owns the page from here, so resolving would render into a document on its way out
           return new Promise<T>(() => {})
         }
         throw e
@@ -46,9 +45,7 @@ const MapPage = lazy(fresh(() => import('./MapPage')))
 const World = lazy(fresh(() => import('./World')))
 const Ui = lazy(fresh(() => import('./Ui')))
 
-/* One loading mark for the whole app: four squares walking a ring on the pixel
- * grid. The bleeding ink blot it replaced was slow, soft and the wrong shape for
- * a tool made of hard pixels. */
+/* one loading mark for the whole app, four squares walking a ring on the pixel grid, because a soft bleeding blot is the wrong shape for a tool made of hard pixels */
 export function Ink({ what = '' }: { what?: string }) {
   return (
     <div className="inkwait" role="status" aria-live="polite">
@@ -130,8 +127,7 @@ export default function Shell() {
   let page: React.ReactNode = null
   if (route.path === '/') page = session.loading ? <Ink /> : session.user ? <Home /> : <Landing />
   else if (route.path === '/enter') page = <Enter />
-  // the one page that is not about a single map: where every map sits on the
-  // one ocean, which is a document the platform holds exactly one of
+  // the one page that is not about a single map: where every map sits on the one ocean, a document the platform holds exactly one of
   else if (route.path === '/world') page = <World />
   else if (mapMatch) page = <MapPage slug={mapMatch.slug} />
   else page = <Lost path={route.path} />

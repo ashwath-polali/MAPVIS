@@ -55,8 +55,7 @@ export function packAtlas(files, { max = MAX_TEXTURE_SIZE, pad = 1 } = {}) {
     for (let row = 0; row < it.h; row++) {
       const from = row * it.w * 4
       const to = ((it.y + row) * width + it.x) * 4
-      // decodePNG hands back a Uint8Array rather than a Buffer, so this is set()
-      // rather than copy(). Both are byte moves; only one of them exists here.
+      // decodePNG hands back a Uint8Array rather than a Buffer, so this is set() and not copy().
       rgba.set(it.data.subarray(from, from + it.w * 4), to)
     }
   }

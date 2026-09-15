@@ -1,11 +1,4 @@
-// Prove a change touched comments only.
-//
-// Strips every comment from the committed version of a file and from the working copy, normalises
-// whitespace, and compares. Identical means the code is untouched. Anything else is printed and the
-// file is named so it can be put back.
-//
-// usage: node codeonly.mjs <repoRoot> [ref]        checks every changed file
-//        node codeonly.mjs <repoRoot> <ref> <file> checks one
+// proves a change touched comments only: strip every comment from the committed version and from the working copy, normalise whitespace and compare, where identical means the code is untouched and anything else is printed with the file named so it can be put back
 import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -16,10 +9,7 @@ const only = process.argv[4] || ''
 
 const git = (args) => execFileSync('git', args, { cwd: root, encoding: 'utf8', maxBuffer: 1 << 28 })
 
-// ---- strippers --------------------------------------------------------------
-
-// a javascript/typescript scanner that knows strings, templates and regex literals, because a
-// dumber one eats "http://" out of a string and reports a code change that never happened
+// strippers: a javascript and typescript scanner that knows strings, templates and regex literals, because a dumber one eats the slashes of a url out of a string and reports a code change that never happened
 function stripJS(src) {
   let out = ''
   let i = 0

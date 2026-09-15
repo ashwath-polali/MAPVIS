@@ -1,16 +1,4 @@
-// Taking the animation off a thing, and putting it back, through the real route.
-
-//   node server/db/verify-switch.mjs
-
-// Nothing is generated: the frames are already bought, so the switch keeps them rather than binning
-// them and putting them back costs nothing. That is the whole reason this can exist at all.
-//
-// The route is driven here as the server drives it, with a scripted request and response, because
-// the risk in this feature is not arithmetic. It is the swap window: for a moment both a loose png
-// and a folder of frames sit under one name, and reading the wrong one records an animated thing as
-// a still with no frames, uploads nothing, then deletes the file every placement was pointing at.
-// That failure is silent, survives a reload, and is what the author sees as "it came back invisible".
-// So this walks the real disk and then asks the library what it ended up believing.
+// takes the animation off a thing and puts it back through the real route, node server/db/verify-switch.mjs. the risk is the swap window: a loose png and a folder of frames under one name, and reading the wrong one silently records a still and deletes the file every placement pointed at.
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -23,8 +11,7 @@ const no = (m) => {
   console.log(`  FAIL  ${m}`)
 }
 
-/* the route writes under WORK, and WORK is read once when api.mjs loads, so it is pointed at a
- * throwaway folder BEFORE the import. Without this the checks would edit the real work/ tree. */
+/* WORK is read once when api.mjs loads, so it is pointed at a throwaway folder before the import, or the checks would edit the real work/ tree */
 const WORK = fs.mkdtempSync(path.join(os.tmpdir(), 'mapvis-switch-'))
 process.env.MAPVIS_WORK = WORK
 
@@ -33,8 +20,7 @@ const { store } = await import('../store/blobs.mjs')
 const { libraryOf, mapIdFor } = await import('../store/platform.mjs')
 const { q, closeDb } = await import('./pool.mjs')
 
-/* a real png: the library reads the IHDR off the first bytes to size a row, and a colour in the
- * pixels so "which frame was kept" is answerable rather than assumed */
+/* a real png, because the library reads IHDR off the first bytes to size a row and a colour in the pixels answers which frame was kept */
 function png(w, h, tint) {
   const crcTable = []
   for (let n = 0; n < 256; n++) {
@@ -67,8 +53,7 @@ function png(w, h, tint) {
   ])
 }
 
-/* the route as the server calls it: api() hands the response back through res.end rather than by
- * returning, so the call is finished when end fires */
+/* api() hands the response back through res.end rather than by returning, so the call is finished when end fires */
 function post(pathname, payload) {
   return new Promise((resolve) => {
     const req = { url: pathname, method: 'POST', headers: {}, socket: {}, _body: Promise.resolve(payload) }
@@ -111,11 +96,7 @@ const tintOf = (file) => {
 }
 
 try {
-  /* THE MAP EXISTS FIRST, because it always does: nobody animates an asset in a map they have not
-   * made. It is created here rather than left to the route on purpose. mapIdFor REFUSES to create a
-   * map inside an http request carrying no signed-in user, which is what stops a stranger writing
-   * rows onto somebody else's account by naming a slug, and driving the route is exactly that shape
-   * of request. So the row is made out of band, the way the author's own session made it. */
+  /* the map row is made out of band because mapIdFor refuses to create a map inside an http request with no signed-in user, which is what stops a stranger writing rows onto somebody else's account by naming a slug */
   await mapIdFor(SLUG, { create: true })
 
   // ---- it starts as four frames --------------------------------------------
@@ -134,26 +115,21 @@ try {
     ? ok('and the picture kept is the FIRST frame, which is the one the author drew before asking for movement')
     : no(`the still holds tint ${fs.existsSync(still) ? tintOf(still) : 'nothing'}, expected the first frame's 10`)
 
-  /* NOTHING IS THROWN AWAY. Every one of those frames was paid for, so taking the movement off has
-   * to be a switch and not a deletion, or "bring it back" is a promise the tool cannot keep. */
+  /* nothing is thrown away: every frame was paid for, so taking the movement off has to be a switch and not a deletion, or bringing it back is a promise the tool cannot keep */
   {
     const kept = path.join(prev, NAME)
     const n = fs.existsSync(kept) ? fs.readdirSync(kept).filter((f) => f.endsWith('.png')).length : 0
     n === 4 ? ok('and all four frames are kept, so none of what was paid for is thrown away') : no(`${n} of 4 frames were kept`)
   }
 
-  // ---- and what the library believes ---------------------------------------
-  // The row being wrong is the silent half: a placement reads the row to know
-  // what to draw, so a row still calling this an animation points every copy of
-  // it at a folder that no longer exists.
+  // and what the library believes: a placement reads the row to know what to draw, so a row still calling this an animation points every copy at a folder that no longer exists
   {
     const it = await rowFor()
     it && it.kind === 'static' ? ok('the library records it as the still it now is') : no(`the row says ${it && it.kind}`)
     it && !(it.frames && it.frames.length) ? ok('and carries no frames') : no('a still row still lists frames')
   }
 
-  /* and the still really is in the store, because on a host work/ is empty and a row pointing at a
-   * file nobody uploaded is the same invisible asset by a different route */
+  /* and the still really is in the store, because on a host work/ is empty and a row pointing at a file nobody uploaded is the same invisible asset by another route */
   {
     const id = await mapIdFor(SLUG)
     let got = 0
@@ -185,8 +161,7 @@ try {
       : no(`the row came back as ${it && it.kind} with ${(it && it.frames && it.frames.length) || 0} frames`)
   }
 
-  /* THE FRAMES REACHED THE STORE TOO. This is the exact failure that made an animated asset
-   * invisible: the row was right and not one frame blob was ever uploaded. */
+  /* the frames reached the store too: the exact failure that made an animated asset invisible was a correct row with not one frame blob uploaded */
   {
     const id = await mapIdFor(SLUG)
     let got = 0
@@ -201,20 +176,12 @@ try {
     got === 4 ? ok('and all four frames are in the store, not only on this disk') : no(`${got} of 4 frames reached the store`)
   }
 
-  // ---- and it goes back and forth, not just once ---------------------------
-  // The first removal has a clean .prev to write into. The second does not, and
-  // prevPath numbers copies after the first, so a switch that could only read
-  // the unnumbered one would work once and then quietly stop.
+  // and it goes back and forth, not just once: the first removal has a clean .prev to write into, the second does not, and prevPath numbers copies after the first, so a switch that could only read the unnumbered one would work once and then stop
   {
     const off2 = await post('/api/asset-animation', { id: SLUG, name: NAME, on: false })
     off2.code === 200 ? ok('it comes off a second time') : no(`the second removal answered ${off2.code} ${JSON.stringify(off2.body)}`)
 
-    /* AND THE FRAMES ARE OUT OF THE STORE, which is what this round trip exists to prove. They used
-     * to be left there: hydrateMap pulls a map's whole library down onto an empty work/ before any
-     * route reads the disk, so the folder came back beside the png, the folder is believed over a
-     * png of the same name, and the thing was animated again on the very next request. On a host,
-     * where work/ is always empty and a hydrate always runs, removing an animation did not stick at
-     * all. It read as "I took it off and it came back on its own". */
+    /* and the frames are out of the store. they used to be left there, and hydrateMap pulls a map's whole library onto an empty work/ before any route reads the disk, so the folder came back beside the png, a folder is believed over a png of the same name, and removal never stuck on a host. */
     {
       const id = await mapIdFor(SLUG)
       let left = 0
@@ -249,10 +216,7 @@ try {
       : no(`a never-animated still answered ${on.code} ${JSON.stringify(on.body)}`)
   }
 
-  // ---- a set of headings keeps its headings --------------------------------
-  // A walking figure is not a frame folder: it is one picture set per heading,
-  // and flattening it to a single png would throw seven directions away. Taking
-  // the movement off a figure means the standing rotation it was drawn with.
+  // a set of headings keeps its headings: a walking figure is one picture set per heading, so flattening it to a single png would throw seven directions away
   {
     const SET = 'zz-porter'
     const sdir = path.join(lib, SET)
@@ -277,8 +241,7 @@ try {
     heads2.every((h) => meta.dirs[h].length === 1)
       ? ok('each holding one picture, which is the standing rotation it was drawn with')
       : no('a heading came back with more than one picture, so it still moves')
-    /* THE RIG IS THE WAY BACK. A set with no character id can never be given another motion, so
-     * losing it here would make this a one-way door disguised as a switch. */
+    /* the rig is the way back: a set with no character id can never be given another motion, so losing it here makes this a one-way door disguised as a switch */
     meta.characterId === 'char-abc' ? ok('and the character it was drawn from is carried across') : no('the character id was dropped, so it can never be animated again')
     /* the first picture of each heading, not an arbitrary one: the others were deleted */
     heads.every((h, hi) => fs.existsSync(path.join(sdir, `${h}-0.png`)) && tintOf(path.join(sdir, `${h}-0.png`)) === 30 + hi * 3)
@@ -297,9 +260,7 @@ try {
   {
     const r = await post('/api/asset-animation', { id: SLUG, name: 'zz-nothing-here', on: false })
     r.code === 404 ? ok('a name that is not in the library is a 404 and not a crash') : no(`an unknown name answered ${r.code}`)
-    /* NO NAME AT ALL IS REFUSED, and this is not a formality: cleanName falls back to the word
-     * "asset" rather than to nothing, so a guard written on the cleaned name would have let a
-     * nameless request through to flatten whatever row happened to be called asset. */
+    /* no name at all is refused, because cleanName falls back to the word asset rather than to nothing, so a guard on the cleaned name would let a nameless request flatten whatever row is called asset */
     const n = await post('/api/asset-animation', { id: SLUG, on: false })
     n.code === 400 ? ok('and a request with no name is refused before any row is read') : no(`a nameless request answered ${n.code} ${JSON.stringify(n.body)}`)
   }

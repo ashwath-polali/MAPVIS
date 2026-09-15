@@ -1,8 +1,6 @@
 /* the publish gate refuses rather than warns, because a version is immutable and shipping a dead door costs a version number nobody can correct; the contract lives here, per map class */
 
-/* what a map of each class has to carry before it is worth publishing. Kept
- * small on purpose: every line here is a thing an author cannot ship without,
- * and a gate that refuses for taste is a gate people learn to route around. */
+/* what a map of each class has to carry before it is worth publishing, kept small on purpose because a gate that refuses for taste is a gate people learn to route around */
 const NEEDS = {
   island: [],
   // you have to be able to leave a place you can only be inside of
@@ -10,8 +8,7 @@ const NEEDS = {
   hall: ['a door out'],
 }
 
-/* one edit distance, capped, for naming the nearest thing to a misspelt slug.
- * Bounded rather than clever: the registry is tens of maps, not thousands. */
+/* one edit distance, capped, for naming the nearest thing to a misspelt slug, bounded rather than clever because the registry is tens of maps and not thousands */
 function near(want, options) {
   let best = null
   let bestD = Infinity
@@ -38,9 +35,7 @@ function dist(a, b) {
   return prev[n]
 }
 
-/* The game's own standability test, transcribed from check-anchors.mjs, which
- * transcribed it from the walk law: the hip band either side of the feet, so
- * nobody balances on a single legal pixel. */
+/* the game's own standability test from the walk law, the hip band either side of the feet, so nobody balances on a single legal pixel */
 function standTest(levels, mapJson) {
   const enc = mapJson.encoding || {}
   const tol = enc.stepTolerance ?? 10
@@ -93,9 +88,7 @@ function reachableFrom(sx, sy, t) {
   return seen
 }
 
-/* Is any pixel inside this anchor's ring both standable and in the reached set.
- * The ring rather than the centre, because a door's centre is legitimately the
- * painted archway and the walkable pixels are the mat in front of it. */
+/* is any pixel in this anchor's ring both standable and reached, the ring rather than the centre because a door's centre is the painted archway and the walkable pixels are the mat in front of it */
 function ringOk(a, t, reached) {
   const r = a.r || 14
   const { w, standable } = t
@@ -111,9 +104,7 @@ function ringOk(a, t, reached) {
   return { stand, got }
 }
 
-/* the kinds a body has to be able to walk up to. A region and a trigger fire by
- * being entered and a spawn is where you begin, so all three are checked for
- * standable ground and not for a reachable ring. */
+/* the kinds a body has to walk up to, and a region, a trigger and a spawn all fire by being stood in, so those three are checked for standable ground and not for a reachable ring */
 const INTERACTIVE = new Set(['door', 'post', 'point'])
 
 /* a problem stops the publish and a warning goes in the log, and nothing here throws because the caller decides what a problem costs */
@@ -134,10 +125,7 @@ export function gateMap({ mapJson, anchors, levels, slugs }) {
         `"${a.name}" leads to "${a.to}", which is not published yet, so the game will say the way is barred.`,
       )
   }
-  // toAnchor is checked by the caller, which is the only side that can ask
-  // another map what it is called. Anything it found comes in as a problem.
-
-  // ---- what this class of map has to carry --------------------------------
+  // toAnchor is checked by the caller, the only side that can ask another map what it is called, so anything it found arrives as a problem, and what follows is what this class of map has to carry
   const doorsOut = anchors.filter((a) => a.kind === 'door' && a.to)
   for (const need of NEEDS[cls] || []) {
     if (need === 'a door out' && !doorsOut.length)
@@ -153,8 +141,7 @@ export function gateMap({ mapJson, anchors, levels, slugs }) {
   }
   const t = standTest(levels, mapJson)
 
-  /* WHERE THE PLAYER BEGINS. A spawn anchor silently wins over map.spawn in the
-   * game's own arrival(), so that is the order it is resolved in here too. */
+  /* where the player begins, and a spawn anchor silently wins over map.spawn in the game's own arrival(), so that is the order it is resolved in here too */
   const spawnAnchor = anchors.find((a) => a.kind === 'spawn')
   const sx = spawnAnchor ? spawnAnchor.x : mapJson.spawn?.[0]
   const sy = spawnAnchor ? spawnAnchor.y : mapJson.spawn?.[1]
@@ -163,8 +150,7 @@ export function gateMap({ mapJson, anchors, levels, slugs }) {
     return { problems, warnings }
   }
   if (!t.standable(sx, sy)) {
-    // walk out from the start looking for the nearest pixel that does work, so
-    // the fix is a direction rather than a hunt
+    // walk out from the start looking for the nearest pixel that does work, so the fix is a direction rather than a hunt
     let best = null
     let bestD = Infinity
     for (let y = 0; y < t.h; y++)
@@ -198,9 +184,7 @@ export function gateMap({ mapJson, anchors, levels, slugs }) {
           `Something is fencing it off: try fix gaps, then check reach.`,
       )
     }
-    /* the stand-at point is where a body actually ends up, so it is the pixel
-     * that has to work. A ring with floor in it and a stand-at on the tabletop
-     * is a station that walks the player into the furniture. */
+    /* the stand-at point is where a body ends up so it is the pixel that has to work, and a ring with floor in it plus a stand-at on the tabletop walks the player into the furniture */
     if (a.stand && !t.standable(a.stand[0], a.stand[1]))
       problems.push(
         `"${a.name}" is used from (${a.stand[0]},${a.stand[1]}), which is not somewhere a body can stand.`,

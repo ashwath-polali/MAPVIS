@@ -29,8 +29,7 @@ export interface Patch {
   h: number
 }
 
-/* Every rule takes all of these and ignores what does not apply to it.
- * direction is degrees like a compass: 0 up, 90 right, 180 down, 270 left. */
+/* every rule takes all of these and ignores what does not apply to it; direction is degrees like a compass, 0 up, 90 right, 180 down, 270 left */
 export interface EffectParams {
   width: number
   height: number
@@ -44,9 +43,7 @@ export interface EffectParams {
   seed: number
   // spray only: the sliding foam band where the particles are thrown from
   churn?: boolean
-  // custom only: the knobs the written recipe declared for itself, each already
-  // held inside the range it declared. They ride here so one params object still
-  // saves, reopens and re-renders the way every other effect's does.
+  // custom only: the knobs the written recipe declared for itself, each already held inside its declared range, riding here so one params object still saves, reopens and re-renders the way every other effect's does
   custom?: Record<string, number>
 }
 
@@ -61,8 +58,7 @@ const BY_TYPE: Record<EffectType, Partial<EffectParams>> = {
   swirl: { width: 64, height: 48, count: 4, size: 1, spread: 1, direction: 0 },
 }
 
-// a written recipe sets its own canvas in the plan; this is only what stands in
-// when it leaves a field out
+// a written recipe sets its own canvas in the plan, so this is only what stands in when it leaves a field out
 const CUSTOM_START: Partial<EffectParams> = { width: 64, height: 64, count: 8, size: 1, spread: 1, direction: 0 }
 
 const BASE: EffectParams = {
@@ -88,9 +84,7 @@ const num = (v: unknown, fallback: number) => {
 export const isEffectType = (s: unknown): s is EffectType =>
   typeof s === 'string' && (EFFECT_TYPES as string[]).includes(s)
 
-/* The plan's loose numbers turned into a full, sane param set. Every caller
- * goes through here, so a slider, a plan and a reopened effect.json all land in
- * the same shape. */
+/* the plan's loose numbers turned into a full, sane param set; every caller goes through here, so a slider, a plan and a reopened effect.json all land in the same shape */
 export function fillParams(
   type: AnyEffectType,
   raw?: Record<string, unknown> | Partial<EffectParams> | null,
@@ -112,9 +106,7 @@ export function fillParams(
   }
   if (type === 'spray') p.churn = r.churn === undefined ? !!d.churn : !!r.churn
   if (type === 'custom') {
-    // the plan hands the knobs back flat in params; a reopened effect.json has
-    // them under custom. Read either, and hold each one inside the range its
-    // own control declared rather than any of the fixed five.
+    // the plan hands the knobs back flat in params and a reopened effect.json has them under custom, so read either and hold each inside the range its own control declared rather than any of the fixed five
     const from = r.custom && typeof r.custom === 'object' ? (r.custom as Record<string, unknown>) : r
     const c: Record<string, number> = {}
     for (const k of controls || []) {
@@ -127,9 +119,7 @@ export function fillParams(
   return p
 }
 
-/* Every number a written recipe can read as p.<key>: the canvas and cycle
- * fields, then its own knobs on top. Flat on purpose, so the body never has to
- * know which half a name came from. */
+/* every number a written recipe can read as p.<key>: the canvas and cycle fields, then its own knobs on top, flat so the body never has to know which half a name came from */
 export function flatParams(p: EffectParams): Record<string, number> {
   const out: Record<string, number> = {
     width: p.width,
@@ -150,14 +140,11 @@ export function flatParams(p: EffectParams): Record<string, number> {
 // the cycle plays once over `frames` frames, so speed IS the playback rate
 export const fpsFor = (p: EffectParams) => clampI(6 * p.speed, 2, 20)
 
-/* The keyword fall-back, shared by the client and mirrored on the server: the
- * ask alone decides the rule when the planner is not reachable. It is never
- * clever, it just never leaves the user with nothing. */
+/* the keyword fall-back, shared by the client and mirrored on the server: the ask alone decides the rule when the planner is not reachable, never clever but never leaving the user with nothing */
 export function guessType(ask: string): EffectType {
   const s = String(ask).toLowerCase()
   if (/smoke|steam|vapou?r|bubble|plume|fume|mist|incense/.test(s)) return 'rise'
-  // swirl sits after rise so swirling smoke is still smoke, and before the rest
-  // because a vortex has no other word for itself
+  // swirl sits after rise so swirling smoke is still smoke, and before the rest because a vortex has no other word for itself
   if (/swirl|spiral|vortex|portal|whirl|twist|warp|gateway/.test(s)) return 'swirl'
   // twinkle goes before spray on purpose: a sparkle contains a spark
   if (/sparkle|glint|twinkle|shimmer|firefl|star|glitter/.test(s)) return 'twinkle'
@@ -185,8 +172,7 @@ const COLOR_RAMPS: Record<string, string[]> = {
   gold: ['#fff6d8', '#ffd873', '#d99a1c', '#6d4508'],
 }
 
-// the first colour word in the ask, or nothing. Leftmost wins, so "purple
-// portal with green sparks" is a purple portal.
+// the first colour word in the ask, or nothing; leftmost wins, so purple portal with green sparks is a purple portal
 export function guessColors(ask: string): string[] {
   const m = /\b(purple|violet|green|blue|red|orange|yellow|pink|cyan|teal|white|black|gold)\b/i.exec(String(ask))
   return m ? COLOR_RAMPS[m[1].toLowerCase()].slice() : []
@@ -288,8 +274,7 @@ export function samplePalette(patch: Patch, want = 6): string[] {
     const c: RGB = [e.r / e.n, e.g / e.n, e.b / e.n]
     if (far(c)) picked.push(c)
   }
-  // a flat patch can hand back one colour; the ramp handles that, but two
-  // entries make every rule's colour picking read better
+  // a flat patch can hand back one colour and the ramp handles that, but two entries make every rule's colour picking read better
   if (!picked.length) picked.push([255, 255, 255])
   picked.sort((a, b) => lum(b) - lum(a))
   return picked.map(toHex)
@@ -307,8 +292,7 @@ function mulberry32(seed: number) {
   }
 }
 
-// the 4x4 ordered matrix: how a gradient stays pixel art instead of turning
-// into a smooth ramp
+// the 4x4 ordered matrix: how a gradient stays pixel art instead of turning into a smooth ramp
 const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5]
 const bayer = (x: number, y: number) => (BAYER[(y & 3) * 4 + (x & 3)] + 0.5) / 16
 
@@ -317,8 +301,7 @@ const dirVec = (deg: number): [number, number] => {
   return [Math.sin(r), -Math.cos(r)]
 }
 
-/* One frame as raw rgba. Every rule writes pixels by hand: no blending engine,
- * no soft edges, nothing that could sneak an antialiased fringe into pixel art. */
+/* one frame as raw rgba; every rule writes pixels by hand, with no blending engine and no soft edges that could sneak an antialiased fringe into pixel art */
 class Frame {
   data: Uint8ClampedArray
   constructor(
@@ -327,8 +310,7 @@ class Frame {
   ) {
     this.data = new Uint8ClampedArray(w * h * 4)
   }
-  // where two particles land on one pixel the brighter wins, so a droplet crossing
-  // mist still reads as a droplet
+  // where two particles land on one pixel the brighter wins, so a droplet crossing mist still reads as a droplet
   put(x: number, y: number, c: RGB, a: number) {
     if (a <= 0.02) return
     const xi = Math.round(x)
@@ -373,8 +355,7 @@ function flowFrames(p: EffectParams, colors: string[]): HTMLCanvasElement[] {
   for (let i = 0; i < nLanes; i++) {
     const span = SPANS[Math.min(SPANS.length - 1, Math.floor(rnd() * SPANS.length))]
     const f = clamp(0.3 + 0.25 * p.size + rnd() * 0.15, 0.15, 0.9)
-    // a colour off the ramp, biased toward the light end the way the reference
-    // weighted white over the deep blue-gray
+    // a colour off the ramp, biased toward the light end the way the reference weighted white over the deep blue-gray
     const ci = Math.min(pal.length - 1, Math.floor(Math.pow(rnd(), 1.5) * pal.length))
     lanes.push({
       live: rnd() < density,
@@ -485,8 +466,7 @@ function buildBlob(size: number, colors: string[], seed: number, lift: number): 
       const t = clamp(0.5 + k * 0.8 + n, 0, 1)
       const idx = clampI(Math.floor(t * (pal.length - 1) + bayer(x, y)), 0, pal.length - 1)
       let col = pal[idx]
-      // the rim: any pixel whose lower-right neighbour is empty gets a cooler,
-      // slightly deeper edge, so the puff reads round without an outline pass
+      // the rim: any pixel whose lower-right neighbour is empty gets a cooler, slightly deeper edge, so the puff reads round without an outline pass
       const edge =
         x + 1 >= size || !m[y * size + x + 1] || y + 1 >= size || !m[(y + 1) * size + x]
       if (edge) col = scaleCol(col, 0.86, 0.87, 0.92)
@@ -527,8 +507,7 @@ function riseFrames(p: EffectParams, colors: string[], patch?: Patch | null, own
   const { width: W, height: H } = p
   const n = clampI(p.count, 2, 8)
   const base = clampI(W * 0.52 * p.size, 4, Math.max(4, Math.floor(W / 1.25)))
-  // the lift is there to separate a puff cut from the ground behind it; a ramp
-  // the effect brought itself is already separate, so it barely gets one
+  // the lift is there to separate a puff cut from the ground behind it, so a ramp the effect brought itself is already separate and barely gets one
   const blob = buildBlob(base, colors, p.seed * 2654 + 7, own ? 0.2 : 0.65)
   const [dx, dy] = dirVec(p.direction)
   const perp: [number, number] = [-dy, dx]
@@ -556,8 +535,7 @@ function riseFrames(p: EffectParams, colors: string[], patch?: Patch | null, own
       const a = a0 + (slotA[k + 1] - a0) * t
       const s = s0 + (slotS[k + 1] - s0) * t
       const size = Math.max(3, Math.round(base * s))
-      // the newborn is solid as soon as it clears the rim; the top one holds,
-      // then lets go, which is evaporation rather than a dimmer
+      // the newborn is solid as soon as it clears the rim, and the top one holds then lets go, which is evaporation rather than a dimmer
       let al = 1
       if (k === -1) al = Math.min(1, t * 1.6)
       else if (k === n - 1) al = 1 - t * t
@@ -627,8 +605,7 @@ function sprayFrames(p: EffectParams, colors: string[]): HTMLCanvasElement[] {
       const u = (t + q.phase) % 1
       // travel with a slow-down at the far end, the way spray loses momentum
       const a = q.along * (1 - Math.pow(1 - u, 1.6))
-      // the sideways travel grows while the particle climbs, plus a lazy
-      // wobble so the column never reads as a straight line of dots
+      // the sideways travel grows while the particle climbs, plus a lazy wobble so the column never reads as a straight line of dots
       const b = q.arc * u * acrossScale + Math.sin(u * 6.283 + q.phase * 9) * 0.9
       // in fast, out slow, gone by the end of the life so the loop closes clean
       const al = Math.pow(Math.sin(Math.PI * u), 0.7) * p.intensity
@@ -640,9 +617,7 @@ function sprayFrames(p: EffectParams, colors: string[]): HTMLCanvasElement[] {
   return out
 }
 
-/* The churn where the water lands: short foam dashes sliding outward and
- * fading. At map zoom a droplet is two screen pixels, so what actually reads as
- * motion is this band shifting, the same trick the engine's ocean foam uses. */
+/* the churn where the water lands: short foam dashes sliding outward and fading, because at map zoom a droplet is two screen pixels and what reads as motion is this band shifting, the same trick the engine's ocean foam uses */
 function churnBand(
   fr: Frame,
   t: number,
@@ -721,8 +696,7 @@ function twinkleFrames(p: EffectParams, colors: string[]): HTMLCanvasElement[] {
   return out
 }
 
-// the patch the shear works on, centred into the effect's own canvas. Without
-// one, a lumpy clump of the sampled colours stands in, so the rule always draws
+// the patch the shear works on, centred into the effect's own canvas; without one a lumpy clump of the sampled colours stands in, so the rule always draws
 function shearSource(p: EffectParams, colors: string[], patch?: Patch | null): Uint8ClampedArray {
   const { width: W, height: H } = p
   const out = new Uint8ClampedArray(W * H * 4)
@@ -833,30 +807,23 @@ function swirlFrames(p: EffectParams, colors: string[], own: boolean): HTMLCanva
   const rnd = mulberry32(p.seed * 15731 + 17)
   const rings = clampI(p.count, 2, 10)
   const pal = own ? ownRamp(colors, rings + 2) : ramp(colors, rings + 2)
-  // the brightest entry, pushed a little further when the ramp is the effect's
-  // own, so the middle of a gateway burns rather than sits
+  // the brightest entry, pushed a little further when the ramp is the effect's own, so the middle of a gateway burns rather than sits
   const core = own ? mix(pal[0], [255, 255, 255], 0.4) : pal[0]
   const cx = W / 2
   const cy = H / 2
-  // at size 1 the ellipse fills the canvas exactly, whichever side is tighter.
-  // Above 1 it runs off the edges, the same way a glow's radius does, so size
-  // stays a way to overfill a canvas on purpose rather than a second width.
+  // at size 1 the ellipse fills the canvas exactly on whichever side is tighter, and above 1 it runs off the edges the way a glow's radius does, so size stays a way to overfill a canvas on purpose rather than a second width
   const R = Math.min(W / 2, H / (2 * SWIRL_SQUASH)) * clamp(p.size, 0.2, 2)
   const rx = Math.max(2, R)
   const ry = Math.max(1.5, R * SWIRL_SQUASH)
-  // how far in from the rim the bands reach: spread pulls them toward the
-  // centre, leaving a smaller core hole
+  // how far in from the rim the bands reach: spread pulls them toward the centre, leaving a smaller core hole
   const rc = clamp(0.3 / clamp(p.spread, 0.3, 3), 0.06, 0.6)
   const bw = (1 - rc) / rings
-  // direction tilts the ellipse, which is the only spatial thing a flat disc
-  // has left to say. Everything else about it is radial.
+  // direction tilts the ellipse, the only spatial thing a flat disc has left to say, because everything else about it is radial
   const tilt = (p.direction * Math.PI) / 180
   const ctl = Math.cos(tilt)
   const stl = Math.sin(tilt)
   const TAU = Math.PI * 2
-  // per ring: its arm count, and the radians it has turned by the end of the
-  // cycle. Both are independent of the frame count, which is what keeps a
-  // 16-frame render a resampling of the 8-frame one rather than a new pattern.
+  // per ring: its arm count and the radians it has turned by the end of the cycle, both independent of the frame count, which is what keeps a 16-frame render a resampling of the 8-frame one rather than a new pattern
   const arms: number[] = []
   const turn: number[] = []
   for (let i = 0; i < rings; i++) {
@@ -899,8 +866,7 @@ function swirlFrames(p: EffectParams, colors: string[], own: boolean): HTMLCanva
         const u = (((th % cell) + cell) % cell) / cell
         const duty = clamp(0.68 - 0.03 * i, 0.32, 0.72)
         if (u >= duty) continue
-        // an arc is brightest in its middle and tapers at both ends, the way a
-        // streak does in flow
+        // an arc is brightest in its middle and tapers at both ends, the way a streak does in flow
         const k = Math.pow(Math.sin(Math.PI * (u / duty)), 0.6)
         const col = pal[clampI(1 + Math.round((i / Math.max(1, rings - 1)) * (pal.length - 2)), 0, pal.length - 1)]
         const a = p.intensity * k * (1 - 0.25 * ((rr - rc) / (1 - rc))) * 0.95

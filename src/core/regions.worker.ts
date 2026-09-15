@@ -55,9 +55,7 @@ ctx.onmessage = (e: MessageEvent<RegionJob>) => {
     }
   }
 
-  // ---- absorb the residue ----------------------------------------------
-  // a region under minPx joins whichever neighbouring region it touches most.
-  // Two passes so chains of specks settle into their surroundings.
+  // absorb the residue: a region under minPx joins whichever neighbouring region it touches most, two passes so chains of specks settle into their surroundings
   for (let pass = 0; pass < 2; pass++) {
     const votes = new Map<number, Map<number, number>>()
     for (let i = 0; i < n; i++) {

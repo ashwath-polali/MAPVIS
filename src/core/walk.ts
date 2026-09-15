@@ -19,8 +19,7 @@ export const defaultCfg = (): WalkCfg => ({
   yScale: 0.72,
 })
 
-// test-stage feel only: the exported map.json speed stays
-// the contract value; the tool's walk test just moves at this multiple of it
+// test-stage feel only: the exported map.json speed stays the contract value and the tool's walk test just moves at this multiple of it
 export const TEST_SPEED = 1.9
 
 export const near = (cfg: WalkCfg, a: number, b: number) => Math.abs(a - b) <= cfg.near
@@ -123,9 +122,7 @@ export interface ReachResult {
   orphans: { px: number; rect: [number, number, number, number]; level: number }[]
 }
 
-/* Walk-flood from the spawn using the engine's own legality test, then list
- * every walkable island the player can never get to. This is the check that
- * would have caught the 1px breakwater seam before a person noticed it. */
+/* walk-flood from the spawn using the engine's own legality test, then list every walkable island the player can never reach, the check that would have caught the 1px breakwater seam before anybody noticed it */
 export function checkReach(doc: MaskDoc, cfg: WalkCfg, sx?: number, sy?: number): ReachResult {
   const x0 = sx == null ? doc.spawn[0] : sx
   const y0 = sy == null ? doc.spawn[1] : sy

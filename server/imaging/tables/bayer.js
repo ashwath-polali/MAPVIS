@@ -1,12 +1,4 @@
-// Bayer threshold matrices, 2 through 16.
-//
-// The recurrence that builds these is four lines, and it is in dither/ordered.js
-// for anyone who wants an arbitrary size. These four are here because they are
-// the four anybody actually uses and rebuilding a 16 costs 256 recursive calls
-// to answer a question with a fixed answer.
-//
-// Values run 0 to n*n-1. Divide by n*n and subtract a half to get the signed
-// offset an ordered dither adds.
+// Bayer threshold matrices 2 through 16, values 0 to n*n-1: divide by n*n and subtract a half for the signed offset an ordered dither adds. dither/ordered.js has the recurrence for any size, these four are data because rebuilding a 16 costs 256 recursive calls.
 
 export const BAYER_2 = new Uint16Array([
   0, 2, 3, 1,

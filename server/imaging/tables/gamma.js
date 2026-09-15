@@ -1,13 +1,4 @@
-// The sRGB transfer function, both ways, at the two resolutions that matter.
-//
-// LINEAR_FROM_BYTE turns the 256 encoded values into light. It is the hot path:
-// every blend, blur and resample in this library starts by looking a pixel up
-// here, and a pow() per channel per pixel is several times the cost of the
-// arithmetic around it.
-//
-// BYTE_FROM_LINEAR_12 goes back the other way at twelve bits, which is enough
-// that rounding to eight bits afterwards is exact. An eight bit reverse table
-// loses the darkest four steps, where a shading ramp does its work.
+// the sRGB transfer function both ways: LINEAR_FROM_BYTE is the hot path because a pow per channel per pixel costs several times the arithmetic around it, and BYTE_FROM_LINEAR_12 is twelve bits because an eight bit reverse table loses the darkest four steps, where a shading ramp does its work.
 
 export const LINEAR_FROM_BYTE = new Float64Array([
   0.000000000, 0.000303527, 0.000607054, 0.000910581, 0.001214108, 0.001517635,

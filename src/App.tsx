@@ -25,9 +25,7 @@ import {
   type StairRegion,
 } from './core/mask'
 
-/* What each kind is FOR, in the words an author would use. Shown on the kind
- * buttons and under the form, because "post" and "trigger" mean nothing until
- * somebody says what the engine does with them. */
+/* what each anchor kind is for, in an author's words, shown on the kind buttons and under the form because post and trigger mean nothing until somebody says what the engine does with them */
 const ANCHOR_WHAT: Record<AnchorKind, string> = {
   point: 'a spot to walk to · guide_to("name")',
   region: 'an area to be inside · fires when the player is in it',
@@ -57,17 +55,14 @@ const ANCHOR_ICON: Record<AnchorKind, IconName> = {
   trigger: 'trigger',
 }
 
-/* what a route's kind means, said once and read by the chips in the form and by
- * the tooltip on the row, so the two cannot drift into two answers */
+/* what a route's kind means, said once and read by both the chips in the form and the tooltip on the row, so the two cannot drift into two answers */
 const PATH_WHAT: Record<(typeof PATH_KINDS)[number], string> = {
   walk: 'a body walks it, so every leg is held to ground it can stand on',
   sail: 'it leaves the floor on purpose · no ground check',
   camera: 'a camera move · no feet, so nothing to check',
 }
 import { Help } from './ui/Help'
-/* what a person reads, given a thing whose `name` is a python identifier. This
-   is the surface that CREATES those identifiers, which makes it the last place
-   that should have been printing one where a name belongs. */
+/* what a person reads for a thing whose `name` is a python identifier, because the surface that creates those identifiers is the last place that should print one where a name belongs */
 import { displayName, readable } from './core/naming'
 import { computeRegions } from './core/regions'
 import { debase } from './core/debase'
@@ -105,10 +100,7 @@ const STEPS: { id: StepId; n: number; name: string }[] = [
   { id: 'export', n: 6, name: 'export' },
 ]
 
-/* THE TRANSITION SCREEN A MAP IS ENTERED THROUGH IS NOT A STEP HERE. It was, and it was in the wrong
-   place: a cover is its own kind of thing rather than a stage of finishing a map, so it is its own
-   editor at /ui under "transition screens" and picks its map from a dropdown. The map still carries
-   it, and the export still ships it. See src/site/Covers.tsx. */
+/* the transition screen a map is entered through is not a step here: a cover is its own thing, edited at /ui under transition screens in src/site/Covers.tsx, and the map still carries it and the export still ships it */
 
 // the groups that exist even when empty, so placing has somewhere to aim
 const SUGGESTED_GROUPS = ['trees', 'people', 'smoke', 'effects', 'props']
@@ -127,8 +119,7 @@ const FACE_GRID = [
   ['south-west', 'south', 'south-east'],
 ] as const
 
-// where a tool lives, so a keyboard tool change can never happen off-screen:
-// the workflow follows the key instead of hiding the mode
+// where a tool lives, so a keyboard tool change can never happen off-screen: the workflow follows the key instead of hiding the mode
 const homeStep = (t: Tool): StepId =>
   isCutTool(t) ? 'cut' : 'levels'
 
@@ -159,8 +150,7 @@ interface Toast {
   act?: { label: string; run: () => void }
 }
 
-// one row of the compare panel: a library item and its frames exactly as they
-// came back, before anything was matched to anything
+// one row of the compare panel: a library item and its frames exactly as they came back, before anything was matched to anything
 interface PlItem {
   name: string
   kind: 'static' | 'animated'
@@ -182,8 +172,7 @@ interface FxState {
   custom?: CustomSpec
 }
 
-// how many times the tool looks at its own render before he is asked to judge
-// it. Every pass is free: the render is local and the look generates nothing.
+// how many times the tool looks at its own render before a person judges it, and every pass is free because the render is local and the look generates nothing
 const FX_PASSES = 3
 
 /* how many go on one contact sheet; the review route slices to it, so callers cut their own list to match. */
@@ -207,9 +196,7 @@ const rail = (v: number, lo: number, hi: number): CSSProperties => ({
   ['--pct' as string]: `${hi > lo ? Math.max(0, Math.min(1, (v - lo) / (hi - lo))) * 100 : 0}%`,
 })
 
-/* The handle a stop is posted against. One per gesture, minted here so every
- * long call in the tool carries one and none of them can run to a timeout with
- * nothing to press. The prefix is only there to read in a log. */
+/* the handle a stop is posted against, one per gesture, so no long call can run to a timeout with nothing to press; the prefix is only there to read in a log */
 const newJob = (what: string) => `${what}-${Date.now()}-${Math.floor(Math.random() * 1e6)}`
 
 const slug = (s: string) =>
@@ -228,9 +215,7 @@ const folderOf = (it: api.LibItem): string => {
 }
 
 /* one library row as one appearance. views before src, or a view set's src loses the other seven headings. */
-/* A face, in the shape the renderer draws. Same three shapes as a library row
- * and for the same reason: a state of a walking character is eight headings,
- * and losing them mid-round turns a troll south the moment it becomes a rock. */
+/* a face in the shape the renderer draws, the same three shapes as a library row, because a walking state is eight headings and losing them mid-round turns a troll south the moment it becomes a rock */
 /* the face's name rides with the picture, not read off its url; anchorName fixes hyphenated library rows. */
 const lookNameOf = (want: string | undefined): string | undefined => {
   const n = anchorName(String(want || ''))
@@ -257,8 +242,7 @@ const lookOfItem = (it: api.LibItem): AssetLook => {
       : { kind: 'static', src: it.src }
   if (it.dirs && Object.keys(it.dirs).length) {
     L.dirs = { ...it.dirs }
-    // a heading holds a whole walk cycle on a character, so a view set needs a
-    // rate the same way an animated item does
+    // a heading holds a whole walk cycle on a character, so a view set needs a rate the same way an animated item does
     if (it.fps && it.fps > 0) L.fps = it.fps
   }
   const name = lookNameOf(it.name)
@@ -266,11 +250,7 @@ const lookOfItem = (it: api.LibItem): AssetLook => {
   return L
 }
 
-// ---- the palette lock: pushed onto the map's palette after it lands, arithmetic and not a generation ----
-
-// every frame of a library item, decoded onto its own canvas. The compare
-// panel draws these and the lock reads them, so both halves work off the same
-// pixels the library is already showing.
+// the palette lock is arithmetic pushed onto the map's palette after it lands and never a generation, and every frame of a library item is decoded onto its own canvas so the lock and the compare panel read the same pixels
 /* every picture an item is made of. src on a view set is only the south view, so an edit hit one of eight. */
 /* every picture, not the first frame per heading: reading 8 of 64 turned a walk cycle into eight stills. */
 function partsOf(it: { kind: string; src?: string; frames?: string[]; dirs?: Record<string, string[]> }): {
@@ -311,8 +291,7 @@ async function framesOf(it: {
   })
 }
 
-// one frame through the lock and back onto a canvas. Nothing leaves the tab,
-// so the slider is a preview of exactly the bytes that would be written.
+// one frame through the lock and back onto a canvas; nothing leaves the tab, so the slider previews exactly the bytes that would be written
 function matchCanvas(src: HTMLCanvasElement, palette: string[], strength: number): HTMLCanvasElement {
   const g0 = src.getContext('2d') as CanvasRenderingContext2D
   const out = matchToPalette(g0.getImageData(0, 0, src.width, src.height), palette, strength)
@@ -324,18 +303,13 @@ function matchCanvas(src: HTMLCanvasElement, palette: string[], strength: number
   return c
 }
 
-// the map's own colours, off the WHOLE painting with the cut dropped. A radius
-// bigger than the canvas makes patchAround hand back all of it, so nobody has
-// to click a spot and no step is added to anyone's way through the tool.
+// the map's own colours off the whole painting with the cut dropped: a radius bigger than the canvas makes patchAround hand back all of it, so nobody has to click a spot and no step is added
 const readMapPalette = (e: Editor): string[] => {
   const p = e.patchAround(Math.round(e.doc.W / 2), Math.round(e.doc.H / 2), Math.max(e.doc.W, e.doc.H))
   return p ? sampleMapPalette({ data: p.data, width: p.w, height: p.h }, 14) : []
 }
 
-// ---- small pieces -------------------------------------------------------
-
-// the walkable percentage, eased toward its new value so a region click
-// visibly moves the number instead of teleporting it
+// small pieces, starting with the walkable percentage eased toward its new value so a region click visibly moves the number instead of teleporting it
 function TickPct({ value }: { value: number }) {
   const [shown, setShown] = useState(value)
   const fromRef = useRef(value)
@@ -413,8 +387,7 @@ function AnchorsShown({ ed, on }: { ed: Editor | null; on: boolean }) {
   )
 }
 
-// a section header. Every panel labels its groups the same way, so the eye
-// learns one shape instead of six.
+// a section header; every panel labels its groups the same way, so the eye learns one shape instead of six
 function Sec({ children }: { children: ReactNode }) {
   return <div className="asec">{children}</div>
 }
@@ -434,8 +407,7 @@ function Addr({ parts }: { parts: [string | null, string][] }) {
   )
 }
 
-// one collapsed line of keys at the foot of a panel, instead of a standing
-// block of text nobody reads twice
+// one collapsed line of keys at the foot of a panel, instead of a standing block of text nobody reads twice
 function Keys({ lines }: { lines: string[] }) {
   return (
     <details className="keys">
@@ -449,13 +421,10 @@ function Keys({ lines }: { lines: string[] }) {
   )
 }
 
-/* Two clicks for anything that can not be taken back. The first click arms and
- * the label says so, the second does it, and an unattended arm disarms itself.
- * One hook for every armed control in the tool, so they all behave the same. */
+/* two clicks for anything that cannot be taken back: the first arms and says so, the second does it, an unattended arm disarms itself, and one hook covers every armed control */
 function useArm(): [string, (key: string, ms?: number) => boolean, () => void] {
   const [armed, setArmed] = useState('')
-  // the answer has to be known inside the click handler, so the truth lives in
-  // a ref and the state is only what the label reads
+  // the answer has to be known inside the click handler, so the truth lives in a ref and the state is only what the label reads
   const cur = useRef('')
   const t = useRef(0)
   const drop = useCallback(() => {
@@ -481,17 +450,13 @@ function useArm(): [string, (key: string, ms?: number) => boolean, () => void] {
   return [armed, arm, drop]
 }
 
-/* A number you can type. It shows the live value until it has focus, then it
- * holds exactly what is being typed; enter and blur commit, esc puts the old
- * value back. One commit is one undo step in the editor. */
+/* a number you can type: it shows the live value until it has focus, then holds exactly what is typed, enter and blur commit, esc restores, and one commit is one undo step */
 function NumField(props: {
   label: string
   value: number
   dp?: number
   step?: number
-  /* what the field means, when its name does not already say it. On hover, not
-     under the block: one shared sentence over six fields is three lines tall
-     and only restates the six labels. */
+  /* what the field means when its name does not say it, on hover rather than under the block, because one shared sentence over six fields is three lines tall and only restates the labels */
   tip?: string
   onCommit: (v: number) => void
 }) {
@@ -614,9 +579,7 @@ function FootField({
   )
 }
 
-// the effect preview: the rendered frames looping on a canvas at one zoom.
-// Pixel art, so nothing is smoothed and nothing is tweened between frames, and
-// the clock is the effect's own fps so the panel plays what the map will play.
+// the effect preview loops the rendered frames at one zoom, with no smoothing and no tweening because it is pixel art, clocked at the effect's own fps so the panel plays what the map will play
 function FxPlay({ frames, zoom, fps }: { frames: HTMLCanvasElement[]; zoom: number; fps: number }) {
   const ref = useRef<HTMLCanvasElement>(null)
   useEffect(() => {
@@ -645,11 +608,7 @@ function FxPlay({ frames, zoom, fps }: { frames: HTMLCanvasElement[]; zoom: numb
   return <canvas ref={ref} className="fxcv" />
 }
 
-/* Where a map opened by id gets its painting from, in order. The working copy is
- * the live one so it goes first; the published bundle is the copy that always
- * exists once a map has been exported, and it is the road back for a map whose
- * painting never reached the store. `loadPainting` keeps whatever it is given, so
- * arriving by the second road also repairs the first. */
+/* a map opened by id takes the working copy first, then its published bundle, which is the road back for a painting that never reached the store; `loadPainting` keeps what it is given, so the second road repairs the first */
 async function paintingFor(id: string): Promise<string | null> {
   const work = `/work/${encodeURIComponent(id)}/scene.png`
   try {
@@ -686,9 +645,7 @@ export default function App() {
   const [st, setSt] = useState<EditorStatus | null>(null)
   const [step, setStep] = useState<StepId>('load')
   const [prompt, setPrompt] = useState('')
-  /* THE HAND, CHOSEN BEFORE THE SUBJECT IS TYPED. Empty is Other: the words go
-   * out as typed. The list is whatever this account may draw with, which for
-   * almost everybody is nothing but their own. */
+  /* the hand, chosen before the subject is typed: empty means the words go out as typed, and the list is whatever this account may draw with */
   const [cards, setCards] = useState<api.StyleCard[]>([])
   const [styleKey, setStyleKey] = useState('')
   const [willDraw, setWillDraw] = useState('')
@@ -700,17 +657,14 @@ export default function App() {
   const [covers, setCovers] = useState<{ cover: boolean; covers: string[] }>({ cover: false, covers: [] })
   const [armed, arm, disarm] = useArm()
   const [lib, setLib] = useState<api.LibItem[] | null>(null)
-  // the words the author typed, kept so "what did I write to get that tree"
-  // has an answer in the app instead of on disk
+  // the words the author typed, kept so what was written to get a given tree has an answer in the app instead of on disk
   const [asks, setAsks] = useState<api.Ask[]>([])
   const [asksOpen, setAsksOpen] = useState(false)
   /* ctrl+p grain, sprite pixels per map pixel. 1 is the strict match and too blocky, so this starts at 2. */
   const [grain, setGrain] = useState(2)
   // the assets panel's two halves, plus a cache stamp on thumbnail urls so rewritten pixels are not served stale
   const [bust, setBust] = useState<Record<string, number>>({})
-  // the picker over what the pixellab account already owns. Open, which page,
-  // what is typed in its search, what came back, and which one is being copied
-  // in right now. Nothing on this path generates.
+  // the picker over what the pixellab account already owns: open, page, search, results and which one is being copied in, and nothing on this path generates
   const [acc, setAcc] = useState<{
     open: boolean
     q: string
@@ -737,36 +691,28 @@ export default function App() {
   /* the button counts out loud: a still label for six minutes is indistinguishable from a hang. */
   const [charRun, setCharRun] = useState<{ at: number } | null>(null)
   const [charSecs, setCharSecs] = useState(0)
-  // how many things a fill plans. A range, because "populate this" means
-  // something different for a courtyard than for a whole beach.
+  // how many things a fill plans, a range because populating a courtyard is not the same size of job as a whole beach
   const [fillCount, setFillCount] = useState(6)
   /* takes of one thing, not fill's different ones. 1 for a cheap default, 8 max at nine generations a take. */
   const [genCount, setGenCount] = useState(1)
   const [scene, setScene] = useState<api.ScenePlan | null>(null)
-  // which of the planned things are still wanted, by index: a plan you can
-  // edit before spending beats a plan you accept whole or throw away
+  // which of the planned things are still wanted, by index: a plan you can edit before spending beats a plan you accept whole or throw away
   const [sceneOff, setSceneOff] = useState<Set<number>>(new Set())
   const [fillRun, setFillRun] = useState<{ done: number; total: number; what: string } | null>(null)
   const [genRun, setGenRun] = useState<{ done: number; total: number } | null>(null)
-  // the area boxed on the painting, in painting pixels. null means the whole
-  // map is read instead, which is a real answer and not a missing step.
+  // the area boxed on the painting, in painting pixels; null means the whole map is read instead, which is a real answer and not a missing step
   const [genBox, setGenBox] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
-  // what the model wrote after looking. Held so the words and the size can be
-  // seen BEFORE anything is bought; the second press spends it.
+  // what the model wrote after looking, held so the words and the size can be seen before anything is bought, and the second press spends it
   const [genPlan, setGenPlan] = useState<api.MakePlan | null>(null)
   const [genBusy, setGenBusy] = useState(false)
-  // the prompt behind the take he did not keep, fed into the next reading so
-  // pressing again is a correction rather than a reroll of the same idea
+  // the prompt behind the take that was not kept, fed into the next reading so pressing again is a correction rather than a reroll of the same idea
   const [genLast, setGenLast] = useState('')
   const [genShow, setGenShow] = useState(false)
   /* three steps to give a placement movement. esc at the boundary is an answer, so the map is judged instead. */
-  // the help panel, opened on the step you are standing in so the first
-  // thing you read is about what is in front of you
+  // the help panel, opened on the step you are standing in so the first thing you read is about what is in front of you
   const [helpOn, setHelpOn] = useState(false)
   const [lifeOpen, setLifeOpen] = useState(false)
-  /* the second-face box. Separate from the sparkle's because they are separate
-   * jobs and doing them in one box was the shape that could not work: a face is
-   * a GENERATION and a round is free, so they cannot share a send button. */
+  /* the second-face box, kept apart from the sparkle's because a face is a generation and a round is free, so they cannot share a send button */
   const [faceOpen, setFaceOpen] = useState(false)
   const [faceAsk, setFaceAsk] = useState('')
   const [faceBusy, setFaceBusy] = useState(false)
@@ -782,8 +728,7 @@ export default function App() {
   const [animRun, setAnimRun] = useState<{ at: number; plan: api.AnimPlan } | null>(null)
   const [animSecs, setAnimSecs] = useState(0)
   const [animNote, setAnimNote] = useState('')
-  // stop: the server-side job to kill, and a flag the loops check between
-  // steps so a batch ends after the generation already in flight
+  // stop: the server-side job to kill, and a flag the loops check between steps so a batch ends after the generation already in flight
   const jobRef = useRef('')
   const stopRef = useRef(false)
   /* a round waits here until the first placement lands. a ref, so it does not re-run the placing effect. */
@@ -797,25 +742,17 @@ export default function App() {
   const gateRef = useRef<((go: boolean) => void) | null>(null)
   // the confirmed static generate is waiting for a spot on the map
   const [genPick, setGenPick] = useState(false)
-  // the add-door flow: armed for a map click, then which door's form is open
-  // and whether that form is a fresh drop (cancel removes it) or a reopened
-  // row (done is the only way out, the row's x removes)
+  // the add-door flow: armed for a map click, then which door's form is open and whether it is a fresh drop (cancel removes it) or a reopened row (done is the only way out, the row's x removes)
   const [doorPick, setDoorPick] = useState(false)
   const [doorEdit, setDoorEdit] = useState(0)
   const [doorNew, setDoorNew] = useState(false)
-  /* Renaming is held while it is being typed rather than applied per keystroke,
-   * because a name is checked for uniqueness and legality and half a word is
-   * neither. nameSaid carries back what the editor did with it. */
+  /* a rename is held while it is typed rather than applied per keystroke, because a name is checked for uniqueness and legality and half a word is neither; nameSaid carries back what the editor did with it */
   const [nameDraft, setNameDraft] = useState<string | null>(null)
   const [nameSaid, setNameSaid] = useState<{ id: number; why: string } | null>(null)
-  /* The same hold, for the name on a PLACEMENT. Kept apart from the anchor
-   * pair above because both forms can be open at once and one draft between
-   * them would put half a typed anchor name into the selected sprite. */
+  /* the same hold for a name on a placement, kept apart from the anchor pair because both forms can be open at once and one shared draft would put half a typed anchor name into the selected sprite */
   const [pnameDraft, setPnameDraft] = useState<string | null>(null)
   const [pnameSaid, setPnameSaid] = useState<{ id: string; why: string } | null>(null)
-  /* the two anchor fields a person points at rather than types. Both borrow the
-   * one-shot map click "add door" already uses; the rectangle needs two, so it
-   * holds the first corner while it waits for the second. */
+  /* the two anchor fields pointed at rather than typed, both borrowing the one-shot map click add door uses, and the rectangle holds its first corner while it waits for the second */
   const [standPick, setStandPick] = useState(0)
   const [rectPick, setRectPick] = useState<{ id: number; from: [number, number] | null } | null>(null)
   /* the radius while typed: clearing the box to type 300 passes through '', which would clamp to the minimum. */
@@ -831,47 +768,36 @@ export default function App() {
   const [collEdit, setCollEdit] = useState('')
   const [collDraft, setCollDraft] = useState<string | null>(null)
   const [collSaid, setCollSaid] = useState('')
-  /* the rack slot a drag has hold of, by its NUMBER and never by its position.
-   * The number is the whole guarantee a rack exists for, so nothing here can
-   * carry an index around and hand it back as an address. */
+  /* the rack slot a drag has hold of, by its number and never by its position, because the number is the whole guarantee a rack exists for and an index must never be handed back as an address */
   const [dragSlot, setDragSlot] = useState(0)
   /* one group's condition field at a time; an input on every group made the layer list the tallest thing here. */
   const [grpWhen, setGrpWhen] = useState('')
-  // the map's own id, held while it is typed, because a rename is a server call
-  // that can be refused and half a slug is not a thing to send
+  // the map's own id, held while it is typed, because a rename is a server call that can be refused and half a slug is not a thing to send
   const [idDraft, setIdDraft] = useState<string | null>(null)
   // null until somebody asks, because finding them is three flood fills
   const [stairs, setStairs] = useState<StairRegion[] | null>(null)
   const [paintDraft, setPaintDraft] = useState<string | null>(null)
   const [idSaid, setIdSaid] = useState('')
-  // the effect box: the ask, the armed map click, the plan the click produced
-  // and the params a human is tuning. fxFrames is the render, redone locally on
-  // every slider move. Nothing here has touched the disk yet.
+  // the effect box: the ask, the armed map click, the plan the click produced and the params being tuned, with fxFrames re-rendered locally on every slider move and nothing written to disk yet
   const [fxAsk, setFxAsk] = useState('')
   const [fxPick, setFxPick] = useState(false)
   const [fxBusy, setFxBusy] = useState(false)
   const [fxSaving, setFxSaving] = useState(false)
-  // set while the panel is reopened on an effect that already exists on disk:
-  // save rewrites that item in place, save as new writes another one
+  // set while the panel is reopened on an effect that already exists on disk: save rewrites that item in place, save as new writes another one
   const [fxEdit, setFxEdit] = useState<api.LibItem | null>(null)
   // colors renders; mapColors and ownColors keep the toggle reversible; ask lets a dead recipe fall back free
   const [fx, setFx] = useState<FxState | null>(null)
   const [fxP, setFxP] = useState<EffectParams | null>(null)
   const [fxFrames, setFxFrames] = useState<HTMLCanvasElement[]>([])
-  // the review loop, shown honestly while it runs: which pass it is on, what it
-  // last said, and whether it is still going. null means it has not looked yet.
+  // the review loop while it runs: which pass it is on, what it last said, whether it is still going, and null means it has not looked yet
   const [fxRev, setFxRev] = useState<{ pass: number; why: string; running: boolean } | null>(null)
-  // use this one: the loop reads this between passes and stops where it stands,
-  // so he is never trapped waiting for a check he did not ask for
+  // the loop reads this between passes and stops where it stands, so nobody is left waiting out a check they did not ask for
   const fxStop = useRef(false)
-  // one quiet line under a written effect's preview: it rendered, but it does
-  // not wrap. Not a block, because he may not care on a slow drift.
+  // one quiet line under a written effect's preview: it rendered, but it does not wrap, and not a block because a slow drift may not matter
   const [fxNote, setFxNote] = useState('')
   // the recipe fold, so what was written for him is always one click away
   const [fxShow, setFxShow] = useState(false)
-  // the recipe that has drawn something at least once. A knob turned somewhere
-  // useless is not a broken recipe, so only one that has NEVER rendered gets
-  // thrown away for a built-in.
+  // the recipe that has drawn something at least once, because a knob turned somewhere useless is not a broken recipe and only one that never rendered is thrown away for a built-in
   const fxRan = useRef('')
   const [growPx, setGrowPx] = useState(64)
   // the style card read off the painting once, and the map's colours for the palette lock; both are optional
@@ -887,8 +813,7 @@ export default function App() {
   } | null>(null)
   /* what the look saw, held on the run because most runs open no panel; advice only, the item stays either way. */
   const [said, setSaid] = useState<{ why: string; verdict: 'good' | 'revise'; fix: string } | null>(null)
-  // the look itself, in flight. One flag for every path, so the stop button's
-  // line has one thing to name however the run got here.
+  // the look itself, in flight: one flag for every path, so the stop button's line has one thing to name however the run got here
   const [looking, setLooking] = useState(false)
   const [plStr, setPlStr] = useState(80)
   const [plOut, setPlOut] = useState<HTMLCanvasElement[][]>([])
@@ -908,8 +833,7 @@ export default function App() {
     setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), act ? 12000 : 4200)
   }, [])
 
-  // entering a step sets the view that shows that step's work, so nothing
-  // can land behind a toggle
+  // entering a step sets the view that shows that step's work, so nothing can land behind a toggle
   const gotoStep = useCallback((s: StepId, keepTool = false) => {
     setStep(s)
     disarm()
@@ -954,12 +878,7 @@ export default function App() {
     ed.attach(canvasRef.current as HTMLCanvasElement)
     setSt(ed.status())
 
-    /* ?id with no ?img takes the working copy, then the map's own published
-     * bundle, and only then says there is no painting. The second road is what
-     * was missing: a map whose painting never reached the store answered "drop
-     * one in" and stopped, so `loadPainting` never ran, so the upload that would
-     * have fixed it never ran either. A published map always carries its own
-     * painting, so opening one now repairs it on the way in. */
+    /* ?id with no ?img takes the working copy, then the map's own published bundle, and only then says there is no painting: without the second road a painting that never reached the store stopped at drop one in, so `loadPainting` never ran and the upload that would have fixed it never ran either */
     const q = new URLSearchParams(location.search)
     const img = q.get('img')
     const id = q.get('id')
@@ -1076,28 +995,24 @@ export default function App() {
     if (sel && sel !== doorEdit) setDoorEdit(sel)
   }, [st?.anchorSel])
 
-  // the library is PER MAP: it resets with the painting, and so does the
-  // door form state
+  // the library is per map: it resets with the painting, and so does the door form state
   useEffect(() => {
     setLib(null)
     setDoorPick(false)
     setDoorEdit(0)
     setDoorNew(false)
-    // an effect is built out of one painting's colours, so it cannot survive
-    // the painting changing under it
+    // an effect is built out of one painting's colours, so it cannot survive the painting changing under it
     setFx(null)
     setFxP(null)
     setFxFrames([])
     setFxPick(false)
     setFxEdit(null)
     setBust({})
-    // the card and the colours belong to one painting, and so does anything
-    // left waiting in the compare panel
+    // the card and the colours belong to one painting, and so does anything left waiting in the compare panel
     setMapPal([])
     setPl(null)
     setPlOut([])
-    // a run paused on the gate is awaiting a promise nobody is left to answer,
-    // so the swap answers it: no, and what was already drawn stays
+    // a run paused on the gate is awaiting a promise nobody is left to answer, so the swap answers it no and what was already drawn stays
     if (gateRef.current) {
       stopRef.current = true
       gateRef.current(false)
@@ -1112,8 +1027,7 @@ export default function App() {
     }
   }, [step, doorPick])
 
-  // and a half-laid route or a half-drawn area the same way, or their clicks
-  // would land as corners on a step where neither shape is even drawn
+  // a half-laid route or a half-drawn area is dropped the same way, or their clicks would land as corners on a step where neither shape is even drawn
   useEffect(() => {
     if (step !== 'test') {
       edRef.current?.cancelPath()
@@ -1123,8 +1037,7 @@ export default function App() {
 
   /* watched, not returned from a handler: two of the three ways a line ends happen outside react. */
   const layingPath = (st?.pathDraw ?? -1) >= 0
-  // the same read for an area being walked round. The gesture lives in the
-  // editor, so this is how the form knows the shape is still open.
+  // the same read for an area being walked round, because the gesture lives in the editor and this is how the form knows the shape is still open
   const drawingRegion = (st?.polyDraw ?? -1) >= 0
   const wasLaying = useRef(false)
   useEffect(() => {
@@ -1172,9 +1085,7 @@ export default function App() {
     setMapPal(readMapPalette(e))
   }, [step, sceneKey])
 
-  // ---- the assets step -------------------------------------------------
-  // leave the click-where-it-goes wait without spending anything. Both waits
-  // share one picker, so arming either one has to drop the other.
+  // the assets step: leaving the click-where-it-goes wait spends nothing, and arming either wait has to drop the other because they share one picker
   const stopPick = useCallback(() => {
     setGenPick(false)
     setFxPick(false)
@@ -1220,9 +1131,7 @@ export default function App() {
       .then((r) => setChars({ items: r.items, busy: false, err: '' }))
       .catch((e) => setChars({ items: [], busy: false, err: String(e instanceof Error ? e.message : e).slice(0, 120) }))
   }, [acc.open, accTab, chars])
-  // the same free listing, fetched when the style toggle is on and the map
-  // has not yet been told whose style that is, so the one-time pick has
-  // something to pick from
+  // the same free listing, fetched when the style toggle is on and the map has not yet been told whose style that is, so the one-time pick has something to pick from
   useEffect(() => {
     if (!styleOn || chars) return
     setChars({ items: [], busy: true, err: '' })
@@ -1254,8 +1163,7 @@ export default function App() {
     [acc.taking, push],
   )
 
-  // the clock under the sprite button. One second is enough resolution for
-  // a wait measured in minutes.
+  // the clock under the sprite button, at one second because the wait is measured in minutes
   useEffect(() => {
     if (!charRun) {
       setCharSecs(0)
@@ -1266,8 +1174,7 @@ export default function App() {
     return () => window.clearInterval(t)
   }, [charRun])
 
-  // the same clock under the animate button, for the same reason: eight
-  // headings is minutes and a label that never moves reads as a hang
+  // the same clock under the animate button, for the same reason: eight headings is minutes and a label that never moves reads as a hang
   useEffect(() => {
     if (!animRun) {
       setAnimSecs(0)
@@ -1278,9 +1185,7 @@ export default function App() {
     return () => window.clearInterval(t)
   }, [animRun])
 
-  /* A plan is a price for ONE item. Picking a different thing drops it, or the
-   * armed button would still be lit and the next press would buy the last
-   * item's plan against this one's name. */
+  /* a plan is a price for one item, so picking a different thing drops it, or the armed button stays lit and the next press buys the last item's plan against this one's name */
   const animSel = st?.assetSel ?? ''
   useEffect(() => {
     setAnimOpen(false)
@@ -1291,15 +1196,12 @@ export default function App() {
   /* the one look at a run, free because the strip is local; advice only, nothing is removed from the library. */
   const lookAt = useCallback(
     async (sid: string, ask: string, prompt: string, all: api.LibItem[]): Promise<api.ObjVerdict | null> => {
-      // the sheet holds six, so six is what gets sent. Cut here rather than at
-      // the far end, so what the words name is what the picture shows.
+      // the sheet holds six, so six is what gets sent, cut here rather than at the far end so what the words name is what the picture shows
       const made = all.slice(0, LOOK_CELLS)
       if (!made.length) return null
       setSaid(null)
       setLooking(true)
-      // one line rather than silence when the look cannot happen. Returning
-      // having said nothing is indistinguishable from a look that ran and
-      // approved.
+      // one line rather than silence when the look cannot happen, because returning having said nothing is indistinguishable from a look that ran and approved
       const quiet = (why: string) => {
         setLooking(false)
         setSaid({ why, verdict: 'good', fix: '' })
@@ -1308,15 +1210,13 @@ export default function App() {
       let shots: string[] = []
       try {
         const cans = await Promise.all(made.map(async (it) => (await framesOf(it))[0]))
-        // one candidate that will not decode would shift every index, and then
-        // "the second one" would name the wrong sprite: skip the look instead
+        // one candidate that will not decode would shift every index, so the second one would name the wrong sprite: skip the look instead
         if (cans.some((c) => !c)) return quiet('did not look · one of these would not decode')
         shots = cans.map((c) => c.toDataURL('image/png'))
       } catch {
         return quiet('did not look · those pixels would not decode')
       }
-      // the look runs after the spend, so the job that bought them is finished
-      // and stop has nothing to post against. It gets its own.
+      // the look runs after the spend, so the job that bought them is finished and stop has nothing to post against; it gets its own
       const job = newJob('look')
       jobRef.current = job
       /* the real size, hidden by a 3x strip. sent only when candidates agree; a wrong number is worse than none. */
@@ -1326,9 +1226,7 @@ export default function App() {
       try {
         const v = await api.objReview({ id: sid, ask, prompt, frames: shots, job, ...(oneSize ? { w, h } : {}) })
         setLooking(false)
-        // anything that is not the word revise is good, the same default the
-        // effect loop takes, so a server that has not been given a verdict yet
-        // still says its line and nothing else changes
+        // anything that is not the word revise is good, the same default the effect loop takes, so a server that has not been given a verdict yet still says its line and nothing else changes
         setSaid({ why: v.why, verdict: v.verdict === 'revise' ? 'revise' : 'good', fix: v.fix || '' })
         return v
       } catch {
@@ -1386,8 +1284,7 @@ export default function App() {
           try {
             const r = await api.characterGen(sid, {
               description: plan.prompt,
-              // the server will not spend without this, and only the confirmed
-              // press sends it
+              // the server will not spend without this, and only the confirmed press sends it
               confirm: true,
               job,
               ...runs[i],
@@ -1410,9 +1307,7 @@ export default function App() {
             if (e.sceneId !== sid) break
             setLib((prev) => [...(prev || []).filter((x) => x.name !== r.item.name), r.item])
             made.push(r.item)
-            // a motion that did not happen is said out loud. It still lands,
-            // standing, because the body was bought before the motion was ever
-            // asked for.
+            // a motion that did not happen is said out loud, and it still lands standing because the body was bought before the motion was ever asked for
             if (r.note) push(`${r.item.name} · ${r.note}`)
             /* faces before the round, because a round can only name a face that exists; a failed face keeps the body. */
             let owner = r.item
@@ -1470,25 +1365,20 @@ export default function App() {
             ? `${made[0].name} added · ${ways} ways${moves ? ', moving' : ''} · click it, then the map`
             : `${made.length} sprites added · click one, then the map`,
       )
-      // the same free look every other run gets. A sprite is the most expensive
-      // thing here and it was the least checked: nine generations came back and
-      // nothing said whether the body was the one that was asked for.
+      // the same free look every other run gets: a sprite is the most expensive thing here and was the least checked, with nine generations coming back and nothing saying whether the body was the one asked for
       void lookAt(sid, p, plan.prompt, made)
     },
     [genCount, charRun, askGate, lookAt, push, styleOn, styleId, styleView],
   )
 
-  // the search box, one call behind the typing so a full listing is not walked
-  // per keystroke
+  // the search box, one call behind the typing so a full listing is not walked per keystroke
   useEffect(() => {
     if (!acc.open) return
     const t = window.setTimeout(() => void accLoad(acc.q, acc.page), acc.q ? 260 : 0)
     return () => window.clearTimeout(t)
   }, [acc.open, acc.q, acc.page, accLoad])
 
-  // one of his own objects copied into this map's library, then closed. It
-  // lands as a normal static item, so placing it is the same click as anything
-  // else in the library.
+  // one account object copied into this map's library, then closed; it lands as a normal static item, so placing it is the same click as anything else in the library
   const takeAccount = useCallback(
     async (o: api.AccountObject) => {
       const e = edRef.current
@@ -1507,10 +1397,7 @@ export default function App() {
     [acc.taking, push],
   )
 
-  // ---- the palette lock: raw and matched side by side, a human chooses, and both are local so it is free ----
-
-  // the matched frames, redone on every slider move. A sprite holds a few
-  // dozen distinct colours, so a whole batch re-renders inside one frame.
+  // the palette lock shows raw and matched side by side so a person chooses, both local and free, and the matched frames redo on every slider move because a sprite holds a few dozen distinct colours so a whole batch re-renders inside one frame
   useEffect(() => {
     if (!pl || !mapPal.length) {
       setPlOut([])
@@ -1526,13 +1413,11 @@ export default function App() {
   const closeMatch = useCallback(() => {
     setPl(null)
     setPlOut([])
-    // the line under the button and the line in the panel are the same words,
-    // so closing the panel must not make them reappear somewhere else
+    // the line under the button and the line in the panel are the same words, so closing the panel must not make them reappear somewhere else
     setSaid(null)
   }, [])
 
-  // one thing he KEPT, on the record for this map. Fire and forget: it shapes
-  // the next ask and nothing waits on it. Only keeps go in, never discards.
+  // one kept thing, on the record for this map: fire and forget, it shapes the next ask and nothing waits on it, and discards never go in
   const noteKeep = useCallback(
     (id: string, ask: string, prompt: string, name: string, kind: 'asset' | 'effect') => {
       if (!ask.trim()) return
@@ -1541,8 +1426,7 @@ export default function App() {
     [],
   )
 
-  // open the compare on library items: a fresh static generate hands in what
-  // it made, the inspector hands in the one item behind the selected placement
+  // open the compare on library items: a fresh static generate hands in what it made, the inspector hands in the one item behind the selected placement
   /* cut the pedestal in arithmetic: a prompt refusing ground four times still came back on a stone slab. */
   const doDebase = useCallback(
     async (item: api.LibItem, placeId: string): Promise<boolean> => {
@@ -1564,8 +1448,7 @@ export default function App() {
           }
           const out = mkCanvas(c.width, c.height)
           const og = out.getContext('2d') as CanvasRenderingContext2D
-          // write through a fresh ImageData the context owns, so the buffer type
-          // is whatever this browser wants rather than whatever built it
+          // write through a fresh ImageData the context owns, so the buffer type is whatever this browser wants rather than whatever built it
           const dst = og.createImageData(c.width, c.height)
           dst.data.set(r.data)
           og.putImageData(dst, 0, 0)
@@ -1575,15 +1458,12 @@ export default function App() {
           push('no base found · ' + note)
           return false
         }
-        // in place, under the same name: the trim erases rows rather than
-        // cropping them, so the png is the same size and every placement of it
-        // simply loses its slab
+        // in place, under the same name: the trim erases rows rather than cropping them, so the png keeps its size and every placement of it loses its slab
         const r = await api.assetCrop(e.sceneId, item.name, null, {
           kind: item.kind,
           frames: cut,
           fps: item.fps,
-          // eight-sided art is trimmed on every view and written back under the
-          // view names, not as animation frames
+          // eight-sided art is trimmed on every view and written back under the view names, not as animation frames
           dirKeys: partsOf(item).keys,
         })
         setLib((prev) => [...(prev || []).filter((x) => x.name !== r.item.name), r.item])
@@ -1679,8 +1559,7 @@ export default function App() {
             const g = c.getContext('2d') as CanvasRenderingContext2D
             g.imageSmoothingEnabled = false
             g.drawImage(img, 0, 0)
-            // every frame goes down to the SAME size, so an animation's loop
-            // stays in register instead of jittering by a pixel
+            // every frame goes down to the same size, so an animation's loop stays in register instead of jittering by a pixel
             const r = bitify(g.getImageData(0, 0, c.width, c.height).data, c.width, c.height, tw, th)
             note = r.note
             const dc = mkCanvas(r.width, r.height)
@@ -1697,24 +1576,14 @@ export default function App() {
             dirKeys: partsOf(item).keys,
           })
           setLib((prev) => [...(prev || []).filter((x) => x.name !== res.item.name), res.item])
-          // the png keeps its name, so without this the browser answers from
-          // cache and the map goes on drawing the replaced pixels
+          // the png keeps its name, so without this the browser answers from cache and the map goes on drawing the replaced pixels
           e.bustAssets(folderOf(res.item))
           setBust((q) => ({ ...q, [res.item.name]: Date.now() }))
-          /* THE SNAPSHOT GOES FIRST, or the undo restores the scales it just grew.
-             rescalePlacementsOf mutates without snapping and refreshPlacementsOf snaps AFTER it, so
-             the one step this used to file already held the doubled values: pressing z put the
-             placements back exactly as the pixelate had left them. */
+          /* the snapshot goes first, or the undo restores the scales it just grew: rescalePlacementsOf mutates without snapping and refreshPlacementsOf snaps after it, so the one filed step held the doubled values and z put the placements back exactly as the pixelate had left them */
           e.doc.snap()
-          /* and the ART has to be filed as revertible, the way a crop files it. Without an entry at
-             this depth Editor.beforeUndo has nothing to call there and asset-revert is never asked, so
-             the pixelated png stayed on disk and in the store while the toast said z undoes it. The
-             original pixels were in .prev and in library_versions with no button in the tool able to
-             reach them, so a batch pixelate at the wrong grain was permanent. */
+          /* the art has to be filed as revertible the way a crop is: without an entry at this depth Editor.beforeUndo has nothing to call, asset-revert is never asked, and a batch pixelate at the wrong grain is permanent even though the original pixels sit in .prev and in library_versions */
           pixelUndo.current.push({ name: res.item.name, at: e.doc.histLen() })
-          // it shrank, so EVERY placement of it grows by the same amount to
-          // stay the size it was, including ones that were never selected,
-          // because they are all looking at the one file
+          // it shrank, so every placement of it grows by the same amount to stay the size it was, including ones that were never selected, because they are all looking at the one file
           const n = e.rescalePlacementsOf(res.item, item.w / res.item.w, item.h / res.item.h)
           e.refreshPlacementsOf(res.item)
           done += n || places.length
@@ -1731,9 +1600,7 @@ export default function App() {
     [lib, grain, push],
   )
 
-  /* the words, then the fence, then the answer. The placement is pinned by id
-   * up front: drawing the box clears the selection, so anything reading it
-   * live would lose its subject halfway through. */
+  /* the placement is pinned by id up front, because drawing the box clears the selection and anything reading it live would lose its subject halfway through */
   /* one generation for another face; kept off the free sparkle, and a face must exist before a round names it. */
   const runFace = useCallback(
     async (name: string) => {
@@ -1761,8 +1628,7 @@ export default function App() {
   )
 
   const runLife = useCallback(
-    /* said is for the round that came out of the make ask and is waiting for
-     * something to land on. Everything else reads the box, as it always has. */
+    /* said is for the round that came out of the make ask and is waiting for something to land on, and everything else reads the box as it always has */
     async (placeId: string, said?: string) => {
       const e = edRef.current
       const ask = (said || lifeAsk).trim()
@@ -1797,12 +1663,9 @@ export default function App() {
             bounds,
             walkPct: bounds ? walkPct : undefined,
             walkOnly,
-            // what it is allowed to name when it wants the picture to change.
-            // The server picks out of this list and nothing else, so a sequence
-            // cannot ask for a boulder this map has never had.
+            // what it is allowed to name when it wants the picture to change: the server picks out of this list and nothing else, so a sequence cannot ask for a boulder this map has never had
             names: (lib || []).map((x) => x.name),
-            // the row this placement is drawn from. If it has faces of its own
-            // the server offers those instead of the whole library.
+            // the row this placement is drawn from; if it has faces of its own the server offers those instead of the whole library
             owner: item ? item.name : undefined,
             job,
           })
@@ -1832,14 +1695,10 @@ export default function App() {
           }
           if (life.states) for (const s of life.states) s.art = artAt[s.art || 0] || 0
           const swaps = looks.length ? ` · changes into ${looks.length} other picture${looks.length > 1 ? 's' : ''}` : ''
-          // a name that went missing is said out loud, because a picture that
-          // quietly stays put is exactly what this whole lane looked like while
-          // it was broken
+          // a name that went missing is said out loud, because a picture that quietly stays put is exactly what this lane looked like while it was broken
           const missed = named.length - 1 - looks.length
           const gone = missed > 0 ? ` · ${missed} not in the library, left as it was` : ''
-          /* One ask, everything picked. A market is one place and the crowd in
-           * it shares the box; what they do not share is the seed and the phase,
-           * or a dozen figures step in perfect time and read as one thing. */
+          /* one ask, everything picked: a market is one place and the crowd in it shares the box, but never the seed and the phase, or a dozen figures step in perfect time and read as one thing */
           const n = ids.length > 1 ? e.setLifeMany(ids, life, looks) : (e.setLife(placeId, life, looks), 1)
           setLifeNote(r.note || '')
           setLifeOpen(false)
@@ -1909,8 +1768,7 @@ export default function App() {
       }
 
       const plan = animPlan
-      // nothing to buy and nothing to draw here. Saying no is the answer, and
-      // the button never arms over it.
+      // nothing to buy and nothing to draw here, so saying no is the answer and the button never arms over it
       if (plan.path === 'blocked') return
       /* travel goes to the free recipe engine: both animators redraw in place and a scatter comes back on the spot. */
       if (plan.path === 'written') {
@@ -1950,10 +1808,7 @@ export default function App() {
             }
           }
           if (!got) {
-            /* THIS SENTENCE USED TO BE A LIE THAT COST MONEY. Pressing again sent no recover, so it
-               redrew and charged for every heading a second time, while the first set sat finished on
-               the account. The group is written down on the server now, so a fresh press collects it
-               before it spends anything, and the sentence is true. */
+            /* pressing again used to send no recover, so it redrew and charged for every heading a second time while the first set sat finished on the account; the group is written down on the server now, so a fresh press collects it before it spends anything */
             push(
               `${item.name} · still drawing after twenty minutes · press animate again and it will be collected for nothing, not redrawn`,
             )
@@ -1969,8 +1824,7 @@ export default function App() {
         }
         const next = r.item
         setLib((prev) => [...(prev || []).filter((x) => x.name !== next.name), next])
-        // same names, new bytes: without this the editor answers every draw out
-        // of the frames it already cached
+        // same names, new bytes: without this the editor answers every draw out of the frames it already cached
         e.bustAssets(folderOf(next))
         setBust((q) => ({ ...q, [next.name]: Date.now() }))
         /* pixellab pads the canvas, so placements are rescaled by the difference before refresh or figures resize. */
@@ -1980,8 +1834,7 @@ export default function App() {
         setAnimNote(r.note || '')
         setAnimAsk('')
         setAnimOpen(false)
-        /* a partial run is a success with a hole in it, so it is said plainly and
-         * not folded into the note where it reads as a detail. */
+        /* a partial run is a success with a hole in it, so it is said plainly and not folded into the note where it reads as a detail */
         push(
           (r.partial ? `${next.name} moves, mostly · ${r.partial}` : `${next.name} is moving · ${plan.motion}`) +
             (r.note && !r.partial ? ' · ' + r.note : '') +
@@ -2045,8 +1898,7 @@ export default function App() {
     async (which: 'matched' | 'raw' | 'discard') => {
       const e = edRef.current
       if (!e || !pl || plBusy) return
-      // which rows the buttons act on: the chosen one when something was
-      // picked, everything when nothing was
+      // which rows the buttons act on: the chosen one when something was picked, everything when nothing was
       const idx = pl.pick >= 0 && pl.pick < pl.items.length ? [pl.pick] : pl.items.map((_, i) => i)
       const others = pl.items.filter((_, i) => !idx.includes(i))
       setPlBusy(true)
@@ -2070,8 +1922,7 @@ export default function App() {
                 : 'kept as it came back',
           )
         } else {
-          // the matched pixels replace the item's own, so the library keeps one
-          // row per thing instead of growing a -matched twin beside every item
+          // the matched pixels replace the item's own, so the library keeps one row per thing instead of growing a -matched twin beside every item
           const saved: api.LibItem[] = []
           for (const i of idx) {
             const frames = (plOut[i] || []).map((c) => c.toDataURL('image/png'))
@@ -2091,8 +1942,7 @@ export default function App() {
             e.refreshPlacementsOf(it)
           }
           if (pl.mode === 'gen') {
-            // a fresh batch: the takes he did not pick still go, so a ×3 leaves
-            // one item rather than three
+            // a fresh batch: the takes that were not picked still go, so a ×3 leaves one item rather than three
             const others = pl.items.filter((it) => !saved.some((s) => s.name === it.name))
             for (const it of others) await api.libraryRemove(e.sceneId, it.name)
             setLib((await api.library(e.sceneId)).items)
@@ -2128,18 +1978,14 @@ export default function App() {
     [openMatch, lookAt],
   )
 
-  // ---- the effect engine: generated effects came back unusable, so local rules run over sampled colours ----
-
-  // the current params turned into frames. Re-runs on every slider move; a
-  // whole 8-frame effect at map scale renders in a few milliseconds.
+  // the effect engine runs local rules over sampled colours because generated effects came back unusable, and the current params turn into frames on every slider move, a whole 8-frame effect at map scale in a few milliseconds
   useEffect(() => {
     if (!fx || !fxP) {
       setFxFrames([])
       setFxNote('')
       return
     }
-    // a written recipe runs in the sandbox, which is a worker and so async. The
-    // seven run here and now, exactly as they always have.
+    // a written recipe runs in the sandbox, which is a worker and so async, while the seven built-ins run here and now
     if (fx.type === 'custom') {
       const spec = fx.custom
       if (!spec) {
@@ -2163,8 +2009,7 @@ export default function App() {
           if (run.empty) throw new Error(run.errors[0] || 'nothing drawn at these numbers')
           fxRan.current = spec.code
           setFxFrames(customCanvases(run))
-          // it rendered but it does not wrap: say so once, quietly, and leave
-          // the decision with him
+          // it rendered but it does not wrap: say so once, quietly, and leave the decision to the person looking
           setFxNote(run.seamRan && !run.loops ? 'this one does not loop cleanly' : '')
         } catch (err) {
           if (dropped) return
@@ -2208,10 +2053,7 @@ export default function App() {
     edRef.current?.pickPoint(null)
   }, [])
 
-  // ---- the review loop: rendering is free, so the tool looks at its own frames before asking a person ----
-
-  // one render, off explicit values instead of state, so a revision can be
-  // proven to draw something BEFORE it reaches the panel
+  // the review loop looks at its own frames before asking a person because rendering is free, and this renders once off explicit values instead of state, so a revision is proven to draw something before it reaches the panel
   const renderOnce = useCallback(async (f: FxState, p: EffectParams): Promise<HTMLCanvasElement[]> => {
     if (f.type === 'custom') {
       if (!f.custom) throw new Error('no recipe')
@@ -2276,9 +2118,7 @@ export default function App() {
         if (fxStop.current || e.sceneId !== sid) break
         why = v.why || why
         if (v.verdict !== 'revise') break
-        // what it wants changed, rendered before it is committed. A recipe that
-        // came back broken, or numbers that draw nothing, end the loop with the
-        // render that already worked still on screen.
+        // what it wants changed, rendered before it is committed; a recipe that came back broken, or numbers that draw nothing, end the loop with the render that already worked still on screen
         let nf = f
         let np = p
         if (f.type === 'custom' && v.code) nf = { ...f, custom: { code: v.code, controls: f.custom?.controls || [] } }
@@ -2305,9 +2145,7 @@ export default function App() {
     [renderOnce],
   )
 
-  // use this one: whatever is on screen right now is the render, and the loop
-  // ends where it stands rather than making him wait out a check. The pass in
-  // flight gets killed too, or the flag would only take effect after it.
+  // whatever is on screen right now is the render, so the loop ends where it stands instead of making anyone wait out a check, and the pass in flight is killed too or the flag would only take effect after it
   const stopReview = useCallback(() => {
     fxStop.current = true
     const j = jobRef.current
@@ -2315,8 +2153,7 @@ export default function App() {
     setFxRev((r) => (r ? { ...r, running: false } : r))
   }, [])
 
-  // the same look on demand, for any effect: a written one gets its body
-  // rewritten, one of the seven gets better numbers
+  // the same look on demand, for any effect: a written one gets its body rewritten, one of the seven gets better numbers
   const lookAtFx = useCallback(() => {
     if (!fx || !fxP || fxRev?.running) return
     void reviewFx(fx, fxP, fxFrames)
@@ -2330,8 +2167,7 @@ export default function App() {
       const sid = e.sceneId
       const patch = e.patchAround(at[0], at[1], 24)
       const mapColors = patch ? samplePalette(patch, 8) : ['#ffffff']
-      // two reads in a row at a minute each, so the stop button has to have
-      // something to post against for the whole of it
+      // two reads in a row at a minute each, so the stop button has to have something to post against for the whole of it
       const job = newJob('fx')
       jobRef.current = job
       stopRef.current = false
@@ -2353,12 +2189,10 @@ export default function App() {
       if (stopRef.current) return
       // a scene swap while the ask was being read drops the whole thing
       if (e.sceneId !== sid) return
-      // the eighth answer: no rule fitted, so the plan carries a renderer
-      // written for these words instead of the name of one
+      // the eighth answer: no rule fitted, so the plan carries a renderer written for these words instead of the name of one
       const written = !!(plan && plan.type === 'custom' && plan.code)
       const type: AnyEffectType = written ? 'custom' : plan && isEffectType(plan.type) ? plan.type : guessType(ask)
-      // the server already applied the colour-word rule, so its answer stands;
-      // only an unreachable server sends the words back through the fall-back
+      // the server already applied the colour-word rule, so its answer stands; only an unreachable server sends the words back through the fall-back
       let ownColors: string[] = []
       if (plan) {
         if (plan.palette === 'own' && Array.isArray(plan.colors)) ownColors = plan.colors
@@ -2395,8 +2229,7 @@ export default function App() {
           ? `${label} · its own colours · tune it, nothing is written yet`
           : `${label} · ${colors.length} colours off the map · tune it, nothing is written yet`,
       )
-      // a written renderer is the one nobody has ever seen the output of, so it
-      // reviews itself before he is asked anything. Free, and stoppable.
+      // a written renderer is the one nobody has ever seen the output of, so it reviews itself before anyone is asked anything, free and stoppable
       if (written) void reviewFx(next, params, [])
     },
     [push, reviewFx],
@@ -2423,8 +2256,7 @@ export default function App() {
     })
   }, [])
 
-  // make an effect arms a one-shot map click, the same picker the door flow
-  // uses. A click off the art stays armed; esc or right-click cancels.
+  // make an effect arms a one-shot map click, the same picker the door flow uses; a click off the art stays armed, and esc or right-click cancels
   const armFx = useCallback(() => {
     const e = edRef.current
     const ask = fxAsk.trim()
@@ -2471,16 +2303,14 @@ export default function App() {
             colors: fx.colors,
             palette: fx.palette,
             fps: fpsFor(fxP),
-            // a written effect carries its recipe onto disk beside the frames,
-            // so the pencil reopens it with every knob still working
+            // a written effect carries its recipe onto disk beside the frames, so the pencil reopens it with every knob still working
             code: fx.custom?.code,
             controls: fx.custom?.controls,
           },
           over,
           fx.ask,
         )
-        // it IS an effect by construction, so the flag rides whatever came back:
-        // without this the pencil only showed up after a reload
+        // it is an effect by construction, so the flag rides whatever came back: without this the pencil only showed up after a reload
         r.item.effect = true
         setLib((prev) => [...(prev || []).filter((x) => x.name !== r.item.name), r.item])
         // kept, so it goes on this map's record and shapes the next ask
@@ -2491,21 +2321,16 @@ export default function App() {
             .then((q) => setAsks(q.asks))
             .catch(() => {})
         if (over) {
-          // the urls did not change, so nothing on the map knows yet: repoint
-          // the placements (a longer take has more frames) and drop the cached
-          // pixels for those exact urls
+          // the urls did not change, so nothing on the map knows yet: repoint the placements (a longer take has more frames) and drop the cached pixels for those exact urls
           const n = e.refreshPlacementsOf(r.item)
           e.bustAssets(folderOf(r.item))
           setBust((b) => ({ ...b, [r.item.name]: Date.now() }))
           push(n ? `${r.item.name} updated · ${n} on the map` : `${r.item.name} updated`)
         } else if (fxEdit) {
-          // a second take off a reopened effect: it belongs to the library, not
-          // on top of whatever the original is doing
+          // a second take off a reopened effect: it belongs to the library, not on top of whatever the original is doing
           push(`${r.item.name} saved · click it, then the map`)
         } else {
-          // a glow, a twinkle or a swirl sits around its spot, so it drops half
-          // a sprite lower and the click ends up in the middle; everything else
-          // stands on the spot, the way every other placement anchors at its feet
+          // a glow, a twinkle or a swirl sits around its spot, so it drops half a sprite lower and the click ends up in the middle; everything else stands on the spot, the way every other placement anchors at its feet
           const mid =
             fx.type === 'glow' || fx.type === 'twinkle' || fx.type === 'swirl' || fx.type === 'custom'
           const n = e.addPlacements([
@@ -2555,8 +2380,7 @@ export default function App() {
         const patch = e.patchAround(spot[0], spot[1], 24)
         const sampled = patch ? samplePalette(patch, 8) : ['#ffffff']
         const colors = saved.colors.length ? saved.colors : sampled
-        // an effect saved on its own ramp reopens on it; the sampled colours
-        // sit behind the toggle so the map is still one click away
+        // an effect saved on its own ramp reopens on it, and the sampled colours sit behind the toggle so the map is still one click away
         const palette: 'map' | 'own' = saved.palette === 'own' ? 'own' : 'map'
         stopPick()
         setFx({
@@ -2636,9 +2460,7 @@ export default function App() {
     [standPick],
   )
 
-  /* THE AREA, two corners, so the second click needs the first one to still be
-   * in hand. Held in state rather than in the editor because it is a gesture
-   * and not a fact about the map until both clicks have happened. */
+  /* the area is two corners, so the second click needs the first one still in hand, held in state rather than in the editor because it is a gesture and not a fact about the map until both clicks have happened */
   const armRect = useCallback(
     (id: number) => {
       const e = edRef.current
@@ -2716,8 +2538,7 @@ export default function App() {
           ? Array.from({ length: genCount }, (_, i) => ({ name: `${slug(p)}-${i + 1}`, seed: seed0 + i + 1 }))
           : [{}]
       setGenRun({ done: 0, total: runs.length })
-      // the line under the button is about what LAST came back, so it goes the
-      // moment something new is being drawn
+      // the line under the button is about what last came back, so it goes the moment something new is being drawn
       setSaid(null)
       const made: api.LibItem[] = []
       // asked once per run, and only once something is on screen to ask about
@@ -2777,8 +2598,7 @@ export default function App() {
       setGenRun(null)
       if (made.length) {
         setGenPrompt('')
-        // the box clears on success, so the words go on the list in the same
-        // breath: the box is otherwise the only place they exist
+        // the box clears on success, so the words go on the list in the same breath: the box is otherwise the only place they exist
         api
           .asks(sid)
           .then((r) => setAsks(r.asks))
@@ -2805,9 +2625,7 @@ export default function App() {
     if (genBox) {
       setGenBox(null)
       setGenPlan(null)
-      // a fill's plan is a list of positions INSIDE the box, so it means nothing
-      // once the box is gone. Letting it survive leaves the draw button lit
-      // over a plan with nowhere to land.
+      // a fill's plan is a list of positions inside the box, so it means nothing once the box is gone, and letting it survive leaves the draw button lit over a plan with nowhere to land
       setScene(null)
       push('box cleared · it will read the whole map')
       return
@@ -2844,8 +2662,7 @@ export default function App() {
       const box = genBox || { x: 0, y: 0, w: e.doc.W, h: e.doc.H }
       const r = await api.scenePlan(e.sceneId, {
         map,
-        // the boxed area goes at 2x because a 40px strip is easier to judge
-        // enlarged. With no box the area IS the map, which is already in hand.
+        // the boxed area goes at 2x because a 40px strip is easier to judge enlarged, and with no box the area is the map, which is already in hand
         boxImage: genBox ? e.areaDataURL(genBox, 2) : map,
         box,
         ask,
@@ -2889,8 +2706,7 @@ export default function App() {
   const runMany = useCallback(async () => {
     const e = edRef.current
     if (!e || !scene || fillRun) return
-    // the map half is what needs the area. A library row does not stand
-    // anywhere yet, so it does not need one.
+    // the map half is what needs the area, because a library row does not stand anywhere yet
     const place = makeWhat === 'fill'
     if (place && !genBox) return
     const wanted = scene.items.filter((_, i) => !sceneOff.has(i))
@@ -2899,12 +2715,9 @@ export default function App() {
       return
     }
     const sid = e.sceneId
-    // what this set came from, held before the box is cleared. A fill's box can
-    // be empty, and then the plan's own line is the nearest thing to an ask.
+    // what this set came from, held before the box is cleared, because a fill's box can be empty and then the plan's own line is the nearest thing to an ask
     const ask = genPrompt.trim() || scene.note || `${wanted.length} things`
-    // one job for the whole run. Without it a stop mid-run posted the id of
-    // the planner that had already finished, so only the flag between items did
-    // anything and the generation in flight ran to the end.
+    // one job for the whole run, or a mid-run stop posts the id of the planner that already finished, leaving only the flag between items and letting the generation in flight run to the end
     const job = newJob(place ? 'fill' : 'many')
     jobRef.current = job
     stopRef.current = false
@@ -2926,12 +2739,9 @@ export default function App() {
             : await api.assetGen(sid, it.what, { job, thing: it.prompt, tw: it.w, th: it.h })
         if (e.sceneId !== sid) break
         setLib((prev) => [...(prev || []).filter((x) => x.name !== r.item.name), r.item])
-        // one of a set can land still when the whole set was asked for moving,
-        // so the reason travels with that item rather than being lost in the
-        // run's own summary
+        // one of a set can land still when the whole set was asked for moving, so the reason travels with that item rather than being lost in the run's own summary
         if ('note' in r && r.note) push(`${r.item.name} · ${r.note}`)
-        // straight onto the map at the planned spot, so a run cut short still
-        // leaves what it managed to draw
+        // straight onto the map at the planned spot, so a run cut short still leaves what it managed to draw
         if (place && genBox)
           e.addPlacements([
             {
@@ -2964,9 +2774,7 @@ export default function App() {
         : 'nothing was drawn',
     )
     if (!made.length) return
-    // the words go on the record and out of the box in the same breath, the
-    // same as a single asset ask. A fill's box is steering rather than an ask,
-    // so it keeps what was typed.
+    // the words go on the record and out of the box in the same breath, the same as a single asset ask; a fill's box is steering rather than an ask, so it keeps what was typed
     if (!place) setGenPrompt('')
     api
       .asks(sid)
@@ -2979,9 +2787,7 @@ export default function App() {
   /* two presses: a free read writing the prompt off the painting, then a spend that runs it verbatim. */
   const doGen = useCallback(async (askIn?: string) => {
     const e = edRef.current
-    // the words are normally the ones in the box. They are handed in only by
-    // try-again, whose whole point is that one press both fills the box and
-    // reads the map, and state set a line earlier is not readable yet.
+    // the words are normally the ones in the box, handed in only by try-again, where one press both fills the box and reads the map and state set a line earlier is not readable yet
     const p = (askIn ?? genPrompt).trim()
     if (!e || !p || genRun || genBusy || charRun) return
     const what = makeWhat === 'sprite' ? 'sprite' : 'object'
@@ -3009,8 +2815,7 @@ export default function App() {
           job,
         })
         if (stopRef.current) return
-        // held to the same 1..24 the area planner clamps to, so the busy line
-        // and the price can never name a number the next call will not honour
+        // held to the same 1..24 the area planner clamps to, so the busy line and the price can never name a number the next call will not honour
         const many = Math.min(24, Math.max(1, Math.round(r.plan.count || 1)))
         /* "a few crates" came back one welded png, so the router counts the ask and hands a set to the fill planner. */
         if (what === 'object' && many > 1) {
@@ -3033,8 +2838,7 @@ export default function App() {
     }
 
     const plan = genPlan
-    // a sprite mode holding an object plan has nowhere to send it, so it reads
-    // again rather than spending on the wrong endpoint
+    // a sprite mode holding an object plan has nowhere to send it, so it reads again rather than spending on the wrong endpoint
     if (what === 'sprite' && !plan.sprite) {
       setGenPlan(null)
       push('that read came back as an asset · press again to read it as a sprite')
@@ -3047,8 +2851,7 @@ export default function App() {
       void runSpriteGen(p, plan)
       return
     }
-    // pixellab takes the background at 32..192 per side, so the box is fitted
-    // into that before it is sent; without a box it generates on bare canvas
+    // pixellab takes the background at 32..192 per side, so the box is fitted into that before it is sent; without a box it generates on bare canvas
     const bg = genBox ? e.areaDataURL(genBox, 0, 192) : ''
     runGen(p, plan, bg)
   }, [genPrompt, genRun, genBusy, charRun, makeWhat, genPlan, genBox, genType, genLast, readMany, push, runGen, runSpriteGen])
@@ -3067,8 +2870,7 @@ export default function App() {
     [closeMatch, doGen, push],
   )
 
-  // deleting a library item: the file goes for good, and every placement of
-  // it comes off the canvas in one undo step (z restores the placements)
+  // deleting a library item: the file goes for good, and every placement of it comes off the canvas in one undo step (z restores the placements)
   const removeLib = useCallback(
     async (it: api.LibItem) => {
       const e = edRef.current
@@ -3118,11 +2920,7 @@ export default function App() {
     [push],
   )
 
-  /* THE ANIMATION SWITCH. Nothing is generated either way, so it needs no plan, no price and no
-     confirm: taking the movement off keeps the frames, and putting it back reads the frames that
-     were kept. The library row, the decoded images and every placement of it all have to be told,
-     the same four steps an in-place edit takes, because the item has changed shape and a placement
-     holding the old shape's urls draws nothing at all. */
+  /* the animation switch generates nothing either way, so it needs no plan, price or confirm, but the library row, the decoded images and every placement have to be told, the same four steps an in-place edit takes, because a placement holding the old shape's urls draws nothing at all */
   const doAnimSwitch = useCallback(
     async (name: string, on: boolean) => {
       const ed = edRef.current
@@ -3145,10 +2943,7 @@ export default function App() {
     [push],
   )
 
-  /* FRAMES ALREADY BOUGHT, FETCHED FOR NOTHING. The server looks on the account for a motion this
-     figure was paid for and hands it back; it refuses rather than guessing when it cannot find one,
-     and it will not pad a set of standing rotations into a fake walk cycle. No plan, no price and no
-     confirm, because nothing here can spend. */
+  /* frames already bought, fetched for nothing: the server hands back a motion this figure was paid for, refuses rather than guessing when it cannot find one, and will not pad standing rotations into a fake walk cycle, so no plan, price or confirm */
   const doCollect = useCallback(
     async (item: api.LibItem) => {
       const e = edRef.current
@@ -3192,8 +2987,7 @@ export default function App() {
       const parts = partsOf(a)
       const urls = parts.urls
       if (!urls.length || !urls[0]) return
-      // the anchor comes off the placement BEFORE it is repointed, or it would
-      // be measured against the cropped size
+      // the anchor comes off the placement before it is repointed, or it would be measured against the cropped size
       const at = e.cropAnchor(id, r)
       e.setBusy('cropping')
       try {
@@ -3205,9 +2999,7 @@ export default function App() {
           g.drawImage(img, r.x, r.y, r.w, r.h, 0, 0, r.w, r.h)
           return c.toDataURL('image/png')
         })
-        // Every placement of this item, and where each of their feet have to
-        // land so the kept pixels do not jump. Measured BEFORE the write, since
-        // the anchor is worked out against the size the png still has.
+        // every placement of this item, and where each of their feet have to land so the kept pixels do not jump, measured before the write since the anchor is worked out against the size the png still has
         const mine = e.doc.assets.filter((q) => assetLabel(q) === name).map((q) => q.id)
         /* a crop of one writes a copy under a new name, so the other placements keep their row untouched. */
         const alone = !editAll && mine.length > 1
@@ -3229,12 +3021,9 @@ export default function App() {
           const anchors = new Map<string, { x: number; y: number } | null>()
           for (const pid of mine) anchors.set(pid, pid === id ? at : e.cropAnchor(pid, r))
           e.refreshPlacementsOf(res.item)
-          // ONE undo step for every copy. Per-placement edits put one entry on
-          // the stack each, so z moves a single tree back and leaves the other
-          // eighteen where the crop put them.
+          // one undo step for every copy, because per-placement edits put one entry on the stack each, so z moves a single tree back and leaves the other eighteen where the crop put them
           e.moveAll(anchors)
-          // filed against the undo depth it now sits at, so z knows which press
-          // is the one that should put the pixels back
+          // filed against the undo depth it now sits at, so z knows which press is the one that should put the pixels back
           pixelUndo.current.push({ name, at: e.doc.histLen() })
           saidEdit(name, `cropped to ${r.w}×${r.h}`, mine.length)
         }
@@ -3263,8 +3052,7 @@ export default function App() {
     })
   }, [applyCrop, push])
 
-  // a double click on a placement opens the crop box, so the editor needs a way
-  // back into this callback
+  // a double click on a placement opens the crop box, so the editor needs a way back into this callback
   useEffect(() => {
     const e = edRef.current
     if (e) e.cropReq = doCrop
@@ -3325,8 +3113,7 @@ export default function App() {
     }
   }, [])
 
-  /* the words that would be sent, read back from the server so what is shown is
-   * what runs rather than a second copy of the assembly living in the browser */
+  /* the words that would be sent, read back from the server so what is shown is what runs rather than a second copy of the assembly living in the browser */
   useEffect(() => {
     const sub = prompt.trim()
     if (!sub) return setWillDraw('')
@@ -3356,8 +3143,7 @@ export default function App() {
     setCands([])
     try {
       const { jobs } = await api.generate(p, n, w, h, styleKey)
-      // the choice belongs to the map from here, so every asset made for it
-      // afterwards is drawn by the same hand without being asked again
+      // the choice belongs to the map from here, so every asset made for it afterwards is drawn by the same hand without being asked again
       if (e.sceneId) void api.setMapStyle(e.sceneId, styleKey).catch(() => {})
       const live: Cand[] = jobs
         .filter((j) => j.id)
@@ -3538,11 +3324,7 @@ export default function App() {
       </label>
 
       <Sec>generate</Sec>
-      {/* THE HAND COMES BEFORE THE SUBJECT. Choosing it after the words are
-          typed reads as a filter on them; choosing it first reads as what it is,
-          which is who is drawing. Only shown when there is a hand to choose:
-          an account with none has no choice to make and Other is the only
-          answer, so an empty pair of buttons would be furniture. */}
+      {/* the hand comes before the subject, because choosing it after the words are typed reads as a filter on them, and it is only shown when there is a hand to choose since an account with none has Other as its only answer */}
       {cards.length > 0 && (
         <div className="stylepick">
           {cards.map((c) => (
@@ -3589,8 +3371,7 @@ export default function App() {
           {candN} paintings to choose from{usd ? ` · ${usd} left` : ''}
         </span>
       </label>
-      {/* what will actually be sent, because a hand described is a hand nobody
-          can check and this is free to show */}
+      {/* what will actually be sent, because a hand described is a hand nobody can check and this is free to show */}
       {willDraw ? (
         <details className="willdraw">
           <summary>what will be drawn</summary>
@@ -3933,9 +3714,7 @@ export default function App() {
   // the map's routes and its shots, and whichever row of each has its form open
   const paths = st?.paths ?? []
   const editingPath = paths.find((p) => p.id === pathEdit)
-  /* the bad legs of the route being edited, and only when it is the one the
-     editor has selected: the status measures the selection, and opening a form
-     without selecting the same route would report another line's faults */
+  /* the bad legs of the route being edited, and only when it is the one the editor has selected, because the status measures the selection and a form opened without selecting the same route would report another line's faults */
   const pathBad = editingPath && st?.pathSel === editingPath.id ? (st?.pathBad ?? []) : []
   const framings = st?.framings ?? []
   const editingShot = framings.find((f) => f.id === shotEdit)
@@ -3962,9 +3741,7 @@ export default function App() {
   const setGaps = editingSet && st?.anchorSetSel === editingSet.id ? (st?.setGaps ?? []) : []
   const rackGaps = editingRack && st?.rackSel === editingRack.id ? (st?.rackGaps ?? []) : []
   const varGaps = editingVar && st?.variantSel === editingVar.id ? (st?.variantGaps ?? []) : []
-  /* Open one collection and close every other form in this panel, the route and
-   * the shot included. The editor is told which row is selected as well, or the
-   * gaps above measure nothing. */
+  /* open one collection and close every other form in this panel, the route and the shot included, and tell the editor which row is selected or the gaps above measure nothing */
   const openColl = (kind: 'set' | 'rack' | 'var', id: number) => {
     setCollEdit(id ? `${kind}:${id}` : '')
     setCollDraft(null)
@@ -3977,9 +3754,7 @@ export default function App() {
     setShotEdit(0)
     ed?.selectFraming(0)
   }
-  /* the anchor picker every collection form spends, offered once. A name that
-   * has been renamed or deleted under a slot is added by the caller, because
-   * only the caller knows which name is missing. */
+  /* the anchor picker every collection form spends, offered once; a name renamed or deleted under a slot is added by the caller, because only the caller knows which name is missing */
   const anchorOpts = doors.map((d) => (
     <option key={d.id} value={d.name}>
       {readable(d)} · {d.name}
@@ -4079,9 +3854,7 @@ export default function App() {
                   spellCheck={false}
                 />
               </label>
-              {/* WITHOUT THIS every door into a map drops the player on that
-                  map's single global spawn, so three connected rooms all land
-                  you on the same tile whichever way you came in. */}
+              {/* without this, every door into a map drops the player on that map's single global spawn, so three connected rooms all land you on the same tile whichever way you came in */}
               <label className="anchfield">
                 <span>arrive at · anchor over there</span>
                 <input
@@ -4132,8 +3905,7 @@ export default function App() {
                   ))}
                 </optgroup>
               )}
-              {/* a binding whose placement is gone is shown rather than silently
-                  dropped, or an author fixes an anchor they never knew broke */}
+              {/* a binding whose placement is gone is shown rather than silently dropped, or an author fixes an anchor they never knew broke */}
               {editingDoor.placement && !bindTargets.has(editingDoor.placement) && (
                 <option value={editingDoor.placement}>{editingDoor.placement} · gone</option>
               )}
@@ -4226,9 +3998,7 @@ export default function App() {
               >
                 draw
               </button>
-              {/* THE ONLY THING THAT THROWS A SHAPE AWAY, and it takes a press.
-                  A mode switch that does it silently loses an author's drawing
-                  to the wrong button. */}
+              {/* the only thing that throws a shape away, and it takes a press, because a mode switch that does it silently loses an author's drawing to the wrong button */}
               {((liveShape === 'poly' && editingDoor.poly) || (liveShape === 'rect' && editingDoor.rect)) && (
                 <button
                   className="arow-x"
@@ -4263,9 +4033,7 @@ export default function App() {
           </div>
           <div className="doorhint">{ANCHOR_ZONE[editingDoor.kind]}</div>
 
-          {/* THE RADIUS, TYPEABLE, because the ceiling is 512 and stepping there
-              two pixels at a time is 250 presses. The buttons stay for the small
-              corrections they were always for. */}
+          {/* the radius is typeable because the ceiling is 512 and stepping there two pixels at a time is 250 presses, and the buttons stay for the small corrections they were always for */}
           <div className="doorrad">
             <span>radius</span>
             <button className="mbtn" onClick={() => ed?.updateEvent(editingDoor.id, { r: editingDoor.r - 2 })}>
@@ -4293,9 +4061,7 @@ export default function App() {
             </button>
           </div>
           <div className="doorhint">{ANCHOR_WHAT[editingDoor.kind]}</div>
-          {/* what this one anchor is a member of. Without it a collection is
-              only visible from its own form, so an author looking at stele_2
-              cannot tell it is one of the five that python iterates. */}
+          {/* what this one anchor is a member of: without it a collection is only visible from its own form, so an author looking at stele_2 cannot tell it is one of the five that python iterates */}
           {anchorIn.length > 0 && <div className="doorhint">in {anchorIn.join(' · ')}</div>}
           {/* the bag a reader picks up, which without this carries only MAPVIS bookkeeping and nothing an author chose. */}
           <div className="metarows">
@@ -4312,8 +4078,7 @@ export default function App() {
                   onBlur={(e) => {
                     const nk = e.target.value.trim()
                     if (nk === k) return
-                    // the new name takes the previous one's value, and clearing
-                    // the name is how a key is removed
+                    // the new name takes the previous one's value, and clearing the name is how a key is removed
                     if (nk) ed?.setAnchorMeta(editingDoor.id, nk, String(v ?? ''))
                     if (k) ed?.setAnchorMeta(editingDoor.id, k, null)
                   }}
@@ -4453,9 +4218,7 @@ export default function App() {
               className={'evrow' + (doorEdit === ev.id ? ' sel' : '')}
               /* what this kind does and where it goes, rather than a title repeating the two lines already under the pointer. */
               data-tip={
-                /* the reach is the radius only while the radius is the live
-                   shape. On a region drawn as an area the ring is dormant data
-                   and the row would be quoting a number the game never tests. */
+                /* the reach is the radius only while the radius is the live shape, because on a region drawn as an area the ring is dormant data and the row would quote a number the game never tests */
                 `${ANCHOR_WHAT[ev.kind]} · ${
                   anchorShape(ev) === 'poly'
                     ? `${ev.poly?.length ?? 0} points drawn`
@@ -4476,9 +4239,7 @@ export default function App() {
               <span className="row-ic">
                 <Icon name={ANCHOR_ICON[ev.kind]} />
               </span>
-              {/* the NAME leads, because that is what a player is told the
-                  door is. Its address and where it goes sit on the line under
-                  it, captioned, in Addr above. */}
+              {/* the name leads, because that is what a player is told the door is, and its address and where it goes sit captioned on the line under it, in Addr above */}
               <span className="ev-name">
                 {/* the label leads and the identifier follows; displayName unpacks the identifier when no label was typed. */}
                 {/* the mark is only about these words: reading ev.meta.derived dotted a label somebody actually typed. */}
@@ -4588,8 +4349,7 @@ export default function App() {
             </div>
           )}
 
-          {/* the heading to hold on arrival, the same compass the anchor form
-              uses and the same middle cell meaning no opinion */}
+          {/* the heading to hold on arrival, the same compass the anchor form uses and the same middle cell meaning no opinion */}
           <div className="anchface">
             <span>facing</span>
             <div className="facegrid">
@@ -4708,9 +4468,7 @@ export default function App() {
                 setPathEdit(open)
                 setRnameDraft(null)
                 ed?.selectPath(open)
-                // one inspector at a time. Picking a route while a shot form
-                // was open stacked both, and the panel grew until neither the
-                // route nor the shot was on screen at the same moment.
+                // one inspector at a time: picking a route while a shot form was open stacked both, and the panel grew until neither was on screen at the same moment
                 setShotEdit(0)
                 ed?.selectFraming(0)
               }}
@@ -4719,9 +4477,7 @@ export default function App() {
                 <Icon name="route" />
               </span>
               <span className="ev-name">
-                {/* the same two lines a door row has, and for the same reason:
-                    `the_dock_walk` is the address, not the name, and printing
-                    it as the heading was the last place in the tool doing it */}
+                {/* the same two lines a door row has, and for the same reason: `the_dock_walk` is the address, not the name, and printing it as the heading was the last place in the tool doing it */}
                 <b className={displayName(p).derived ? 'guessed' : undefined}>{displayName(p).text}</b>
                 <Addr
                   parts={[
@@ -4759,9 +4515,7 @@ export default function App() {
             ? 'the offset from that anchor, so the shot travels when it does'
             : 'open an anchor above first, or it stores raw numbers'
         }
-        // and this one, because it says what pressing WILL DO in the state the
-        // panel is actually in. A shot saved on no anchor stores raw pixels
-        // that re-break the next time the painting is cut.
+        // and this one, because it says what pressing will do in the state the panel is actually in: a shot saved on no anchor stores raw pixels that re-break the next time the painting is cut
         keep
         onClick={() => {
           const id = ed?.armFraming(editingDoor?.name ?? '')
@@ -4810,9 +4564,7 @@ export default function App() {
                   {readable(d)} · {d.name}
                 </option>
               ))}
-              {/* an anchor that has been renamed or deleted under the shot is
-                  shown rather than silently dropped, or an author fixes a shot
-                  they never knew broke */}
+              {/* an anchor that has been renamed or deleted under the shot is shown rather than silently dropped, or an author fixes a shot they never knew broke */}
               {editingShot.anchor && !doors.some((d) => d.name === editingShot.anchor) && (
                 <option value={editingShot.anchor}>{editingShot.anchor} · gone</option>
               )}
@@ -4847,8 +4599,7 @@ export default function App() {
               value={editingShot.dy}
               onCommit={(v) => ed?.updateFraming(editingShot.id, { dy: v })}
             />
-            {/* two decimals on purpose: the pull-out shot cannot exist on the
-                renderer's integer notches, so this field does not round */}
+            {/* two decimals on purpose: the pull-out shot cannot exist on the renderer's integer notches, so this field does not round */}
             <NumField
               label="zoom"
               value={editingShot.zoom}
@@ -4868,8 +4619,7 @@ export default function App() {
             </button>
           </div>
 
-          {/* short for the same reason the route form's mark button is: this row
-              cannot wrap, so a long label widens the form past the panel */}
+          {/* short for the same reason the route form's mark button is: this row cannot wrap, so a long label widens the form past the panel */}
           <div className="anchspot">
             <span>check it</span>
             <button
@@ -4906,9 +4656,7 @@ export default function App() {
             <div
               key={f.id}
               className={'evrow' + (shotEdit === f.id ? ' sel' : '')}
-              /* WHAT A SHOT IS, and what the word `arrival` on the line below
-                 means, which is the question a tooltip repeating that line
-                 leaves unanswered */
+              /* what a shot is, and what the word `arrival` on the line below means, which is the question a tooltip repeating that line leaves unanswered */
               data-tip={
                 (f.entry
                   ? 'the view a player gets on arriving in this map'
@@ -4921,8 +4669,7 @@ export default function App() {
                 setShotEdit(open)
                 setSnameDraft(null)
                 ed?.selectFraming(open)
-                // the other half of the same law, so a shot picked under an
-                // open route form closes that form instead of piling onto it
+                // the other half of the same law, so a shot picked under an open route form closes that form instead of piling onto it
                 setPathEdit(0)
                 ed?.selectPath(0)
               }}
@@ -5002,9 +4749,7 @@ export default function App() {
                 editingDoor && ed?.updateSet(editingSet.id, { members: [...editingSet.members, editingDoor.name] })
               }
             >
-              {/* the name is not repeated in the already-in case: this row is
-                  one nowrap button in a 228px form, and `quarry_gate is
-                  already in` ellipsised to `quarry_gate is alread…` */}
+              {/* the name is not repeated in the already-in case: this row is one nowrap button in a 228px form, and `quarry_gate is already in` ellipsised to `quarry_gate is alread…` */}
               {!editingDoor
                 ? 'open an anchor above first'
                 : editingSet.members.includes(editingDoor.name)
@@ -5026,9 +4771,7 @@ export default function App() {
               </button>
             </div>
           ))}
-          {/* the same question the publish gate asks, asked while somebody is
-              still looking at the screen, in the red check reach paints
-              stranded ground with */}
+          {/* the same question the publish gate asks, asked while somebody is still looking at the screen, in the red check reach paints stranded ground with */}
           {setGaps.length > 0 && (
             <div className="anchwarn">nothing on this map is called {setGaps.join(', ')}</div>
           )}
@@ -5255,8 +4998,7 @@ export default function App() {
               )}
             </select>
           </label>
-          {/* a member can only be a placement somebody NAMED: an unnamed one has
-              no address for the set to hold on to */}
+          {/* a member can only be a placement somebody named: an unnamed one has no address for the set to hold on to */}
           <label className="anchfield">
             <span>add a placement</span>
             <select
@@ -5279,8 +5021,7 @@ export default function App() {
           </label>
           {editingVar.members.map((m) => (
             <div className="varrow" key={m.name}>
-              {/* the dot turns all the way off, because nothing showing is a
-                  state an author chooses and not a fallback */}
+              {/* the dot turns all the way off, because nothing showing is a state an author chooses and not a fallback */}
               <button
                 className={'vardot' + (editingVar.initial === m.name ? ' on' : '')}
                 role="radio"
@@ -5387,12 +5128,10 @@ export default function App() {
   const assets: PlacedAsset[] = st?.assets ?? []
   const selAll = st?.assetSelAll ?? []
   const many = selAll.length > 1
-  // the inspector is about ONE placement's numbers, so it stands down when a
-  // set is picked and the many-at-once row takes its place
+  // the inspector is about one placement's numbers, so it stands down when a set is picked and the many-at-once row takes its place
   const selA = many ? undefined : assets.find((a) => a.id === st?.assetSel)
   const hiddenSet = new Set(st?.hiddenGroups ?? [])
-  // the condition a layer carries. A group only gets a row in the document once
-  // it says something, so most maps answer '' here and grow no field.
+  // the condition a layer carries: a group only gets a row in the document once it says something, so most maps answer '' here and grow no field
   const whenOfGroup = (name: string) => (st?.groups ?? []).find((g) => g.name === name)?.when ?? ''
   /* read off the sets, because membership lives there and a placement has no idea it is in one. */
   const selVariant = (() => {
@@ -5403,15 +5142,12 @@ export default function App() {
     }
     return null
   })()
-  /* EVERY FACE THIS PLACEMENT HAS, numbered the way `art` numbers them: slot 0
-   * is the picture it was placed with and slot 1 is looks[0]. That off-by-one
-   * lives in lookOf and this list only counts. */
+  /* every face this placement has, numbered the way `art` numbers them: slot 0 is the picture it was placed with and slot 1 is looks[0], an off-by-one that lives in lookOf while this list only counts */
   const selFaces = selA ? [0, ...(selA.looks || []).map((_, i) => i + 1)] : []
   const groupNames = [...SUGGESTED_GROUPS]
   for (const a of assets) if (!groupNames.includes(a.group)) groupNames.push(a.group)
   const thumbOf = (a: { src?: string; frames?: string[] }) => a.src || (a.frames && a.frames[0]) || ''
-  // one picture off any library item, whichever of the three shapes it is: a
-  // png, a folder of frames, or a set of headings
+  // one picture off any library item, whichever of the three shapes it is: a png, a folder of frames, or a set of headings
   const shotOf = (a: api.LibItem) => a.src || a.frames?.[0] || a.dirs?.south?.[0] || ''
   /* one movement value for a placement or a whole set, since runLife reads the live selection either way. */
   const lifeBoxFor = (id: string) => (
@@ -5469,15 +5205,12 @@ export default function App() {
   const styled = makeWhat === 'sprite' && styleOn && !!styleId
   const perTake = makeWhat === 'sprite' ? (styled ? PRO_BODY : 1) + spriteDirs + spriteFaces : genType === 'animated' ? 2 : 1
   const genCost = genCount * perTake
-  // the big preview's zoom: the largest whole multiple that still fits the
-  // panel, so a tall plume and a wide splash both land inside the column
+  // the big preview's zoom: the largest whole multiple that still fits the panel, so a tall plume and a wide splash both land inside the column
   const fxBig = fxP ? ([4, 3, 2, 1].find((z) => Math.max(fxP.width, fxP.height) * z <= 208) ?? 1) : 4
 
-  // the library item a placement was made from, matched by name: that is what
-  // the library calls a static png (basename) and an animated folder alike
+  // the library item a placement was made from, matched by name: that is what the library calls a static png (basename) and an animated folder alike
   const selItem = selA ? (lib || []).find((it) => it.name === assetLabel(selA)) : undefined
-  // how many placements draw from the same library row, which is how many a
-  // pixel edit would change
+  // how many placements draw from the same library row, which is how many a pixel edit would change
   const sameCount = selA ? assets.filter((q) => assetLabel(q) === assetLabel(selA)).length : 0
   const selIsFx = !!(selItem && selItem.kind === 'animated' && selItem.effect)
   /* animating is the library row, not one copy: it rewrites the art in place under the row's own name. */
@@ -5493,8 +5226,7 @@ export default function App() {
   )
   /* a ceiling and not a promise: eight headings is at most eight and a written recipe costs none. */
   const animMost = selWays || 1
-  // said the same way everywhere: an eight-heading job is minutes, and a label
-  // that never changes for five of them is indistinguishable from a hang
+  // said the same way everywhere: an eight-heading job is minutes, and a label that never changes for five of them is indistinguishable from a hang
   const animWait = animPlan
     ? animPlan.path === 'character'
       ? `${(animPlan.headings || []).length || selWays} headings in one job · five to fifteen minutes`
@@ -5550,9 +5282,7 @@ export default function App() {
         <span className="field-desc">{animDesc}</span>
       </label>
       <div className="genrow">
-        {/* the yellow arm is the money colour and it stays that way: a free
-            answer is a second press too, but it is not a spend and must not
-            shout like one */}
+        {/* the yellow arm is the money colour and it stays that way: a free answer is a second press too, but it is not a spend and must not shout like one */}
         <button
           className={'primary genbtn' + (animPlan && animPlan.price > 0 ? ' armed' : '')}
           onClick={() => void doAnim(animItem)}
@@ -5570,16 +5300,13 @@ export default function App() {
     </div>
   )
 
-  // how far this one placement is above the map's pixel size; 1 means it is
-  // already there and the button has no work to offer
+  // how far this one placement is above the map's pixel size; 1 means it is already there and the button has no work to offer
   const selBit =
     selItem && selA
       ? bitFactor(selItem.w, selItem.h, selItem.w * Math.abs(selA.sx), selItem.h * Math.abs(selA.sy))
       : 1
   const thumbSrc = (it: api.LibItem) => thumbOf(it) + (bust[it.name] ? `?t=${bust[it.name]}` : '')
-  /* Does this row's art move at all. kind cannot answer it: a set of headings
-   * is 'static' whether each heading holds one still or eight frames of a walk,
-   * so the only honest test is how many frames a heading has. */
+  /* does this row's art move at all: kind cannot answer it, because a set of headings is 'static' whether each heading holds one still or eight frames of a walk, so the honest test is how many frames a heading has */
   const libMoves = (it: api.LibItem) =>
     it.kind === 'animated' ? (it.frames?.length ?? 0) > 1 : (Object.values(it.dirs ?? {})[0]?.length ?? 0) > 1
 
@@ -5610,12 +5337,8 @@ export default function App() {
     </div>
   )
 
-  // the selected placement, in numbers you can type. Every field commits on
-  // enter or blur and each commit is one undo step, so a typed 0.62 walks back
-  // exactly like a dragged corner.
-  /* How far ctrl+p goes. Shown wherever the button is, because the right amount
-   * is a look and only the person looking can call it: "match the map" is the
-   * arithmetically correct answer and it came out far too blocky in practice. */
+  // the selected placement, in numbers you can type: every field commits on enter or blur and each commit is one undo step, so a typed 0.62 walks back exactly like a dragged corner
+  /* how far ctrl+p goes, shown wherever the button is, because the right amount is a look and only the person looking can call it: matching the map is arithmetically correct and came out far too blocky in practice */
   const grainRow = (
     <div className="grainrow">
       <span className="grainlab">chunk</span>
@@ -5692,9 +5415,7 @@ export default function App() {
       </div>
       {faceOpen && selItem && (
         <div className="lifebox">
-          {/* one line saying what this box does, because a bare input with a
-              greyed example in it reads as a field to fill rather than an
-              action to take */}
+          {/* one line saying what this box does, because a bare input with a greyed example in it reads as a field to fill rather than an action to take */}
           <div className="boxwhat">
             {selItem.states?.length
               ? `it already wears ${selItem.states.map((f) => f.name).join(', ')} · add another picture`
@@ -5792,9 +5513,7 @@ export default function App() {
         />
       </label>
       {pnameSaid?.id === selA.id && <div className="anchwarn">{pnameSaid.why}</div>}
-      {/* it is one of several that trade places, not scenery. Said here because
-          the set itself lives two steps back, on step 4, and nothing on this
-          placement would otherwise admit it is half of a pair. */}
+      {/* it is one of several that trade places, not scenery, said here because the set itself lives two steps back on step 4 and nothing on this placement would otherwise admit it is half of a pair */}
       {selVariant && (
         <div className="doorhint">
           one of {selVariant.set.members.length} in {selVariant.set.name} · this one is{' '}
@@ -5823,16 +5542,12 @@ export default function App() {
         value={selA.when ?? ''}
         onCommit={(v) => ed?.setAssetWhen([selA.id], v)}
       />
-      {/* WHAT IT BLOCKS ON THE GROUND. Measured off the sprite's own alpha at
-          publish, which is right nearly always, so blank is the answer here and
-          four numbers are the correction. */}
+      {/* what it blocks on the ground, measured off the sprite's own alpha at publish, which is right nearly always, so blank is the answer here and four numbers are the correction */}
       <FootField
         value={selA.foot}
         onCommit={(f) => ed?.setFoot([selA.id], f)}
       />
-      {/* a group's condition is inherited rather than copied, so a placement
-          with none of its own is not unconditional and must not read as if it
-          is */}
+      {/* a group's condition is inherited rather than copied, so a placement with none of its own is not unconditional and must not read as if it is */}
       {!selA.when && whenOfGroup(selA.group) && (
         <div className="doorhint">inherits {whenOfGroup(selA.group)} from {selA.group}</div>
       )}
@@ -5868,10 +5583,7 @@ export default function App() {
           <input type="checkbox" checked={selA.fy} onChange={() => ed?.flipSelected('y')} /> flip v
         </label>
       </div>
-      {/* WHICH OF TWO OVERLAPPING THINGS IS IN FRONT. It writes a nudge to the sort key and
-          moves nothing: the older version of these two shifted the placement down the map, which
-          put it in front and also stood it somewhere its author had not put it. The step is
-          measured against what this actually covers, so one press clears the thing in the way. */}
+      {/* which of two overlapping things is in front: it writes a nudge to the sort key and moves nothing, because the older version shifted the placement down the map, which put it in front but also stood it where its author had not, and the step is measured against what this covers so one press clears the thing in the way */}
       <div className="actrow">
         <button
           className="abtn"
@@ -5909,9 +5621,7 @@ export default function App() {
         </button>
       </div>
       <div className="actrow">
-        {/* it sits with the other edits to the ART, because that is what it is:
-            the pixels get rewritten in place under the same name, the way
-            trim and pixelate rewrite them. It offers no list of animations. */}
+        {/* it sits with the other edits to the art because that is what it is: the pixels get rewritten in place under the same name, the way trim and pixelate rewrite them, and it offers no list of animations */}
         {animItem && (
           <button
             className={'abtn' + (animOpen ? ' on' : '')}
@@ -5925,12 +5635,7 @@ export default function App() {
             animate
           </button>
         )}
-        {/* WHAT WAS BOUGHT AND NEVER ARRIVED. A run whose group name nobody wrote down leaves its
-            frames finished on the account with nothing pointing at them, and until this there was no
-            way to reach them: the only button that sent recover was inside a poll loop that had
-            already given up. It spends nothing, and it says what it found rather than writing
-            silently, because collecting the wrong motion over a figure's art is worse than not
-            collecting. */}
+        {/* what was bought and never arrived: a run whose group name nobody wrote down leaves finished frames on the account with nothing pointing at them, so this spends nothing and says what it found rather than writing silently, because collecting the wrong motion over a figure's art is worse than not collecting */}
         {animItem && selWays > 0 && (
           <button
             className="abtn"
@@ -5941,10 +5646,7 @@ export default function App() {
             collect what was paid for
           </button>
         )}
-        {/* THE WAY BACK, and the way back to the way back. Asked for by name: reverting was the
-            only road and it steps back one version whatever that version happens to be. It offers
-            "bring it back" on anything standing still, because whether frames were ever kept for a
-            row is a question only the server can answer, and it answers it in a sentence. */}
+        {/* the way back, asked for by name, because revert steps back one version whatever that version happens to be; it offers to bring frames back on anything standing still, since only the server knows whether frames were ever kept for a row */}
         {animItem && (
           <button
             className="abtn"
@@ -6107,9 +5809,7 @@ export default function App() {
 
   const accPanel = (
     <div className="accpanel">
-      {/* two kinds of thing, said out loud. A prop and a sprite are different
-          in pixellab and behave differently here: only the second turns to face
-          where it goes. */}
+      {/* two kinds of thing, said out loud: a prop and a sprite are different in pixellab and behave differently here, because only the second turns to face where it goes */}
       <div className="seg acctabs" role="radiogroup" aria-label="what to browse">
         {(['objects', 'sprites'] as const).map((t) => (
           <button
@@ -6210,19 +5910,15 @@ export default function App() {
     </div>
   )
 
-  /* many at once: in front and behind are a nudge to the sort key, so the picked placements stay
-     exactly where their author put them. See Editor.order. */
-  /* the group every picked placement is already in, or blank when they differ,
-     so the select never claims a crowd is somewhere only one of them is */
+  /* many at once: in front and behind are a nudge to the sort key, so the picked placements stay exactly where their author put them, see Editor.order */
+  /* the group every picked placement is already in, or blank when they differ, so the select never claims a crowd is somewhere only one of them is */
   const manyPicked = assets.filter((a) => selAll.includes(a.id))
   const manyGroup = manyPicked.every((a) => a.group === manyPicked[0]?.group) ? (manyPicked[0]?.group ?? '') : ''
   const manyPanel = many && (
     <div className="insp many">
       <div className="insp-head">
         <span className="insp-name">{selAll.length} picked</span>
-        {/* one behaviour onto the whole set. Placing a crowd one figure at a
-            time and asking each of them separately is the same answer typed
-            twelve times, and it is the thing a crowd most obviously wants. */}
+        {/* one behaviour onto the whole set, because asking a crowd one figure at a time is the same answer typed twelve times and is the thing a crowd most obviously wants */}
         <button
           className={'lifedot' + (lifeOpen ? ' on' : '')}
           data-tip={`give all ${selAll.length} the same way of moving`}
@@ -6238,8 +5934,7 @@ export default function App() {
         </button>
       </div>
       {lifeOpen && lifeBoxFor(selAll[0])}
-      {/* one group onto the whole pick. The select next door acts on one
-          placement, so a crowd was regrouped one at a time. */}
+      {/* one group onto the whole pick, because the select next door acts on one placement and a crowd was regrouped one at a time */}
       <label className="insp-row">
         <span>group</span>
         <select
@@ -6385,9 +6080,7 @@ export default function App() {
 
   const libraryPane = (
     <>
-      {/* the library header carries the cheap door out: hundreds of objects
-          are already on the account and picking one of those beats asking for
-          a new one, so it sits beside the library rather than under create */}
+      {/* the library header carries the cheap door out: hundreds of objects are already on the account and picking one of those beats asking for a new one, so it sits beside the library rather than under create */}
       <div className="sechead">
         <Sec>library</Sec>
         <button
@@ -6406,9 +6099,7 @@ export default function App() {
       ) : (
         <>
           <div className="lib-cap">click one, then the map</div>
-          {/* the animate ask, under the row it belongs to. It rewrites the art
-              in place under the same name, so it was always about the library
-              row rather than about one copy sitting on the map. */}
+          {/* the animate ask, under the row it belongs to, because it rewrites the art in place under the same name and was always about the library row rather than one copy sitting on the map */}
           {libItem && !selA && (
             <div className="actrow">
               <button
@@ -6443,9 +6134,7 @@ export default function App() {
                       <img src={thumbSrc(it)} alt="" />
                     </span>
                     <span className="lib-name">{it.name}</span>
-                    {/* a set of headings is kind 'static' whether each heading
-                        holds one frame or a whole walk cycle, so nothing in this
-                        row told them apart and a walker looked like a statue */}
+                    {/* a set of headings is kind 'static' whether each heading holds one frame or a whole walk cycle, so nothing in this row told them apart and a walker looked like a statue */}
                     {libMoves(it) && <span className="lib-moves" aria-label="moves" />}
                   </button>
                   {it.effect && (
@@ -6471,17 +6160,13 @@ export default function App() {
     </>
   )
 
-  /* One button, and what it says depends on where you are: reading is free and
-   * says so, spending states the price first, and a run in flight reports which
-   * of how many it is on. Two presses to spend, always. */
+  /* one button whose words follow the state: reading is free and says so, spending states the price first, a run in flight reports which of how many it is on, and spending is always two presses */
   const doMake = useCallback(() => {
     if (makeWhat === 'effect') return void armFx()
-    // a planned set is the same second press whichever ask produced it: fill
-    // asks for an area, an asset ask can resolve to more than one thing
+    // a planned set is the same second press whichever ask produced it: fill asks for an area, an asset ask can resolve to more than one thing
     if (scene) return void runMany()
     if (makeWhat === 'fill') return void doScenePlan()
-    // a sprite runs the same two presses a thing does: the router answers the
-    // plan, and the second press buys it.
+    // a sprite runs the same two presses a thing does: the router answers the plan, and the second press buys it
     return void doGen()
   }, [makeWhat, scene, armFx, runMany, doScenePlan, doGen])
 
@@ -6501,8 +6186,7 @@ export default function App() {
           // disabled: "box the area first" in the press-me colour is a button asking to be pressed and refusing
           !genBox
         : !genPrompt.trim() || (makeWhat === 'object' && genPick))
-  // the sprite plan's own words for what it decided to make move, so the busy
-  // line says hovering rather than walking when that is what it bought
+  // the sprite plan's own words for what it decided to make move, so the busy line says hovering rather than walking when that is what it bought
   const spriteMoves = genPlan?.sprite && genPlan.sprite.anim.how !== 'none'
   const takes = genRun && genRun.total > 1 ? `${Math.min(genRun.done + 1, genRun.total)}/${genRun.total} · ` : ''
   const makeLabel = charRun
@@ -6510,9 +6194,7 @@ export default function App() {
       `${takes}${spriteMoves ? 'drawing it, then the motion' : 'drawing it'} · ${mmss(charSecs)}`
     : fillRun
       ? // a planned item writes its own words long, "a weathered fishing net
-        // draped over a barrel beside the quay". The button holds one height and
-        // hides what does not fit, so an uncapped line loses its tail with
-        // nothing to show for it. Cut it here, where the ellipsis is meant.
+        // draped over a barrel beside the quay: the button holds one height and hides what does not fit, so the words are cut here where the ellipsis is meant rather than losing their tail
         `${fillRun.done + 1}/${fillRun.total} · ${fillRun.what.length > 34 ? fillRun.what.slice(0, 33).trimEnd() : fillRun.what}…`
       : genRun
         ? genRun.total > 1
@@ -6528,9 +6210,7 @@ export default function App() {
               ? 'click where it goes'
               : makeWhat === 'effect'
                 ? 'make it move'
-                : /* a planned set states its real total whichever ask planned
-                     it, and it is the total for the rows still in the list, so
-                     striking one out changes the number on the button */
+                : /* a planned set states its real total whichever ask planned it, and it is the total for the rows still in the list, so striking one out changes the number on the button */
                   scene
                   ? `${manyGens} generation${manyGens === 1 ? '' : 's'} · draw ${wantedInScene === 1 ? 'it' : 'them'}`
                   : makeWhat === 'fill'
@@ -6550,19 +6230,15 @@ export default function App() {
       ? 'free · built from this map’s colours'
       : makeWhat === 'sprite'
         ? charRun
-          ? /* what a stop is still worth: the body is paid for the moment it is
-             * asked for, the eight directions of motion are not */
+          ? /* what a stop is still worth: the body is paid for the moment it is asked for, the eight directions of motion are not */
             spriteMoves
             ? 'pixellab is drawing · stopping before the motion saves eight'
             : 'pixellab is drawing · already paid for'
-          : /* said honestly: this is minutes, not the seconds an object takes,
-             * and the motion is what most of them go on */
+          : /* said honestly: this is minutes, not the seconds an object takes, and the motion is what most of them go on */
             `${CHAR_DIRS} ways${genType === 'animated' ? ' + motion' : ''}${styled ? ` · in the game's style` : ''} · ${genType === 'animated' ? 'five to fifteen minutes' : 'two to five minutes'}${takeWord}${usd ? ` · ${usd} left` : ''}`
         : makeWhat === 'fill'
           ? `${genBox ? `the boxed ${genBox.w}×${genBox.h}` : 'box an area'} · ${fillWord}${usd ? ` · ${usd} left` : ''}`
-          : /* the ask resolved to several things. It says so here rather than
-               going on describing one png, and it says where they land, because
-               that is the one thing this differs from a fill in. */
+          : /* the ask resolved to several things, said here rather than going on describing one png, and it says where they land because that is the one thing this differs from a fill in */
             scene
             ? `${wantedInScene} thing${wantedInScene === 1 ? '' : 's'} · ${manyGens} generation${manyGens === 1 ? '' : 's'} · into the library${usd ? ` · ${usd} left` : ''}`
             : `${genBox ? `reads the boxed ${genBox.w}×${genBox.h}` : 'reads the whole map'} · ${genType === 'animated' ? 'sprite + 8 frames' : 'one png'}${takeWord}${usd ? ` · ${usd} left` : ''}`
@@ -6574,8 +6250,7 @@ export default function App() {
         {(
           [
             ['object', 'an asset'],
-            // not "a person". A person is one of the things this can be, and
-            // naming the mode after it told everybody the rest were not allowed.
+            // not a person: a person is one of the things this can be, and naming the mode after it told everybody the rest were not allowed
             ['sprite', 'a sprite'],
             ['effect', 'motion'],
             ['fill', 'fill an area'],
@@ -6590,13 +6265,11 @@ export default function App() {
               setMakeWhat(m)
               setGenPlan(null)
               setScene(null)
-              // the line about the last thing that came back belongs to the
-              // mode that drew it, so it goes with the mode
+              // the line about the last thing that came back belongs to the mode that drew it, so it goes with the mode
               setSaid(null)
               // takes reset to one on a mode change: eight is seventy-two generations the moment the mode says sprite
               setGenCount(1)
-              // an arm does not survive a change of mind about what is being
-              // made, or the next press spends on the new thing
+              // an arm does not survive a change of mind about what is being made, or the next press spends on the new thing
               disarm()
               stopPick()
             }}
@@ -6611,8 +6284,7 @@ export default function App() {
           placeholder={
             makeWhat === 'effect'
               ? // short because it has to FIT. The long version measured 228px
-                // in a 210px box and rendered as "where the fall lai", and this
-                // hint is the only instruction motion has.
+                // in a 210px box and rendered as `where the fall lai`, and this hint is the only instruction motion has
                 'e.g. water splashing at the falls'
               : makeWhat === 'fill'
                 ? 'anything to steer it, or leave empty'
@@ -6658,8 +6330,7 @@ export default function App() {
                 aria-checked={genType === t}
                 onClick={() => {
                   setGenType(t)
-                  // the plan was written for the other answer, so it is not the
-                  // plan for this one
+                  // the plan was written for the other answer, so it is not the plan for this one
                   setGenPlan(null)
                   setScene(null)
                   stopPick()
@@ -6699,16 +6370,14 @@ export default function App() {
             style={rail(genCount, 1, 8)}
             onChange={(ev) => {
               setGenCount(Number(ev.target.value))
-              // the price on the button changes, so the confirm it was armed
-              // for is not the confirm that was agreed to
+              // the price on the button changes, so the confirm it was armed for is not the confirm that was agreed to
               setGenPlan(null)
             }}
           />
           <b>{genCount}</b>
         </label>
       ) : null}
-      {/* a box is context for a drawing on the map, and the sprite endpoint has
-          nowhere to put one */}
+      {/* a box is context for a drawing on the map, and the sprite endpoint has nowhere to put one */}
       {(makeWhat === 'object' || makeWhat === 'fill') && (
         <button
           className={'abtn areabtn' + (genBox ? ' on' : '')}
@@ -6722,9 +6391,7 @@ export default function App() {
         <button className={'primary genbtn' + (makeArmed ? ' armed' : '')} onClick={doMake} disabled={makeOff}>
           {makeLabel}
         </button>
-        {/* everything that can be running is listed here on purpose. A wait
-            with nothing to press is the failure this button exists for, so a
-            new one must be added to this line the day it is written. */}
+        {/* everything that can be running is listed here on purpose: a wait with nothing to press is the failure this button exists for, so a new one goes on this line the day it is written */}
         {(genBusy ||
           !!genRun ||
           !!fillRun ||
@@ -6796,8 +6463,7 @@ export default function App() {
                 onChange={(ev) => {
                   const c = (chars?.items || []).find((q) => q.id === ev.target.value)
                   if (!c) return
-                  // written once into the map's own bag, where the export
-                  // panel already lets it be read and changed by hand
+                  // written once into the map's own bag, where the export panel already lets it be read and changed by hand
                   ed?.setProps({
                     meta: { ...(st?.props.meta || {}), [STYLE_ID]: c.id, [STYLE_VIEW]: c.view, [STYLE_NAME]: c.name },
                   })
@@ -6887,8 +6553,7 @@ export default function App() {
             <button
               key={i}
               className={'scenerow' + (off ? ' off' : '')}
-              /* the whole ask, because the row shows the first line of it and a
-                 scene item is picked by what was asked for */
+              /* the whole ask, because the row shows the first line of it and a scene item is picked by what was asked for */
               data-tip={it.prompt}
               onClick={() =>
                 setSceneOff((prev) => {
@@ -6907,9 +6572,7 @@ export default function App() {
           )
         })}
       </div>
-      {/* the one thing this list does not otherwise say: a fill puts them on
-          the map where the plan chose, an asset ask puts them in the library
-          and the map is a later click */}
+      {/* the one thing this list does not otherwise say: a fill puts them on the map where the plan chose, an asset ask puts them in the library and the map is a later click */}
       <div className="planmeta">
         {wantedInScene} of {scene.items.length} · click one to drop it ·{' '}
         {makeWhat === 'fill' ? 'onto the map' : 'into the library'}
@@ -6935,9 +6598,7 @@ export default function App() {
             </span>
           </div>
           {fxNote && <div className="fxwarn">{fxNote}</div>}
-          {/* the tool judging its own render, in the open. While it runs he can
-              take whatever is on screen and move on; when it stops, one quiet
-              line says what it did. He is only asked to judge it after this. */}
+          {/* the tool judging its own render, in the open: while it runs whatever is on screen can be taken and the loop left, when it stops one quiet line says what it did, and a person is only asked to judge after this */}
           <div className="fxlook">
             {fxRev?.running ? (
               <>
@@ -6982,8 +6643,7 @@ export default function App() {
               />
             ))}
           </div>
-          {/* the seven share five fixed knobs; a written effect ships its own,
-              so the panel shows whichever it actually has */}
+          {/* the seven share five fixed knobs; a written effect ships its own, so the panel shows whichever it actually has */}
           {fx.type === 'custom' && fx.custom
             ? fx.custom.controls.map((c) => {
                 const v = fxP.custom?.[c.key] ?? c.value
@@ -7064,8 +6724,7 @@ export default function App() {
               discard
             </button>
           </div>
-          {/* what was written for him, read-only. Nothing here is a text
-              editor: it is there so the panel is not a black box */}
+          {/* the written recipe, read-only: nothing here is a text editor, it is there so the panel is not a black box */}
           {fx.type === 'custom' && fx.custom && (
             <div className="fxrecipe">
               <button className="fxshow" onClick={() => setFxShow((v) => !v)}>
@@ -7100,9 +6759,7 @@ export default function App() {
                   setMakeWhat('effect')
                   setFxAsk(a.ask)
                 } else {
-                  // a sprite put back in the object box comes out a prop shaped
-                  // like one, so the mode has to come back with the words. The
-                  // on-disk word is still 'character', so old rows replay.
+                  // a sprite put back in the object box comes out a prop shaped like one, so the mode has to come back with the words; the on-disk word is still 'character', so old rows replay
                   setMakeWhat(a.kind === 'character' ? 'sprite' : 'object')
                   setGenPrompt(a.ask)
                 }
@@ -7127,8 +6784,7 @@ export default function App() {
       {/* the make strip on top, then one context zone: six things competing for a 272px column each got a slice. */}
       {makeStrip}
       <div className="zone">
-        {/* the gate goes first. Nothing else can be open while a run is held,
-            but saying so here makes it true by construction. */}
+        {/* the gate goes first: nothing else can be open while a run is held, but saying so here makes it true by construction */}
         {gateCard ? (
           gateCard
         ) : matchPanel ? (
@@ -7147,9 +6803,7 @@ export default function App() {
           libraryPane
         )}
       </div>
-      {/* the foot: small, always there, never in the way. The clipboard says
-          what it holds wherever you are, the groups are one line of chips, and
-          the asks hide behind a toggle. */}
+      {/* the foot: small, always there, never in the way, with the clipboard saying what it holds wherever you are, the groups one line of chips, and the asks behind a toggle */}
       {st?.clip && (
         <div className="clipline">
           <span>copied · {st.clip}</span>
@@ -7249,8 +6903,7 @@ export default function App() {
               onBlur={(e) => {
                 const nk = e.target.value.trim()
                 if (nk === k) return
-                // the new name takes the old one's value with it, and clearing
-                // the name is how a key is removed
+                // the new name takes the old one's value with it, and clearing the name is how a key is removed
                 if (nk) ed?.setMapMeta(nk, String(v ?? ''))
                 if (k) ed?.setMapMeta(k, null)
               }}
@@ -7260,8 +6913,7 @@ export default function App() {
               defaultValue={String(v ?? '')}
               placeholder="value"
               onBlur={(e) => {
-                // the key is whatever is in the box to the left, which on the
-                // blank row at the bottom is a key that was named a moment ago
+                // the key is whatever is in the box to the left, which on the blank row at the bottom is a key that was named a moment ago
                 const kk = (e.currentTarget.parentElement?.querySelector('input') as HTMLInputElement)?.value.trim()
                 if (kk) ed?.setMapMeta(kk, e.target.value)
               }}
@@ -7391,8 +7043,7 @@ export default function App() {
   return (
     <div className="app">
       <header>
-        {/* the same wordmark, the same size and face as the home page, and it
-            goes there. One product should not have two logos. */}
+        {/* the same wordmark, at the same size and face as the home page, and it goes there, because one product should not have two logos */}
         <a className="brand" href="/" title="your maps">
           MAPVIS
         </a>

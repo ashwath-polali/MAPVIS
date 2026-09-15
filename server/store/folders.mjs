@@ -46,11 +46,7 @@ export async function listFolders(ownerId) {
   }
 }
 
-// ---- the folders themselves ------------------------------------------------
-
-// A new folder goes on the end of the rail. sort is sparse and set once here;
-// the rail is otherwise in creation order, which is what somebody who has made
-// three folders expects to see.
+// the folders themselves: a new folder goes on the end of the rail, and sort is sparse and set once here so the rail stays in creation order
 export async function createFolder(ownerId, wanted) {
   const clean = name(wanted) || 'untitled'
   const last = await one('select coalesce(max(sort), 0) as s from folders where owner_id = $1', [ownerId])
@@ -61,9 +57,7 @@ export async function createFolder(ownerId, wanted) {
   return { id: f.id, name: f.name, maps: [] }
 }
 
-// owner_id is in the where clause of every write below, not checked first and
-// then written. A check and a write are two statements and the id in between
-// them is whatever the browser sent.
+// owner_id is in the where clause of every write below, because a check and then a write are two statements and the id in between them is whatever the browser sent
 export async function renameFolder(ownerId, id, wanted) {
   const fid = uuid(id)
   if (!fid) return false
@@ -79,11 +73,7 @@ export async function removeFolder(ownerId, id) {
   return r.rowCount > 0
 }
 
-// ---- what a map belongs to -------------------------------------------------
-
-// The checkbox list saves as one call carrying the full answer rather than an
-// add and a remove per box, so a picker that is closed halfway through cannot
-// leave a map in a state nobody chose.
+// what a map belongs to: the checkbox list saves as one call carrying the full answer, so a picker closed halfway through cannot leave a map in a state nobody chose
 export async function setMapFolders(ownerId, mapSlug, ids) {
   const wanted = [...new Set((Array.isArray(ids) ? ids : []).map(uuid).filter(Boolean))]
   return tx(async (c) => {
@@ -91,8 +81,7 @@ export async function setMapFolders(ownerId, mapSlug, ids) {
     const mapId = m.rows[0]?.id
     if (!mapId) return false
 
-    // only this account's folders, so a wrong id is dropped rather than
-    // silently filing somebody else's map
+    // only this account's folders, so a wrong id is dropped rather than filing somebody else's map
     const mine = wanted.length
       ? (await c.query('select id from folders where owner_id = $1 and id = any($2::uuid[])', [ownerId, wanted])).rows.map((r) => r.id)
       : []
@@ -105,8 +94,7 @@ export async function setMapFolders(ownerId, mapSlug, ids) {
     )
 
     for (const fid of mine) {
-      // a map dropped into a folder lands at the end of it, which is where the
-      // hand that dropped it is looking
+      // a map dropped into a folder lands at the end of it, which is where the drop happened
       await c.query(
         `insert into folder_maps (folder_id, map_id, sort)
          values ($1, $2, coalesce((select max(sort) from folder_maps where folder_id = $1), 0) + 10)
@@ -128,8 +116,7 @@ export async function orderMaps(ownerId, folderId, slugs) {
   if (folderId != null && !fid) return false
 
   return tx(async (c) => {
-    // slug -> id, restricted to this account, so an id that is not theirs never
-    // makes it into an update
+    // slug to id, restricted to this account, so an id that is not theirs never makes it into an update
     const rows = (await c.query('select id, slug from maps where owner_id = $1 and slug = any($2::text[])', [ownerId, seq])).rows
     const byslug = new Map(rows.map((r) => [r.slug, r.id]))
     if (!byslug.size) return false
@@ -164,8 +151,7 @@ export async function orderMaps(ownerId, folderId, slugs) {
 export async function foldersApi(req, res, p) {
   if (p !== '/api/folders' && !p.startsWith('/api/folders/')) return false
 
-  // no database means no folders, and the page is built to render without them.
-  // 501 rather than 500 so an unconfigured install is not logged as a fault.
+  // no database means no folders and the page renders without them, so 501 rather than 500 keeps an unconfigured install out of the fault log
   if (!platformOn()) {
     send(res, 501, { error: 'folders need the database' })
     return true
@@ -194,9 +180,7 @@ export async function foldersApi(req, res, p) {
 
   if (p === '/api/folders/create') {
     const folder = await createFolder(user.id, b.name)
-    // "new folder for this map" is one gesture in the picker, so it is one
-    // request here as well; a create that succeeds and a set that does not
-    // would leave a folder nobody asked for
+    // a new folder for this map is one gesture in the picker so it is one request here, because a create that succeeds next to a set that does not leaves a folder nobody asked for
     if (b.map) await setMapFolders(user.id, b.map, [...(Array.isArray(b.folders) ? b.folders : []), folder.id])
     send(res, 200, { folder })
     return true

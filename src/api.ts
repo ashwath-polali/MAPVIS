@@ -7,28 +7,9 @@ const KEEPALIVE_MAX = 60 * 1024
 /* A REQUEST THAT NEVER ANSWERS HAS TO BECOME AN ERROR, because a promise that never settles is not a slow call, it is a dead button: doExport holds a flag while it waits, so one interrupted export left every later press returning without making a request. This is the floor under the SHORT calls only, and the map below carries the long ones; it catches never, not slow, and what it must never do again is catch a generation that is still being drawn. */
 const POST_TIMEOUT_MS = 180_000
 
-/* BUT THREE MINUTES IS SHORTER THAN THE WORK, AND THAT COST REAL MONEY. This one ceiling governed
- * every call, and an eight-heading animation is eight background jobs that take about five minutes
- * together, so the browser gave up while pixellab was still drawing. The generations were bought,
- * the server finished and saved them minutes later, and the author was told "did not answer within
- * 180s" and pressed again, which bought all eight a second time. Measured on the account: four
- * eight-way runs in thirty-one minutes, thirty-two generations, every job completed, none collected.
- *
- * So the deadline belongs to the route and not to the transport. These are the calls whose server
- * side legitimately outlives three minutes, each set past the ceiling the server itself waits to plus
- * the downloads after it, so the browser is never the first to give up. The server's own numbers are
- * CHAR_WAIT 600s, WALK_WAIT 900s and HOST_WAIT 230s, in server/api.mjs.
- *
- * None of this beats the host, which cuts a function at 300s whatever is written here (vercel.json,
- * maxDuration) and answers with its own page rather than json. That is why the read below cannot
- * assume a body parses, and why HOST_WAIT exists at all: on the host the answer to a long fan-out is
- * a receipt to collect later, never a longer wait.
- *
- * Everything absent from this map keeps the three minutes, which is what it was written for. */
+/* routes whose server side outlives the 180s default, set past the server's own wait plus downloads so the browser never gives up first: a 180s abort bought 32 generations over four eight-way runs and collected none. server waits CHAR_WAIT 600s, WALK_WAIT 900s, HOST_WAIT 230s; the host cuts at 300s. */
 const SLOW_POSTS: Array<[string, number]> = [
-  /* a sprite is the body and then up to eight walk cycles in ONE request: CHAR_WAIT 600s plus
-   * WALK_WAIT 900s plus sixty-four downloads after them. 960s was under the server's own sum, so the
-   * browser was still the first to give up on the most expensive thing in the tool. */
+  /* a sprite is the body plus up to eight walk cycles in one request: CHAR_WAIT 600s plus WALK_WAIT 900s plus sixty-four downloads, so 960s let the browser give up first. */
   ['/api/character-gen', 1_620_000],
   ['/api/character-import', 960_000],
   // a motion on an existing rig: the free plan read, then WALK_WAIT 900s of fan-out, then 64 frames
@@ -37,8 +18,7 @@ const SLOW_POSTS: Array<[string, number]> = [
   ['/api/asset-anim', 660_000],
   ['/api/asset-gen', 360_000],
   ['/api/asset-gen-here', 360_000],
-  // one edited rotation set, which is every heading in a single job
-  // awaitCharacter's own 600s, and then every heading comes down
+  // one edited rotation set is every heading in a single job, awaitCharacter's own 600s, and then every heading downloads
   ['/api/asset-state', 720_000],
   ['/api/account-import', 360_000],
   // the planner reads a painting and reasons about it
@@ -71,16 +51,12 @@ async function jpost<T>(url: string, body: unknown, opts?: { keepalive?: boolean
       ...(opts?.keepalive && payload.length <= KEEPALIVE_MAX ? { keepalive: true } : {}),
     })
   } catch (e) {
-    // name the wait, because "failed to fetch" sends the next person looking at
-    // the server when the server may never have been asked
+    // name the wait, because "failed to fetch" sends the next person to the server when the server may never have been asked
     if (e instanceof DOMException && e.name === 'TimeoutError')
       throw new Error(`${url} did not answer within ${ms / 1000}s`)
     throw e
   }
-  /* A GATEWAY DOES NOT ANSWER IN JSON. The host cuts a function at 300s and sends its own page, and
-   * r.json() on that throws out of the parser before the status is looked at, so a wait that ran out
-   * reads as a bug in this file. Only reachable now that the paid routes are allowed past three
-   * minutes, because until then the abort above always answered first. */
+  /* a gateway does not answer in json: the host cuts a function at 300s and sends its own page, and r.json() on that throws before the status is read, so a wait that ran out looks like a bug here */
   const raw = await r.text()
   let j: unknown
   try {
@@ -106,10 +82,7 @@ async function jget<T>(url: string): Promise<T> {
 
 export const balance = () => jget<{ usd?: number }>('/api/balance')
 
-/* WHOSE HAND A MAP IS DRAWN BY. A card carries the craft sentence: projection,
- * cluster size, outline, light and saturation, and nothing about the subject.
- * The house card is one account's and is offered only where it has been granted,
- * so a stranger signing up is never handed it. */
+/* whose hand a map is drawn by: the craft sentence only, projection, cluster size, outline, light and saturation, never the subject. the house card is offered only where it has been granted */
 export interface StyleCard {
   key: string
   title: string
@@ -126,8 +99,7 @@ export const styles = () =>
     grants?: string[]
   }>('/api/styles')
 
-/* the words that would be sent, written but not bought, so the hand can be read
- * before anything is spent on it */
+/* the words that would be sent, written but not bought, so the hand can be read before anything is spent */
 export const mapPrompt = (subject: string, style: string, kind?: string) =>
   jpost<{ prompt: string; kind: string; style: string; canvas: { w: number; h: number }; parts: string[] }>('/api/map-prompt', {
     subject,
@@ -135,13 +107,11 @@ export const mapPrompt = (subject: string, style: string, kind?: string) =>
     kind,
   })
 
-/* the choice, kept on the map so every asset made for it afterwards and every
- * republish are drawn by the same hand */
+/* the choice, kept on the map so every asset made for it afterwards and every republish are drawn by the same hand */
 export const setMapStyle = (id: string, style: string, kind?: string) =>
   jpost<{ style: string; kind: string }>('/api/map-style', { id, style, kind })
 
-/* the house hand handed to somebody else, and taken back. The owner alone, and
- * the list that comes back is who may draw with it now. */
+/* the house hand granted to somebody else, and taken back. restricted to the account that holds it, and the list that comes back is who may draw with it now */
 export const grantHand = (email: string, revoke?: true) =>
   jpost<{ email: string | null; granted: string[] }>('/api/styles/grant', { email, revoke })
 
@@ -161,9 +131,7 @@ export const generate = (prompt: string, n: number, w: number, h: number, style?
 export const jobState = (id: string) =>
   jget<{ state: 'running' | 'done' | 'failed'; images?: string[]; error?: string }>('/api/job/' + encodeURIComponent(id))
 
-/* THE TRANSITION SCREEN A MAP IS ENTERED THROUGH. A cover belongs to a map, so the game shows it on
- * every door and every sail into that map with no python naming it. The default has no name and is
- * the map's own; an extra carries a code name that enter(map, cover="<name>") calls. */
+/* the transition screen a map is entered through: a cover belongs to its map, so the game shows it on every door and sail in with no python naming it, and the default is nameless while an extra carries the code name enter(map, cover="<name>") calls */
 
 /* free, and the whole sentence the router would send, so nothing is paid for on a guess */
 export const coverPrompt = (subject: string, style?: string, id?: string) =>
@@ -173,9 +141,7 @@ export const coverPrompt = (subject: string, style?: string, id?: string) =>
     id,
   })
 
-/* ONE generation, and only on the press. The prompt is built on the server, never here. The map id
- * rides along because the ownership gate reads one off every post: with none it resolved to the slug
- * "untitled", so whoever owns the map of that name could draw and nobody else could. */
+/* one generation, and only on the press. the prompt is built on the server, never here, and the map id rides along because the gate reads one off every post: with none it resolved to the slug "untitled", so only whoever holds that map could draw */
 export const coverGen = (subject: string, style?: string, id?: string) =>
   jpost<{ job: { id: string; seed: number }; w: number; h: number; prompt: string; style: string | null }>(
     '/api/cover-gen',
@@ -195,8 +161,7 @@ export const coverRemove = (id: string, name?: string) => jpost<CoverState>('/ap
 
 export const coversOf = (id: string) => jget<CoverState>('/api/covers/' + encodeURIComponent(id))
 
-/* the picture itself. The cache buster is the caller's, because a kept cover replaces the one before
- * it under the same url and the browser would go on drawing the old one. */
+/* the picture itself. the cache buster is the caller's, because a kept cover replaces the one before it under the same url and the browser would go on drawing the old one */
 export const coverUrl = (id: string, name?: string, bust?: number) =>
   `/api/cover/${encodeURIComponent(id)}${name ? '/' + encodeURIComponent(name) : ''}${bust ? `?t=${bust}` : ''}`
 
@@ -205,35 +170,24 @@ export const propose = (image: string) =>
 
 export const saveScene = (id: string, image: string) => jpost<{ url: string }>('/api/save', { id, image })
 
-// one entry of an exported assets.json, exactly the loader contract's shape.
-// scale is the legacy uniform field (= scaleX); the transform fields are
-// absent in bundles exported before they existed.
+// one entry of an exported assets.json, exactly the loader contract's shape. scale is the legacy uniform field (= scaleX) and the transform fields are absent in older bundles
 export interface SavedAssetEntry {
   id?: string
-  /* what the AUTHOR called this thing. The id beside it is a counter MAPVIS made
-   * up and does not survive a delete and a re-place, so this is the only address
-   * an anchor binding, a variant member or a member's python can hold. */
+  /* what the author called this thing: the id beside it is a counter that does not survive a delete and a re-place, so this is the only address an anchor binding, a variant member or python can hold */
   name?: string
   group?: string
-  /* WHEN THIS THING IS THERE AT ALL, resolved at export from the placement's own
-   * condition or its group's. An opaque string: MAPVIS declares it and python
-   * decides what it means. */
+  /* when this thing is there at all, resolved at export from the placement's own condition or its group's. an opaque string: the editor declares it and python decides what it means */
   when?: string
   /* what each face is called, indexed the way art indexes them: slot 0 is the placement's own picture. An empty string holds its slot, because dropping one would shift every later index down. Absent on every bundle exported before it existed. */
   lookNames?: string[]
   src?: string
   frames?: string[]
   fps?: number
-  /* one view per heading, keyed by the eight names the walk-test frames use, each
-   * one a list of bundle-relative paths inside a single folder. Written for
-   * anything that has to face where it is going. */
+  /* one view per heading, keyed by the eight names the walk-test frames use, each a list of bundle-relative paths in one folder, for anything that has to face where it is going */
   dirs?: Record<string, string[]>
-  /* how it MOVES, if it does: a core/life.ts Life, written through untouched by
-   * the exporter. Off the wire, so it is only a Life once cleanLife says so. */
+  /* how it moves, if it does: a core/life.ts Life written through untouched by the exporter, and off the wire it is only a Life once cleanLife says so */
   life?: unknown
-  /* the extra appearances a sequence switches to, index 1 and up, each written
-   * in the same shape as the entry itself. Absent on everything that does not
-   * change, and a reader that has never heard of them draws the entry. */
+  /* the extra appearances a sequence switches to, index 1 and up, each in the same shape as the entry itself, absent on anything that does not change, and a reader that has never heard of them draws the entry */
   looks?: { src?: string; frames?: string[]; fps?: number; dirs?: Record<string, string[]>; name?: string }[]
   x?: number
   y?: number
@@ -258,10 +212,7 @@ export interface SavedScene {
 }
 export const savedScene = (id: string) => jget<SavedScene>('/api/scene/' + encodeURIComponent(id))
 
-// ---- the assets step ----------------------------------------------------
-
-// one library entry: a single png, or a folder of frames played in order.
-// The library is per map: only what was generated for this scene id.
+// the assets step: one library entry is a single png or a folder of frames played in order, and the library is per map, only what was generated for this scene id
 /* A FACE this row has been given: the same thing edited into another state, not a second thing that looks like one. It keeps the library's three shapes because a state of a walking character IS eight headings, or a troll snaps round to face south the instant it becomes a boulder. Deliberately NOT a LibItem: a library that fills with boulder, boulder-2, sleeping-dragon is a library of rows that mean nothing alone. */
 export interface AssetState {
   name: string
@@ -285,9 +236,7 @@ export interface LibItem {
   src?: string
   frames?: string[]
   fps?: number
-  /* one view per heading, for something that has to face where it is going.
-   * Keys are the eight names the walk-test frames use. Absent on almost
-   * everything: a crab is two apparent directions and a flip covers it. */
+  /* one view per heading for something that has to face where it is going, keyed by the eight walk-test names, absent on almost everything because a crab is two apparent directions and a flip covers it */
   dirs?: Record<string, string[]>
   w: number
   h: number
@@ -298,12 +247,7 @@ export const library = (id: string) => jget<{ items: LibItem[] }>('/api/library/
 export const assetRevert = (id: string, name: string) =>
   jpost<{ item: LibItem }>('/api/asset-revert', { id, name })
 
-/* TAKE THE ANIMATION OFF A THING, OR PUT IT BACK. Free both ways: the frames are already bought
- * and go to the kept copies rather than to the bin. Off leaves the first frame as an ordinary
- * picture, and for a set of headings leaves the standing rotation, so it still faces where it
- * walks. On puts back the newest frames kept for that name. Deliberately not assetRevert, which
- * steps back one version whatever that version is: an author who cropped after animating asked to
- * stop the movement and got the uncropped picture. */
+/* take the animation off a thing or put it back, free both ways because the frames are kept rather than binned. off leaves the first frame, or the standing rotation for a set of headings, and on puts back the newest kept frames. not assetRevert: stepping back one version returns an uncropped picture */
 export const assetAnimation = (id: string, name: string, on: boolean) =>
   jpost<{ item: LibItem; plays: boolean }>('/api/asset-animation', { id, name, on })
 
@@ -315,9 +259,7 @@ export const assetState = (
   o?: { state?: string; seed?: number; job?: string },
 ) => jpost<{ item: LibItem | null; face: string }>('/api/asset-state', { id, name, ask, ...o })
 
-// ---- what the account already owns --------------------------------------
-
-// The objects on the pixellab account, browsable: 700 already sitting there, and the ones written in the house style beat anything a fresh ask comes back with. Picking one costs nothing, and thumb is pixellab's own public preview url.
+// what the account already owns: 700 objects already sitting on the pixellab account, browsable, the house-style ones beat a fresh ask, picking one costs nothing, and thumb is pixellab's own public preview url
 export interface AccountObject {
   id: string
   name: string
@@ -331,14 +273,11 @@ export const accountObjects = (page: number, q: string) =>
     `/api/account-objects?page=${page}&q=${encodeURIComponent(q)}`,
   )
 
-// one of them copied into this map's library as a normal static item. Free:
-// the png already exists, this only moves the bytes.
+// one of them copied into this map's library as a normal static item, free because the png already exists and this only moves the bytes
 export const accountImport = (id: string, sceneId: string, name?: string) =>
   jpost<{ item: LibItem }>('/api/account-import', { id, sceneId, name })
 
-// ---- the style card -----------------------------------------------------
-
-// What this map looks like, read off the painting ONCE and kept on disk. The ask has never carried the map's look, so tropical palm trees came back generic bright green. clause is the deliverable, one phrase that hangs off any sprite description. FREE, and a scene that never answers just goes without.
+// the style card: what this map looks like, read off the painting once and kept on disk, because an ask without it came back generic bright green for tropical palms. clause is the deliverable, one phrase that hangs off any sprite description, free, and a scene that never answers goes without
 export interface StyleCard {
   palette: string
   light: string
@@ -357,8 +296,7 @@ export interface AskTranslation {
   h: number
   belongs?: number
 }
-// id rides along so the rewrite can be shaped by what he has already KEPT on
-// this map: the last few keeps go into the prompt as taste, never the discards.
+// id rides along so the rewrite is shaped by what has already been kept on this map: the last few keeps go into the prompt as taste, never the discards
 export const translate = (
   ask: string,
   kind: 'static' | 'animated',
@@ -381,8 +319,7 @@ export const assetGen = (
     th?: number
     /* A crop of the painting, once sent so pixellab would draw into this map's art. Nothing sends it: measured over twenty-two generations in both modes the schema allows, that endpoint continues the picture it is handed instead of drawing the subject into it. Kept only because the route still accepts one. */
     background?: string
-    // a generation already asked for is already paid for, so what a stop buys
-    // is the one NOT yet asked for. The server checks the job before it sends.
+    // a generation already asked for is already paid for, so a stop only saves the one not yet asked for, and the server checks the job before it sends
     job?: string
   },
 ) => jpost<{ item: LibItem }>('/api/asset-gen', { id, prompt, ...o })
@@ -401,9 +338,7 @@ export interface AccountCharacter {
 export const accountCharacters = () =>
   jget<{ items: AccountCharacter[]; total: number }>('/api/account-characters')
 
-/* One character into this map's library, WITH its walk cycle when it has one.
- * What lands is one entry per heading with frames inside, which is the shape
- * the renderers already understand. */
+/* one character into this map's library with its walk cycle when it has one, landing as one entry per heading with frames inside, the shape the renderers already understand */
 export const characterImport = (id: string, sceneId: string, o?: { name?: string; animation?: string }) =>
   jpost<{ item: LibItem }>('/api/character-import', { id, sceneId, ...o })
 
@@ -415,23 +350,17 @@ export const characterGen = (
     confirm: true
     job?: string
     name?: string
-    // pins the starting noise so two variants of one ask are distinct takes
-    // rather than the same roll twice
+    // pins the starting noise so two variants of one ask are distinct takes rather than the same roll twice
     seed?: number
-    // pixellab pads the canvas about 40% past this to leave room for the
-    // animation, so 48 comes back near 68 and arrives needing its base trimmed
+    // pixellab pads the canvas about 40% past this to leave room for the animation, so 48 comes back near 68 and arrives needing its base trimmed
     size?: number
     view?: SpriteRoute['view']
-    // one of the six rigs. The server turns mannequin into humanoid and the
-    // other five into quadruped + that template.
+    // one of the six rigs: the server turns mannequin into humanoid and the other five into quadruped + that template
     skeleton?: SpriteRoute['skeleton']
-    // eight, because life.ts works out an eight-way facing and four makes the
-    // diagonals snap to the wrong view. An engine requirement, so it is not a
-    // routing answer.
+    // eight, because life.ts works out an eight-way facing and four snaps the diagonals to the wrong view, an engine requirement and not a routing answer
     nDirections?: 4 | 8
     anim?: SpriteAnim
-    // standard is one generation. pro is twenty to forty and can never be a
-    // default here, and the price on the button assumes standard.
+    // standard is one generation, pro is twenty to forty and can never be the default here because the price on the button assumes standard
     mode?: 'standard' | 'pro' | 'v3'
     /* ONE OF YOUR OWN EIGHT-WAY CHARACTERS, whose rotations guide every direction of this one. Pro only, and how a new person comes back built like your own character instead of like the template rig: four standard-mode principals were flat upright humanoids whatever the words said. */
     styleCharacterId?: string
@@ -452,8 +381,7 @@ export interface SpriteAnim {
 export interface SpriteRoute {
   skeleton: 'mannequin' | 'bear' | 'cat' | 'dog' | 'horse' | 'lion'
   view: 'low top-down' | 'high top-down' | 'side' | 'perspective'
-  // the sprite's own pixel height, 32..96. Above 96 a written animation costs
-  // more than one generation per direction, so bigger is a scale-up on the map.
+  // the sprite's own pixel height, 32..96, because above 96 a written animation costs more than one generation per direction, so bigger is a scale-up on the map
   size: number
   anim: SpriteAnim
   why: string
@@ -465,8 +393,7 @@ export interface MakePlan {
   note: string
   w: number
   h: number
-  // one line when the OTHER mode would have suited it better. The router never
-  // switches on its own, because a switch changes the price.
+  // one line when the other mode would have suited it better, and the router never switches on its own because a switch changes the price
   crossing?: string
   sprite?: SpriteRoute
   /* WHERE ON THE MAP this thing belongs: the patch of painting whose light and surface it should have been painted under, not where it will be placed. It rides as pixellab's background_image, the one lever measured to beat the generator's own idea of what a noun looks like. */
@@ -482,8 +409,7 @@ export const assetPlan = (
   ask: string,
   o: {
     map: string
-    // which of the two spending modes is open. The router answers for that one
-    // and says so in crossing if the other one fits better.
+    // which of the two spending modes is open: the router answers for that one and says so in crossing when the other fits better
     what: 'object' | 'sprite'
     kind: 'static' | 'animated'
     box?: { x: number; y: number; w: number; h: number } | null
@@ -505,12 +431,10 @@ export const lifePlan = (
     at?: { x: number; y: number }
     size?: { w: number; h: number }
     bounds?: { x: number; y: number; w: number; h: number } | null
-    /* how much of that box is ground a person could stand on, and whether that
-     * crossed the line where the floor becomes a second fence */
+    /* how much of that box is ground a person could stand on, and whether that crossed the line where the floor becomes a second fence */
     walkPct?: number
     walkOnly?: boolean
-    // every library item this map has, by name. The server picks from these
-    // and never names anything else.
+    // every library item this map has, by name, and the server picks from these and never names anything else
     names?: string[]
     /* the LIBRARY ROW this placement is drawn from. When that row has faces of its own the server offers those instead of the library, so a sequence picks between the pictures THIS thing can wear. That is what makes "which boulder" not a question. */
     owner?: string
@@ -587,27 +511,22 @@ export const assetAnim = (
 /* ---- making a thing that is already in the library MOVE, without paying to generate it a second time. The user types what it should do and the server routes it, because a list of animations is always shorter than what somebody wants. Four paths, priced differently: `character` puts every heading through ONE coordinated job, because eight separate calls come back as eight rhythms and a figure would breathe faster facing north; `sprite` is one generation; `written` costs NOTHING and is named rather than run, because neither generator can carry a sprite anywhere; `blocked` refuses instead of selling a defect. Everything but written rewrites the item IN PLACE, staged under .stage with the replaced bytes going to work/<id>/.prev. ONE route, two presses: the free read answers the plan and the true price, and the price is re-derived server-side so a client cannot talk it down. */
 export interface AnimPlan {
   path: 'character' | 'sprite' | 'written' | 'blocked'
-  // exact, and the number the armed button shows. 0 on written and on blocked,
-  // and on written it is a real zero: nothing there touches pixellab at all.
+  // exact, and the number the armed button shows: 0 on written and on blocked, and on written it is a real zero because nothing there touches pixellab
   price: number
-  // the ask rewritten as one plain line of what the body does, which is what
-  // the animator is actually given. The panel shows this, not the raw ask.
+  // the ask rewritten as one plain line of what the body does, which is what the animator is given and what the panel shows, not the raw ask
   motion: string
   // how many frames the loop is. 4 to 16, even.
   frames: number
   // one short line saying what it will look like
   note: string
-  // true when the words were about where the thing GOES rather than what its
-  // body does, which is what sends it down the free path
+  // true when the words were about where the thing goes rather than what its body does, which is what sends it down the free path
   move: boolean
   name: string
   shape: 'still' | 'frames' | 'views'
-  // the headings a character job covers. Its length times the per-heading price
-  // IS the price.
+  // the headings a character job covers, and its length times the per-heading price is the price
   headings?: string[]
   characterId?: string
-  // how the character behind a folder was found: pinned, off dirs.json, or
-  // rescued through asks.json
+  // how the character behind a folder was found: pinned, off dirs.json, or rescued through asks.json
   found?: string
   pad?: boolean
   sprite?: boolean
@@ -627,9 +546,7 @@ export const assetAnimate = (
     recover?: true | string
   },
 ) =>
-  /* `partial` is set when a heading's own job failed and it kept its standing
-   * frame. The set is whole and it walks; one of its headings does not move,
-   * which is worth saying rather than leaving to be found on the map. */
+  /* `partial` is set when a heading's own job failed and kept its standing frame: the set still walks but one heading does not move, which is better said than found on the map */
   jpost<{ plan?: AnimPlan; item?: LibItem; note?: string; free?: boolean; pending?: boolean; group?: string; partial?: string }>(
     '/api/asset-animate',
     {
@@ -638,9 +555,7 @@ export const assetAnimate = (
     },
   )
 
-// ---- the effect engine --------------------------------------------------
-
-// Which motion rule fits the ask, what numbers to start it at, and WHOSE COLOURS it is made of: palette 'map' is the sampled painting, 'own' is the only way a purple portal on a brown island is purple. FREE, and it answers from a keyword match when the planner is unreachable so it never hard-fails. type "custom" is the eighth answer and carries a WRITTEN renderer run in the core/customfx sandbox, still free.
+// the effect engine: which motion rule, what numbers, and whose colours, palette 'map' sampled off the painting and 'own' the only way a purple portal on a brown island is purple. free, keyword-matches when the planner is unreachable, and type custom runs a renderer in the core/customfx sandbox
 export interface EffectPlan {
   type: string
   name: string
@@ -653,9 +568,7 @@ export interface EffectPlan {
 export const effectPlan = (ask: string, colors: string[], id?: string, job?: string) =>
   jpost<{ plan: EffectPlan }>('/api/effect-plan', { ask, colors, id, job })
 
-// ---- the review loop ----------------------------------------------------
-
-// The frames the client just rendered, laid out as one strip on disk and LOOKED AT. verdict good means ship it; revise carries a replacement body or better numbers. FREE every pass, and strip is the absolute path of what was looked at, so a failure can be seen rather than guessed at.
+// the review loop: the frames just rendered, laid out as one strip on disk and looked at. verdict good means ship it, revise carries a replacement body or better numbers, free every pass, and strip is the absolute path of what was looked at so a failure can be seen
 export interface FxVerdict {
   strip: string
   verdict: 'good' | 'revise'
@@ -674,8 +587,7 @@ export const fxReview = (
     code?: string
     controls?: CustomControl[]
     pass?: number
-    // three passes at two minutes each is six minutes of nothing to press, so
-    // the look carries a job like every other planner
+    // three passes at two minutes each is six minutes of nothing to press, so the look carries a job like every other planner
     job?: string
   },
 ) => jpost<FxVerdict>('/api/fx-review', { id, ...o })
@@ -717,8 +629,7 @@ export const effectSave = (
   ask = '',
 ) => jpost<{ item: LibItem }>('/api/effect-save', { id, name, frames, meta, overwrite, ask })
 
-// Every ask this map has been given, newest first. Free, read-only, and the
-// answer to "what did I type to get that". A record, not an input.
+// every ask this map has been given, newest first, free and read-only: a record of what was typed to get a thing, not an input
 export interface Ask {
   name: string
   // character is here so a past ask reopens in the mode that made it: without it a sprite came back in the object box, which draws a prop of a body. The on-disk word stays 'character' so old asks.json rows replay.
@@ -737,8 +648,7 @@ export interface EffectSaved {
   colors: string[]
   fps: number
   frames: number
-  // a custom effect keeps its recipe beside its frames, so the pencil reopens
-  // it with every knob still working
+  // a custom effect keeps its recipe beside its frames, so the pencil reopens it with every knob still working
   code?: string
   controls?: CustomControl[]
 }
@@ -756,9 +666,7 @@ export const assetCrop = (
     fps?: number
     suffix?: string
     keepCopy?: boolean
-    /* when the item is a set of VIEWS, what each frame is called. Without it an
-     * edited view set would be written back as animation frames and stop being
-     * a view set at all. */
+    /* when the item is a set of views, what each frame is called, because without it an edited view set is written back as animation frames and stops being a view set */
     dirKeys?: string[] | null
   },
 ) => jpost<{ item: LibItem }>('/api/asset-crop', { id, name, rect, ...o })
@@ -767,8 +675,7 @@ export const assetCrop = (
 export const libraryRemove = (id: string, name: string) =>
   jpost<{ removed: 'static' | 'animated' }>('/api/library-remove', { id, name })
 
-// the cut-applied painting on its own, so a map can be cut and staged before
-// any mechanics are drawn. Writes scene-cut.png, and cut.png so it reopens.
+// the cut-applied painting on its own, so a map can be cut and staged before any mechanics are drawn, writing scene-cut.png and cut.png so it reopens
 export const saveCutPNG = (id: string, image: string, cut: string) =>
   jpost<{ dir: string; files: string[] }>('/api/savecut', { id, image, cut })
 

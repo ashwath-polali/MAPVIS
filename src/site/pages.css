@@ -131,8 +131,7 @@
   margin: 34px 0 22px;
 }
 
-/* a field is a label over a LINE, not a box. A box is a form control; a line is
-   somewhere to write. */
+/* a field is a label over a line, not a box: a box is a form control, a line is somewhere to write */
 .wfield {
   display: grid;
   gap: 6px;
@@ -354,8 +353,7 @@
   flex-wrap: wrap;
 }
 
-/* the walk screen moved to panels.css, where it is a full stage rather than a
-   boxed 16:10 panel with a video-player triangle in it. */
+/* the walk screen moved to panels.css, where it is a full stage rather than a boxed 16:10 panel with a video-player triangle in it */
 
 .map-cols {
   display: grid;
@@ -691,15 +689,13 @@
   margin-top: 14px;
 }
 
-/* the walk canvas lives in its own patch of dom, so it must fill the stage
-   without react ever laying anything out inside it */
+/* the walk canvas lives in its own patch of dom, so it must fill the stage without react ever laying anything out inside it */
 .walk-mount {
   position: absolute;
   inset: 0;
   display: grid;
   place-items: center;
-  /* it covers the whole stage, so while it is empty it would swallow the click
-     on the start button sitting behind it. The canvas inside takes events back. */
+  /* it covers the whole stage, so while it is empty it would swallow the click on the start button sitting behind it, and the canvas inside takes events back */
   pointer-events: none;
 }
 .walk-mount > canvas {
@@ -721,8 +717,7 @@
   color: var(--wax);
 }
 
-/* whose hand drew a map, on its dashboard card. Quiet: it sits in the row of
-   counts and is a fact about the map rather than a thing to press. */
+/* whose hand drew a map, on its dashboard card, quiet because it sits in the row of counts and is a fact about the map rather than a thing to press */
 .card-hand {
   color: var(--acc-mark);
   letter-spacing: 0.02em;

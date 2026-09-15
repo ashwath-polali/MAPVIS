@@ -1,9 +1,4 @@
-// Skyline packing, which is the cheap one.
-//
-// The free space is described by its top edge only, as a list of horizontal
-// runs. That throws away any pocket under an overhang, so it packs looser than
-// MaxRects, but an insert is O(number of runs) rather than O(free rectangles)
-// and the run list stays short.
+// skyline packing is the cheap one, describing free space by its top edge as a list of horizontal runs, which throws away any pocket under an overhang and packs looser than MaxRects but makes an insert O(number of runs) with a short run list
 
 export class Skyline {
   constructor(width, height) {
@@ -19,8 +14,7 @@ export class Skyline {
     for (let i = 0; i < this.runs.length; i++) {
       const fit = this.fit(i, w, h)
       if (!fit) continue
-      // lowest top edge wins, and on a tie the narrower run, which keeps wide
-      // runs available for the wide pieces still to come
+      // lowest top edge wins, and on a tie the narrower run, which keeps wide runs free for the wide pieces still to come
       if (!best || fit.y < best.y || (fit.y === best.y && this.runs[i].w < this.runs[best.index].w)) {
         best = { ...fit, index: i }
       }
@@ -54,8 +48,7 @@ export class Skyline {
       const prev = this.runs[i - 1]
       if (cur.x >= prev.x + prev.w) break
       const overlap = prev.x + prev.w - cur.x
-      // the area under the new run that can never be reached again, tracked so
-      // a caller can see how much of the sheet the heuristic threw away
+      // the area under the new run that can never be reached again, tracked so a caller can see how much of the sheet the heuristic threw away
       this.wasted += overlap * Math.max(0, inserted.y - cur.y)
       cur.x += overlap
       cur.w -= overlap
@@ -80,8 +73,7 @@ export class Skyline {
   }
 }
 
-/* the sheet is square and a power of two, because a texture that is neither is
- * refused outright by some hardware and silently padded by the rest */
+/* the sheet is square and a power of two, because a texture that is neither is refused outright by some hardware and silently padded by the rest */
 export function smallestSheet(items, { max = 4096, min = 64, padding = 0 } = {}) {
   for (let size = min; size <= max; size *= 2) {
     const bin = new Skyline(size, size)

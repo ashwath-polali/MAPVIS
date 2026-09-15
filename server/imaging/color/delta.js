@@ -1,15 +1,9 @@
-// How far apart two colours are, in four opinions.
-//
-// A quantiser is only as good as the distance it minimises. Plain rgb distance
-// is fast and wrong: it treats a step of eight in blue as the same size as a
-// step of eight in green, and an eye does not. Every function here takes two
-// rgb triples and returns a number where zero is identical.
+// how far apart two colours are, in four opinions, each taking two rgb triples and returning a number where zero is identical: plain rgb distance is fast and wrong, because it calls a step of eight in blue the same size as a step of eight in green
 
 import { rgbToLab } from './lab.js'
 import { rgbToOklab } from './oklab.js'
 
-/* squared, because nothing here compares a distance to anything but another
- * distance and a square root per pixel per palette entry is real time */
+/* squared, because nothing here compares a distance to anything but another distance and a square root per pixel per palette entry is real time */
 export function rgbDistSq(a, b) {
   const dr = a[0] - b[0]
   const dg = a[1] - b[1]
@@ -17,9 +11,7 @@ export function rgbDistSq(a, b) {
   return dr * dr + dg * dg + db * db
 }
 
-/* the weighted approximation that gets most of Lab's benefit for none of its
- * cost. The weights shift with the mean red, which is what stops it reading
- * dark blues as close to dark greens. */
+/* the weighted approximation with most of Lab's benefit for none of its cost, the weights shifting with the mean red, which is what stops it reading dark blues as close to dark greens */
 export function redmean(a, b) {
   const rm = (a[0] + b[0]) / 2
   const dr = a[0] - b[0]
@@ -37,8 +29,7 @@ export function deltaE76(a, b) {
   return Math.sqrt(dl * dl + da * da + db * db)
 }
 
-/* graphic arts weights. Cheaper than 2000 and good enough to rank candidates
- * that are already close. */
+/* graphic arts weights, cheaper than 2000 and good enough to rank candidates that are already close */
 export function deltaE94(a, b) {
   const x = rgbToLab(a)
   const y = rgbToLab(b)
@@ -55,9 +46,7 @@ export function deltaE94(a, b) {
   return Math.sqrt((dl / sl) ** 2 + (dc / sc) ** 2 + (dh2 > 0 ? dh2 / (sh * sh) : 0))
 }
 
-/* CIEDE2000, with the hue rotation term. It is fiddly and it is the one that
- * agrees with an eye on near-neutrals, which is exactly where a shading ramp
- * lives. */
+/* CIEDE2000 with the hue rotation term, fiddly and the one that agrees with an eye on near-neutrals, which is where a shading ramp lives */
 export function deltaE2000(a, b, kL = 1, kC = 1, kH = 1) {
   const x = rgbToLab(a)
   const y = rgbToLab(b)
@@ -116,8 +105,7 @@ export function deltaE2000(a, b, kL = 1, kC = 1, kH = 1) {
   )
 }
 
-/* straight euclidean distance in OKLab, which is what that space was fitted to
- * make meaningful, and the default this library quantises against */
+/* straight euclidean distance in OKLab, the space fitted to make that meaningful, and the default this library quantises against */
 export function deltaOk(a, b) {
   const x = rgbToOklab(a)
   const y = rgbToOklab(b)

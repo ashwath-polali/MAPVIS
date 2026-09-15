@@ -1,18 +1,8 @@
-// Exact euclidean distance transform, by Felzenszwalb and Huttenlocher.
-//
-// How far every empty pixel is from the nearest filled one. It answers "where is
-// the middle of this room" and "how wide is this corridor at its narrowest",
-// both of which are questions about a map that are otherwise guessed at.
-//
-// The naive version is O(n) per pixel against every filled pixel. This is two
-// one dimensional passes, each linear, and the answer is exact rather than the
-// chamfer approximation most implementations settle for.
+// exact euclidean distance transform, Felzenszwalb and Huttenlocher: two linear one dimensional passes instead of O(n) per pixel, and exact rather than the chamfer approximation, so it answers where the middle of a room is and how wide a corridor is at its narrowest
 
 const INF = 1e20
 
-/* the lower envelope of a set of parabolas, one per row entry. The whole trick:
- * the squared distance from a row of sources is a parabola per source, and the
- * distance transform is the lowest of them at each x. */
+/* the lower envelope of one parabola per source in the row, because squared distance from a row of sources is a parabola each and the transform is the lowest of them at each x */
 function edt1d(f, n) {
   const d = new Float64Array(n)
   const v = new Int32Array(n)
@@ -66,8 +56,7 @@ export function distanceTransform(plane, { threshold = 1, invert = false } = {})
   return out
 }
 
-/* the point furthest from any edge, which is where a label goes so it does not
- * run off the shape */
+/* the point furthest from any edge, which is where a label goes so it does not run off the shape */
 export function poleOfInaccessibility(plane, opts) {
   const d = distanceTransform(plane, { ...opts, invert: true })
   let best = -1
@@ -87,8 +76,7 @@ export function poleOfInaccessibility(plane, opts) {
   return { x: bx, y: by, radius: best }
 }
 
-/* the narrowest point of a shape, doubled, which is the widest body that can
- * pass through it */
+/* the narrowest point of a shape, doubled, which is the widest body that can pass through it */
 export function narrowest(plane, opts) {
   const d = distanceTransform(plane, { ...opts, invert: true })
   let min = Infinity

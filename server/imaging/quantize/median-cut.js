@@ -1,10 +1,4 @@
-// Median cut, which is the quantiser to reach for when the palette has to keep
-// the picture's own colours rather than invent new ones.
-//
-// It repeatedly splits the box of colours along its longest axis at the median,
-// so every box ends up holding roughly the same number of PIXELS rather than the
-// same volume of colour space. That is what stops a large flat sky eating the
-// whole palette.
+// median cut keeps the picture's own colours instead of inventing new ones: each box splits along its longest axis at the median, so every box holds roughly the same number of pixels rather than the same volume of colour space, and a large flat sky cannot eat the whole palette
 
 import { histogram, unpackRGB } from '../color/srgb.js'
 
@@ -22,9 +16,7 @@ function boxOf(entries) {
   return { entries, rlo, rhi, glo, ghi, blo, bhi, count }
 }
 
-/* the longest side is measured with the luma weights on, because a box that is
- * wide in blue and narrow in green is perceptually narrower than its numbers
- * say and splitting it first wastes an entry */
+/* the longest side is measured with the luma weights on, because a box wide in blue and narrow in green is perceptually narrower than its numbers say and splitting it first wastes an entry */
 function longestAxis(box) {
   const r = (box.rhi - box.rlo) * 0.2126
   const g = (box.ghi - box.glo) * 0.7152

@@ -6,8 +6,7 @@ import { closeDb } from './pool.mjs'
 import { publishBundle, orderedHeadings } from '../store/publish.mjs'
 import { isPlacementName, isAnchorName } from '../store/crypto.mjs'
 
-// a round is at most this many states and each can name one picture that is not
-// look 0, which is the same cap the export route packs to
+// a round is at most this many states, each naming one picture that is not look 0, the same cap the export route packs to
 const STATES_MAX = 6
 
 /* nothing recomputes the group condition later, so reading only the placement makes them unconditional */

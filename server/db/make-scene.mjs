@@ -46,8 +46,7 @@ await q(
   [map.id, keys.scene(map.id), png.length, crypto.createHash('sha256').update(png).digest('hex')],
 )
 
-// a levels plane that says the whole thing is ground. Nothing walks here, but
-// the bundle contract expects the file and a reader should never meet a hole.
+// a levels plane saying the whole thing is ground: nothing walks here, but the bundle contract expects the file and a reader should never meet a hole
 const flat = flatLevels(w, h, 40)
 
 const r = await publishBundle(slug, {
@@ -72,8 +71,7 @@ console.log(`published ${slug} v${r.version} · ${r.files.length} files · ${(r.
 console.log('the landing page will pick it up on the next load')
 await closeDb()
 
-/* A one-colour png, written by hand rather than pulled from a library. It is a
- * single scanline repeated, so zlib crushes it to nothing whatever the size. */
+/* a one-colour png written by hand rather than pulled from a library, a single scanline repeated so zlib crushes it to nothing whatever the size */
 function flatLevels(width, height, value) {
   const row = Buffer.alloc(1 + width * 4)
   for (let x = 0; x < width; x++) {

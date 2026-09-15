@@ -1,13 +1,8 @@
-// Colour temperature, for matching one painting's light to another's.
-//
-// Two maps drawn months apart drift: one is lit warm and one is lit neutral, and
-// placing a prop from the first onto the second reads as a sticker. Measuring
-// the light rather than eyeballing it is what makes a correction repeatable.
+// colour temperature, for matching one painting's light to another's, because a prop lifted off a warm lit map onto a neutral lit one reads as a sticker
 
 import { rgbToXYZ, xyzToRGB, toChromaticity, adapt, D65 } from './xyz.js'
 
-/* Planckian locus by the Kim cubic, which is accurate from 1667K to 25000K and
- * is the range anything in a painting sits in */
+/* Planckian locus by the Kim cubic, accurate from 1667K to 25000K, which covers anything in a painting */
 export function kelvinToChromaticity(k) {
   const t = Math.max(1667, Math.min(25000, k))
   let x
@@ -30,16 +25,14 @@ export function kelvinToRGB(k) {
   return rgb.map((c) => Math.round((c / max) * 255))
 }
 
-/* McCamy's approximation, inverted off the chromaticity. Good to a few kelvin
- * near daylight and that is all this needs. */
+/* McCamy's approximation inverted off the chromaticity, good to a few kelvin near daylight and that is all this needs */
 export function estimateKelvin(rgb) {
   const [x, y] = toChromaticity(rgbToXYZ(rgb))
   const n = (x - 0.332) / (0.1858 - y)
   return 449 * n * n * n + 3525 * n * n + 6823.3 * n + 5520.33
 }
 
-/* a whole image pushed from one light to another, through Bradford. Scaling the
- * channels directly is the shortcut and it shifts every hue on the way. */
+/* a whole image pushed from one light to another through Bradford, because scaling the channels directly shifts every hue on the way */
 export function shiftTemperature(rgba, fromK, toK) {
   const a = kelvinToChromaticity(fromK)
   const b = kelvinToChromaticity(toK)
@@ -60,8 +53,7 @@ export function shiftTemperature(rgba, fromK, toK) {
   return out
 }
 
-/* the average light of a painting, ignoring transparent pixels, which is the
- * measurement a style match is actually made against */
+/* the average light of a painting, ignoring transparent pixels, which is the measurement a style match is made against */
 export function averageLight(rgba) {
   let x = 0
   let y = 0

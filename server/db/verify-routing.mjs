@@ -33,9 +33,7 @@ try {
       : no(`asking threw the wrong thing: ${e.name} ${e.message}`)
   }
 
-  // ---- the fall-through ---------------------------------------------------
-  // translateAsk catches NoPlanner and returns the author's words wrapped in
-  // the house style, which is the prompt that actually goes to pixellab.
+  // the fall-through: translateAsk catches NoPlanner and returns the author words in the house style, which is the prompt pixellab actually gets.
   const api = await import('../api.mjs')
   const t = await api.__translateAskForTest?.('a small wooden fishing hut', 'static', '', 'hub', '')
   if (!t) {

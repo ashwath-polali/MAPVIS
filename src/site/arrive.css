@@ -1,15 +1,6 @@
-/* Two screens, and they are deliberately not the same kind of thing.
- *
- * The landing is a place: one painting, a camera, six words at a time.
- * Home is an interface: a grid, dark, where the only colour on screen comes out
- * of the maps themselves.
- */
+/* two screens on purpose: the landing is a place, one painting and six words at a time, and home is a dark grid where the only colour comes out of the maps themselves */
 
-/* ============================ the landing ==============================
- *
- * Six paintings stacked in one frame. Only one is lit; the rest sit behind it
- * at zero opacity, already decoded, so a step is a swap and never a load.
- */
+/* the landing: six paintings stacked in one frame, one lit and the rest behind it at zero opacity already decoded, so a step is a swap and never a load */
 
 .land {
   position: relative;
@@ -21,8 +12,7 @@
   position: absolute;
   inset: 0;
 }
-/* each painting fills the frame, pixel-perfect, and is nudged slightly as it
-   arrives so a step has direction rather than just being a cut */
+/* each painting fills the frame pixel-perfect and is nudged as it arrives, so a step has direction rather than being a cut */
 .land-plate {
   position: absolute;
   inset: 0;
@@ -40,14 +30,12 @@
   opacity: 1;
   transform: scale(1) translateY(0);
 }
-/* one that has been passed sits slightly further back, so scrolling up feels
-   like returning rather than like a fresh arrival */
+/* a painting already passed sits slightly further back, so scrolling up feels like returning rather than a fresh arrival */
 .land-plate.past {
   transform: scale(1.02) translateY(-2%);
 }
 
-/* the edges go dark so words always have somewhere to sit, whatever the
-   painting is doing underneath them */
+/* the edges go dark so words always have somewhere to sit, whatever the painting underneath is doing */
 .land::after {
   content: '';
   position: absolute;
@@ -107,17 +95,7 @@
   justify-items: end;
   text-align: right;
 }
-/* A HARD OUTLINE, not a soft shadow.
- *
- * White on a painting is legible right up until the letters cross a pale roof
- * or a sandbar, and a blur only makes the collision softer rather than
- * readable. A solid ring in the darkest colour on the page separates the type
- * from whatever is behind it at every stop, and a hard edge is also what
- * belongs over pixel art, where nothing else is blurred.
- *
- * paint-order lets the stroke sit UNDER the fill, so thickening it never eats
- * into the letterforms. The shadow ring underneath catches browsers that do
- * not honour a stroke, and the one deep glow stays for weight. */
+/* a hard outline, not a soft shadow: a blur only softens the collision where white type crosses a pale roof, paint-order keeps the stroke under the fill so thickening it never eats the letterforms, and the shadow ring catches browsers that ignore a stroke */
 .land-say p {
   max-width: 14ch;
   margin: 0;
@@ -173,8 +151,7 @@
   transform: translateY(-2px);
   box-shadow: 0 14px 44px -14px rgba(255, 255, 255, 0.55);
 }
-/* position, not buttons to hunt for. The lit one grows rather than changing
-   colour, so it reads at a glance without a legend. */
+/* position, not buttons to hunt for: the lit dot grows rather than changing colour, so it reads at a glance without a legend */
 .land-dots {
   display: flex;
   gap: 7px;
@@ -249,9 +226,7 @@
 .home-find:focus {
   border-color: var(--edge);
 }
-/* every control in this bar, including the two that are links now rather than
-   spelt-out words. text-decoration is here because an <a> brings an underline
-   with it and a 30px square with a line under it is not an icon. */
+/* covers every control in this bar, and text-decoration is here because an <a> brings an underline and a 30px square with a line under it is not an icon */
 .home-icon {
   display: grid;
   place-items: center;
@@ -291,9 +266,7 @@
     transform 260ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* The bin. Invisible until the pointer is on the card, and only red once it is
- * on the bin itself, so the destructive control never competes with the
- * painting for attention but is unmistakable the moment you reach for it. */
+/* the bin is invisible until the pointer is on the card and only red once it is on the bin itself, so the destructive control never competes with the painting */
 .card-bin {
   position: absolute;
   z-index: 3;
@@ -419,8 +392,7 @@
   color: var(--ink);
 }
 
-/* new map is a card too, so the grid never has a special first row that breaks
-   at the wrong width */
+/* new map is a card too, so the grid never has a special first row that breaks at the wrong width */
 .card.new {
   align-items: flex-start;
   justify-content: center;
@@ -451,14 +423,7 @@
   color: var(--ink-3);
 }
 
-/* ============================= folders =================================
- *
- * All of this is absent unless the folders api answered, so nothing below may
- * be load bearing for reading the page. It is a rail of names down the left, a
- * marker while a card is being dragged, and a small popover on a card. No
- * colour: the paintings stay the only bright thing on the screen, and a folder
- * that shouted would be an organiser competing with the work it organises.
- */
+/* folders, all of it absent unless the folders api answered, so nothing below may be load bearing for reading the page, and no colour on any of it because the paintings stay the only bright thing on screen */
 
 .home-split {
   display: grid;
@@ -466,8 +431,7 @@
   gap: clamp(16px, 1.6vw, 24px);
   align-items: start;
 }
-/* under a phone width the rail becomes a row of chips above the grid, because
-   164px of names beside a one-column grid is most of the screen */
+/* under 760px the rail becomes a row of chips above the grid, because 164px of names beside a one-column grid is most of the screen */
 @media (max-width: 760px) {
   .home-split {
     grid-template-columns: 1fr;
@@ -564,8 +528,7 @@ button.rail-row.on {
 .rail-x:hover {
   color: var(--acc-stop-lit);
 }
-/* removing a folder keeps every map in it, so this asks once, inline, rather
-   than opening the two-step dialog that deleting a map opens */
+/* removing a folder keeps every map in it, so this asks once inline rather than opening the two-step dialog that deleting a map opens */
 .rail-sure {
   display: flex;
   gap: 6px;
@@ -621,18 +584,14 @@ button.rail-row.on {
 
 /* ---- a folder as a tile in the grid ---- */
 
-/* The same footprint as a map card, because they stand in the same grid and a
-   different size would leave the top of the page ragged. What is different is
-   the face: a shape and no painting, and no colour on it until something is
-   being dragged onto it. */
+/* same footprint as a map card because they stand in the same grid, with a shape instead of a painting and no colour on it until something is being dragged onto it */
 .card.fold {
   cursor: var(--cur-do);
 }
 .card.fold:hover {
   border-color: var(--edge);
 }
-/* the face is the click target and the whole art area, so opening a folder is
-   the same size of gesture as opening a map */
+/* the face is the click target and the whole art area, so opening a folder is the same size of gesture as opening a map */
 .fold-face {
   position: relative;
   display: grid;
@@ -651,8 +610,7 @@ button.rail-row.on {
 .card.fold:hover .fold-face {
   color: #39434f;
 }
-/* a map is over this folder and letting go files it here. Same green as the
-   rail row, so the two drop targets for one folder say it the same way. */
+/* a map is over this folder and letting go files it here, in the same green as the rail row so both drop targets say it the same way */
 .card.fold.over {
   border-color: var(--acc-live);
   transform: none;
@@ -673,8 +631,7 @@ button.rail-row.on {
 .fold-in:hover {
   color: var(--ink);
 }
-/* removing a folder keeps every map in it, so it asks once and it asks here,
-   in the corner the bin is in, rather than opening the dialog a map opens */
+/* removing a folder keeps every map in it, so it asks once here, in the corner the bin is in, rather than opening the dialog a map opens */
 .fold-sure {
   position: absolute;
   z-index: 4;
@@ -703,8 +660,7 @@ button.rail-row.on {
 
 /* ---- inside a folder ---- */
 
-/* One line above the grid. The way out is the first thing on it, because the
-   grid underneath is now a subset and nothing else on the page says so. */
+/* one line above the grid with the way out first on it, because the grid underneath is now a subset and nothing else on the page says so */
 .fold-head {
   display: flex;
   align-items: baseline;
@@ -786,13 +742,11 @@ button.rail-row.on {
 
 /* ---- dragging a card ---- */
 
-/* the card in the hand fades rather than moves, because the browser is already
-   drawing a copy of it under the pointer */
+/* the card in the hand fades rather than moves, because the browser is already drawing a copy of it under the pointer */
 .card.lifted {
   opacity: 0.4;
 }
-/* where it lands. A bar in the gap, not a highlight on the card, so it says
-   between these two rather than onto this one. */
+/* a bar in the gap, not a highlight on the card, so it says between these two rather than onto this one */
 .card.drop-before::before,
 .card.drop-after::before {
   content: '';

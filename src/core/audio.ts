@@ -18,8 +18,7 @@ const read = (): boolean => {
     const v = JSON.parse(raw) as Partial<Stored>
     return v.mute === true
   } catch {
-    // private browsing has no storage, and a browser that cannot remember an
-    // answer should default to the one that surprises nobody: sound on.
+    // private browsing has no storage, and a browser that cannot remember an answer defaults to the one that surprises nobody, sound on
     return false
   }
 }
@@ -42,8 +41,7 @@ export function setMuted(muted: boolean): void {
   try {
     localStorage.setItem(KEY, JSON.stringify({ mute: muted } satisfies Stored))
   } catch {
-    // storage refused, so this answer lasts as long as the tab. Still obeyed:
-    // a switch that does not stick is a smaller lie than one that does not act.
+    // storage refused so this answer lasts as long as the tab, still obeyed because a switch that does not stick is a smaller lie than one that does not act
   }
   if (cached === muted) return
   cached = muted
@@ -51,8 +49,7 @@ export function setMuted(muted: boolean): void {
   for (const fn of listeners) fn(muted)
 }
 
-/** something already playing subscribes so it can stop, rather than finishing a
- *  sound the person just asked it not to make */
+/** something already playing subscribes so it can stop, rather than finishing a sound the person just asked it not to make */
 export function onMuted(fn: (muted: boolean) => void): () => void {
   listeners.add(fn)
   return () => {
@@ -97,12 +94,10 @@ const settle = () => {
   if (!waiting.length) return
   const asked = waiting.splice(0)
   void build().then((c) => {
-    // still blocked, so put the askers back and wait for another gesture rather
-    // than handing out a context that will swallow whatever is played into it
+    // still blocked, so put the askers back and wait for another gesture rather than handing out a context that will swallow whatever is played into it
     if (!c) {
       gestured = false
-      // unshift and not push, so somebody who asked while the resume was in
-      // flight does not get served ahead of whoever was waiting first
+      // unshift and not push, so somebody who asked while the resume was in flight does not get served ahead of whoever was waiting first
       waiting.unshift(...asked)
       arm()
       return
@@ -128,23 +123,19 @@ function disarm() {
 function arm() {
   if (armed || gestured || typeof window === 'undefined') return
   armed = true
-  // capture phase, so a component that stops propagation on its own buttons
-  // cannot make the whole page look ungestured
+  // capture phase, so a component that stops propagation on its own buttons cannot make the whole page look ungestured
   window.addEventListener('pointerdown', onGesture, true)
   window.addEventListener('keydown', onGesture, true)
 }
 
 arm()
-/* the stored answer has to reach the stylesheets on the first frame, before any
- * settings sheet has been opened, for the same reason motion.ts publishes on
- * load: the first thing that happens must already be obeying the preference */
+/* the stored answer has to reach the stylesheets on the first frame, before any settings sheet is opened, so the first thing that happens is already obeying the preference */
 publish()
 
 /** whether this browser can play audio at all */
 export const audioSupported = (): boolean => audioCtor() !== null
 
-/** whether the document has had the click or keypress browsers require before
- *  any sound is allowed through */
+/** whether the document has had the click or keypress browsers require before any sound is allowed through */
 export const audioUnblocked = (): boolean => gestured
 
 /** a settings row showing the real state re-renders when it changes */

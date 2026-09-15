@@ -1,20 +1,4 @@
-// Find every comment in a source file, and put a rewritten one back without touching a byte of code.
-//
-// The whole reason it works this way: whoever rewrites the prose never sees or writes code, only the
-// words, so a sweep over thousands of comments cannot change behaviour by accident. It did 2,800 in
-// the engine repo and every file came out proved identical once the comments were stripped.
-//
-//   node scripts/comments.mjs list <root> <dir...>         one json line per file needing work
-//   node scripts/comments.mjs show <root> <file> [limit]   the comments in one file, as json
-//   node scripts/comments.mjs apply <root> <file> <json>   splice one line per id back in
-//
-// The json handed to apply is [{"id": 4, "line": "the sentence that replaces it"}], prose only: the
-// splicer adds the delimiter the comment already used, keeps the indentation, and deletes the lines
-// the old one took up. Prove the result with scripts/codeonly.mjs before committing it.
-//
-// A comment is listed as needing work when it runs past one line, carries an em-dash, or names a
-// person, an AI, a session or a document. A directive comment is never listed and never touched.
-// Triple-quoted python is a string and not a comment, so a docstring another suite parses survives.
+// rewrites a comment without touching a byte of code, because the rewriter only ever sees the words, so a sweep of thousands cannot change behaviour and codeonly.mjs proves it; one is listed when it runs past one line, carries an em-dash, or names a person, a model, a working session or a document
 import fs from 'node:fs'
 import path from 'node:path'
 
@@ -28,10 +12,7 @@ const BANNED =
 const hasDash = (s) => /[—–]/.test(s)
 const needsWork = (text, lines) => lines > 1 || hasDash(text) || BANNED.test(text)
 
-// ---- scanning ---------------------------------------------------------------
-
-// every comment span in a javascript-family source, with strings, templates and regex literals
-// skipped so a "//" inside a url is never mistaken for one
+// scanning: every comment span in a javascript-family source, with strings, templates and regex literals skipped so a double slash inside a url is never mistaken for one
 function scanJS(src) {
   const spans = []
   let i = 0
@@ -210,10 +191,7 @@ const scan = (file, src) => {
   return scanJS(src)
 }
 
-// ---- grouping ---------------------------------------------------------------
-
-// a run of comment-only lines is one comment, blank lines between paragraphs included, because
-// "one line each" means one line for the whole thought and not one per paragraph
+// grouping: a run of comment-only lines is one comment, blank lines between paragraphs included, because one line each means one line for the whole thought
 function group(src, spans, file) {
   const lineStart = [0]
   for (let i = 0; i < src.length; i++) if (src[i] === '\n') lineStart.push(i + 1)

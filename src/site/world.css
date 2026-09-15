@@ -1,76 +1,22 @@
-/* The world composition page: a chart of an ocean with a survey panel beside
- * it. It borrows the site's palette and the home page's chrome rather than
- * inventing a third look, and everything that is not the water is small,
- * narrow and out of the way.
- *
- * TWO RULES DO MOST OF THE WORK HERE, and the first pass of this sheet kept
- * neither.
- *
- * GOLD ONLY EVER MEANS THE TOOL SPEAKING. It was on five things at once, three
- * of them as a filled slab, so the brightest thing on a dark chart was a row of
- * buttons rather than the island being worked on. It is now a hairline and a
- * word on whatever is armed, and a fill on nothing but the press you are
- * actually making.
- *
- * FOUR TYPE SIZES AND FOUR SPACINGS, and there were nine of each. A panel with
- * nine sizes in it does not read as a form, it reads as a document that grew.
- * The spacings are still 4, 8, 12 or 18 apart. The sizes are no longer this
- * page's business: it names a step from the scale in tokens.css, so a tenth
- * size cannot be invented here without inventing it for the whole app.
- *
- * AND NO HEX AT ALL. The rule above was written and then five raw colours were
- * left in anyway: a sunk surface at #0d1219, a scrollbar hover at #38434f, and
- * three rgba washes carrying the wax and the gold at hand-picked alphas. Every
- * one of them is now a color-mix over a token, so moving --acc-stop moves the
- * refusal wash with it instead of leaving a stale tint behind. The canvas is the
- * one exception and it is fenced inside World.tsx, because a 2d context cannot
- * read a custom property.
- *
- * Loaded from World.tsx rather than from main.tsx, because this route is one
- * page and nobody who never opens it should pay for the rules.
- */
+/* the world composition page. gold only means the tool speaking, so a fill goes on nothing but the press being made, sizes come from the tokens.css scale, and no raw hex: every colour is a color-mix over a token, except the canvas, because a 2d context cannot read a custom property. */
 
 .world {
-  /* the page's own line and surface, named once. Ten hard-coded near-identical
-     greys is how a panel edge ends up a shade off the panel edge beside it.
-
-     THEY ARE ALIASES NOW. Naming them once inside this page fixed the ten
-     greys and left the page free to pick the wrong five, which it did:
-     --quiet was #5b6470 at 3.29:1 and it was carrying the back arrow, the zoom
-     readout, every section header and the id column, all between 9 and 11px.
-     None of those are large text, so none of them get the 3:1 exemption. */
+  /* the page's line and surface named once, as aliases: ten near-identical greys is how one panel edge ends up a shade off the next. --quiet was #5b6470 at 3.29:1 under 9 to 11px text, which takes the 4.5:1 floor and not the 3:1 large-text exemption. */
   --wl: var(--edge);
   --wl-lit: var(--edge-ctl);
-  /* a well sunk into the page. A surface, not a line, and it was #0d1219: a
-     sixth grey with no relation to the five above it. Mixed out of the two
-     tokens either side of it, so it can never drift off them again. */
+  /* a well sunk into the page, a surface and not a line. it was #0d1219, a sixth grey unrelated to the five above it, so it is mixed out of the two tokens either side instead. */
   --sunk: color-mix(in srgb, var(--void) 82%, var(--line));
 
-  /* THE EDITOR'S TWO SURFACES, COPIED RATHER THAN IMPORTED, AND WHY.
-   *
-   * app.css declares --panel and --raised at :root, and app.css is the editor's
-   * lazy chunk: Shell only loads it for /edit and /ui, so on this route both
-   * names resolve to nothing and every rule reaching for one falls back to
-   * transparent. That is how a panel meant to look like the editor's ends up
-   * with no surface at all.
-   *
-   * So they are mixed out of the two tokens either side of them, which lands
-   * within a point or two of #10141a and #161c24 and keeps this sheet's own
-   * rule that it writes no raw hex. If the editor's greys move, these move with
-   * them, because both are derived from --void and --line. */
+  /* --panel and --raised are copied rather than imported, because app.css is the editor's lazy chunk loaded only for /edit and /ui, so on this route both names resolve to nothing and every rule reaching for one falls back to transparent. mixed from --void and --line, landing near #10141a and #161c24. */
   --panel: color-mix(in srgb, var(--void) 78%, var(--line));
   --raised: color-mix(in srgb, var(--void) 62%, var(--line));
   --say: var(--ink-2);
   --quiet: var(--ink-3);
-  /* what a plate over the water is filled with. The chart writes the same wash
-     into its canvas by hand and the two have to agree, or a toast floating over
-     the chart reads as a different program's window. */
+  /* what a plate over the water is filled with; the chart writes the same wash into its canvas by hand and the two have to agree. */
   --glass: color-mix(in srgb, var(--void) 88%, transparent);
 
   display: grid;
-  /* a bar, the work, a readout strip. The editor is 48px / 1fr / 30px and this
-     was two rows, which is the largest single reason the two screens did not
-     read as one program. */
+  /* a bar, the work, a readout strip, matching the editor's 48px / 1fr / 30px; this was two rows, which is the largest single reason the two screens did not read as one program. */
   grid-template-rows: auto minmax(0, 1fr) 30px;
   height: 100svh;
   background: var(--void);
@@ -78,25 +24,14 @@
   font-family: var(--font-label);
 }
 
-/* A KEYBOARD FOCUS RING, WHICH THIS ROUTE DID NOT HAVE ONE OF.
- *
- * app.css declares `:focus-visible { outline: 2px solid var(--acc) }` and app.css
- * is the editor's lazy chunk, so on /world neither the rule nor --acc exists and
- * every tab stop fell back to whatever chromium draws. Measured on the tool
- * group: a pale two pixel box the same weight as an armed control, which is a
- * second thing that looks selected while nothing is. Gold, because gold is the
- * tool speaking, and it matches the editor's ring in everything but the token
- * name that route can reach. */
+/* a keyboard focus ring, because app.css holds :focus-visible and --acc and is the editor's lazy chunk, so on /world every tab stop fell back to chromium's pale 2px box, the same weight as an armed control. gold, because gold is the tool speaking. */
 .world :focus-visible {
   outline: 2px solid var(--gold);
   outline-offset: 1px;
   border-radius: var(--r);
 }
 
-/* scrollbars stop being the one thing on screen that looks like an operating
-   system rather than like this program. The panel had the browser's own light
-   bar down its edge while the editor two clicks away had a thin dark one, which
-   is the same tool disagreeing with itself. Same rule the editor uses. */
+/* scrollbars follow the editor's rule, so the panel does not carry the browser's light bar while the editor two clicks away draws a thin dark one. */
 .world *,
 .world {
   scrollbar-width: thin;
@@ -146,19 +81,12 @@
   text-transform: uppercase;
   color: var(--ink-on-sea);
 }
-/* the one flexible gap in a bar, so the things after it sit right. `grow` and
-   not `margin-left: auto` on whatever happens to be next, which is how a bar
-   ends up re-anchored every time an item is added to it. */
+/* the one flexible gap in a bar, so a bar is not re-anchored with margin-left auto every time an item is added to it. */
 .world-grow {
   flex: 1;
 }
 
-/* ---- the readout strip --------------------------------------------------
- *
- * The editor's own footer, restated with the tokens this route has loaded:
- * --panel, a hairline over it, mono numbers and dim words. What is IN it is the
- * same class of fact the editor puts there, the scale and the size and the
- * counts, and each of those has one place on this page rather than several. */
+/* the readout strip: the editor's footer restated with the tokens this route loads, holding the scale, the size and the counts, each with one place on this page. */
 .world-foot {
   display: flex;
   align-items: center;
@@ -172,8 +100,7 @@
 .world-read {
   white-space: nowrap;
 }
-/* the same two utility names the editor's footer uses, scoped so they cannot
-   reach anything else on the site */
+/* the same two utility names the editor's footer uses, scoped so they cannot reach anything else on the site */
 .world-foot .mono {
   font-family: var(--font-mono);
   font-variant-numeric: tabular-nums;
@@ -212,23 +139,14 @@
   margin: 0;
 }
 
-/* the last thing in the strip is a standing line about the two gestures, and it
-   gives way first: at a narrow window the numbers matter and the reminder does
-   not. The editor's own hint takes the same treatment at the same end. */
+/* the last thing in the strip is a standing hint about the two gestures and it gives way first: at a narrow window the numbers matter and the reminder does not. */
 @media (max-width: 1100px) {
   .world-foot > .world-read:last-child {
     display: none;
   }
 }
 
-/* ONE SEGMENTED CONTROL, AND IT IS THE EDITOR'S OWN.
- *
- * This was a 1px gap over a coloured background, which is a second idiom for a
- * thing the editor already draws: .seg in app.css is a bordered tray at
- * --r-tight holding options at --r, and the armed one takes a soft accent fill
- * with a matching border. Two screens one click apart cannot disagree about
- * what a group of options looks like, so this is that rule restated with the
- * tokens this route actually has loaded. */
+/* one segmented control, and it is the editor's .seg: a bordered tray at --r-tight holding options at --r, the armed one taking a soft accent fill and matching border, restated with the tokens this route loads. */
 .world-tools {
   display: flex;
   gap: 2px;
@@ -257,9 +175,7 @@
   background: var(--gold-soft);
   border-color: var(--gold);
 }
-/* THE ONE FILLED CONTROL ON THE PAGE, and it is the one that writes. Everything
-   else on this bar is an outline, which is what makes a filled gold button read
-   as the end of the sentence rather than as decoration. */
+/* the one filled control on the page, and it is the one that writes; everything else on this bar is an outline, which is what makes a filled gold button read as the end of the sentence. */
 .world-save {
   padding: 5px 16px;
   font: 600 var(--fs-small) var(--font-label);
@@ -297,9 +213,7 @@
   }
 }
 
-/* the canvas is absolute so that measuring the stage can never be affected by
-   the size the canvas was last given, which is how a fit like this ends up
-   growing by a few pixels on every resize */
+/* the canvas is absolute so measuring the stage can never be affected by the size the canvas was last given, which is how a fit like this grows by a few pixels on every resize */
 .world-stage {
   position: relative;
   overflow: hidden;
@@ -312,18 +226,7 @@
   touch-action: none;
 }
 
-/* THE ARMED TOOL'S ONE LINE, AND IT FOLLOWS THE HAND.
- *
- * It was pinned to the top centre of the stage. Measured on a 1076 wide stage:
- * that put it 500 px from the button that armed the tool and 500 px from the
- * water the click has to land on, and it sat on top of the zoom cluster while
- * it was there. An instruction you have to look away from the work to read is
- * an instruction nobody reads twice.
- *
- * So World.tsx writes --hx and --hy from the pointer while a tool is armed, and
- * this sits just off the cursor. The fallback pair is the top left of the
- * stage, next to the tool group that armed it, for the moment before the
- * pointer has come over the water at all. */
+/* the armed tool's line follows the pointer through --hx and --hy from World.tsx: pinned to the top centre it sat 500 px from the button that armed the tool and 500 px from the water on a 1076 wide stage, and over the zoom cluster. the fallback is the stage's top left. */
 .world-hint {
   position: absolute;
   left: var(--hx, 14px);
@@ -345,10 +248,7 @@
   }
 }
 
-/* the zoom cluster. It is about the view and not about the document, and at
-   4096 across you reach for it constantly, so it sits over the water rather
-   than up in the bar. Top right and not bottom right: the chart writes the far
-   corner of the ocean and the scale bar down there. */
+/* the zoom cluster is about the view and not the document, so it sits over the water rather than in the bar; top right and not bottom right, because the chart writes the far corner of the ocean and the scale bar down there. */
 .world-zoom {
   position: absolute;
   right: 12px;
@@ -361,9 +261,7 @@
   border: var(--hair) solid var(--wl);
   border-radius: var(--r-soft);
 }
-/* the editor's own tool button: a square target, transparent at rest, a raised
-   fill under the pointer and a soft accent when it is on. It was a borderless
-   text link with a 2px radius, which is the one shape the editor never uses. */
+/* the editor's tool button: a square target, transparent at rest, a raised fill under the pointer and a soft accent when on. it was a borderless text link at 2px radius, the one shape the editor never uses. */
 .world-zbtn {
   min-width: 26px;
   height: 26px;
@@ -393,8 +291,7 @@
   background: var(--gold-soft);
   border-color: var(--gold);
 }
-/* a readout, not a control, so it is mono and it is not on the tile grid. The
-   divider is what stops it reading as a fifth button in the row. */
+/* a readout, not a control, so it is mono and off the tile grid; the divider is what stops it reading as a fifth button in the row. */
 .world-zread {
   min-width: 46px;
   padding-right: 4px;
@@ -407,12 +304,8 @@
 
 /* ---- the panel ----------------------------------------------------------- */
 
-/* the layout comes from .sparse in tokens.css, which is a flex column so the
-   empty state can claim the leftover height instead of the panel ending in
-   700px of nothing. This adds the surface and the padding and nothing else. */
-/* THE PANEL IS A SURFACE, and it was the page's own black with a line down one
-   side. The editor's rail carries --panel against a darker stage, which is what
-   makes it read as a thing beside the work rather than as a margin. */
+/* the layout comes from .sparse in tokens.css, a flex column so the empty state claims the leftover height instead of the panel ending in 700px of nothing; this adds the surface and the padding only. */
+/* the panel is a surface, not the page's own black with a line down one side: --panel against a darker stage is what makes it read as a thing beside the work rather than as a margin. */
 .world-side {
   overflow-y: auto;
   padding: 14px 14px 24px;
@@ -420,11 +313,7 @@
   border-left: var(--hair) solid var(--wl);
   gap: 12px;
 }
-/* A SECTION HEADER, AND IT IS THE EDITOR'S .asec EXACTLY.
-   Mono, micro, uppercase, tracked, at the text floor. It was the label face,
-   which put a sans header on this page and a mono one two clicks away for the
-   same job. h3 where it heads a section, so a screen reader gets the outline the
-   eye gets; still a span inside a summary, which cannot hold a heading. */
+/* a section header, the editor's .asec exactly: mono, micro, uppercase, tracked, at the text floor. h3 where it heads a section so a screen reader gets the outline, still a span inside a summary, which cannot hold a heading. */
 .world-lab {
   margin: 0;
   font: 600 var(--fs-micro)/1 var(--font-mono);
@@ -438,8 +327,7 @@
   color: var(--quiet);
 }
 
-/* what the server said, in its own words. A refusal is sealing wax, a warning
-   is gold: one of them stopped the save and the other did not. */
+/* what the server said, in its own words. a refusal is sealing wax and a warning is gold: one stopped the save and the other did not. */
 .world-refused,
 .world-warns {
   display: grid;
@@ -467,13 +355,7 @@
   border-bottom: var(--hair) solid var(--wl);
 }
 
-/* WHAT THIS PANEL IS ABOUT, IN WORDS, WITH THE ADDRESS UNDER IT.
- *
- * A heading that is the literal word "island" on every island never says which
- * one, and leaves the name appearing only inside the name field, where it is the
- * ADDRESS. People read labels, so the words go up top and the identifier goes
- * under them in mono, marked as the code name, because whoever is writing code
- * against it still has to type it. */
+/* the words go up top and the identifier goes under them in mono, marked as the code name: a heading that is the literal word island never says which one, and the name would otherwise appear only inside the name field. */
 .world-head {
   display: grid;
   gap: 2px;
@@ -491,13 +373,8 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* the word in front of an address, so a monospace string on screen is never
-   just loose. It reads "code name the_hub", which is what it is. */
-/* --ink-3 and not --ink-off. It was the latter, which tokens.css names for a
-   control that CANNOT BE PRESSED and measures 3.9:1, and this is neither a
-   control nor disabled: it is a ten pixel word somebody reads to know whether
-   the address under the heading is an island, a stretch of water or a berth.
-   Small text takes the 4.5:1 floor and --ink-3 is the token that meets it. */
+/* the word in front of an address, so a monospace string on screen is never loose. it reads code name the_hub, which is what it is. */
+/* --ink-3 and not --ink-off: tokens.css names --ink-off for a control that cannot be pressed and it measures 3.9:1, while this is a ten pixel word and small text takes the 4.5:1 floor. */
 .world-code i {
   font-style: normal;
   letter-spacing: var(--track-label);
@@ -505,18 +382,7 @@
   color: var(--quiet);
 }
 
-/* ---- THE GROUPS, AND WHY THEY STOPPED BEING BOXES -------------------------
- *
- * Every group of fields was a bordered, filled card sitting inside a bordered,
- * filled panel, which is where "boxy and robotic" comes from: seventeen inputs
- * in outlined boxes, inside five outlined boxes, inside one outlined rail. The
- * editor's panel has no cards at all. It has section headers and hairlines, and
- * the rhythm comes from the space between blocks rather than from a frame drawn
- * round each one.
- *
- * So a section is a header, its fields, and a rule under it. `.world-insp` keeps
- * the only frame left, because the inspector really is one object lifted off the
- * roster below it, which is the same job .insp does in the editor. */
+/* a section is a header, its fields and a rule under it, not a card: seventeen inputs in outlined boxes inside five outlined boxes inside one outlined rail is where boxiness comes from. .world-insp keeps the only frame, because the inspector is one object lifted off the roster. */
 .world-sec {
   display: grid;
   gap: 6px;
@@ -531,12 +397,7 @@
 .world-insp > .world-sec:first-of-type {
   padding-top: 4px;
 }
-/* THE GROUPS THAT FOLD, and only the ones nobody opens twice.
-   The painting and the radii are things an author sets once and then leaves,
-   and both sitting open is most of the 856 px this panel can run to. What
-   is open by default is what is unfinished: a slot with no map opens the
-   painting. The caret is the editor's, drawn as two borders rotated, so a fold
-   here and a fold in the tool are the same mark. */
+/* the groups that fold are the ones nobody opens twice, the painting and the radii, which open together are most of the 856 px this panel can run to; what is unfinished opens by default, so a slot with no map opens the painting. the caret is two borders rotated, the tool's own mark. */
 details.world-fold > summary {
   display: flex;
   align-items: center;
@@ -572,17 +433,12 @@ details.world-fold[open] > summary {
   display: grid;
   gap: 3px;
 }
-/* a field's name above its input, in mono micro at the text floor. The editor's
-   .numf settled this for the whole product and named /world as the reason. */
+/* a field's name above its input, mono micro at the text floor, the same shape .numf settled for the whole product. */
 .world-f > span {
   font: 400 var(--fs-micro) var(--font-mono);
   color: var(--quiet);
 }
-/* THE INPUT IS THE EDITOR'S INPUT. It was 2px of radius on a --sunk fill with
-   an --edge border at 1.8:1, which is under the floor for a control boundary;
-   the tool draws a --r box on the darkest surface with a boundary you can see.
-   --edge-ctl and not --edge, which is the token tokens.css names for exactly
-   this and measures at 3.1:1. */
+/* the input is the editor's input: a --r box on the darkest surface with --edge-ctl at 3.1:1, because --edge measures 1.8:1, under the floor for a control boundary. */
 .world-in {
   width: 100%;
   padding: 6px 9px;
@@ -603,8 +459,7 @@ details.world-fold[open] > summary {
 .world-in.bad {
   border-color: var(--acc-stop-edge);
 }
-/* the browser's own up and down arrows, which nobody here designed and which
-   cost 13px of every number field. The same un-appearance .numf takes. */
+/* the browser's own up and down arrows cost 13px of every number field, so they go, the same un-appearance .numf takes. */
 .world-in[type='number']::-webkit-inner-spin-button,
 .world-in[type='number']::-webkit-outer-spin-button {
   -webkit-appearance: none;
@@ -639,11 +494,7 @@ details.world-fold[open] > summary {
   accent-color: var(--gold);
   cursor: var(--cur-do);
 }
-/* THE BERTHS AN ISLAND CARRIES, as rows rather than as fields.
- *
- * A berth is a real object with a name, a label and a panel of its own now, so
- * an island lists them the way the editor lists the anchors on a map: a swatch,
- * the words, and a quiet right column. Pressing one goes to it. */
+/* the berths an island carries, as rows rather than fields: a swatch, the words and a quiet right column, the way the editor lists the anchors on a map. pressing one goes to it. */
 .world-list {
   display: grid;
   gap: 2px;
@@ -690,9 +541,7 @@ details.world-fold[open] > summary {
   font: 400 var(--fs-micro)/1.2 var(--font-mono);
 }
 
-/* THE BUTTON IS THE EDITOR'S .abtn. It was a bare outline with --ink-2 words on
-   a page whose every other outline is a field, so a control and a text input
-   were the same rectangle. A raised fill is what says this one is pressed. */
+/* the button is the editor's .abtn; a bare outline made a control and a text input the same rectangle, so a raised fill is what says this one is pressed. */
 .world-btn {
   padding: 6px 12px;
   font: 400 var(--fs-small) var(--font-label);
@@ -721,16 +570,7 @@ details.world-fold[open] > summary {
   border-color: var(--gold);
   background: var(--gold-soft);
 }
-/* THE ONE CONTROL HERE THAT DESTROYS SOMETHING, AND IT LOOKS LIKE IT AT REST.
- *
- * "remove the_hub" was drawn at --quiet on the neutral border, which is exactly
- * the row above it and the row below it, and only went red once a pointer was
- * already on it. A control that reveals what it is after you have reached for
- * it has told you too late. It carries the wax at rest now and the lit edge
- * once armed, which is the pair tokens.css names for precisely this.
- *
- * AND IT DOES NOT TAKE THE RAISED FILL the other buttons take, so the last
- * control in the panel is the one thing in the column drawn on nothing. */
+/* the one control here that destroys something, and it looks like it at rest: drawn at --quiet it matched the rows either side and only went red once a pointer was already on it, too late. wax at rest, lit edge once armed, and no raised fill, so it is the one thing in the column drawn on nothing. */
 .world-btn.danger {
   color: var(--acc-stop-lit);
   background: none;
@@ -741,21 +581,15 @@ details.world-fold[open] > summary {
   border-color: var(--acc-stop-edge);
   background: color-mix(in srgb, var(--acc-stop) 22%, transparent);
 }
-/* the second half of removing something. Two buttons, the safe one last, so
-   the hand that was already moving lands on "keep". */
+/* the second half of removing something. two buttons, the safe one last, so the hand that was already moving lands on keep. */
 .world-sure {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 8px;
 }
 
-/* the compass, laid out the way the editor lays it out for a door and a post,
-   with the middle meaning no opinion */
-/* THE COMPASS IS THE EDITOR'S COMPASS, cell for cell.
-   .facegrid in app.css is three 22px columns on 22px rows with a 2px gap, and
-   each cell is an .abtn: a raised tile with its own edge, going accent when it
-   is on. This was 30px columns of 26px outlined boxes at --r-tight, so the one
-   control that exists on both screens for the same job was drawn twice. */
+/* the compass, laid out the way the editor lays it out for a door and a post, with the middle meaning no opinion */
+/* the compass is the editor's .facegrid cell for cell: three 22px columns on 22px rows at a 2px gap, each cell a raised .abtn tile going accent when on. it was 30px columns of 26px outlined boxes at --r-tight. */
 .world-face {
   display: grid;
   grid-template-columns: repeat(3, 22px);
@@ -785,16 +619,8 @@ details.world-fold[open] > summary {
   background: var(--gold-soft);
 }
 
-/* WHAT IS ON THIS CHART, SAID ONCE, IN A RAIL THAT WAS OTHERWISE AIR.
- *
- * Measured: 290 by 719 holding a heading and one 15 px row. The empty state in
- * tokens.css answers a rail with NOTHING in it; this answers the case /world is
- * actually in, which is a chart with one island on it and a column of nothing
- * under it. Counts, the water's own extent, and the things checkWorld would
- * complain about at the save, so the rail earns its border. */
-/* what is not finished yet, in the words the save will use. Gold, because it is
-   the tool speaking about work left rather than a refusal. The counts and the
-   size of the water that shared this block are in the readout strip now. */
+/* what is on this chart, said once, in a rail that was otherwise air: measured 290 by 719 holding a heading and one 15 px row. counts, the water's own extent, and what checkWorld would complain about at the save. */
+/* what is not finished yet, in the words the save will use. gold, because it is the tool speaking about work left rather than a refusal. */
 .world-todo p {
   margin: 0;
   font: 400 var(--fs-small) var(--font-label);
@@ -810,13 +636,7 @@ details.world-fold[open] > summary {
 .world-roster .world-lab {
   margin-bottom: 4px;
 }
-/* ONE COLUMN, ONE MEANING, and it took a group heading to get there.
- *
- * The right hand column printed a map slug on an island row and a KIND on a
- * water row, so the same 42 px of the rail meant two unrelated things one line
- * apart. What is uniform across an island, a stretch of water and a waypoint is
- * the address python holds, so that is what the column is, and what kind of
- * thing a row is now comes from the group it sits in. */
+/* one column, one meaning: the right hand column printed a map slug on an island row and a kind on a water row, so the same 42 px meant two unrelated things a line apart. the column is the address python holds, and the kind comes from the group the row sits in. */
 .world-grp {
   display: grid;
   gap: 1px;
@@ -862,10 +682,7 @@ details.world-fold[open] > summary {
   border: var(--hair) solid transparent;
   border-radius: var(--r-round);
 }
-/* A BERTH IN OPEN WATER, drawn hollow, which is the same difference the chart
-   draws: a filled centre is a point tied to an island, an empty one is a corner
-   the crossing turns at and belongs to nobody. The border colour is written
-   inline beside the fill, so the ring keeps the coral when the middle goes. */
+/* a berth in open water is drawn hollow, the same difference the chart draws: a filled centre is tied to an island, an empty one is a corner the crossing turns at. the border colour is written inline beside the fill, so the ring keeps the coral when the middle goes. */
 .world-row i.open {
   background: none !important;
 }
@@ -900,11 +717,7 @@ details.world-fold[open] > summary {
   margin: 0;
   font: 400 clamp(1.8rem, 4vw, 3rem) var(--font-display);
 }
-/* A WHOLE SCREEN WITH ONE PARAGRAPH ON IT IS A PAGE, NOT A PANEL.
-   This was --fs-body at 44ch, which is 13px wrapping every four words under a
-   3rem display heading: four short ragged lines that read as a caption under a
-   sign. --fs-read is what the rest of the site sets running prose at, and the
-   measure goes with it so the block is three lines rather than five. */
+/* a whole screen with one paragraph on it is a page, not a panel: --fs-body at 44ch was 13px wrapping every four words under a 3rem heading. --fs-read is what the rest of the site sets running prose at, and the measure goes with it, three lines rather than five. */
 .world-gone p {
   margin: 0;
   max-width: 52ch;
@@ -922,38 +735,27 @@ details.world-fold[open] > summary {
   gap: 8px;
   margin-top: 6px;
 }
-/* the door that is actually being offered, lit, so a page with two buttons on
-   it does not make somebody read both to find out which one is the way in */
+/* the door that is actually being offered, lit, so a page with two buttons does not make somebody read both to find out which one is the way in */
 .world-btn.lit {
   color: var(--gold);
   border-color: var(--gold);
   background: var(--gold-soft);
 }
 
-/* WHOSE WATER THIS IS. The block at the head of the rail, and the one place on
-   the page carrying an address meant to be copied out of it.
-
-   No frame. The panel's rhythm is a mono header, its rows, and a hairline
-   under, which is what .world-sec does two hundred lines up, and a card here
-   would be the boxiness that section is written against. */
+/* whose water this is: the block at the head of the rail and the one address meant to be copied out of the page. no frame, because the panel's rhythm is a mono header, its rows and a hairline under. */
 .world-whose {
   display: grid;
   gap: 6px;
   padding-bottom: 11px;
   border-bottom: var(--hair) solid var(--line);
-  /* A GRID ITEM'S min-width IS auto, WHICH IS ITS CONTENT, so the truncation
-     below has to be granted three times over: on the link, on the row and on
-     this block. Miss any one and the 36 character uuid in a member's read
-     address widens the whole rail and gives the panel a horizontal scrollbar,
-     which is what it did. */
+  /* a grid item's min-width is auto, which is its content, so the truncation below has to be granted on the link, on the row and on this block; miss one and the 36 character uuid in a member's read address widens the whole rail. */
   min-width: 0;
 }
 .world-whose .world-note {
   line-height: var(--lh);
   max-width: 40ch;
 }
-/* a label and its value on one line, the label at the text floor and the value
-   in the reading ink, which is the same pairing the editor's readouts use */
+/* a label and its value on one line, the label at the text floor and the value in the reading ink, the same pairing the editor's readouts use */
 .world-fact {
   display: flex;
   align-items: baseline;
@@ -970,18 +772,10 @@ details.world-fold[open] > summary {
   font: 500 var(--fs-small) var(--font-label);
   color: var(--ink-on-sea);
 }
-/* THE ADDRESS, AND IT IS A LINK BECAUSE IT RESOLVES. Pressing it shows the
-   json an engine would receive, which is the fastest way to find out whether
-   the composition is what you think it is. Truncated rather than wrapped: a
-   uuid in the path is 36 characters and wrapping it puts a four line address in
-   a rail that is meant to be scanned. */
+/* the address, and it is a link because it resolves: pressing it shows the json an engine would receive. truncated rather than wrapped, because a uuid in the path is 36 characters and wrapping puts a four line address in a rail meant to be scanned. */
 .world-url {
   flex: 1;
-  /* WITHOUT THIS THE ELLIPSIS NEVER HAPPENS. A flex item's min-width is auto,
-     which is its content, so a 36 character uuid in the path refused to shrink,
-     pushed the copy button off the panel and gave the whole rail a horizontal
-     scrollbar. Measured on a second account's world, which is the only kind
-     whose address carries a uuid. */
+  /* without this the ellipsis never happens: a flex item's min-width is auto, which is its content, so a 36 character uuid in the path refused to shrink, pushed the copy button off the panel and gave the whole rail a horizontal scrollbar. */
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -996,13 +790,7 @@ details.world-fold[open] > summary {
   text-decoration: underline;
 }
 
-/* THE LEGEND, AND IT IS ALSO THE RAIL'S FLOOR.
-   Measured with one island on the water: 183 px of content in a 719 px column,
-   so three quarters of the rail was air with a border down one side. margin-top
-   auto against the .sparse flex column puts this at the bottom, which is what
-   turns a hole into a floor. It is not filler: the roster's swatches were the
-   one thing on this page that encoded meaning as colour with nothing anywhere
-   saying what the colours were. */
+/* the legend is also the rail's floor: measured with one island on the water, 183 px of content in a 719 px column, so margin-top auto against the .sparse column puts it at the bottom. the roster's swatches were the one thing encoding meaning as colour with nothing saying what the colours were. */
 .world-key {
   display: grid;
   gap: 6px;
@@ -1022,8 +810,7 @@ details.world-fold[open] > summary {
   color: var(--quiet);
   font-size: var(--fs-small);
 }
-/* the same 7px square the roster draws, because a legend that does not match
-   the mark it explains is a second mark to learn */
+/* the same 7px square the roster draws, because a legend that does not match the mark it explains is a second mark to learn */
 .world-key-r i {
   flex: none;
   width: 7px;
@@ -1031,8 +818,7 @@ details.world-fold[open] > summary {
   border-radius: var(--r-round);
 }
 
-/* the same answer the rest of the site gives. The chart's own easing is turned
-   off in World.tsx, which is the half of this a stylesheet cannot reach. */
+/* the same answer the rest of the site gives; the chart's own easing is turned off in World.tsx, which is the half a stylesheet cannot reach. */
 @media (prefers-reduced-motion: reduce) {
   .world *,
   .world *::before,
@@ -1042,9 +828,7 @@ details.world-fold[open] > summary {
   }
 }
 
-/* THE BERTH DIAL. A coastline does not run at a multiple of forty-five, so the eight compass
-   presses above this are shortcuts onto it rather than the whole vocabulary. Shares .world-f's
-   label shape so the two controls read as one thing asked two ways. */
+/* the berth dial: a coastline does not run at a multiple of forty-five, so the eight compass presses above are shortcuts onto it rather than the whole vocabulary. shares .world-f's label shape. */
 .world-dial {
   display: grid;
   gap: 3px;

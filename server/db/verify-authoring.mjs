@@ -5,8 +5,7 @@ import { gateMap } from '../store/gate.mjs'
 import { store } from '../store/blobs.mjs'
 import { getWorld, saveWorld, composition, withWorld, worldIdFor, worldByPubId, GAME_WORLD } from '../store/world.mjs'
 import { putLibraryFrames, copyLibraryItem } from '../store/platform.mjs'
-// ownedUiImage is read at 1655 and was never imported, so the whole file threw
-// a ReferenceError there and every check after it never ran
+// ownedUiImage has to stay imported: without it line 1655 threw a ReferenceError and every check after it never ran
 import {
   createUi,
   setUiRegions,
@@ -56,12 +55,10 @@ const eq = (what, got, want) =>
 const W = 64
 const H = 48
 const SLUG = 'zz-verify-authoring'
-// a port of its own, so running this beside the dev server or beside
-// verify-api.mjs does not collide with either
+// a port of its own, so running this beside the dev server or beside verify-api.mjs does not collide with either
 const PORT = 5399
 
-/* a floor with a wall down the right-hand quarter, so there is somewhere legal
- * to stand, somewhere illegal, and somewhere fenced off from the start point */
+/* a floor with a wall down the right-hand quarter, so there is somewhere legal to stand, somewhere illegal, and somewhere fenced off from the start point */
 const lvl = Buffer.alloc(W * H, 40)
 for (let y = 0; y < H; y++) for (let x = 44; x < 48; x++) lvl[y * W + x] = 0
 const occ = Buffer.alloc(W * H)
@@ -92,11 +89,8 @@ const scenePNG = (() => {
   return encodePNG(W, H, rgba)
 })()
 
-/* WHAT AN AUTHOR TYPED. Every value below is one somebody has to be able to
- * enter in the tool, and this file follows each of them from the form all the
- * way to the bundle the game reads. */
-/* overwritten before the save by the lookup below, which finds a real anchor on
- * the target map. It is a placeholder and never a name anything has to carry. */
+/* what an author typed: every value below is one somebody has to be able to enter in the tool, and this file follows each of them from the form to the bundle the game reads */
+/* overwritten before the save by the lookup below, which finds a real anchor on the target map, so it is a placeholder and never a name anything has to carry */
 const DOOR_PLACEHOLDER = 'the_far_side'
 
 const doc = {
@@ -107,8 +101,7 @@ const doc = {
   spawn: [8, 8],
   m: planesB64,
   assets: [
-    // a placement with a NAME, which is the only address anything outside the
-    // map can hold: the id beside it is a counter nobody chose
+    // a placement with a name, which is the only address anything outside the map can hold: the id beside it is a counter nobody chose
     /* names ride beside the art index; look 0's name is on the placement because look 0 is its own picture */
     {
       id: 'a1', name: 'the_coach', group: 'people', kind: 'static', src: '/work/x/library/a/0.png',
@@ -117,20 +110,16 @@ const doc = {
       looks: [{ kind: 'static', src: '/work/x/library/b/0.png', name: 'seated' }],
     },
     { id: 'a2', group: 'props', kind: 'static', src: '/work/x/library/b/0.png', x: 30, y: 30, scale: 1, sx: 1, sy: 1, rot: 0, fx: false, fy: false },
-    /* TWO PLACEMENTS THAT TRADE PLACES, which is what a variant set is and what
-     * one placement wearing two faces cannot be: a ship and the empty water it
-     * is not in have two silhouettes, two footprints and two anchors. */
+    /* two placements that trade places, which is what a variant set is and what one placement wearing two faces cannot be: a ship and the empty water it is not in have two silhouettes, two footprints and two anchors */
     { id: 'a3', name: 'the_ship', group: 'dock', kind: 'static', src: '/work/x/library/c/0.png', x: 24, y: 22, scale: 1, sx: 1, sy: 1, rot: 0, fx: false, fy: false },
     { id: 'a4', name: 'the_empty_berth', group: 'dock', kind: 'static', src: '/work/x/library/d/0.png', x: 24, y: 22, scale: 1, sx: 1, sy: 1, rot: 0, fx: false, fy: false },
-    /* A PLACEMENT WITH ITS OWN CONDITION, which must beat the group's, and one
-     * with none, which must inherit it. */
+    /* a placement with its own condition, which must beat the group's, and one with none, which must inherit it */
     { id: 'a5', name: 'the_banner', group: 'year_two', kind: 'static', src: '/work/x/library/e/0.png', x: 12, y: 26, scale: 1, sx: 1, sy: 1, rot: 0, fx: false, fy: false, when: 'flag("banner_hung")' },
     { id: 'a6', name: 'the_bunting', group: 'year_two', kind: 'static', src: '/work/x/library/f/0.png', x: 14, y: 26, scale: 1, sx: 1, sy: 1, rot: 0, fx: false, fy: false },
   ],
   assetNext: 7,
   events: [
-    // bound to the placement BY ITS NAME, with the floor beside it marked and a
-    // heading to face while standing there
+    // bound to the placement by its name, with the floor beside it marked and a heading to face while standing there
     { id: 1, name: 'coach_post', kind: 'post', x: 20, y: 20, r: 10, to: '', label: 'the coach', placement: 'the_coach', stand: [20, 26], facing: 'north' },
     // an area, four numbers meaning two opposite corners
     { id: 2, name: 'the_yard', kind: 'region', x: 10, y: 10, r: 8, to: '', label: '', rect: [4, 4, 36, 30] },
@@ -138,8 +127,7 @@ const doc = {
     { id: 3, name: 'the_way_out', kind: 'door', x: 12, y: 12, r: 8, to: 'hub', toAnchor: DOOR_PLACEHOLDER, label: 'out' },
     /* a barred door with no placement, so the condition rides the meta bag every projection copies whole */
     { id: 4, name: 'the_barred_way', kind: 'door', x: 16, y: 12, r: 8, to: 'hub', toAnchor: DOOR_PLACEHOLDER, label: 'the barred way', when: 'cord("service")' },
-    // the anchor a variant set is addressed through, which is the only address
-    // python has for one: every world-touching intent takes an anchor name
+    // the anchor a variant set is addressed through, which is the only address python has for one: every world-touching intent takes an anchor name
     { id: 5, name: 'the_berth', kind: 'point', x: 24, y: 22, r: 10, to: '', label: 'the berth' },
     /* L-shaped because no circle holds a bending pier, and at radius 220 it is well past the 64 a narrow clamp allows */
     {
@@ -265,9 +253,7 @@ const doc = {
     },
   ],
   pathNext: 2,
-  /* A NAMED SHOT, hung off an anchor rather than off coordinates, so it travels
-   * with the station when the same beat stages somewhere else and does not
-   * re-break every time the painting is re-cut. */
+  /* a named shot, hung off an anchor rather than off coordinates, so it travels with the station when the same beat stages somewhere else and does not re-break every time the painting is re-cut */
   framings: [
     /* zoom means nothing alone, overFit is how much tighter than the map since the exporter has no canvas */
     { id: 1, name: 'over_the_coach', anchor: 'coach_post', dx: -12, dy: -20, zoom: 2.5, overFit: 2.36, entry: true },
@@ -306,9 +292,7 @@ const doc = {
     },
   ],
   variantNext: 2,
-  /* A CONDITION ON A GROUP, so a dozen placements that are the same year's
-   * dressing are not a dozen copies of one string, and the thirteenth is not
-   * placed without it. */
+  /* a condition on a group, so a dozen placements that are the same year's dressing are not a dozen copies of one string, and the thirteenth is not placed without it */
   groups: [{ name: 'year_two', label: 'second year dressing', when: 'year >= 2' }],
 }
 
@@ -320,13 +304,7 @@ if (existing) await q('delete from maps where id = $1', [existing.id])
 const map = await createMap({ slug: SLUG, ownerId: owner.id, w: W, h: H, base: { w: W, h: H, ox: 0, oy: 0 }, spawn: [8, 8] })
 console.log(`${SLUG}  ${map.id}  ${W}x${H}`)
 
-/* THE DOOR'S TARGET IS FOUND, NEVER NAMED. Every door below arrives on a map
- * this file does not own, and the publish gate refuses a door whose target
- * anchor is not really there. Naming one couples this suite to whatever that
- * map happens to carry and breaks it the day somebody renames an anchor, which
- * is the one rename the tool exists to make safe. So: take a real name off the
- * target if it has one, and otherwise send the doors at a map nobody has
- * painted, which the gate warns about instead of refusing. */
+/* the door's target is found, never named: the publish gate refuses a door whose target anchor is not really there, so take a real name off the target map if it has one, and otherwise aim the doors at a map nobody has painted, which the gate warns about instead of refusing */
 const doorTarget = 'hub'
 const liveAnchor = await one(
   `select a.name from anchors a join maps m on m.id = a.map_id where m.slug = $1 order by a.name limit 1`,
@@ -362,8 +340,7 @@ try {
   eq('the area survives the save', back.events.find((e) => e.name === 'the_yard')?.rect, [4, 4, 36, 30])
   const pier = back.events.find((e) => e.name === 'the_pier')
   eq('a drawn area survives the save with every corner it was given', pier?.poly, doc.events[5].poly)
-  /* the ceiling is enforced in the editor and nowhere else, so this is what
-   * says a large radius is not quietly clipped on the way through. */
+  /* the ceiling is enforced in the editor and nowhere else, so this is what says a large radius is not quietly clipped on the way through */
   eq('a radius past the 64 the editor once clamped to survives the save', pier?.r, 220)
   /* two points store as no shape, checked here too since putDoc takes a raw POST with no mask.ts in front */
   eq('a two-point area is refused rather than stored', back.events.find((e) => e.name === 'the_half_shape')?.poly, undefined)
@@ -403,16 +380,12 @@ try {
   const bf = back.framings?.find((f) => f.name === 'over_the_coach')
   eq('the shot survives the save', [bf?.anchor, bf?.dx, bf?.dy], ['coach_post', -12, -20])
   eq('the shot remembers how tight it was framed', bf?.overFit, 2.36)
-  /* THE ZOOM IS THE ONE THAT WOULD HAVE DIED QUIETLY. The renderer's zoom is an
-   * integer locked at load, so 2.5 is exactly the value something downstream is
-   * most tempted to round, and a pull-out shot cannot exist on integer notches. */
+  /* the renderer's zoom is an integer locked at load, so 2.5 is exactly the value something downstream is most tempted to round, and a pull-out shot cannot exist on integer notches */
   eq('the shot keeps a zoom off the integer notches', bf?.zoom, 2.5)
   const bs = back.sets?.find((s) => s.name === 'the_stations')
   eq('the set survives the save', bs?.members, ['coach_post', 'the_yard'])
   const br = back.racks?.find((r) => r.name === 'the_trophy_wall')
-  /* THE GAP IS THE POINT. A rack that came back as slots 1 and 2 would be a rack
-   * that renumbered itself around a deleted hook, and every trophy after the gap
-   * would hang somewhere else the next time the map was opened. */
+  /* the gap is the point: a rack that came back as slots 1 and 2 would have renumbered itself around a deleted hook, and every trophy after the gap would hang somewhere else the next time the map was opened */
   eq('the rack keeps the slot numbers it was given, gap and all', br?.slots.map((s) => s.slot), [1, 3])
   eq('and the counter does not hand out a number the wall has already used', br?.slotNext, 4)
   /* face names: the planner resolved each to an integer and threw it away, so only numbers ever shipped */
@@ -420,13 +393,9 @@ try {
   eq('the name of look 0 survives the save', bcoach?.lookName, 'standing')
   eq('the name of the face it changes into survives the save', bcoach?.looks?.[0]?.name, 'seated')
   eq('a placement condition survives the save', back.assets.find((a) => a.id === 'a5')?.when, 'flag("banner_hung")')
-  /* field by field, not whole, for the reason the world checks below give: this
-   * came back out of jsonb and postgres does not keep the key order it went in
-   * with */
+  /* field by field, not whole, for the reason the world checks below give: this came back out of jsonb and postgres does not keep the key order it went in with */
   eq('the group row survives the save', [back.groups?.[0]?.name, back.groups?.[0]?.when], ['year_two', 'year >= 2'])
-  /* THE ANCHOR'S CONDITION, which is the one with no column of its own: it rides
-   * anchors.meta because that is the only carrier the anchors upsert copies
-   * whole, and migrateEvent lifts it back onto the field so the panel sees it. */
+  /* the anchor's condition is the one with no column of its own: it rides anchors.meta because that is the only carrier the anchors upsert copies whole, and migrateEvent lifts it back onto the field so the panel sees it */
   const barred = back.events.find((e) => e.name === 'the_barred_way')
   eq('an anchor condition survives the save, in the bag it has to ride in', barred?.meta?.when, 'cord("service")')
   eq('and is lifted back onto the field the author typed it into', barred?.when, 'cord("service")')
@@ -491,8 +460,7 @@ try {
   const pub = await publishBundle(SLUG, {
     mapJson: bundleMap,
     assetsJson: pubAssets,
-    // the scene goes in, because the painted extent is measured off the bytes
-    // that ship rather than read off a column describing the dropped file
+    // the scene goes in, because the painted extent is measured off the bytes that ship rather than read off a column describing the dropped file
     images: { 'levels.png': levelsPNG, 'scene.png': scenePNG },
     files: new Map(),
   })
@@ -520,9 +488,7 @@ try {
   eq('and the box round it, which is what the running game can actually test', shippedPier?.rect, [6, 26, 34, 40])
   eq('published radius past the old 64 cap', shippedPier?.r, 220)
   eq('and the bundle says the drawn area is the shape that is live', shippedPier?.meta?.shape, 'poly')
-  /* AND THE HALF SHAPE REACHES THE BUNDLE AS A PLAIN CIRCLE. It is still a
-   * region and still has a radius; what it does not have is a shape it never
-   * had, silently invented somewhere between the form and the game. */
+  /* the half shape reaches the bundle as a plain circle: still a region and still a radius, but never a shape it did not have, silently invented somewhere between the form and the game */
   eq(
     'a two-point area never becomes a shape downstream either',
     (shipped.anchors || []).find((a) => a.name === 'the_half_shape')?.poly,
@@ -579,9 +545,7 @@ try {
   eq('a second shot on the same anchor sits beside it', pa?.meta?.framings?.wide_on_the_coach, { zoom: 1, dx: 0, dy: 0 })
   /* look_at asks with no name and every miss falls here, so named shots without a default is a dead camera */
   eq('the entry shot is the anchor default', pa?.meta?.framing, { zoom: 2, dx: -12, dy: -20, name: 'over_the_coach' })
-  /* MERGED, NOT SWAPPED IN. A real map's anchor already carries docId
-   * and derived, and the game writes derived itself, so a projection that
-   * replaced the bag would take both out. */
+  /* merged, not swapped in: a real map's anchor already carries docId and derived, and the game writes derived itself, so a projection that replaced the bag would take both out */
   eq('the bag that was already there is still under it', pa?.meta?.docId, 1)
   /* an anchor with no shots grows no camera, and area mode rides the bag because nothing else crosses here */
   eq('an anchor with no shot on it grows no camera', (shipped.anchors || []).find((a) => a.name === 'the_yard')?.meta, {
@@ -611,8 +575,7 @@ try {
   ghosted.version > pub.version ? ok(`the clearing publish went out as v${ghosted.version}`) : no('the clearing publish did not write a version')
   await q(`update anchors set meta = $2::jsonb where map_id = $1 and name = 'the_yard'`, [map.id, JSON.stringify(yardMeta)])
   /* base_w/base_h is the dropped file not the paint: on the hub 440,320 px past the 265,000 ceiling */
-  // read field by field rather than compared whole, because jsonb does not keep
-  // the key order it was handed and a shape test would fail on that alone
+  // read field by field rather than compared whole, because jsonb does not keep the key order it was handed and a shape test would fail on that alone
   eq('published base extent is the paint and not the canvas', [shipped.base?.w, shipped.base?.h, shipped.base?.ox, shipped.base?.oy], [
     PAINT.w,
     PAINT.h,
@@ -624,8 +587,7 @@ try {
     Object.values(await one('select paint_w, paint_h, paint_ox, paint_oy from maps where id = $1', [map.id])),
     [PAINT.w, PAINT.h, PAINT.ox, PAINT.oy],
   )
-  /* a bundle that has left the platform should know where it came from, because
-   * twelve islands means twelve authors and a file on a cdn has no row behind it */
+  /* a bundle that has left the platform should know where it came from, because twelve islands means twelve authors and a file on a cdn has no row behind it */
   shipped.provenance?.owner && shipped.provenance?.publishedAt && shipped.provenance?.version === pub.version
     ? ok(`published provenance ${shipped.provenance.owner} v${shipped.provenance.version}`)
     : no(`provenance missing or wrong: ${JSON.stringify(shipped.provenance)}`)
@@ -635,9 +597,7 @@ try {
   eq('published placement name', byId('a1')?.name, 'the_coach')
   /* names index like art: slot 0 is the placement's own, and putting them in look 0 would overwrite it */
   eq('published look names, indexed exactly as art is', byId('a1')?.lookNames, ['standing', 'seated'])
-  /* THE RESOLVED CONDITION ON EACH PLACEMENT. Its own beats the group's; a
-   * placement with none inherits the group's, which is the whole reason the
-   * carrier could not only be the placement. */
+  /* the resolved condition on each placement: its own beats the group's, and a placement with none inherits the group's, which is the whole reason the carrier could not only be the placement */
   eq('a placement keeps its own condition', byId('a5')?.when, 'flag("banner_hung")')
   eq('and one with none inherits the condition on its group', byId('a6')?.when, 'year >= 2')
 
@@ -653,16 +613,11 @@ try {
       { name: 'moored', placement: 'the_ship' },
     ],
   })
-  /* THE GROUP ROWS SHIP TOO. Nothing has to read them, because every placement
-   * already carries the resolved string; without them a reopened map shows a
-   * dozen placements each carrying a condition and no group that owns any. */
+  /* the group rows ship too: nothing has to read them since every placement already carries the resolved string, but without them a reopened map shows a dozen placements each carrying a condition and no group that owns any */
   eq('published group row', [shipped.groups?.[0]?.name, shipped.groups?.[0]?.when], ['year_two', 'year >= 2'])
-  /* AND THE ANCHOR'S OWN CONDITION, in the bag, beside the shots and under the
-   * docId that was already there. A door barred until a cord is earned has no
-   * placement to hang a condition on, which is the case that settles it. */
+  /* and the anchor's own condition, in the bag beside the shots and under the docId that was already there: a door barred until a cord is earned has no placement to hang a condition on, which is the case that settles it */
   eq('the anchor condition reaches the bag the game reads', (shipped.anchors || []).find((a) => a.name === 'the_barred_way')?.meta?.when, 'cord("service")')
-  /* AND AN ANCHOR NOBODY HUNG A SET ON GROWS NOTHING, so a bundle with no
-   * variant sets on it stays byte for byte what it was. */
+  /* and an anchor nobody hung a set on grows nothing, so a bundle with no variant sets on it stays byte for byte what it was */
   eq('an anchor with no set on it stays as it was', berth?.meta?.framings, undefined)
 
   /* a set silently one short reads as complete downstream, so it is refused here where it costs a retry */
@@ -728,8 +683,7 @@ try {
     ? ok('a map with an unreachable anchor is refused before a version is written')
     : no('an unreachable anchor published anyway')
   const after = await publishedMap(SLUG)
-  // measured against the LAST publish rather than the first, because the meta
-  // clearing fence above deliberately writes a version of its own
+  // measured against the last publish rather than the first, because the meta clearing fence above deliberately writes a version of its own
   after.version === ghosted.version
     ? ok(`still at v${ghosted.version}, so nothing was half written`)
     : no(`version moved to ${after.version}`)
@@ -738,9 +692,7 @@ try {
   /* a berth is off the painting so no anchor can hold one; since 019 a point is a mark naming its island */
   /* two overlapping runs wiped the one world row and both reported green, so withWorld pins one client */
   await withWorld(async (wc) => {
-  // every read and every write in this section runs on the one pinned client the
-  // lock is held on, so a second runner waits instead of reading a half-finished
-  // ocean as its baseline
+  // every read and every write in this section runs on the one pinned client the lock is held on, so a second runner waits instead of reading a half-finished ocean as its baseline
   const saveWorld_ = (d) => saveWorld(d, wc)
   const getWorld_ = () => getWorld(wc)
   const worldBefore = await getWorld_()
@@ -782,9 +734,7 @@ try {
           kind: 'berth',
           x: 880,
           y: 700,
-          /* south and not north: this berth sits inside its island's box, so a
-           * bow to the north lies in the land and the save is refused for it.
-           * The heading is what the hull holds once she is tied up. */
+          /* south and not north: this berth sits inside its island's box, so a bow to the north lies in the land and the save is refused for it, and the heading is what the hull holds once she is tied up */
           facing: 'south',
           at: 'coach_post',
           island: 'zz_verify_isle',
@@ -799,20 +749,16 @@ try {
     const readBack = await getWorld_()
     const isle = readBack.places.find((p) => p.name === 'zz_verify_isle')
     const dock = readBack.marks.find((m) => m.name === 'zz_verify_dock')
-    /* A PLACE CARRIES NO POINT AT ALL, and that is the fence: cleanPlace
-     * dropping the nesting is what stops a leftover berth riding along beside
-     * the real one, where nothing says which of the two the game read. */
+    /* a place carries no point at all, and that is the fence: cleanPlace dropping the nesting is what stops a leftover berth riding along beside the real one, where nothing says which of the two the game read */
     eq('an island carries no point of its own', [isle?.berth, isle?.approach], [undefined, undefined])
-    // field by field rather than whole, because this one came back out of jsonb
-    // and postgres does not keep the key order an object went in with
+    // field by field rather than whole, because this one came back out of jsonb and postgres does not keep the key order an object went in with
     eq(
       'a berth exists in world space and says whose it is',
       [dock?.x, dock?.y, dock?.facing, dock?.at, dock?.island],
       [880, 700, 'south', 'coach_post', 'zz_verify_isle'],
     )
     eq('and a point in open water belongs to nobody', readBack.marks.find((m) => m.name === 'zz_north_turn')?.island, undefined)
-    // the second point survives the round trip nested, which is what makes it an
-    // authored fact rather than a consequence of where it sat in the list
+    // the second point survives the round trip nested, which is what makes it an authored fact rather than a consequence of where it sat in the list
     eq('a berth carries its own run-in', dock?.approach, { x: 940, y: 760 })
     eq('and a spare berth beside it is not one', readBack.marks.find((m) => m.name === 'zz_verify_spare')?.approach, undefined)
     eq('the island state', isle?.state, 'available')
@@ -854,17 +800,13 @@ try {
       approach: { x: 940, y: 760 },
       at: 'coach_post',
     })
-    /* AND EVERY POINT IS STILL ON THE WIRE UNDER `marks`, including the one
-     * folded into the slot above, because the sail loop that grows routes will
-     * want the whole list and not the one dock per island. */
+    /* and every point is still on the wire under `marks`, including the one folded into the slot above, because the sail loop that grows routes will want the whole list and not the one dock per island */
     eq('every point crosses as well, by name', (comp.marks || []).map((m) => m.name).sort(), [
       'zz_north_turn',
       'zz_verify_dock',
       'zz_verify_spare',
     ])
-    /* FOUR NUMBERS AGAINST A READER THAT WANTS FOUR KEYS is the quietest failure
-     * on this endpoint: every comparison is against undefined and false, so no
-     * region ever matches and nothing anywhere is raised. */
+    /* four numbers against a reader that wants four keys is the quietest failure on this endpoint: every comparison is against undefined and false, so no region ever matches and nothing anywhere is raised */
     eq('a sea region crosses as a box', comp.regions.find((r) => r.name === 'zz_the_shallows')?.rect, {
       x: 700,
       y: 500,
@@ -996,9 +938,7 @@ try {
       home: '',
       places: [{ name: 'zz_skew_isle', map: '', x: 100, y: 100, w: 64, h: 64, state: 'rumour', discover: 900 }],
       regions: [],
-      /* THE BERTH MOVES, NOT THE HEADING. This case is about a diagonal being
-       * warned about and kept, so the diagonal has to stay; it sits north-west
-       * of its island's middle instead, where north-west is open water. */
+      /* the berth moves, not the heading: this case is about a diagonal being warned about and kept, so it sits north-west of its island's middle instead, where north-west is open water */
       marks: [{ name: 'zz_skew_dock', kind: 'berth', x: 80, y: 80, facing: 'north-west', island: 'zz_skew_isle' }],
     })
     skew.warnings.some((w) => w.includes('north-west') && w.includes('point west'))
@@ -1007,8 +947,7 @@ try {
     eq('and the diagonal does not cross, because absent and west are the same hull', (await composition()).slots[0]?.berth?.facing, undefined)
     eq('the row keeps what the author typed, so nothing is lost', (await getWorld_()).marks[0]?.facing, 'north-west')
 
-    /* A composition that cannot work is refused where it is written, naming
-     * what is wrong, rather than found by a student sailing into nothing. */
+    /* a composition that cannot work is refused where it is written, naming what is wrong, rather than found by a student sailing into nothing */
     let worldRefused = ''
     try {
       await saveWorld_({
@@ -1060,12 +999,9 @@ try {
       marks: [
         { name: 'zz_north_passage', kind: 'waypoint', x: 1200, y: 400, facing: 'north', r: 60, label: 'the north passage' },
         { name: 'zz_deep_water', kind: 'anchorage', x: 900, y: 1500 },
-        // `approach` left the vocabulary with 019: it was never a kind of point,
-        // it was the second field on a place. A row still carrying it falls back
-        // rather than being kept as a seventh spelling of the same thing.
+        // `approach` is not a kind of point and never was, it was the second field on a place, so a row still carrying it falls back rather than being kept as a seventh spelling of the same thing
         { name: 'zz_old_approach', kind: 'approach', x: 950, y: 1550 },
-        // dropped rather than corrected, because bending it invents an address
-        // the author never wrote and nothing in their python calls
+        // dropped rather than corrected, because bending it invents an address the author never wrote and nothing in their python calls
         { name: 'North Passage', kind: 'waypoint', x: 10, y: 10 },
       ],
     })
@@ -1074,14 +1010,10 @@ try {
     const wp = readMarks.find((m) => m.name === 'zz_north_passage')
     eq('the waypoint survives the save', [wp?.kind, wp?.x, wp?.y, wp?.facing, wp?.r], ['waypoint', 1200, 400, 'north', 60])
     eq('a kind the author narrowed is kept', readMarks.find((m) => m.name === 'zz_deep_water')?.kind, 'anchorage')
-    /* BERTH IS THE FALLBACK, not `waypoint`. Everything on the water is a berth
-     * unless somebody deliberately narrowed it, so a kind this file has never
-     * heard of lands on the word the category is named for. */
+    /* berth is the fallback, not `waypoint`: everything on the water is a berth unless somebody deliberately narrowed it, so a kind this file has never heard of lands on the word the category is named for */
     eq('a kind nothing recognises falls back to a berth', readMarks.find((m) => m.name === 'zz_old_approach')?.kind, 'berth')
 
-    /* ONE NAMESPACE, because python has one. A reader calls sail_to("x") and
-     * never says which list to look in, so a mark sharing a name with an island
-     * is a call whose answer depends on which lookup runs first. */
+    /* one namespace, because python has one: a reader calls sail_to("x") and never says which list to look in, so a mark sharing a name with an island is a call whose answer depends on which lookup runs first */
     let clash = ''
     try {
       await saveWorld_({
@@ -1122,11 +1054,9 @@ try {
         x: 1200,
         y: 400,
         facing: 'north',
-        // and the words a player is shown for it, which the route has to carry:
-        // an island holding only the address prints `zz_north_passage` at somebody
+        // and the words a player is shown for it, which the route has to carry: an island holding only the address prints `zz_north_passage` at somebody
         label: 'the north passage',
-        // which island it belongs to, so a reader that has routed somewhere can
-        // tell what it arrived at without fetching the whole composition
+        // which island it belongs to, so a reader that has routed somewhere can tell what it arrived at without fetching the whole composition
         island: '',
         at: '',
         /* arrive tolerance is not optional: a hull moves in floats, so an exact-pixel test never fires */
@@ -1149,8 +1079,7 @@ try {
         label: 'The Alias Dock',
         island: 'zz_alias_isle',
         at: '',
-        // zero, which is the honest answer for a point nobody set a tolerance
-        // on, and it means the caller decides rather than the route guessing
+        // zero, which is the honest answer for a point nobody set a tolerance on, and it means the caller decides rather than the route guessing
         r: 0,
       })
       eq('and the berth is still reachable by the name it was given', aliased.marks?.zz_alias_dock?.x, 360)
@@ -1166,9 +1095,7 @@ try {
           ? ok(`a second account gets an ocean of its own, row ${theirs}`)
           : no('a stranger was handed the game"s own world row')
         eq('and asking twice does not make a second one', await worldIdFor(mate.id), theirs)
-        /* AND THE GAME'S OWN ROW IS STILL RESOLVED BY THE CONFIGURED ACCOUNT
-         * RATHER THAN BY WHOEVER ASKS FIRST. `game` is the caller's answer to
-         * "is this the account OCEAN_OWNER names", which a store cannot read. */
+        /* and the game's own row is still resolved by the configured account rather than by whoever asks first: `game` is the caller's answer to whether this is the account OCEAN_OWNER names, which a store cannot read */
         eq('the account the game reads is still row 1', await worldIdFor(mate.id, { game: true }), GAME_WORLD)
 
         const oursBefore = await getWorld_()
@@ -1190,17 +1117,14 @@ try {
           oursBefore.places.length,
         ])
 
-        /* THE GAME'S READ IS UNCHANGED BY ONE BYTE, which is the only promise
-         * this item makes to the other repo. Asked through the real route with
-         * no cookie, the way a browser asks it. */
+        /* the game's read is unchanged by one byte, which is the only promise made to the other repo, asked through the real route with no cookie the way a browser asks it */
         const still = await (await fetch(`http://127.0.0.1:${PORT}/api/v1/world/marks`)).json()
         eq('/api/v1/world still answers the game"s own ocean', Object.keys(still.marks).sort(), [
           'zz_alias_dock',
           'zz_alias_isle',
         ])
 
-        // and theirs is fetchable at an address of its own, or an ocean nobody
-        // can read is a drawing
+        // and theirs is fetchable at an address of its own, or an ocean nobody can read is a drawing
         const pub = (await getWorld(undefined, theirs)).pubId
         eq('a stranger"s ocean resolves back from its public address', await worldByPubId(pub), theirs)
         const mine = await (await fetch(`http://127.0.0.1:${PORT}/api/v1/worlds/${pub}`)).json()
@@ -1217,13 +1141,7 @@ try {
       await new Promise((r) => server.close(r))
     }
   } finally {
-    /* PUT THE ROW BACK AS IT WAS FOUND, in one write and through no validation.
-     * A restore is an overwrite of a snapshot and not an edit, so it must not be
-     * judged: going back through saveWorld asks the rules about a document this
-     * file did not write, and a suite that fails because the live ocean breaks a
-     * rule is a suite coupled to production data rather than to the code. The
-     * version goes back in the same statement, because a run that counts two
-     * changes makes a consumer drop every saved position. */
+    /* put the row back as it was found, in one write and through no validation, because a restore is an overwrite of a snapshot and not an edit that should be judged; the version goes back in the same statement, since a run that counts two changes makes a consumer drop every saved position */
     await wc.query(
       `update world set w = $1, h = $2, places = $3::jsonb, regions = $4::jsonb,
               marks = $5::jsonb, home = $6, version = $7, updated_at = now()
@@ -1239,8 +1157,7 @@ try {
         GAME_WORLD,
       ],
     )
-    // the lock is released by withWorld, with the client, so a crash frees it
-    // with the connection instead of wedging the next runner
+    // the lock is released by withWorld, with the client, so a crash frees it with the connection instead of wedging the next runner
   }
   })
 
@@ -1326,8 +1243,7 @@ try {
     carries('what is already on this shelf', 'binder (panel): a worn oak binder')
     carries('that painted words cannot be read or translated', 'NO LETTERING ANYWHERE')
     carries('to say muted rather than saturated', 'MUTED saturation')
-    // and the two fields, because a model that writes the joined sentence can
-    // drop the law out of it
+    // and the two fields, because a model that writes the joined sentence can drop the law out of it
     carries('to answer two fields and never the joined sentence', 'never write the joined sentence yourself')
 
     // a sheet is a different piece and gets a different law, not the ground one
@@ -1346,9 +1262,7 @@ try {
     sheetAsk.includes('DO NOT WRITE THESE NAMES INTO YOUR ANSWER')
       ? ok('and told the names are addresses rather than captions, which is what came back painted once')
       : no('nothing stops the router writing the face names into the subject, which drew them as labels')
-    /* THE FLOOR IN THE SHEET BRIEF IS NOT 192. That number is
-     * /v2/create-ui-asset's, and saying it to a piece going somewhere else is a
-     * lie about the endpoint that will draw it. */
+    /* the floor in the sheet ask is not 192: that number belongs to /v2/create-ui-asset, and saying it to a piece going somewhere else lies about the endpoint that will draw it */
     sheetAsk.includes('both sides start at 192')
       ? no('a sheet was told the panel route floor, which is not the route it goes to')
       : ok('a sheet is not told a floor belonging to the endpoint it does not use')
@@ -1385,9 +1299,7 @@ try {
       ? no('a sheet of loose marks was told to keep its ornament in the corners')
       : ok('a sheet gets no nine-slice clause, because it is never cut into nine')
 
-    /* AND THE PROMPT THE ROUTER WROTE IS THE ONE THAT GETS PAID FOR. Asserted
-     * against the request body rather than against the return value, because
-     * the return value is not what pixellab is handed. */
+    /* and the prompt the router wrote is the one that gets paid for, asserted against the request body rather than the return value, because the return value is not what pixellab is handed */
     const real = globalThis.fetch
     let body = null
     globalThis.fetch = async (url, init) => {
@@ -1462,9 +1374,7 @@ try {
 
   /* elements decides shape, style_image decides material, words neither, over about 280 generations */
   {
-    // the size the body carries has to be one the endpoint will accept, and the
-    // maxima do not combine: 688x512 reads as 4:3 and is refused AFTER the money
-    // is committed
+    // the size the body carries has to be one the endpoint will accept, and the maxima do not combine: 688x512 reads as 4:3 and is refused after the money is committed
     const legalCanvasOk = (s) => {
       const g = legalCanvas(s?.width, s?.height)
       return g.ok && s.width >= 192 && s.height >= 192
@@ -1485,8 +1395,7 @@ try {
     refless.length
       ? no(`${refless.length} type(s) have no material reference on disk: ${refless.map((t) => t.name).join(', ')}`)
       : ok(`all ${generated.length} generated types name a reference file that exists`, generated.length)
-    // and the two named so nobody generates them carry none, rather than a
-    // fallback that would read as a decision somebody made
+    // and the two named so nobody generates them carry none, rather than a fallback that would read as a decision somebody made
     PIECE_TYPES.filter((t) => t.tier === 'none').every((t) => !t.styleRef && !chromeRef(t.name))
       ? ok('a type nobody may generate carries no reference, so no field on it pretends to be read')
       : no('a type that is never drawn was given reference art')
@@ -1505,9 +1414,7 @@ try {
       ? ok('a sheet sends no list and names the route with no such field, rather than claiming the panel route would behave')
       : no('a sheet either carries an element list or still says the panel route returns a grid of loose marks')
 
-    /* FOUR TYPES THROUGH THE WHOLE PATH, one per tier plus the two the recipe
-     * is written against. What is asserted is the request body, because the body
-     * is what is paid for and everything before it is a claim about the body. */
+    /* four types through the whole path, one per tier plus the two the recipe is written against, asserting the request body because the body is what is paid for and everything before it is only a claim about the body */
     const wireFor = async (typeName) => {
       const t = pieceType(typeName)
       const style = chromeStyle(typeName)
@@ -1534,8 +1441,7 @@ try {
       has('the reference rides as a Base64Image, so the material transfers', req.style_image?.type === 'base64' && req.style_image.base64 === style.base64)
       has(`its material reference is ${t.styleRef}`, style.file === t.styleRef)
       has('the canvas is inside an aspect gate, so it is not refused after the money is committed', legalCanvasOk(req.image_size))
-      // the three clauses code owns, which is the whole reason chromeFinal
-      // exists: a model that writes the joined sentence can drop any of them
+      // the three clauses code owns, which is the whole reason chromeFinal exists: a model that writes the joined sentence can drop any of them
       has('nothing may touch the edge of the image, which is what v3 died of', req.description.includes('nothing touching the edge of the image'))
       has(
         t.tier === 'sheet' ? 'every face is complete and inside the canvas' : 'it is one single complete piece, centred',
@@ -1595,9 +1501,7 @@ try {
     badCanvas.length
       ? no(`${badCanvas.length} sheet canvas(es) would be refused after the money is committed: ${badCanvas.map((t) => t.name).join(', ')}`)
       : ok('every sheet canvas passes its own route gate before anything is spent')
-    /* AND CLEARS 171 ON THE LONG SIDE. Under that the endpoint answers with a
-     * GRID OF VARIANTS of one mark, 4 or 16 or 64 of them, rather than one
-     * picture, so a sheet asked for small comes back as sixty-four compasses. */
+    /* and clears 171 on the long side: under that the endpoint answers with a grid of variants of one mark, 4 or 16 or 64 of them, rather than one picture, so a sheet asked for small comes back as sixty-four compasses */
     sheets.every((t) => Math.max(t.w, t.h) >= SHEET_ONE_IMAGE)
       ? ok('and clears the one-image line, so the answer is one canvas rather than a grid of variants')
       : no(`a sheet is small enough to come back as a grid of variants: ${sheets.filter((t) => Math.max(t.w, t.h) < SHEET_ONE_IMAGE).map((t) => t.name).join(', ')}`)
@@ -1627,22 +1531,17 @@ try {
       )
       has('it is cut out, because a mark is laid straight over a painted map', req.no_background === true)
       has('the canvas is the one the type asks for', req.image_size.width === t.w && req.image_size.height === t.h)
-      /* AND NO FIELD FROM THE OTHER ROUTE. GenerateImageV2Request sets
-       * additionalProperties false, so one `elements` carried across from the
-       * panel body is a 422 for the whole call. */
+      /* and no field from the other route: GenerateImageV2Request sets additionalProperties false, so one `elements` carried across from the panel body is a 422 for the whole call */
       has('nothing from the panel route rides along, which would be a 422 for the whole call', !('elements' in req) && !('pieces' in req) && !('name' in req) && !('color_palette' in req))
       has('and the description fits the schema ceiling of 2000', req.description.length <= 2000 && req.description.length >= 1)
-      // the clauses code owns on this tier, which is what the first two rolls
-      // proved a model will not carry on its own
+      // the clauses code owns on this tier, which two generations proved a model will not carry on its own
       has('the count rides, which is the number the cut checks against', req.description.includes(`Exactly ${t.faces.length} marks on the canvas`))
       has('no frame around the group, which is what the panel route always drew', req.description.includes('No frame, border, card or panel around the group'))
       has('it is a grid of separate small marks', req.description.includes('A grid of separate small marks'))
       has('no nine-slice law on something that is never cut into nine', !req.description.includes('Ornament only in the four corners'))
     }
 
-    /* A CHIP'S MARKS ARE PLATES, so the flat "nothing sits on a plate" clause and
-     * the family it was asked for cannot both be obeyed, and two instructions
-     * that contradict is how a generator picks. Same shape as the ring clause. */
+    /* a chip's marks are plates, so the flat "nothing sits on a plate" clause and the family it was asked for cannot both be obeyed, and two instructions that contradict is how a generator picks, the same shape as the ring clause */
     const chipTail = chromeFinal({ subject: 'three round tokens', style: 'chunky pixels', t: pieceType('chip') })
     chipTail.includes('unless the mark itself is a plate')
       ? ok('the sheet whose marks ARE plates is not told to draw nothing on a plate')
@@ -1662,8 +1561,7 @@ try {
           }
       return encodePNG(w, h, px)
     }
-    // evenly spaced across the canvas with a margin at both ends, so nothing in
-    // these fixtures runs off the right edge and wraps onto the next row
+    // evenly spaced across the canvas with a margin at both ends, so nothing in these fixtures runs off the right edge and wraps onto the next row
     const row = (n, y, size, w) => Array.from({ length: n }, (_, i) => [Math.round((w - n * size) / (n + 1)) * (i + 1) + i * size, y, size, size])
     const pipT = pieceType('pip')
 
@@ -1675,15 +1573,12 @@ try {
       ? ok('and each one is a face, which is the kind a consumer cuts OUT rather than draws into')
       : no('a cut came back as some other kind of region')
 
-    /* READING ORDER IS BANDED AND NOT A SORT ON Y. Marks in one row do not share
-     * a y: a tick sits lower than a compass of the same height, and a plain sort
-     * by y interleaves two rows into nonsense. */
+    /* reading order is banded and not a sort on y: marks in one row do not share a y, since a tick sits lower than a compass of the same height and a plain sort by y interleaves two rows into nonsense */
     const jittered = cutFaces(sheetPNG(384, 256, [[30, 20, 60, 60], [150, 32, 60, 60], [270, 18, 60, 60], [30, 150, 60, 60], [150, 162, 60, 60], [270, 148, 60, 60]]), pieceType('pointer'))
     eq('a row whose marks do not share a y still reads left to right', jittered.faces.map((f) => f.name), pieceType('pointer').faces)
 
     /* a paw print is five shapes sharing no pixel, and when boxes overlap only the union holds each */
-    // a ring with a needle floating inside it, which shares no pixel with the
-    // ring and whose box sits entirely within the ring's
+    // a ring with a needle floating inside it, which shares no pixel with the ring and whose box sits entirely within the ring's
     const ringed = (x) => [
       [x, 30, 60, 8],
       [x, 82, 60, 8],
@@ -1696,8 +1591,7 @@ try {
       ? ok('a mark drawn in separate pieces is cut as one face, because no rectangle could separate them anyway')
       : no(`a mark in pieces was not merged: found ${paw.found}, ${paw.why || paw.note || 'no reason'}`)
 
-    /* AND THE TWO REFUSALS. One big object is the failure the whole second path
-     * exists to get past, and it is what the panel route returned every time. */
+    /* and the two refusals: one big object is the failure the whole second path exists to get past, and it is what the panel route returned every time */
     const lump = cutFaces(sheetPNG(512, 160, [[40, 20, 430, 120]]), pipT)
     lump.why.includes('one big object')
       ? ok('a sheet that came back as one big object is refused, naming what it looks like')
@@ -1750,9 +1644,7 @@ try {
     const read = await getUiByName(owner.id, UI)
     const bar = read?.regions.find((s) => s.name === 'stamina')
     eq('a region comes back by name', [bar?.kind, bar?.x, bar?.y, bar?.w, bar?.h], ['fill', 10, 40, 180, 12])
-    /* A ROPE THAT STRETCHES IS A SMEAR AND A ROPE THAT TILES IS A ROPE, which is
-     * what `fill` carries and a bare `bar` cannot: without a direction and a
-     * tile rule the reader has to guess both. */
+    /* a rope that stretches is a smear and a rope that tiles is a rope, which is what `fill` carries and a bare `bar` cannot: without a direction and a tile rule the reader has to guess both */
     eq('a fill says which way it grows and whether it tiles', [bar?.axis, bar?.mode], ['right', 'tile'])
     eq('a region keeps the bag its author filled', bar?.meta, { fills: 'left' })
     eq('a region keeps its alignment', read?.regions.find((s) => s.name === 'speaker')?.align, 'left')
@@ -1764,8 +1656,7 @@ try {
       ? ok('a nameless region is refused rather than given a number')
       : no(`a nameless region saved anyway: ${nameless || 'no error'}`)
 
-    // and a rect off the edge of the picture, which can never be drawn into,
-    // is refused with the region's own name in the sentence
+    // and a rect off the edge of the picture, which can never be drawn into, is refused with the region's own name in the sentence
     const offEdge = await thrown(() => setUiRegions(owner.id, UI, [{ name: 'off_the_edge', kind: 'text', x: 180, y: 70, w: 60, h: 40 }]))
     offEdge.includes('off_the_edge') && offEdge.includes('200x80')
       ? ok('a region off the edge is refused, naming the region and the picture')
@@ -1848,9 +1739,7 @@ try {
     eq('and the draw thickness beside them', [g.scale, g.fill, g.repeat.x, g.repeat.y], [2, true, 'round', 'round'])
     const back = await getUiByName(owner.id, GROUND)
     eq('the slices survive being read back', four(back.slice), [12, 14, 13, 14])
-    /* THE FORM HE CAN PASTE. Section 3's smallest change on the game side is
-     * three tokens plus one rule per image, and border-width is slice * scale
-     * so nothing is guessed on that side. */
+    /* the form that can be pasted straight in: the smallest change on the game side is three tokens plus one rule per image, and border-width is slice * scale so nothing is guessed on that side */
     back?.css.includes('--kit-slice-zz_verify_ground: 12 14 13 14;') && back?.css.includes('--kit-slice-w-zz_verify_ground: 24px 28px 26px 28px;')
       ? ok('the measurement comes out as css that can be pasted, with the thickness worked out')
       : no(`the css is not the shape the game takes: ${(back?.css || '').split('\n')[0] || 'nothing'}`)
@@ -1869,9 +1758,7 @@ try {
       ? ok('and it falls back to the piece own bytes at a versioned url, so an undefined token is not a blank panel')
       : no('the border image still depends on a token nothing defines')
 
-    /* THE CONSTRAINT THAT BREAKS SILENTLY. If the top and bottom insets do not
-     * leave a middle, CSS drops to no border image at all and says nothing,
-     * which sends the author to the wrong stylesheet. */
+    /* the constraint that breaks silently: if the top and bottom insets do not leave a middle, CSS drops to no border image at all and says nothing, which sends the author to the wrong stylesheet */
     const crossed = await thrown(() =>
       setUiRegions(owner.id, GROUND, [{ name: 'body', kind: 'text', x: 14, y: 14, w: 68, h: 68 }], {
         slice: { top: 60, right: 14, bottom: 50, left: 14 },
@@ -1881,8 +1768,7 @@ try {
       ? ok('edges that cross leave no middle and are refused, naming what CSS does about it')
       : no(`crossed edges saved anyway: ${crossed || 'no error'}`)
 
-    /* AND A PANEL WITHOUT fill RENDERS AS A RING AROUND A HOLE, because
-     * border-image defaults it off. Only the highlight edge wants that. */
+    /* and a panel without `fill` renders as a ring around a hole, because border-image defaults it off, and only the highlight edge wants that */
     const ring = await thrown(() =>
       setUiRegions(owner.id, GROUND, [{ name: 'body', kind: 'text', x: 14, y: 14, w: 68, h: 68 }], {
         slice: { top: 12, right: 14, bottom: 13, left: 14 },
@@ -1931,9 +1817,7 @@ try {
     ])
     eq('a sheet reports its faces as a list of cuts', s.faces.map((f) => f.name), ['fall', 'winter', 'spring', 'spent', 'ghost'])
     eq('and each cut keeps its rectangle', s.faces[3], { name: 'spent', x: 60, y: 0, w: 20, h: 20 })
-    /* TWO CUTS SHARING PIXELS IS NOT A MIS-DRAG THE WAY TWO REGIONS ARE. One of
-     * the two comes out with a corner of its neighbour in it, so it is refused
-     * where two overlapping text wells only warn. */
+    /* two cuts sharing pixels is not a mis-drag the way two regions are: one of the two comes out with a corner of its neighbour in it, so it is refused where two overlapping text wells only warn */
     const shared = await thrown(() =>
       setUiRegions(owner.id, SHEET, [
         { name: 'fall', kind: 'face', x: 0, y: 0, w: 30, h: 20 },
@@ -1941,14 +1825,11 @@ try {
       ]),
     )
     shared.includes('share pixels') ? ok('two cuts that share pixels are refused') : no(`overlapping faces saved: ${shared || 'no error'}`)
-    // and a sheet does not stretch, so four edge numbers on one are a
-    // measurement nothing will ever read
+    // and a sheet does not stretch, so four edge numbers on one are a measurement nothing will ever read
     const wrongTier = await thrown(() => setUiRegions(owner.id, SHEET, [], { slice: { top: 4, right: 4, bottom: 4, left: 4 } }))
     wrongTier.includes('does not stretch') ? ok('edge numbers on a sheet are refused as a field nothing reads') : no(`slices saved on a sheet: ${wrongTier || 'no error'}`)
 
-    /* A PIECE WITHOUT SLICES IS REFUSED AT PUBLISH, because those four numbers
-     * are the entire thing the game can consume: without them the consumer
-     * falls back to squashing the whole painting into the box. */
+    /* a piece without slices is refused at publish, because those four numbers are the entire thing the game can consume: without them the consumer falls back to squashing the whole painting into the box */
     const NOSLICE = 'zz_verify_unmeasured'
     await removeUi(owner.id, NOSLICE, { core: true })
     await createUi({ ownerId: owner.id, name: NOSLICE, type: 'panel', description: 'never measured', w: 96, h: 96 })
@@ -1998,14 +1879,12 @@ try {
     })
     dlg.css.includes('.kit-surface-dialogue {') &&
     dlg.css.includes('--kit-slice-dialogue:') &&
-    // the fallback url still names the row, which is right: the ROUTE is keyed
-    // by the piece name and only the css handle is translated
+    // the fallback url still names the row, which is right: the route is keyed by the piece name and only the css handle is translated
     !dlg.css.includes('.kit-surface-dialogue_box') &&
     !dlg.css.includes('--kit-slice-dialogue_box')
       ? ok('the core dialogue box emits the handle the game mounts and not the kit name')
       : no(`the css still names dialogue_box, which the game has no class or token for: ${dlg.css.split('\n')[5] || ''}`)
-    /* put the author's piece back, every column and both pictures. A row this
-     * file found must survive it unchanged, cut the way it was cut. */
+    /* put the author's piece back, every column and both pictures, because a row this file found must survive it unchanged and cut the way it was cut */
     if (realDlgSnap) {
       await putUiBack(realDlgSnap)
       const kept = await getUiByName(owner.id, 'dialogue_box').catch(() => null)
@@ -2055,8 +1934,7 @@ try {
   try {
     await removeUi(owner.id, TWIN, { core: true })
     await removeUi(other.id, TWIN, { core: true })
-    // the member row first, so "the oldest wins" alone would pick the wrong one
-    // and only the core flag can save it
+    // the member row goes in first, so oldest wins alone would pick the wrong one and only the core flag can save it
     await createUi({ ownerId: other.id, name: TWIN, type: 'panel', description: 'a member piece', w: 96, h: 96 })
     await setUiImage(other.id, TWIN, solidPNG(96, 96, 10, 10, 10), 96, 96)
     await createUi({ ownerId: owner.id, name: TWIN, type: 'panel', description: 'the core one', w: 96, h: 96, core: true })
@@ -2107,8 +1985,7 @@ try {
         }
     return encodePNG(w, h, rgba)
   }
-  // a rectangle drawn as an outline, so something can sit inside its box
-  // without touching its pixels, which is the highlight edge's real shape
+  // a rectangle drawn as an outline, so something can sit inside its box without touching its pixels, which is the highlight edge's real shape
   const ringBoxes = (x, y, w, h, t, c) => [
     [x, y, w, t, ...c],
     [x, y + h - t, w, t, ...c],
@@ -2118,8 +1995,7 @@ try {
 
   const dlgType = pieceType('dialogue_box')
   {
-    /* THE ORDINARY CASE. A hero of 520x180 at 60,20 on a 688x384 canvas is 35%
-     * of it, and three tray buttons sit well below with nothing overlapping. */
+    /* the ordinary case: a hero of 520x180 at 60,20 on a 688x384 canvas is 35% of it, and three tray buttons sit well below with nothing overlapping */
     const good = familyPNG(688, 384, [
       [60, 20, 520, 180, 120, 90, 60],
       [60, 260, 150, 40, 120, 90, 60],
@@ -2131,9 +2007,7 @@ try {
     eq('and cuts the hero out at the pixel', cut.box, { x: 60, y: 20, w: 520, h: 180 })
     const back = decodePNG(cut.png)
     eq('the bytes it hands over really are that size', [back.w, back.h], [520, 180])
-    /* AND THE CUT IS THE PIECE AND NOT A WINDOW ONTO IT. Every corner of the
-     * returned picture has to be the hero's own paint, or the box was off by
-     * enough to carry canvas. */
+    /* and the cut is the piece and not a window onto it: every corner of the returned picture has to be the hero's own paint, or the box was off by enough to carry canvas */
     const corner = (x, y) => [back.data[(y * back.w + x) * 4], back.data[(y * back.w + x) * 4 + 3]]
     JSON.stringify([corner(0, 0), corner(519, 0), corner(0, 179), corner(519, 179)]) === JSON.stringify([[120, 255], [120, 255], [120, 255], [120, 255]])
       ? ok('all four corners of the cut are the hero, so the box is tight rather than near')
@@ -2141,9 +2015,7 @@ try {
   }
 
   {
-    // A SHAPE INSIDE THE HERO'S BOX. A ring with a chip in its hole: the two
-    // never touch, so they are two regions, and a cut on the outer one would
-    // carry the inner one with it.
+    // a shape inside the hero's box, a ring with a chip in its hole: the two never touch, so they are two regions, and a cut on the outer one would carry the inner one with it
     const overlap = familyPNG(688, 384, [
       ...ringBoxes(60, 20, 520, 180, 12, [120, 90, 60]),
       [200, 80, 40, 40, 200, 40, 40],
@@ -2155,8 +2027,7 @@ try {
   }
 
   {
-    // TOO SMALL TO BE THE PIECE. 200x100 is 7% of a 688x384 canvas, which is a
-    // tray button, and crowning one would cut the kit down to a button.
+    // too small to be the piece: 200x100 is 7% of a 688x384 canvas, which is a tray button, and crowning one would cut the kit down to a button
     const small = familyPNG(688, 384, [
       [40, 40, 200, 100, 120, 90, 60],
       [300, 40, 120, 60, 120, 90, 60],
@@ -2168,9 +2039,7 @@ try {
   }
 
   {
-    // THE RIGHT SIZE AND THE WRONG SHAPE. 260x380 is 37% of the canvas, so it
-    // clears the area check, and its ratio is 0.68 against the 1.79 a dialogue
-    // box is drawn at, which is outside the band.
+    // the right size and the wrong shape: 260x380 is 37% of the canvas so it clears the area check, but its ratio is 0.68 against the 1.79 a dialogue box is drawn at, which is outside the band
     const wrong = familyPNG(688, 384, [[10, 2, 260, 380, 120, 90, 60]])
     const cut = cropHero(wrong, dlgType)
     !cut.box && cut.why.includes('too far off to be the piece')
@@ -2186,9 +2055,7 @@ try {
       : no('an empty picture produced a crop')
   }
 
-  /* A SHEET IS A GRID OF CUTS AND CROPPING IT THROWS THE OTHER CUTS AWAY. So a
-   * sheet is never scanned, and neither is a cover plate, whose canvas IS the
-   * painting. Only a ground piece is one piece. */
+  /* a sheet is a grid of cuts and cropping it throws the other cuts away, so a sheet is never scanned, and neither is a cover plate whose canvas is the painting, because only a ground piece is one piece */
   eq('a ground piece is cropped to its hero', cropsToHero(pieceType('panel')), true)
   eq('a sheet is left whole, because every cut on it is wanted', cropsToHero(pieceType('pip')), false)
   eq('and so is a cover plate, whose canvas is the painting', cropsToHero(pieceType('cover_plate')), false)
@@ -2224,14 +2091,11 @@ try {
     const saved = await setUiImage(owner.id, CROPPED, family, 688, 384)
     eq('importing a family stores the hero size and not the canvas size', [saved.w, saved.h], [520, 180])
     const row = await getUiByName(owner.id, CROPPED)
-    // read field by field: jsonb does not keep the key order it was given, so
-    // comparing the whole object as a string compares postgres's ordering
+    // read field by field: jsonb does not keep the key order it was given, so comparing the whole object as a string compares postgres's ordering
     eq('and the row says where in the family the hero was', [row?.crop?.x, row?.crop?.y, row?.crop?.w, row?.crop?.h], [60, 20, 520, 180])
     eq('and offers the family it came out of', row?.full, `/api/ui/${CROPPED}/full`)
     row?.cropNote ? no(`a clean crop still left a note: ${row.cropNote}`) : ok('a clean crop leaves no hand-crop note on the row')
-    /* THE FAMILY IS KEPT WHOLE. It is the rest of the kit, drawn in the same job
-     * and paid for in the same spend, so throwing it away to keep the blob
-     * store tidy would mean paying for those buttons again. */
+    /* the family is kept whole: it is the rest of the kit, drawn in the same job and paid for in the same spend, so throwing it away to keep the blob store tidy would mean paying for those buttons again */
     const kept = await ownedUiFull(owner.id, CROPPED)
     kept && kept.equals(family)
       ? ok('the family is kept exactly as it was drawn, tray and all')
@@ -2240,9 +2104,7 @@ try {
     const heroSize = hero ? decodePNG(hero) : null
     eq('and the piece itself serves the hero', [heroSize?.w, heroSize?.h], [520, 180])
 
-    /* A REFUSAL KEEPS THE WHOLE PICTURE AND SAYS WHY ON THE ROW, because the
-     * author has to be told a hand crop is owed rather than discovering it when
-     * their four numbers draw the wrong band. */
+    /* a refusal keeps the whole picture and says why on the row, because the author has to be told a hand crop is owed rather than discovering it when their four numbers draw the wrong band */
     const bad = familyPNG(688, 384, [
       [40, 40, 200, 100, 120, 90, 60],
       [300, 40, 120, 60, 120, 90, 60],
@@ -2254,16 +2116,12 @@ try {
       ? ok('and the row says a hand crop is owed, naming the check that stopped it')
       : no(`a refused crop said nothing on the row: ${JSON.stringify(note?.cropNote)}`)
     note?.crop ? no('a refused crop still claimed a box') : ok('and it claims no box, because none was cut')
-    /* AND THE LAST IMPORT'S FAMILY IS GONE WITH IT. A `.full` left behind from
-     * a crop that has been replaced is a picture of something else sitting under
-     * the undo button. */
+    /* and the last import's family is gone with it, because a `.full` left behind from a crop that has been replaced is a picture of something else sitting under the undo button */
     ;(await ownedUiFull(owner.id, CROPPED)) === null
       ? ok('a redraw that does not crop takes the old family away with it')
       : no('the previous import`s family is still under the undo route')
 
-    // and putting a crop back, which is the other half of the rule: a crop that
-    // passed every check and is still wrong has to be one press to undo rather
-    // than a spend to draw again
+    // and putting a crop back, which is the other half of the rule: a crop that passed every check and is still wrong has to be one press to undo rather than a spend to draw again
     await setUiImage(owner.id, CROPPED, family, 688, 384)
     const put = await uncropUi(owner.id, CROPPED)
     eq('undoing a crop puts the whole family back as the piece', [put.w, put.h], [688, 384])
@@ -2298,8 +2156,7 @@ try {
     const gotFirst = await bytesAt(`/api/ui/${FRESH}/image`, asOwner)
     gotFirst.equals(first) ? ok('the first picture reaches the route it is served on') : no('the first picture did not come back')
 
-    // the same size and different bytes, which is the case that has no other
-    // tell: nothing about the row changes except the picture
+    // the same size and different bytes, which is the case that has no other tell: nothing about the row changes except the picture
     const second = solidPNG(96, 96, 200, 190, 180)
     await setUiImage(owner.id, FRESH, second, 96, 96)
     const gotSecond = await bytesAt(`/api/ui/${FRESH}/image`, asOwner)
@@ -2334,9 +2191,7 @@ try {
   const dlgSnap = await snapUi('dialogue_box')
   try {
     const KIT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'work', '.kit')
-    /* THE REAL ART, in the order it is most likely to be the family: the
-     * picture a crop already came out of, then the row's own bytes, then the
-     * file on disk. Nothing is generated and nothing is invented. */
+    /* the real art, in the order it is most likely to be the family: the picture a crop already came out of, then the row's own bytes, then the file on disk, with nothing generated and nothing invented */
     const onDisk = ['dialogue_box_v4.png', 'dialogue_box.png']
       .map((f) => path.join(KIT, f))
       .find((f) => fs.existsSync(f))
@@ -2370,8 +2225,7 @@ try {
       const measured = await setUiRegions(owner.id, 'dialogue_box', marks, {
         slice: edge, scale: 2, fill: true, repeat: { x: 'round', y: 'round' },
       })
-      // in the order border-image-slice takes them, and field by field, because
-      // jsonb hands the object back in whatever key order it chose
+      // in the order border-image-slice takes them, and field by field, because jsonb hands the object back in whatever key order it chose
       const four = (s) => [s?.top, s?.right, s?.bottom, s?.left]
       eq('the measurement survives being saved', four(measured.slice), four(edge))
       eq('a published dialogue box says it is published', (await publishUi(owner.id, 'dialogue_box')).published, true)
@@ -2482,15 +2336,12 @@ try {
     eq('the copy lands in the other map', there?.name, 'dock-barrel')
     eq('the copy carries the same frame count', there?.frame_count, 3)
     eq('the copy keeps the size and the rate', [there?.w, there?.h, there?.fps], [8, 8, 6])
-    /* THE ROW IS THE CHEAP HALF. A row saying three frames with one png behind
-     * it is exactly the failure a partial copy looks like, so the bucket is
-     * counted rather than trusted. */
+    /* the row is the cheap half: a row saying three frames with one png behind it is exactly what a partial copy looks like, so the bucket is counted rather than trusted */
     const bytes = await store().list(`maps/${bmap.id}/library/dock-barrel/`)
     bytes.length === 3
       ? ok('all three frames really are in the bucket of the map copied into')
       : no(`the row says 3 frames and the bucket holds ${bytes.length}`)
-    /* AND IT IS A COPY, NOT A MOVE. The source has to be untouched, or
-     * "offering" a barrel to a second island quietly takes it off the first. */
+    /* and it is a copy, not a move: the source has to be untouched, or offering a barrel to a second island quietly takes it off the first */
     const still = await store().list(`maps/${a.id}/library/dock-barrel/`)
     still.length === 3 ? ok('the map it came from still has its own') : no(`the source lost frames: ${still.length} left`)
     eq('the copy reports where it came from', copied?.from, KIT_A)
@@ -2540,16 +2391,12 @@ try {
     const r = await publishedMap(SLUG)
     const shippedA = JSON.parse((await store().get(r.blob_prefix + 'assets.json')).toString('utf8'))
     eq('an authored footprint reaches the bundle instead of the scan', shippedA.assets.find((a) => a.id === 'a3')?.foot, hand)
-    /* and correcting one placement does not hand the rest the same number. This
-     * fixture ships no pngs, so nothing else can be measured and the honest
-     * answer for the rest is no footprint at all rather than a borrowed one. */
+    /* and correcting one placement does not hand the rest the same number, since this fixture ships no pngs, so the honest answer for the rest is no footprint at all rather than a borrowed one */
     const other = shippedA.assets.find((a) => a.id === 'a1')?.foot
     other === undefined ? ok('and no other placement borrowed it') : no(`another placement came back ${JSON.stringify(other)}`)
   }
 
-  /* THE OUTLINES AN AUTHOR DREW. Three tools take polygon points and all three
-   * rasterize and clear, so one outline was traced by hand three times. They are
-   * a stencil and not a shape the map has: nothing reads them but the tool. */
+  /* the outlines an author drew: three tools take polygon points and all three rasterize and clear, so one outline was traced by hand three times, and they are a stencil rather than a shape the map has since nothing but the tool reads them */
   {
     const drawn = [{ id: 1, pts: [[1, 1], [9, 1], [9, 7]] }, { id: 2, pts: [[2, 2], [4, 2], [4, 4], [2, 4]] }]
     await putDoc(map.id, JSON.stringify({ ...doc, stencils: drawn, stencilNext: 3 }))

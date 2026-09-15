@@ -8,8 +8,7 @@ const COOKIE = 'mapvis_session'
 // set when somebody signs out on purpose, read only by solo mode
 const OUT_COOKIE = 'mapvis_out'
 
-// Never select the key columns. A shape with a name says what may leave the
-// server much more reliably than remembering to delete fields at each caller.
+// never select the key columns, because a named shape says what may leave the server more reliably than deleting fields at each caller
 const PUBLIC = `id, email, display_name, claude_provider, pixellab_provider,
                 (claude_key_enc is not null)   as has_claude_key,
                 (pixellab_key_enc is not null) as has_pixellab_key,
@@ -46,9 +45,7 @@ export async function signIn({ email, password, userAgent = '' }) {
     }
   }
 
-  /* The same work whether the email exists or not. Answering an unknown address
-   * instantly while a real one takes 100ms of scrypt would say which addresses
-   * have accounts here just as loudly as a different error message would. */
+  /* verify against a dummy hash when there is no row, because answering instantly while a real login takes 100ms of scrypt leaks which addresses have accounts */
   const okPassword = row
     ? await verifyPassword(password, row.password_hash)
     : await verifyPassword(password, 'scrypt$32768$8$1$AAAAAAAAAAAAAAAAAAAAAA==$AAAA')
@@ -89,8 +86,7 @@ export async function whoIs(token) {
 export const closeSession = (token) =>
   token ? q('delete from sessions where token_hash = $1', [hashToken(token)]) : null
 
-// expired rows are dead weight and a small privacy leak, since they record what
-// browser was used and when
+// expired rows are dead weight and a small privacy leak, since they record what browser was used and when
 export const sweepSessions = () => q('delete from sessions where expires_at < now()')
 
 // ---- reading the request ---------------------------------------------------
@@ -106,11 +102,9 @@ export function tokenFrom(req) {
   return null
 }
 
-// signing in is also the end of having deliberately signed out, so the crumb
-// that suppresses solo mode is dropped here
+// signing in is also the end of having deliberately signed out, so the crumb that suppresses solo mode is dropped here
 export function setSessionCookie(res, token) {
-  // httpOnly so no script can read it, sameSite=Lax so it is not sent from
-  // another site's form, secure once there is a domain in front of it
+  // httpOnly so no script can read it, sameSite=Lax so it is not sent from another site's form, secure once there is a domain in front of it
   const secure = env().MAPVIS_INSECURE_COOKIE === '1' ? '' : '; Secure'
   res.setHeader('Set-Cookie', [
     `${COOKIE}=${encodeURIComponent(token)}; Path=/; Max-Age=${DAYS * 86400}; HttpOnly; SameSite=Lax${secure}`,
@@ -144,12 +138,7 @@ export async function currentUser(req) {
   return one(`select ${PUBLIC} from users where email = $1`, [String(solo).toLowerCase()])
 }
 
-/* Solo mode is a development convenience and nothing else: it treats an
- * unauthenticated request as one named account. Four fences, because a deploy
- * that shipped .env once signed every anonymous visitor in as the club account.
- * It is off unless MAPVIS_SOLO names an account, off wherever a serverless
- * runtime is detected, off whenever NODE_ENV says production on any host at
- * all, and off for any request that did not come from the loopback address. */
+/* solo mode treats an unauthenticated request as one named account, off unless MAPVIS_SOLO names it, off on a serverless runtime, off when NODE_ENV is production, and off for a request not from loopback, because a deploy that shipped .env once signed every anonymous visitor in as the club account */
 export const soloMode = () => {
   const E = env()
   if (E.MAPVIS_NO_SOLO === '1') return null
@@ -165,8 +154,7 @@ export const soloMode = () => {
   return E.MAPVIS_SOLO
 }
 
-/* ::1, 127.0.0.0/8 and the ipv4-mapped spelling of the same. A unix socket has
- * no address at all and is local by construction. */
+/* ::1, 127.0.0.0/8 and the ipv4-mapped spelling of the same, and a unix socket has no address at all so it is local by construction */
 const LOOPBACK = /^(::1|::ffff:127\.\d+\.\d+\.\d+|127\.\d+\.\d+\.\d+)$/
 const fromThisMachine = (req) => {
   const a = req?.socket?.remoteAddress
@@ -183,9 +171,7 @@ function sayRefused(why) {
 
 // ---- what an account may reach ---------------------------------------------
 
-/* Ownership, asked once, in one place. Everything that mutates a map goes
- * through this, because "the editor only shows your maps" is a UI convenience
- * and not a rule anybody has to obey. */
+/* ownership asked once in one place, because everything that mutates a map goes through this and the editor only showing your maps is a UI convenience, not a rule */
 export async function mayEdit(user, slug) {
   if (!user) return false
   const m = await one('select owner_id from maps where slug = $1', [slug])
@@ -204,8 +190,7 @@ export async function setProvider(userId, service, mode, key) {
     if (!String(key || '').trim()) throw new Error('that mode needs a key')
     await q(`update users set ${col}_provider = 'key', ${col}_key_enc = $2 where id = $1`, [userId, sealKey(key.trim())])
   } else {
-    // leaving a key behind on a switch to relay or none would mean the account
-    // still holds a secret it no longer claims to use
+    // leaving a key behind on a switch to relay or none would mean the account still holds a secret it no longer claims to use
     await q(`update users set ${col}_provider = $2, ${col}_key_enc = null where id = $1`, [userId, mode])
   }
   return getUser(userId)
@@ -222,9 +207,7 @@ export async function keyFor(userId, service) {
   return { mode: 'none', key: null }
 }
 
-/* The key a linked machine lends, sealed like a pasted one. Only into an account
- * that chose relay for that service: a chosen key or a chosen none is not
- * overridden by whatever machine happens to poll. */
+/* a lent key is sealed like a pasted one and only enters an account that chose relay, so a chosen key or a chosen none is not overridden by whatever machine polls */
 export async function lendKey(userId, service, key) {
   if (!['claude', 'pixellab'].includes(service)) throw new Error('unknown service')
   const k = String(key || '').trim()
@@ -233,10 +216,7 @@ export async function lendKey(userId, service, key) {
   await q(`update users set ${col}_key_enc = $2 where id = $1 and ${col}_provider = 'relay'`, [userId, sealKey(k)])
 }
 
-// ---- the ledger ------------------------------------------------------------
-
-// Every spend, so a shared club account has a record instead of a surprise, and
-// so the account holder can see which member burned what.
+// the ledger records every spend, so a shared club account has a record instead of a surprise and the holder can see which member burned what
 export const noteSpend = ({ userId, mapId, jobId, provider, endpoint, cost }) =>
   q(
     `insert into usage (user_id, map_id, job_id, provider, endpoint, cost_usd)

@@ -7,8 +7,7 @@ export interface BitResult {
   note: string
 }
 
-/* near-identical shades group together for the vote, so a block of one colour
- * in six dithered tones does not split its vote six ways and lose to a stray */
+/* near-identical shades group together for the vote, so a block of one colour in six dithered tones does not split its vote six ways and lose to a stray */
 const KEY = (r: number, g: number, b: number) => ((r >> 3) << 10) | ((g >> 3) << 5) | (b >> 3)
 
 const A_MIN = 20
@@ -34,8 +33,7 @@ export function bitify(data: Uint8ClampedArray, w: number, h: number, tw: number
       let opaque = 0
       let total = 0
       let aSum = 0
-      // the slice of source this output pixel stands for, worked out from the
-      // ratio rather than a fixed block, so nothing is skipped or counted twice
+      // the slice of source this output pixel stands for, worked out from the ratio rather than a fixed block, so nothing is skipped or counted twice
       const x0 = Math.floor((ox * w) / ow)
       const x1 = Math.max(x0 + 1, Math.floor(((ox + 1) * w) / ow))
       const y0 = Math.floor((oy * h) / oh)
@@ -50,14 +48,12 @@ export function bitify(data: Uint8ClampedArray, w: number, h: number, tw: number
           aSum += a
           const k = KEY(data[i], data[i + 1], data[i + 2])
           counts.set(k, (counts.get(k) || 0) + 1)
-          // the first exact colour seen for this group is what gets written, so
-          // the output only ever contains colours the sprite already had
+          // the first exact colour seen for this group is what gets written, so the output only ever contains colours the sprite already had
           if (!pick.has(k)) pick.set(k, i)
         }
       }
       const o = (oy * ow + ox) * 4
-      // a block that is mostly air becomes air: this is what keeps the outline
-      // crisp instead of growing a halo of half-transparent fringe
+      // a block that is mostly air becomes air, which keeps the outline crisp instead of growing a halo of half-transparent fringe
       if (!opaque || opaque * 2 < total) {
         out[o] = 0
         out[o + 1] = 0
@@ -76,8 +72,7 @@ export function bitify(data: Uint8ClampedArray, w: number, h: number, tw: number
       out[o] = data[src]
       out[o + 1] = data[src + 1]
       out[o + 2] = data[src + 2]
-      // one alpha for the whole sprite edge: pixel art is on or off, and the
-      // averaged alpha is what makes a downsample look smudged
+      // one alpha for the whole sprite edge: pixel art is on or off, and the averaged alpha is what makes a downsample look smudged
       out[o + 3] = aSum / opaque > 200 ? 255 : Math.round(aSum / opaque)
     }
   }

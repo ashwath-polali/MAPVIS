@@ -21,8 +21,7 @@ const hip = mapJson.character?.hip ?? 2
 const { w, h } = levels
 const at = (x, y) => (x < 0 || y < 0 || x >= w || y >= h ? 0 : levels.data[((y | 0) * w + (x | 0)) * 4])
 
-// the game's own test: the hip band either side of the feet, so nobody balances
-// on a single legal pixel
+// the game's own test: the hip band either side of the feet, so nobody balances on a single legal pixel
 const standable = (x, y) => {
   const here = at(x, y)
   if (here <= (enc.blocked ?? 0)) return false
@@ -55,8 +54,7 @@ for (const a of anchors) {
     console.log(`  ok    ${a.name}  (${a.x},${a.y}) r${r} · ${inside} standable px inside`)
     continue
   }
-  // how far away the nearest ground actually is, so the fix is a direction and
-  // not a guess
+  // how far away the nearest ground actually is, so the fix is a direction and not a guess
   let best = Infinity
   let bx = 0
   let by = 0

@@ -9,8 +9,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '.
 const WORK = path.join(ROOT, 'work')
 const WRITE = process.argv.includes('--write')
 
-// .prev is undo scratch and assets/ is export output that a publish rewrites,
-// so neither is the irreplaceable half.
+// .prev is undo scratch and assets/ is export output a publish rewrites, so neither is the irreplaceable half
 const SKIP = new Set(['.prev', 'assets'])
 
 function walk(dir, base = '') {

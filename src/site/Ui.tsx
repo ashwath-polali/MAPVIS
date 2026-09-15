@@ -79,14 +79,10 @@ type Vocab = {
   floor: number
 }
 
-/* the fields /api/my-maps really sends. It is `published` and never `version`, so the thumbnail's
-   fallback to a published painting read undefined and could never fire, and `style` is the map's own
-   hand, which is the right default for the hand its cover is drawn with. */
+/* the fields /api/my-maps really sends: `published` and never `version`, so a thumbnail fallback keyed on `version` reads undefined and never fires, and `style` is the map's own hand */
 type MapRow = { slug: string; title: string; published?: number | null; style?: string }
 
-/* the shape a piece name has to read as, and the same one an anchor name does.
- * Deliberately a python identifier, so renaming a piece for a person cannot
- * silently break the member's island that holds the name. */
+/* a piece name and an anchor name share this shape, deliberately a python identifier, so renaming a piece cannot silently break an island that holds the name */
 const IDENT = /^[a-z][a-z0-9_]{0,47}$/
 
 const clamp = (v: number, lo: number, hi: number) => (v < lo ? lo : v > hi ? hi : v)
@@ -102,15 +98,11 @@ const post = async (path: string, body: unknown) => {
   return j
 }
 
-/* WHAT YOU ARE MAKING, asked before anything else. This page used to open straight into the
-   twenty-one game pieces, so the only thing it could make was the one thing it showed. A group is a
-   kind of thing with its own editor and its own rules, and the list is a list on purpose: a third
-   one is a row here rather than a redesign. */
+/* what you are making, asked before anything else: a group is a kind of thing with its own editor and its own rules, and the list is a list on purpose so a third one is a row here rather than a redesign */
 type GroupId = 'pieces' | 'covers'
 
 const GROUPS: { id: GroupId; name: string; name2: string }[] = [
-  /* NO SENTENCES. The dashboard's cards say a name and then numbers, and a paragraph explaining what
-     a thing is reads as an apology for it not being obvious. The pictures do the explaining. */
+  /* no sentences on these cards: they say a name and then numbers, and a paragraph explaining what a thing is reads as an apology for it not being obvious */
   { id: 'pieces', name: 'game pieces', name2: 'the chrome every screen is dressed in' },
   { id: 'covers', name: 'transition screens', name2: 'what a student sees on the way in' },
 ]
@@ -131,9 +123,7 @@ const TIERS: Array<[PType['tier'], string]> = [
   ['none', 'not drawn here'],
 ]
 
-/* THE ONE FACT THAT DECIDES WHETHER FOUR EDGE NUMBERS MEAN ANYTHING on this
- * piece: a ground stretches, a sheet is cut into faces, a painting is neither.
- * A footer readout, so it is short and it is not a sentence. */
+/* the one fact that decides whether four edge numbers mean anything on a piece: a ground stretches, a sheet is cut into faces, a painting is neither. A footer readout, so keep it short */
 function stretchLaw(t: PType | undefined): string {
   if (!t) return 'unfiled'
   if (t.tier === 'sheet') return t.facesFree || t.faces.length < 2 ? 'sheet · cut into faces' : `sheet · ${t.faces.length} faces`
@@ -150,26 +140,19 @@ export default function Ui() {
   const [v, setV] = useState<Vocab | null>(null)
   const [maps, setMaps] = useState<MapRow[]>([])
   const [mine, setMine] = useState(false)
-  /* THE PICTURE IS SERVED IMMUTABLE FOR A YEAR, which is right for a classroom
-   * of thirty machines and wrong for the page that just redrew it. One stamp
-   * per load busts the cache here and nowhere else. */
+  /* the picture is served immutable for a year, right for a classroom of thirty machines and wrong for the page that just redrew it, so one stamp per load busts the cache here and nowhere else */
   const [stamp, setStamp] = useState(() => Date.now())
   const [step, setStep] = useState<Step>('pieces')
   /* empty is the chooser, which is where the page now opens */
   const [group, setGroup] = useState<GroupId | ''>('')
-  /* WHICH MAPS CARRY A COVER, asked once so the chooser can show one and count them. A card with a
-     picture on it is the whole difference between this page and a list of words. */
+  /* which maps carry a cover, asked once so the chooser can show one and count them, because a card with a picture on it is the whole difference from a list of words */
   const [coverMaps, setCoverMaps] = useState<string[]>([])
   // which of the twenty-one is armed for drawing, and which drawn piece is open
   const [armed, setArmed] = useState('')
   const [open, setOpen] = useState('')
-  /* THE POINTER'S POSITION IN THE PIECE'S OWN PIXELS, which is what the editor
-   * puts in the left of its footer and is the one number worth having while a
-   * rectangle is being dragged. It lives up here because the footer does. */
+  /* the pointer's position in the piece's own pixels, the one number worth having while a rectangle is dragged, and it lives up here because the footer does */
   const [readout, setReadout] = useState('')
-  /* how many marks are on the piece RIGHT NOW, which is not the same number as
-   * the one on the saved record and is the one worth reporting while somebody is
-   * dragging rectangles. The footer lives up here, so the count has to. */
+  /* how many marks are on the piece right now, which is not the number on the saved record, and it lives up here because the footer does */
   const [marks, setMarks] = useState(0)
   /* whether claude wrote the prompt is carried up, since with no claude the author's sentence goes bare. */
   const [bare, setBare] = useState('')
@@ -193,9 +176,7 @@ export default function Ui() {
       .then((j: { maps?: MapRow[] }) => {
         const rows = j.maps || []
         setMaps(rows)
-        /* which of them carry a cover, asked once so the chooser can put a real one on its card and
-           count the rest. One request per map is fine at ten and would not be at a hundred, so it is
-           capped rather than left to grow quietly. */
+        /* which maps carry a cover, asked once so the chooser can show a real one and count the rest. One request per map is fine at ten and would not be at a hundred, so it is capped rather than left to grow quietly */
         void Promise.all(
           rows.slice(0, 24).map((m) =>
             fetch('/api/covers/' + encodeURIComponent(m.slug))
@@ -206,17 +187,14 @@ export default function Ui() {
         ).then((hit) => setCoverMaps(hit.filter(Boolean)))
       })
       .catch(() => {})
-    /* CORE CHROME BELONGS TO ONE ACCOUNT, the same one the ocean does, so that
-     * is the question being asked. Everyone else makes an additive piece, which
-     * is the whole of what a member's piece is meant to be. */
+    /* core chrome belongs to one account, the same one the ocean does, so that is the question asked here, and everyone else makes an additive piece */
     fetch('/api/world/mine')
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
       .then((j: { mine?: boolean }) => setMine(j.mine !== false))
       .catch(() => setMine(false))
   }, [user, loading, load])
 
-  /* Polling that stops when nothing is drawing. A row sits in `pending` for the
-   * minute and a half a generation takes and for no longer. */
+  /* polling that stops when nothing is drawing: a row sits in `pending` for the minute and a half a generation takes and no longer */
   useEffect(() => {
     if (!v?.pending) return
     const t = window.setInterval(() => void load(), 4000)
@@ -234,8 +212,7 @@ export default function Ui() {
     setStep(s)
   }
 
-  // opening a drawn piece is the same act as going to step three, so it is one
-  // call and the two can never disagree about which piece is on the stage
+  // opening a drawn piece is the same act as going to step three, so one call does both and they can never disagree about which piece is on the stage
   const openPiece = (name: string) => {
     setOpen(name)
     setStep('mark')
@@ -258,21 +235,15 @@ export default function Ui() {
         : ''
 
   /* uikit rides beside app as a fence: every rule under it in ui.css is a metric and never a colour. */
-  /* the real pictures, and never a placeholder: the first few pieces this account has actually drawn,
-     and a cover it has actually kept. An illustration of a thing is worse than the thing. */
-  /* ONE piece, filling the frame, the way the cover beside it does. Four of them shrunk to a quarter
-     height read as a loading state, and most chrome is dark art that disappears on a dark field. The
-     one with the most drawn on it is the one that reads: a plate sheet carries a dozen plaques where
-     a cue carries one arrow. */
+  /* the real pictures and never a placeholder: pieces this account has actually drawn and a cover it has actually kept, because an illustration of a thing is worse than the thing */
+  /* one piece filling the frame, because four shrunk to a quarter height read as a loading state and most chrome is dark art that disappears on a dark field, and the one with the most drawn on it is the one that reads */
   const piecesArt = (v?.ui || [])
     .filter((p) => p.src)
     .sort((a, c) => (c.w || 0) * (c.h || 0) - (a.w || 0) * (a.h || 0))
     .slice(0, 1)
     .map((p) => `${p.src}?v=${stamp}`)
   const coversArt = coverMaps.slice(0, 1).map((s) => `/api/cover/${encodeURIComponent(s)}?t=${stamp}`)
-  /* TWO NUMBERS THAT SAY DIFFERENT THINGS. It was "18 drawn · 18 core" and "1 of 10 maps · 10 maps",
-     which is one fact printed twice each time, and a number that repeats the one beside it teaches a
-     reader to stop reading the row. */
+  /* two numbers that say different things: `18 drawn · 18 core` is one fact printed twice, and a number that repeats the one beside it teaches a reader to stop reading the row */
   const madePieces = (v?.ui || []).length
   const outPieces = (v?.ui || []).filter((p) => p.published).length
   const piecesNums = [
@@ -284,8 +255,7 @@ export default function Ui() {
     ...(coverMaps.length ? [] : ['every map falls back']),
   ]
 
-  /* THE CHOOSER. Nothing else is on screen until a group is picked, because the page's whole problem
-     was that it looked like one editor for one thing. */
+  /* the chooser: nothing else is on screen until a group is picked, because otherwise the page looks like one editor for one thing */
   if (!group)
     return (
       <div className="app uikit">
@@ -302,8 +272,7 @@ export default function Ui() {
         <main>
           <div className="uk-pick">
             <h1 className="uk-ask">What are you making?</h1>
-            {/* the product's own card, the one the dashboard uses for a map: a painting on top, a name
-                and then numbers under it. Nothing here invents a second card. */}
+            {/* the product's own card, the one the dashboard uses for a map: a painting on top, a name and then numbers under it, and no second card design */}
             <div className="uk-cards">
               {GROUPS.map((g) => {
                 const art = g.id === 'pieces' ? piecesArt : coversArt
@@ -371,8 +340,7 @@ export default function Ui() {
   return (
     <div className="app uikit">
       <header>
-        {/* the same wordmark, the same size and face as the editor's and the
-            home page's. One product should not have three logos. */}
+        {/* the same wordmark, size and face as the editor's and the home page's, because one product should not have three logos */}
         <a className="brand" href="/" title="your maps">
           MAPVIS
         </a>
@@ -458,9 +426,7 @@ export default function Ui() {
         )}
       </main>
 
-      {/* The same split the editor's footer makes: the pointer on the left, what
-          the tool has measured on the right. The header says which piece is
-          open, so saying it again down here would be one string twice. */}
+      {/* the same split the editor's footer makes: the pointer on the left, what the tool measured on the right. The header already says which piece is open */}
       <footer>
         <span className="read mono">{readout}</span>
         <span className="grow" />
@@ -546,9 +512,7 @@ function Pieces({
                       {p.w}×{p.h}
                       {t ? ' · ' + displayName({ name: t.name, label: t.label }).text.toLowerCase() : ''}
                     </span>
-                    {/* the same sentence the card carries, because the rail is
-                        what somebody scans when they are looking for the piece
-                        that still needs work */}
+                    {/* the same sentence the card carries, because the rail is what somebody scans when they are looking for the piece that still needs work */}
                     <Made p={p} />
                   </span>
                 </button>
@@ -564,8 +528,7 @@ function Pieces({
       <div className="stage">
         {v.ui.length === 0 ? (
           <p className="empty">
-            {/* wrapped, because bare text in a grid becomes an anonymous item
-                that fills its track and then reads left-aligned inside it */}
+            {/* wrapped, because bare text in a grid becomes an anonymous item that fills its track and then reads left aligned inside it */}
             <span>nothing drawn yet · draw a piece to put something here</span>
           </p>
         ) : (
@@ -587,8 +550,7 @@ function Pieces({
                     </span>
                     <span className="ui-card-say">
                       <span className={'ui-card-name' + (said.derived ? ' guessed' : '')}>{said.text}</span>
-                      {/* who owns it, which is a fact about the piece and not a
-                          selection, so it is a word and never the gold border */}
+                      {/* who owns it is a fact about the piece and not a selection, so it is a word and never the gold border */}
                       <span className="ui-card-meta mono">
                         {p.core ? 'core · ' : ''}
                         {p.w}×{p.h}
@@ -637,9 +599,7 @@ function Made({ p }: { p: Piece }) {
 
 /* ---- what a type is, drawn as a diagram and never a preview: the viewBox is the real canvas ---- */
 
-/* THE TWO THAT ARE NEVER GENERATED still have to say what they are. Neither has
- * a canvas, so neither gets a real one: a shape to be drawn in, and the card's
- * own meta line says out loud that nothing is drawn here. */
+/* the two that are never generated still have to say what they are: neither has a canvas, so each gets a shape to be drawn in and a meta line saying nothing is drawn here */
 const NOMINAL: Record<string, [number, number]> = {
   sign: [384, 288],
   row: [480, 200],
@@ -657,22 +617,18 @@ function Dia({ t }: { t: PType }) {
   const [w, h] = diaSize(t)
   const X = (f: number) => Math.round(f * w * 10) / 10
   const Y = (f: number) => Math.round(f * h * 10) / 10
-  /* a rectangle in fractions of the canvas. The class says what kind of thing
-   * it is: f a drawn frame, g something not there yet, m a mark, t a run of
-   * type, p painted paper. ui.css owns what each of those looks like. */
+  /* a rectangle in fractions of the canvas, classed by what it is: f a drawn frame, g something not there yet, m a mark, t a run of type, p painted paper, and ui.css owns what each looks like */
   const R = (x: number, y: number, ww: number, hh: number, k = 'f', r = 0) => (
     <rect className={k} x={X(x)} y={Y(y)} width={X(ww)} height={Y(hh)} rx={r} />
   )
-  /* a line of type is always a mark and never a word. At a fifth of size a word
-   * is noise, and what the diagram is saying is where the words go. */
+  /* a line of type is always a mark and never a word, because at a fifth of size a word is noise and the diagram is saying where the words go */
   const T = (x: number, y: number, ww: number, hh = 0.05) => R(x, y, ww, hh, 't', 3)
   const wrap = (kids: React.ReactNode) => (
     <svg className="ui-dia" viewBox={`0 0 ${w} ${h}`} aria-hidden>
       {kids}
     </svg>
   )
-  // a small silhouette family, told apart by shape rather than by hue, which is
-  // the whole definition of an icon set
+  // a small silhouette family, told apart by shape rather than by hue, which is the whole definition of an icon set
   const MARKS = (cx: number, cy: number, s: number, i: number) => {
     const px = X(cx)
     const py = Y(cy)
@@ -690,9 +646,7 @@ function Dia({ t }: { t: PType }) {
   }
 
   switch (t.name) {
-    /* a frame, a plate hung on its top edge with the speaker's name in it, a
-       portrait well with somebody in it, three lines of speech and the tap that
-       says the line has finished */
+    /* a frame, a plate hung on its top edge with the speaker's name, a portrait well with somebody in it, three lines of speech and the tap that says the line has finished */
     case 'dialogue_box':
       return wrap(
         <>
@@ -776,8 +730,7 @@ function Dia({ t }: { t: PType }) {
         </>,
       )
 
-    // the same canvas with no plates, because a family told apart by silhouette
-    // is the whole difference between an icon set and a chip sheet
+    // the same canvas with no plates, because a family told apart by silhouette is the whole difference between an icon set and a chip sheet
     case 'icon_set':
       return wrap(
         <>
@@ -864,8 +817,7 @@ function Dia({ t }: { t: PType }) {
         </>,
       )
 
-    // an aperture with somebody in it, standing on the bottom of the box rather
-    // than floating in the middle of it, which is the whole point of the type
+    // an aperture with somebody in it, standing on the bottom of the box rather than floating in the middle of it, which is the whole point of the type
     case 'portrait_frame':
       return wrap(
         <>
@@ -900,8 +852,7 @@ function Dia({ t }: { t: PType }) {
         </>,
       )
 
-    /* a strip of frames of one mark, which is what an animated cue is. Filled
-       and not a stroked v: at a fifth of size a two pixel chevron is a speck. */
+    /* a strip of frames of one mark, which is what an animated cue is, filled and not a stroked v because at a fifth of size a two pixel chevron is a speck */
     case 'cue':
       return wrap(
         <>
@@ -975,16 +926,13 @@ function Dia({ t }: { t: PType }) {
         </>,
       )
 
-    /* A TYPE THE SERVER ADDED AND THIS FILE HAS NOT DRAWN YET. It gets its own
-     * honest canvas outline rather than nothing, so a new type appears on the
-     * gallery as an undrawn one instead of an empty card. */
+    /* a type the server added and this file has not drawn yet gets an honest canvas outline rather than nothing, so it shows on the gallery as undrawn instead of an empty card */
     default:
       return wrap(R(0.02, 0.02, 0.96, 0.96, 'g', 8))
   }
 }
 
-/* THE CANVAS AT ITS TRUE SIZE, holding the diagram. One divisor across the
- * whole gallery, so the boxes are honest against each other. */
+/* the canvas at its true size holding the diagram, one divisor across the whole gallery so the boxes are honest against each other */
 function DiaBox({ t, children }: { t: PType; children?: React.ReactNode }) {
   const [w, h] = diaSize(t)
   return (
@@ -1056,8 +1004,7 @@ function Drawing({
     }
   }
 
-  // why a name is refused, said on the line under the box rather than after a
-  // press. All four cases are about the identifier a reader will hold.
+  // why a name is refused, said on the line under the box rather than after a press, and all four cases are about the identifier a reader will hold
   const nameSays = !legal
     ? 'lower case, digits and underscores, starting with a letter'
     : reserved
@@ -1089,9 +1036,7 @@ function Drawing({
             <div className="panel-empty">
               <p>pick one of the twenty-one and this fills with what to say about it</p>
             </div>
-            {/* the one fact worth having before anything is armed, because it is
-                about the spend and not about the layout: the server draws one
-                piece at a time and refuses the second. */}
+            {/* the server draws one piece at a time and refuses the second, worth saying before anything is armed because it is about the spend and not the layout */}
             <div className="panel-foot ui-foot">one press draws one piece</div>
           </>
         )}
@@ -1162,8 +1107,7 @@ function Drawing({
               ) : null}
             </div>
 
-            {/* THE ONE STANDING LINE ON THIS SCREEN, and it is only here while a
-                type is armed. Everything else a type has to say is a tip. */}
+            {/* the one standing line on this screen, and only while a type is armed, because everything else a type has to say is a tip */}
             <div className="lawhint">{t.what}</div>
             {blocked ? (
               <div className="anchwarn" style={{ padding: '0 var(--pan-in)' }}>
@@ -1207,9 +1151,7 @@ function Drawing({
                           </DiaBox>
                         </span>
                         <span className="ui-card-say">
-                          {/* through displayName like every other name on this
-                              page, so a type whose label the server ever stops
-                              sending still reads as words and not `cover_plate` */}
+                          {/* through displayName like every other name on this page, so a type whose label the server ever stops sending still reads as words and not `cover_plate` */}
                           <span className="ui-card-name">{displayName({ name: x.name, label: x.label }).text}</span>
                           <span className="ui-card-meta mono">
                             {had ? 'drawn' : x.tier === 'none' ? 'no canvas' : `${x.w}×${x.h}`}
@@ -1334,8 +1276,7 @@ function Marking({
       }),
     )
 
-  // a rectangle dragged onto the picture. It is not a mark until it is named,
-  // because a mark silently called `region_3` is a promise nobody made.
+  // a rectangle dragged onto the picture is not a mark until it is named, because a mark silently called `region_3` is a promise nobody made
   const startDraft = (e: React.PointerEvent) => {
     if (mode !== 'marks' || e.target !== e.currentTarget) return
     const a = at(e)
@@ -1587,9 +1528,7 @@ function Marking({
           })
         )}
 
-        {/* the chosen mark's own fields, in the editor's inspector, because a
-            fill's direction on a text well is a control reporting a state it
-            does not deliver */}
+        {/* the chosen mark's own fields, in the editor's inspector, because a fill's direction on a text well is a control reporting a state it does not deliver */}
         {chosen ? (
           <div className="insp">
             <div className="insp-head">
@@ -1729,8 +1668,7 @@ function Marking({
         ) : null}
 
         {err ? <p className="ui-err">{err}</p> : null}
-        {/* said where the piece is looked at, because that is where somebody
-            decides whether the picture is any good */}
+        {/* said where the piece is looked at, because that is where somebody decides whether the picture is any good */}
         {bare ? (
           <div className="anchwarn" style={{ padding: '4px var(--pan-in) 0' }}>
             {bare}
@@ -1849,9 +1787,7 @@ function Marking({
                       moveRegion(i, false)(e)
                     }}
                   >
-                    {/* the words, never the identifier, which is the one rule
-                        src/core/naming.ts exists to hold. The address is on the
-                        rail row's mono line. */}
+                    {/* the words, never the identifier, which is the one rule src/core/naming.ts exists to hold, and the address is on the rail row's mono line */}
                     <i>{displayName(r.name).text}</i>
                     <b onPointerDown={moveRegion(i, true)} />
                   </span>

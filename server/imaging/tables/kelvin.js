@@ -1,13 +1,4 @@
-// The Planckian locus, 1700K to 25000K in 25 kelvin steps.
-//
-// Two chromaticity coordinates per entry, x then y. The cubic that produces
-// these is in color/temperature.js; it is four branches and eight coefficients,
-// and evaluating it per pixel to warm a whole painting is the kind of arithmetic
-// that belongs in a table.
-//
-// The step is 25K because that is below what an eye resolves as a change in
-// white point anywhere in the range, so interpolating between neighbours is
-// indistinguishable from evaluating the cubic.
+// the Planckian locus, 1700K to 25000K in 25 kelvin steps, x then y per entry. the cubic is in color/temperature.js, and 25K is below what an eye resolves as a change in white point, so interpolating between neighbours is indistinguishable from evaluating it.
 
 export const KELVIN_MIN = 1700
 export const KELVIN_MAX = 25000

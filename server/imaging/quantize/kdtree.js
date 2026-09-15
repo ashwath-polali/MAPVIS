@@ -1,8 +1,4 @@
-// Nearest colour in a palette, without asking every entry every time.
-//
-// A 688x384 painting is 264,192 pixels. Against a 64 colour palette that is 16.9
-// million distance calls for one pass, and a palette match runs several passes.
-// A three dimensional tree takes it to about eight comparisons a pixel.
+// nearest colour in a palette without asking every entry: a 688x384 painting is 264,192 pixels, which against a 64 colour palette is 16.9 million distance calls per pass and a match runs several, where a three dimensional tree takes it to about eight comparisons a pixel
 
 import { rgbToOklab } from '../color/oklab.js'
 
@@ -16,9 +12,7 @@ class Node {
   }
 }
 
-/* built over OKLab and not rgb, because the tree has to split on the same axes
- * the distance is measured in or the pruning is unsound and quietly returns the
- * second nearest colour */
+/* built over OKLab and not rgb, because the tree has to split on the same axes the distance is measured in or the pruning is unsound and quietly returns the second nearest colour */
 export class ColorTree {
   constructor(palette) {
     this.palette = palette.map((c) => c.slice())
@@ -79,8 +73,7 @@ function search(node, q, points, best) {
   const near = delta < 0 ? node.left : node.right
   const far = delta < 0 ? node.right : node.left
   search(near, q, points, best)
-  // the only interesting line: the far side is worth opening only when the
-  // splitting plane itself is closer than the best found so far
+  // the far side is worth opening only when the splitting plane itself is closer than the best found so far
   if (delta * delta < best.dist) search(far, q, points, best)
 }
 
@@ -102,8 +95,7 @@ function searchK(node, q, points, heap, k) {
   if (heap.length < k || delta * delta < heap[worst].dist) searchK(far, q, points, heap, k)
 }
 
-/* a flat cache in front of the tree. A painting has far fewer distinct colours
- * than pixels, so most lookups after the first thousand are repeats. */
+/* a flat cache in front of the tree, because a painting has far fewer distinct colours than pixels and most lookups after the first thousand are repeats */
 export function cachedMatcher(palette) {
   const tree = new ColorTree(palette)
   const cache = new Map()

@@ -41,9 +41,7 @@ function otsu(hist) {
   return cut
 }
 
-/* WHICH PIXELS ARE INK. Luminance, split by Otsu over the opaque pixels only. A
- * transparent pixel is not ink, because nothing was drawn there, and the
- * highlight edge's middle is exactly that. */
+/* which pixels are ink: luminance split by otsu over the opaque pixels only, because a transparent pixel is not ink and the highlight edge's middle is exactly that */
 function inkMap(im) {
   const hist = new Array(256).fill(0)
   const lum = new Uint8Array(im.w * im.h)
@@ -84,8 +82,7 @@ function sideBox(im, ink) {
     /* under half the lines finding a frame, it is not the one shape a nine-slice can describe */
     return got.length < lines.length / 2 ? -1 : median(got)
   }
-  // read off the middle sixty percent of each axis, because a line near a corner
-  // is looking at the corner rather than at the rail
+  // read off the middle sixty percent of each axis, because a line near a corner is looking at the corner rather than at the rail
   const ys = []
   for (let y = Math.floor(im.h * 0.2); y < Math.ceil(im.h * 0.8); y++) ys.push(y)
   const xs = []
@@ -121,8 +118,7 @@ function clearCorners(im, ink, box) {
     }
     return false
   }
-  // a corner arc is a fraction of the frame's own depth, so a runaway here means
-  // the picture is not a rounded frame and the sides keep what they measured
+  // a corner arc is a fraction of the frame's own depth, so a runaway here means the picture is not a rounded frame and the sides keep what they measured
   const cap = Math.max(box.top, box.right, box.bottom, box.left)
   for (let i = 0; i < cap; i++) {
     const tl = dirty(s.left, s.top)
@@ -167,15 +163,12 @@ function ornament(n, depth, sample) {
     }
     off.push(s / depth)
   }
-  /* A BAND WITH NOTHING ON IT MUST ANSWER ZERO. Otsu splits noise as happily as
-   * it splits a rivet, so a band whose worst line is barely off its own typical
-   * one has no ornament at all and the scan says so instead of inventing one. */
+  /* a band with nothing on it must answer zero: otsu splits noise as happily as it splits a rivet, so a band whose worst line is barely off its own typical one has no ornament and the scan says so rather than inventing one */
   const worst = Math.max(...off)
   if (worst < 20) return { orn: 0, plain: true }
   /* otsu is wrong on a band: the rope ran to x=44 and otsu called plain at x=13, so use the rail's scatter */
   const tol = Math.max(8, 3 * median(off))
-  // the first stretch of quiet lines is the start of the repeatable run. Long
-  // enough that a single quiet line inside a carving does not end the ornament.
+  // the first stretch of quiet lines starts the repeatable run, long enough that a single quiet line inside a carving does not end the ornament
   const run = Math.max(4, Math.round(n * 0.02))
   const corner = Math.floor(n * 0.25)
   for (let i = 0; i <= n - run; i++) {
@@ -196,8 +189,7 @@ function measure(im) {
       const i = at(im, x, y)
       return [im.data[i], im.data[i + 1], im.data[i + 2], im.data[i + 3]]
     }
-    // the top and bottom bands, walked along x, which is what says how wide a
-    // corner is
+    // the top and bottom bands, walked along x, which is what says how wide a corner is
     const topL = ornament(im.w, s.top, (i, d) => px(i, d))
     const topR = ornament(im.w, s.top, (i, d) => px(im.w - 1 - i, d))
     const botL = ornament(im.w, s.bottom, (i, d) => px(i, im.h - 1 - d))
@@ -221,9 +213,7 @@ function measure(im) {
       left: Math.max(inner.left, topL.orn, botL.orn),
       right: Math.max(inner.right, topR.orn, botR.orn),
     }
-    /* AND NO SIDE MAY EAT THE MIDDLE. top + bottom has to stay under h or CSS
-     * drops the whole border image and says nothing, so a runaway corner scan is
-     * capped here rather than caught by checkSlices after a save. */
+    /* and no side may eat the middle: top + bottom has to stay under h or CSS drops the whole border image and says nothing, so a runaway corner scan is capped here rather than caught by checkSlices after a save */
     const capY = Math.floor((im.h - 1) / 2)
     const capX = Math.floor((im.w - 1) / 2)
     next.top = Math.min(next.top, capY)
@@ -282,8 +272,7 @@ const LAYOUT = {
     ]
   },
 
-  // a place name over a line about it, and nothing else: a band is not a person
-  // talking, so it carries no speaker furniture at all
+  // a place name over a line about it and nothing else, because a band is not a person talking and carries no speaker furniture
   band: (m) => {
     const i = m.in
     const title = Math.round(i.h * 0.58)
@@ -302,17 +291,14 @@ const LAYOUT = {
     ]
   },
 
-  // what goes here, said under the empty face rather than across it, so the
-  // thing that lands in the socket does not land on the words
+  // what goes here, said under the empty face rather than across it, so the thing that lands in the socket does not land on the words
   socket: (m) => {
     const i = m.in
     const cap = Math.max(12, Math.round(i.h * 0.34))
     return [R('caption', 'text', i.x, i.y + i.h - cap, i.w, cap, { wrap: 'wrap', overflow: 'clip' })]
   },
 
-  /* THE CHANNEL IS THE FILL AND THE READING SITS ON IT. Those two overlap and it
-   * is meant: the drive bar carries its remaining yards printed on the bar that
-   * measures them, which is the case checkUi's overlap warning names out loud. */
+  /* the channel is the fill and the reading sits on it, and that overlap is meant: the drive bar prints its remaining yards on the bar that measures them, the case checkUi's overlap warning names */
   gauge: (m) => {
     const i = m.in
     const read = Math.min(Math.round(i.w * 0.22), 120)
@@ -332,16 +318,13 @@ const LAYOUT = {
     ]
   },
 
-  // the label takes the whole face and the press area is the whole tab, frame
-  // included: a tab that only answers a click on its paper is a tab with a dead
-  // border, and input parity is the most load-bearing rule in the kit
+  // the label takes the whole face and the press area is the whole tab, frame included, because a tab that only answers a click on its paper has a dead border, and input parity is the most load-bearing rule in the kit
   tab: (m) => {
     const i = m.in
     return [R('label', 'text', i.x, i.y, i.w, i.h, { wrap: 'nowrap', overflow: 'ellipsis' }), R('press', 'press', 0, 0, m.w, m.h)]
   },
 
-  // the key cap is drawn on the plank at the left end so a keyboard player can
-  // see the number rather than guess it, and the label takes what is left
+  // the key cap is drawn on the plank at the left end so a keyboard player sees the number rather than guessing it, and the label takes what is left
   plank: (m) => {
     const i = m.in
     const cap = Math.min(Math.round(i.h * 0.7), Math.round(i.w * 0.14))
@@ -362,8 +345,7 @@ const LAYOUT = {
     ]
   },
 
-  // it is a ring. Its middle is the map, and a rectangle marked on it would be a
-  // place the engine draws over the map's own art.
+  // it is a ring: its middle is the map, so a rectangle marked on it would be a place the engine draws over the map's own art
   highlight_edge: () => [],
 
   /* a cover plate is full-bleed with no middle, and this came back eleven plates, so wells go on one */

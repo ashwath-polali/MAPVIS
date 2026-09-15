@@ -10,7 +10,5 @@ export const ANCHOR_INK: Record<string, string> = {
   point: '#c8d2dd',
 }
 
-/* the fallback is --ink-edge, a boundary colour rather than a text one on
- * purpose: a kind nobody has an ink for should read as an unfinished thing and
- * not as a seventh category somebody chose. */
+/* the fallback is --ink-edge, a boundary colour rather than a text one on purpose, so a kind nobody has an ink for reads as unfinished and not as a seventh category somebody chose */
 export const inkFor = (m: Record<string, string>, k: string): string => m[k] || '#5b6470'

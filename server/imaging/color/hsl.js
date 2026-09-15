@@ -1,8 +1,4 @@
-// HSL, HSV and HWB.
-//
-// None of these are perceptual and none of them should be used to judge whether
-// two colours match. They are here because they are what a person types and what
-// a colour picker draws, so a value arriving from a UI arrives in one of them.
+// HSL, HSV and HWB, none of them perceptual and none of them fit to judge whether two colours match, kept because they are what a person types and what a colour picker draws, so a value from the UI arrives in one of them
 
 import { clamp255, clamp01 } from './srgb.js'
 
@@ -82,8 +78,7 @@ export function hsvToRgb(hsv) {
   return [clamp255(Math.round(c[0] * 255)), clamp255(Math.round(c[1] * 255)), clamp255(Math.round(c[2] * 255))]
 }
 
-/* whiteness and blackness rather than saturation and value, which is closer to
- * how a painter mixes and reads better on a tint ramp */
+/* whiteness and blackness rather than saturation and value, closer to how a painter mixes and easier to read on a tint ramp */
 export function rgbToHwb(rgb) {
   const hsv = rgbToHsv(rgb)
   const w = Math.min(rgb[0], rgb[1], rgb[2]) / 255

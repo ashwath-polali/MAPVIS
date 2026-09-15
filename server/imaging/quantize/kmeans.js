@@ -1,15 +1,9 @@
-// k-means in OKLab, for when the palette is allowed to invent colours.
-//
-// Median cut and the octree both answer with colours that were IN the picture.
-// k-means answers with the centre of each cluster, which is usually a colour
-// that was not, and for a shading ramp that is the better answer.
+// k-means in OKLab, for when the palette is allowed to invent colours: median cut and the octree answer only with colours that were in the picture, a cluster centre usually was not, and for a shading ramp that is the better answer
 
 import { rgbToOklab, oklabToRGB } from '../color/oklab.js'
 import { histogram, unpackRGB } from '../color/srgb.js'
 
-/* k-means++ seeding, because plain random seeding on a picture with one large
- * flat area puts most centres inside that area and the result is a palette of
- * twelve nearly identical skies */
+/* k-means++ seeding, because plain random seeding on a picture with one large flat area puts most centres inside that area and the result is a palette of twelve nearly identical skies */
 function seed(points, weights, k, rand) {
   const centres = []
   let first = 0
@@ -56,9 +50,7 @@ function dist2(a, b) {
   return d0 * d0 + d1 * d1 + d2 * d2
 }
 
-/* a seeded generator, so the same picture and the same k give the same palette
- * every run. A quantiser that answers differently each time cannot be compared
- * against its own previous answer. */
+/* a seeded generator, so the same picture and the same k give the same palette every run and an answer can be compared against the previous one */
 function mulberry(seedValue) {
   let a = seedValue >>> 0
   return () => {

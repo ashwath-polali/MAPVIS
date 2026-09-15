@@ -140,8 +140,7 @@ function Sound() {
   const [muted, setMine] = useState(isMuted)
   const [, bump] = useState(0)
 
-  /* the unlock line below reports the real state of this tab, so it has to
-     notice the click or keypress that changes it rather than reading once */
+  /* the unlock line below reports the real state of this tab, so it has to notice the click or keypress that changes it rather than reading once */
   useEffect(() => onFirstGesture(() => bump((n) => n + 1)), [])
 
   const set = (next: boolean) => {
@@ -240,9 +239,7 @@ function Key({ user, which, title, api, note }: { user: User; which: 'claude' | 
   )
 }
 
-/* THE HOUSE HAND, AND WHO MAY DRAW WITH IT. Only the account that owns it sees
- * this at all: /api/styles returns the grant list to the owner and to nobody
- * else, so an account that is not the owner renders nothing here. */
+/* the house hand, and who may draw with it: /api/styles returns the grant list to the owning account and to nobody else, so any other account renders nothing here */
 function Hand() {
   const [granted, setGranted] = useState<string[] | null>(null)
   const [email, setEmail] = useState('')

@@ -3,8 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import { cleanLife, lifeAt, separate, type Life } from '../core/life'
 
 export type Stop = {
-  /* where on the painting, in painting pixels. Taken from the scene's own
-   * anchors, so the tour is authored in MAPVIS rather than in this file. */
+  /* where on the painting, in painting pixels, taken from the scene's own anchors so the tour is authored in MAPVIS and not in this file */
   x: number
   y: number
   /* how close. 1 is the whole place; 3 is standing next to something. */
@@ -14,8 +13,7 @@ export type Stop = {
   side?: 'left' | 'right'
 }
 
-/* THE SAME DEPTH RULE THE EDITOR AND THE GAME USE, so a map is drawn in one order wherever it
- * is drawn. Where it stands, plus the author's nudge, and no nudge is the plain y-sort. */
+/* the same depth rule the editor and the game use, so a map is drawn in one order wherever it is drawn: where it stands plus the author's nudge, and no nudge is the plain y-sort */
 const zOf = (p: { z?: number }) => (Number.isFinite(Number(p.z)) ? Number(p.z) : 0)
 
 type Placed = {
@@ -33,9 +31,7 @@ type Placed = {
   fps?: number
   dirs?: Record<string, string[]>
   life?: unknown
-  /* WHICH OF TWO OVERLAPPING THINGS IS IN FRONT, written by move-forward and move-back in the
-   * editor. Added to the sort key and never to the position. Absent on nearly every placement
-   * and on every bundle published before it existed. */
+  /* which of two overlapping things is in front, written by move-forward and move-back in the editor, added to the sort key and never to the position, and absent on nearly every placement and every bundle published before it existed */
   z?: number
 }
 type Ready = {
@@ -69,14 +65,10 @@ async function pool<T>(items: T[], n: number, fn: (t: T) => Promise<unknown>) {
   )
 }
 
-/* Eased, and slow at both ends. A camera that starts and stops abruptly reads
- * as a slideshow; one that leans into the move and settles out of it reads as
- * somebody showing you around. */
+/* eased and slow at both ends, because a camera that starts and stops abruptly reads as a slideshow */
 const ease = (t: number) => (t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2)
 
-/* A hook rather than a component, because the caller needs to drive it: which
- * stop is showing decides which line of text is on screen, and the text is not
- * drawn on the canvas. */
+/* a hook rather than a component, because the caller drives it: which stop is showing decides which line of text is on screen, and the text is not drawn on the canvas */
 export function useTour({
   slug,
   version,
@@ -171,9 +163,7 @@ export function useTour({
 
         const t = (now - t0) / 1000
         const pts: Array<{ x: number; y: number; r: number }> = []
-        /* d is the DEPTH and y is where it is drawn, and they are two numbers now rather
-         * than one, because a nudge changes what a thing is drawn in front of and never
-         * where it is drawn. */
+        /* d is the depth and y is where it is drawn, two numbers rather than one, because a nudge changes what a thing is drawn in front of and never where it is drawn */
         const frame: Array<{ r: Ready; x: number; y: number; d: number; a: number; face: string; flip: boolean }> = []
         for (const r of live) {
           let dx = 0

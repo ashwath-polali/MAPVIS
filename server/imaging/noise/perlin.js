@@ -1,16 +1,11 @@
-// Perlin and simplex noise, with a seeded permutation.
-//
-// Everything here is deterministic from its seed. A ground texture that comes
-// back different on the second run cannot be compared against the first, and a
-// map generated twice has to be the same map.
+// Perlin and simplex noise from a seeded permutation, deterministic from the seed because a map generated twice has to be the same map and a ground texture that comes back different cannot be compared against the first
 
 const GRAD2 = [
   [1, 1], [-1, 1], [1, -1], [-1, -1],
   [1, 0], [-1, 0], [0, 1], [0, -1],
 ]
 
-/* mulberry32: small, fast, and good enough for a shuffle. Not for anything that
- * needs to be unpredictable, which nothing in a texture does. */
+/* mulberry32: small, fast and good enough for a shuffle, not for anything that needs to be unpredictable, which nothing in a texture does */
 function rng(seed) {
   let a = seed >>> 0
   return () => {
@@ -38,9 +33,7 @@ export function permutation(seed = 0) {
   return doubled
 }
 
-/* 6t^5 - 15t^4 + 10t^3, which has a zero second derivative at both ends. The
- * older 3t^2 - 2t^3 does not, and the discontinuity shows as a visible grid of
- * creases along the lattice lines. */
+/* 6t^5 - 15t^4 + 10t^3 has a zero second derivative at both ends, the older 3t^2 - 2t^3 does not, and that discontinuity shows as a visible grid of creases along the lattice lines */
 const fade = (t) => t * t * t * (t * (t * 6 - 15) + 10)
 const lerp = (a, b, t) => a + (b - a) * t
 
@@ -72,8 +65,7 @@ export class Perlin {
     return lerp(x1, x2, v)
   }
 
-  /* octaves summed at halving amplitude and doubling frequency, which is what
-   * turns one smooth field into something with detail at every scale */
+  /* octaves summed at halving amplitude and doubling frequency, which is what turns one smooth field into detail at every scale */
   fbm(x, y, { octaves = 4, lacunarity = 2, gain = 0.5 } = {}) {
     let amp = 1
     let freq = 1
@@ -96,9 +88,7 @@ export class Perlin {
 const F2 = 0.5 * (Math.sqrt(3) - 1)
 const G2 = (3 - Math.sqrt(3)) / 6
 
-/* simplex skews the square lattice to a triangular one, so the number of
- * corners to blend is three rather than four and there is no directional bias
- * along the axes the way perlin has */
+/* simplex skews the square lattice to a triangular one, so three corners blend rather than four and there is no directional bias along the axes the way perlin has */
 export class Simplex {
   constructor(seed = 0) {
     this.p = permutation(seed)
@@ -137,8 +127,7 @@ export class Simplex {
   }
 }
 
-/* cellular noise: distance to the nearest of a set of scattered points. What
- * stone, scales and cracked ground are made of. */
+/* cellular noise, the distance to the nearest of a set of scattered points, which is what stone, scales and cracked ground are made of */
 export class Worley {
   constructor(seed = 0) {
     this.seed = seed >>> 0

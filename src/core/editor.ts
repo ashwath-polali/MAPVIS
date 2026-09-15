@@ -57,9 +57,7 @@ import {
   type MapGroup,
 } from './mask'
 import { Walker, canStand, checkReach, type WalkCfg, type ReachResult } from './walk'
-/* the canvas is a surface a person reads, so it obeys the same law the panels
- * do: it prints the label and never the identifier. It was captioning
- * `the_maw_mouth` and `the_dock_walk` straight onto the painting. */
+/* the canvas prints a placement's label and never its identifier, the same law the panels obey, because it was captioning `the_maw_mouth` straight onto the painting */
 import { displayName } from './naming'
 import { savedScene, saveDoc, loadDoc, saveScene, type LibItem } from '../api'
 
@@ -105,8 +103,7 @@ function inkWidth(data: Uint8ClampedArray, w: number, h: number) {
       if (x < x0) x0 = x
       if (x > x1) x1 = x
     }
-  // a picture with nothing in it at all keeps the canvas, which is what this
-  // measured before and is never worse than answering zero
+  // a picture with nothing in it keeps the whole canvas width, which is never worse than answering zero
   return x1 >= x0 ? x1 - x0 + 1 : w
 }
 
@@ -135,11 +132,7 @@ function freeReach(x: number, y: number, r: number, yScale: number, b: LifeBound
   return x >= b.x - reach && x <= b.x + b.w + reach && y >= b.y - reach * ys && y <= b.y + b.h + reach * ys
 }
 
-/* WHAT OF A PUSH CAN ACTUALLY BE DELIVERED: whole vector first, then each axis, which is the rule the character already walks by. Dropping a push WHOLE when it would land somewhere unstandable fails worst exactly where overlaps are worst, on thin ground: on a narrow quay the shove out of a fishmonger lands in the water, so the figure does not move a pixel and stays fully inside. Measured over 30000 frames: partial delivery takes figure-frames shifted over 4px from 142 to 73.
- *
- * AND IT HOLDS BACK ONLY WHAT THE BEHAVIOUR ITSELF IS HELD BACK BY. A skiff drifting on water is free of the floor for every pixel it travels, so fencing it by the floor the instant it is pushed discards every correction it receives: three of them sat inside each other on 30000 of 30000 frames, 11.46px deep. Reading each row's own fence takes the worst walker-on-walker from 11.46px to 5.19px.
- *
- * It lives in the caller rather than inside separate(), because separate() is shared with the game by a hand copy and both sides have to run the identical rule. */
+/* push delivery is the whole vector first then each axis, because dropping it whole where it cannot land fails worst on thin ground: over 30000 frames that took figure-frames shifted over 4px from 142 to 73, and fencing each row by its own fence took the worst walker-on-walker from 11.46px to 5.19px */
 function floorPush(
   pts: { x: number; y: number }[],
   push: { dx: number; dy: number }[],
@@ -184,15 +177,12 @@ export interface EditorStatus {
   brush: number
   occCount: number
   lastBaseline: number
-  /* every occluder, so the panel can list them and an author can reach the
-   * first one's baseline again after drawing a second */
+  /* every occluder, so the panel can list them and an author can reach the first one's baseline after drawing a second */
   occs: { id: number; baseline: number }[]
   occSel: number
   // the outlines already drawn, newest first
   stencils: Stencil[]
-  /* the six numbers describing the body this map is drawn for, and what the map
-   * calls itself. Both ride the status so a panel can render them without
-   * reaching into the document. */
+  /* the six numbers of the body this map is drawn for and what the map calls itself, both riding the status so a panel renders them without reaching into the document */
   walk: WalkCfg
   props: MapProps
   note: string
@@ -259,9 +249,7 @@ export interface AssetPatch {
   group?: string
 }
 
-/* The clipboard lives at module scope on purpose: a copy has to survive
- * switching scenes inside one session, so it can not hang off an Editor
- * instance or off the document that gets replaced with the painting. */
+/* the clipboard is module scope so a copy survives switching scenes, which means it cannot hang off an Editor instance or off the document the painting replaces */
 let clipboard: PlacedAsset[] = []
 
 const clamp = (v: number, a: number, b: number) => Math.max(a, Math.min(b, v))
@@ -275,9 +263,7 @@ export const groupFor = (name: string): string => {
   return 'props'
 }
 
-// A manual placement's starting scale. Large art (a reopened bundle can
-// carry some) starts at quarter size; a generated 96px asset starts at 0.4
-// so it does not vanish. [ and ] take it from there.
+// a manual placement's starting scale: art 120px or taller starts at 0.25 and a generated 96px asset at 0.4 so it does not vanish, then [ and ] take it from there
 const defaultScale = (it: LibItem): number => (it.h >= 120 ? 0.25 : 0.4)
 
 /* THE OVERLAY COLOURS FOR ROUTES AND SHOTS, their own two: the chrome already spends iris on anchors, green on the spawn, yellow on the mask polygon, purple on occluders and magenta on the cut, so a route in any of those reads as one of those. */
@@ -302,9 +288,7 @@ const STAND_INK = '#6fd08c'
 /* WHAT EVERY MARK ON THE ANCHOR OVERLAY IS CASED IN, and the reason the overlay can be on over a finished painting at all. Measured on the hub at 3x: a one-pixel dashed outline in a mid-tone hue over pixel art of that tone is not faint, it is gone. A darker stroke underneath separates the mark from whatever it lies on, the same job the caption plate does for text. */
 const CASE_INK = 'rgba(14,19,25,0.66)'
 
-/* THE EIGHT HEADINGS AS DIRECTIONS ON THE PAINTING, for drawing the facing
- * arrow. dirFrom in walk.ts turns a direction into one of these words; this is
- * the trip back, and it is only ever used to draw. */
+/* the eight headings as vectors on the painting, the trip back from dirFrom in walk.ts, used only to draw the facing arrow */
 const FACE_VEC: Record<string, [number, number]> = {
   north: [0, -1],
   'north-east': [0.7071, -0.7071],
@@ -344,23 +328,9 @@ function legsOf(p: MapPath): [Pt, Pt][] {
   return out
 }
 
-/* WHICH PLACEMENTS BELONG TO A LIBRARY ITEM. Two plain functions, at module
- * level and exported, because this rule has now broken animation twice and a
- * rule that can only be exercised by opening a map with a canvas in front of it
- * is a rule nobody checks. They take shapes rather than the real types so the
- * pair can be lifted out and run on their own.
- *
- * The hard case is a still that has become an animation. It is the same thing
- * under the same name, but it has moved from `library/palm.png` to
- * `library/palm/0.png`, so a url match alone misses every placement of it. They
- * then keep pointing at a png that is deleted moments later: nothing is drawn,
- * and a reload does not help because the dead url is what was saved. */
-/* WHERE A PLACEMENT SITS IN THE DRAW ORDER. Every surface that draws a map has to answer this
- * the same way: the editor, the three previews on the site, and the game. It is y plus the
- * author's nudge, so with no nudge it is exactly the y-sort every published map already has.
- */
-/* DO TWO DRAWN BOXES SHARE ANY PIXELS. Touching edges do not count: two barrels standing flush
- * are not covering each other and reordering them changes nothing anybody can see. */
+/* which placements belong to a library item, exported and typed by shape so the rule runs without a canvas: a still that becomes an animation moves from `library/palm.png` to `library/palm/0.png`, so a url match alone misses every placement and leaves it pointing at a deleted png a reload cannot fix */
+/* where a placement sits in the draw order, y plus the author's nudge, so with no nudge it is the plain y-sort; the editor, the site previews and the game all answer this the same way */
+/* do two drawn boxes share any pixels, touching edges not counting, because two barrels standing flush are not covering each other */
 export function boxesOverlap(
   a: { x0: number; x1: number; y0: number; y1: number },
   b: { x0: number; x1: number; y0: number; y1: number },
@@ -368,14 +338,7 @@ export function boxesOverlap(
   return a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0
 }
 
-/* HOW FAR THE NUDGE HAS TO MOVE to clear everything the selection covers, or nothing when it is
- * already clear. Out here because the arithmetic is the whole feature and the rest of order() is
- * reading boxes off a canvas: the one part worth being sure about should not need a browser.
- *
- * The step lands one past the far end of what it overlaps, so a single press clears the thing in
- * the way rather than a fraction of it, and the already-clear case returns null rather than 0,
- * because a press that keeps adding to a bias that is doing nothing is how a placement ends up
- * sorting a thousand deep for no reason. */
+/* how far the nudge has to move to clear everything the selection covers, landing one past the far end so a single press clears the thing in the way, and null rather than 0 when already clear so a press cannot keep adding to a bias that does nothing */
 export function orderDelta(dir: 'front' | 'back', mine: number[], theirs: number[]): number | null {
   if (!mine.length || !theirs.length) return null
   if (dir === 'front') {
@@ -400,15 +363,9 @@ export function itemMatch(item: { kind: string; src?: string; frames?: string[] 
 } {
   const first = item.frames && item.frames[0]
   const key = item.kind === 'animated' ? (first ? first.slice(0, first.lastIndexOf('/') + 1) : '') : item.src || ''
-  // the folder and the still it replaced differ by one slash, so it is derived
-  // rather than guessed at or passed in beside it
+  // the folder and the still it replaced differ by one slash, so it is derived rather than passed in beside it
   const wasStill = item.kind === 'animated' && key ? key.slice(0, -1) + '.png' : ''
-  /* AND THE SAME DERIVATION THE OTHER WAY ROUND, because animating is reversible now: taking
-   * the animation off a thing leaves a still where a folder of frames was, and every placement
-   * of it is holding frame urls under a folder that has just been deleted. Without this the
-   * match found none of them, so they kept those urls, drew nothing, and survived a reload,
-   * which is the same three symptoms animating a still used to have. A trailing slash is what
-   * keeps `palm` off `palm-trimmed`. */
+  /* the same derivation the other way round, because taking an animation off leaves a still where a folder of frames was and every placement still holds urls under a folder just deleted, so without this they draw nothing and survive a reload; the trailing slash keeps `palm` off `palm-trimmed` */
   const wasFolder = item.kind !== 'animated' && key.slice(-4).toLowerCase() === '.png' ? key.slice(0, -4) + '/' : ''
   return { key, wasStill, wasFolder }
 }
@@ -448,21 +405,14 @@ export class Editor {
   note = ''
   noteSeq = 0
   busy = ''
-  // the precomputed colour regions for the accept-propose flow: one label per
-  // pixel, -1 where the painting is transparent, computed off-thread by the app
+  // the precomputed colour regions for accept-propose: one label per pixel, -1 where the painting is transparent, computed off-thread
   regionLabels: Int32Array | null = null
   regionCount = 0
   private hoverRegion = -1
   private regionHL: HTMLCanvasElement | null = null
-  // ---- the assets step: life placed ON the painting -----------------------
-  // assetMode is owned by the workflow (step 5 turns it on); while it is on,
-  // the pointer places, selects and drags placements instead of painting mask
+  // the assets step, life placed on the painting: assetMode is owned by the workflow, and while it is on the pointer places, selects and drags placements instead of painting mask
   assetMode = false
-  /* THE ART AS A REFERENCE ONLY, for painting levels underneath it. What is walkable is decided by
-   * where the things on the map stand, and the levels step draws the bare painting, so the author was
-   * holding the furniture in their head while tracing the floor around it. This draws the placements
-   * faintly and changes nothing else: the pointer still belongs to the mask, because every path that
-   * picks, drags or places a placement is gated on assetMode and this is not that. */
+  /* draws the placements faintly under the levels step so the floor is traced around the furniture instead of from memory, and nothing else changes because every pick, drag and place is gated on assetMode */
   assetGhost = false
   placing: LibItem | null = null
   /* Selection is a SET with an anchor. selAsset is the anchor: the one the inspector shows numbers for. It stays a plain property so every path that sets it keeps working, and the setter collapses the set to that one id. Everything acting on "the selection" reads selIds(), so one thing and forty go down the same road. */
@@ -487,8 +437,7 @@ export class Editor {
   selCount(): number {
     return this.selIds().length
   }
-  /* the picked placements themselves, in the order they are drawn, so an align
-   * or a distribute walks them the way the eye does */
+  /* the picked placements themselves, in the order they are drawn, so an align or a distribute walks them the way the eye does */
   private selAssets(): PlacedAsset[] {
     const s = new Set(this.selIds())
     return this.doc.assets.filter((a) => s.has(a.id) && !this.hiddenGroups.has(a.group))
@@ -500,31 +449,22 @@ export class Editor {
     this.dirty = true
     this.emit()
   }
-  /* the behaviour preview: on by default so a placement that moves is seen
-   * moving, and a clock that can be restarted so a fresh behaviour is judged
-   * from its beginning rather than from wherever the page happened to be */
+  /* the behaviour preview, on by default, with a restartable clock so a fresh behaviour is judged from its beginning rather than from wherever the page was */
   lifePlay = true
   lifeT0 = performance.now() / 1000
-  /* the preview clock, stopped, while an editing gesture has hold of something
-   * that moves. Null the rest of the time. lifeNow says why. */
+  /* the preview clock frozen while an editing gesture holds something that moves, null the rest of the time, and lifeNow says why */
   private lifeHold: number | null = null
   /* Where every moving placement's PICTURE is this frame, keyed by id. A behaviour draws a placement at its anchor plus however far it has walked, so the anchor is not where the picture is. The draw works the offset out once a frame and the picker, handles and outline all read it, so a click lands on the sprite on screen. Asking lifeAt again from the picker would answer for a different instant. */
   private liveAt = new Map<string, LifeAt>()
-  // the clock those offsets were worked out at, and -1 until the first frame
-  // has drawn. A hold stops on THIS reading rather than on the wall clock, so
-  // the offsets the gesture carries on with are the ones it grabbed.
+  // the clock those offsets were worked out at, -1 until the first frame draws; a hold stops on this reading and not the wall clock, so a gesture carries on with the offsets it grabbed
   private liveT = -1
   hiddenGroups = new Set<string>()
-  // groups the sparkle run landed that no one has accepted yet: they render
-  // ghosted until the check keeps them or the x removes them
+  // groups the sparkle run landed that no one has accepted yet: they render ghosted until the check keeps them or the x removes them
   proposedGroups = new Set<string>()
   private assetCache = new Map<string, { img: HTMLImageElement; ok: boolean; failed: boolean }>()
-  // urls whose pixels were rewritten under the same name (an effect saved over
-  // itself): the key stays the clean url so exports never see a query string,
-  // and only the img request carries the tag that gets past the browser cache
+  // urls whose pixels were rewritten under the same name: the key stays the clean url so exports never see a query string, and only the img request carries the tag that gets past the browser cache
   private bustTag = new Map<string, number>()
-  // the crop gesture: which placement, the rectangle being dragged in painting
-  // coordinates, and who to hand the source-pixel rect to
+  // the crop gesture: which placement, the rectangle being dragged in painting coordinates, and who to hand the source-pixel rect to
   private cropSt: {
     id: string
     a: Pt | null
@@ -532,21 +472,16 @@ export class Editor {
     dragging: boolean
     /* WHICH PART OF THE BOX THE POINTER TOOK, and what makes a crop a crop rather than a second selection. '' is what an AREA still does, dragging a fresh rectangle out of nothing; a sprite crop opens with the box round the whole picture and every drag after is one edge of THAT box moving. 'move' slides the window without resizing it. */
     grip: '' | 'move' | 'n' | 's' | 'e' | 'w' | 'nw' | 'ne' | 'se' | 'sw'
-    // where the box and the pointer were when the grip was taken, so a drag is
-    // measured as a delta rather than snapping the edge to the cursor
+    // where the box and the pointer were when the grip was taken, so a drag is measured as a delta rather than snapping the edge to the cursor
     from: { x0: number; y0: number; x1: number; y1: number; px: number; py: number } | null
     cb: (r: { x: number; y: number; w: number; h: number } | null) => void
   } | null = null
-  // the panel hands this over so a double click on a placement can open the
-  // crop box itself, the way a slide editor does
+  // the panel hands this over so a double click on a placement can open the crop box itself, the way a slide editor does
   cropReq: (() => void) | null = null
-  // ctrl+p and ctrl+t: the panel owns the pixels, so the editor only says
-  // which placements were picked when the keys were pressed
+  // ctrl+p and ctrl+t: the panel owns the pixels, so the editor only says which placements were picked when the keys were pressed
   bitifyReq: ((ids: string[]) => void) | null = null
   trimReq: ((ids: string[]) => void) | null = null
-  /* the rubber band: dragged from empty painting, it picks up everything it
-   * touches. base is what was already selected when the drag began, so holding
-   * shift adds a second sweep to a first one instead of replacing it. */
+  /* the rubber band picks up everything it touches, and base is what was already selected when the drag began, so shift adds a second sweep to the first instead of replacing it */
   private bandSt: { a: Pt; b: Pt; base: string[]; add: boolean } | null = null
   // one live gesture on the selected placement: moving, scaling from a corner, stretching one axis from an edge, or rotating from the floating handle. The snapshot lands on the first real move, so a bare click never pushes an identical state onto the undo stack.
   private dragAsset: {
@@ -562,8 +497,7 @@ export class Editor {
     rot0: number // rotate: rotation at start
     a0: number // rotate: pointer angle at start
     edge: 'top' | 'bottom' | 'left' | 'right'
-    // every picked placement's position at gesture start, so a move carries
-    // the whole set and a group scale/rotate has something to work from
+    // every picked placement's position at gesture start, so a move carries the whole set and a group scale or rotate has something to work from
     many?: { id: string; x: number; y: number; sx?: number; sy?: number; rot?: number }[]
     // the group's own frame for a many-scale: the box centre and its size
     box?: { cx: number; cy: number; w: number; h: number }
@@ -571,16 +505,13 @@ export class Editor {
   // arrow-key nudges coalesce into one undo step per burst
   private nudgeId = ''
   private nudgeAt = 0
-  // the painting as it was loaded, before any boundary growth: growth always
-  // recomposites from this, so no pixel is ever resampled twice
+  // the painting as it was loaded, before any boundary growth: growth always recomposites from this, so no pixel is ever resampled twice
   private basePainting: HTMLImageElement | HTMLCanvasElement | null = null
 
   private canvas: HTMLCanvasElement | null = null
   private g: CanvasRenderingContext2D | null = null
   private painting: HTMLImageElement | HTMLCanvasElement | null = null
-  /* WHERE THE PICTURE ACTUALLY IS inside the document, in painting pixels.
-   * Worked out once per painting and kept, because a full alpha scan of 688x640
-   * is not something to do sixty times a second. null means not scanned yet. */
+  /* where the picture actually is inside the document, in painting pixels, scanned once per painting because a full alpha scan of 688x640 cannot run sixty times a second; null means not scanned yet */
   private paintBox: { x0: number; y0: number; x1: number; y1: number } | null = null
   private z = 3
   private ox = 0
@@ -600,9 +531,7 @@ export class Editor {
   private natHits: HTMLCanvasElement | null = null
   private pix: Uint8ClampedArray | null = null
   private cutApplied: HTMLCanvasElement | null = null
-  /* which occluder the baseline field is about. 0 means whichever was drawn
-   * last, which is the right answer the moment after you draw one and the wrong
-   * one from then on, which is the whole bug. */
+  /* which occluder the baseline field is about: 0 means whichever was drawn last, right the moment after drawing one and wrong from then on */
   private occSel = 0
   private plates: { cv: HTMLCanvasElement; baseline: number }[] | null = null
   private dirtyMask = true
@@ -611,12 +540,9 @@ export class Editor {
   private last = 0
   private saveT = 0
   private changed = false
-  // loadPainting replaces this.doc and then awaits a restore. Without this the
-  // autosave beat can fire inside that gap and write the empty replacement over
-  // a good save, which is a way to lose a map by opening another one.
+  // loadPainting replaces this.doc then awaits a restore, and without this flag the autosave beat fires inside that gap and writes the empty replacement over a good save
   private loading = false
-  // set once a disk save has failed, so the failure is said once and not every
-  // four seconds forever
+  // set once a disk save has failed, so the failure is said once and not every four seconds forever
   private diskWarned = false
   private listener: ((s: EditorStatus) => void) | null = null
   private detachers: (() => void)[] = []
@@ -646,11 +572,9 @@ export class Editor {
       this.cursor = null
       this.dirty = true
     })
-    // double click means "work on this one": on a placed asset it opens the
-    // crop box the way a slide editor does, everywhere else it closes a polygon
+    // double click means work on this one: on a placed asset it opens the crop box, everywhere else it closes a polygon
     on(canvas, 'dblclick', (e) => {
-      /* a double click keeps the route, and the second press of it has already
-       * dropped a waypoint on top of the first, so that one comes back off */
+      /* a double click keeps the route, and its second press has already dropped a waypoint on top of the first, so that one comes back off */
       if (this.newPath) {
         e.preventDefault()
         const n = this.newPath.length
@@ -671,9 +595,7 @@ export class Editor {
     })
     on(canvas, 'contextmenu', (e) => e.preventDefault())
     on(canvas, 'wheel', (e) => this.onWheel(e as WheelEvent), { passive: false })
-    // a handle on the live editor while running from vite, so a gesture can be
-    // checked from the console instead of guessed at. Never in a build: vite
-    // rewrites this to false and the line is dropped.
+    // a handle on the live editor under the dev server so a gesture can be checked from the console, never in a build where the flag is rewritten to false and the line is dropped
     if ((import.meta as unknown as { env?: { DEV?: boolean } }).env?.DEV)
       (window as unknown as { __ed: unknown }).__ed = this
     on(window, 'keydown', (e) => this.onKey(e as KeyboardEvent, true))
@@ -682,8 +604,7 @@ export class Editor {
       this.keys = {}
     })
 
-    // the scripting surface, the way tools/maskdraw exposed window.__md: the
-    // console can drive every command the buttons drive
+    // the scripting surface: the console can drive every command the buttons drive
     ;(globalThis as unknown as { mapvis: Editor }).mapvis = this
 
     this.resize()
@@ -746,8 +667,7 @@ export class Editor {
       regions: this.regionCount,
       assets: this.doc.assets,
       assetSel: this.selAsset,
-      // every picked id, so the panel can show the many-at-once row and know
-      // when the single-asset inspector is the wrong thing to put on screen
+      // every picked id, so the panel can show the many-at-once row and know when the single-asset inspector is the wrong thing to put on screen
       assetSelAll: this.selIds(),
       placing: this.placing ? this.placing.name : '',
       hiddenGroups: [...this.hiddenGroups],
@@ -775,9 +695,7 @@ export class Editor {
       variantGaps: this.variantSel ? this.variantGaps(this.variantSel) : [],
       groups: this.doc.groups,
       cropping: !!this.cropSt,
-      // which of the two it is, so the hint on screen can say the right thing.
-      // They are one state and two gestures: a crop takes an existing box in,
-      // an area is dragged out of nothing.
+      // which of the two gestures this is, so the hint on screen reads right: a crop takes an existing box in, an area is dragged out of nothing
       cropKind: this.cropSt ? (this.cropSt.id ? 'crop' : 'area') : '',
       lifePlay: this.lifePlay,
       assetGhost: this.assetGhost,
@@ -804,8 +722,7 @@ export class Editor {
     this.basePainting = img
     this.sceneId = id
     this.doc = new MaskDoc(img.naturalWidth, img.naturalHeight)
-    // the replacement is empty and the restore below is async, so the autosave
-    // beat has to be held off until this doc is the real one
+    // the replacement is empty and the restore below is async, so the autosave beat has to be held off until this doc is the real one
     this.loading = true
     this.changed = false
     this.diskWarned = false
@@ -825,9 +742,7 @@ export class Editor {
     this.selAsset = ''
     this.dragAsset = null
     this.nudgeId = ''
-    // a half-drawn route or area belongs to the map it was being drawn on, and
-    // so do both selections: carrying an id into another document points at
-    // whatever happens to hold that number over there
+    // a half-drawn route or area belongs to the map it was being drawn on, and so do both selections: carrying an id into another document points at whatever happens to hold that number over there
     this.newPath = null
     this.newPoly = null
     this.pathSel = 0
@@ -853,14 +768,7 @@ export class Editor {
     } finally {
       this.loading = false
     }
-    /* AND THE PAINTING ITSELF HAS TO REACH THE STORE. `saveScene` had exactly one
-     * caller, `pick()`, which runs only when a candidate generated inside MAPVIS is
-     * chosen. A dropped file and a `?img=` open both land here and neither uploaded
-     * anything, so a map's painting lived in one browser tab while its cut and its
-     * levels autosaved to postgres every four seconds. The dashboard then said "no
-     * painting yet" and reopening by id found nothing, on a map whose work was
-     * perfectly safe. `?img=` is the opening MAPS.md documents, so the documented
-     * road was the one that lost the picture. */
+    /* the painting itself has to reach the store here: `saveScene` ran only from `pick()`, so a dropped file or a `?img=` open left the picture in one browser tab while the cut and the levels autosaved, and reopening by id found nothing */
     void this.keepPainting()
     this.fit()
     this.dirtyMask = true
@@ -868,10 +776,7 @@ export class Editor {
     this.emit()
   }
 
-  /* Put this painting in the store when the store has none. It can only ever FILL a
-   * gap: a map that already has one is left alone, so reopening an id with a
-   * different picture cannot overwrite what is there. That is why the HEAD comes
-   * first instead of writing unconditionally. */
+  /* puts this painting in the store only when the store has none, which is why the HEAD comes first: reopening an id with a different picture must not overwrite what is already there */
   private async keepPainting() {
     const id = this.sceneId
     if (!id) return
@@ -886,8 +791,7 @@ export class Editor {
     try {
       await saveScene(id, url)
     } catch (e) {
-      /* said out loud, once, because a painting that never reached the store is the
-       * difference between a map that reopens and one that looks empty */
+      /* said out loud once, because a painting that never reached the store is the difference between a map that reopens and one that looks empty */
       this.say('painting not saved: ' + (e instanceof Error ? e.message : String(e)))
     }
   }
@@ -952,15 +856,13 @@ export class Editor {
       Math.floor((e.clientY - r.top - this.oy) / this.z),
     ]
   }
-  // the unfloored native point, for transform gestures where a whole pixel of
-  // slack would make a rotation handle stutter
+  // the unfloored native point, for transform gestures where a whole pixel of slack would make a rotation handle stutter
   private toNativeF(e: PointerEvent): Pt {
     const r = (this.canvas as HTMLCanvasElement).getBoundingClientRect()
     return [(e.clientX - r.left - this.ox) / this.z, (e.clientY - r.top - this.oy) / this.z]
   }
 
-  // a synthesised pointer has no id the browser will capture, and scripts use
-  // synthesised pointers
+  // a synthesised pointer has no id the browser will capture, and scripts use synthesised pointers
   private capture(e: PointerEvent) {
     try {
       ;(this.canvas as HTMLCanvasElement).setPointerCapture(e.pointerId)
@@ -1084,8 +986,7 @@ export class Editor {
     }
     const erase = e.shiftKey || e.button === 2 || this.tool === 'eraser'
     if (this.tool === 'region') {
-      // accept-propose: left assigns the active level to the hovered colour
-      // region, right (or shift) clears it back to blocked
+      // accept-propose: left assigns the active level to the hovered colour region, right or shift clears it back to blocked
       if (!this.regionLabels) {
         this.say('regions still loading')
         return
@@ -1145,8 +1046,7 @@ export class Editor {
       this.dirty = true
       return
     }
-    // a door being dragged. It says whether the ground under it can be stood
-    // on as it goes, so a door is never left somewhere the game cannot fire it.
+    // a door being dragged reports whether the ground under it can be stood on as it goes, so it is never left somewhere the game cannot fire it
     if (this.dragEvent) {
       const [x, y] = this.toNative(e)
       const ev = this.doc.events.find((v) => v.id === this.dragEvent!.id)
@@ -1166,9 +1066,7 @@ export class Editor {
       }
       return
     }
-    // a corner of a drawn area being pulled. The shape is corrected in place
-    // rather than redrawn from scratch, which is the whole reason the handles
-    // are draggable: one corner in the water should not cost the other eleven.
+    // a corner of a drawn area being pulled: the shape is corrected in place rather than redrawn, because one corner in the water should not cost the other eleven
     if (this.dragRing) {
       const [x, y] = this.toNative(e)
       const ev = this.doc.events.find((v) => v.id === this.dragRing!.id)
@@ -1203,9 +1101,7 @@ export class Editor {
           if (!c.grip || !c.from) c.b = p
           else this.cropDrag(c, p)
         } else if (c.id && c.a && c.b) {
-          /* the pointer says what a press would do before it is pressed, which
-           * is most of what makes handles feel like handles rather than like
-           * eight squares somebody drew */
+          /* the cursor says what a press would do before it is pressed, which is most of what makes handles feel like handles */
           const p = this.cropPt(e)
           const gx0 = Math.min(c.a[0], c.b[0])
           const gy0 = Math.min(c.a[1], c.b[1])
@@ -1230,8 +1126,7 @@ export class Editor {
         this.emit()
         return
       }
-      // the band lives inside the asset block: this whole branch returns before
-      // the tail of onMove, so a band updated down there never moved at all
+      // the band lives inside the asset block because this whole branch returns before the tail of onMove, so a band updated down there never moved at all
       if (this.bandSt) {
         this.bandSt.b = this.toNativeF(e)
         this.lastPx = [x, y]
@@ -1243,8 +1138,7 @@ export class Editor {
         const d = this.dragAsset
         const a = this.doc.assets.find((q) => q.id === d.id)
         if (a) {
-          // the snapshot happens at the first real move, so a bare select
-          // click never pushes an identical state onto the undo stack
+          // the snapshot happens at the first real move, so a bare select click never pushes an identical state onto the undo stack
           if (!d.moved) {
             this.doc.snap()
             d.moved = true
@@ -1254,8 +1148,7 @@ export class Editor {
             const nx = clamp(Math.round(fx + d.dx), 0, this.doc.W - 1)
             const ny = clamp(Math.round(fy + d.dy), 0, this.doc.H - 1)
             if (d.many && d.many.length > 1) {
-              // the whole picked set rides the same delta, measured off the one
-              // under the pointer, so their spacing survives the move
+              // the whole picked set rides the same delta, measured off the one under the pointer, so their spacing survives the move
               const start = d.many.find((m) => m.id === a.id)
               const ddx = nx - (start ? start.x : a.x)
               const ddy = ny - (start ? start.y : a.y)
@@ -1289,8 +1182,7 @@ export class Editor {
           } else {
             const [ux, uy] = this.rotFrame(a, fx, fy)
             if (d.mode === 'scale') {
-              // corner: uniform, the factor is how far the pointer pulled
-              // from the feet anchor relative to where it grabbed
+              // corner scaling is uniform, the factor being how far the pointer pulled from the feet anchor relative to where it grabbed
               const f = Math.hypot(ux, uy) / d.d0
               a.sx = clamp(+(d.sx0 * f).toFixed(3), 0.02, 8)
               a.sy = clamp(+(d.sy0 * f).toFixed(3), 0.02, 8)
@@ -1299,8 +1191,7 @@ export class Editor {
             } else if (d.edge === 'top') {
               a.sy = clamp(+((d.sy0 * Math.abs(uy)) / d.u0).toFixed(3), 0.02, 8)
             } else {
-              // the bottom edge sits ON the feet anchor, so its stretch is
-              // delta-driven: dragging away from the body grows
+              // the bottom edge sits on the feet anchor, so its stretch is delta driven and dragging away from the body grows it
               const ref = Math.max(this.assetNat(a).h * d.sy0, 1e-3)
               const g = (a.fy ? -uy : uy) / ref
               a.sy = clamp(+(d.sy0 * (1 + g)).toFixed(3), 0.02, 8)
@@ -1500,8 +1391,7 @@ export class Editor {
         return
       }
     }
-    // the crop rectangle owns the keyboard while it is up: enter takes it, esc
-    // drops it, and nothing else (space would start the walk test under it)
+    // the crop rectangle owns the keyboard while it is up: enter takes it, esc drops it and nothing else, because space would start the walk test under it
     if (this.cropSt) {
       e.preventDefault()
       if (e.key === 'Enter') this.commitCrop()
@@ -1510,9 +1400,7 @@ export class Editor {
     }
     if (k === ' ') {
       e.preventDefault()
-      // space is the one key that means "the same thing the game means": start
-      // walking, and once walking, hop. Esc is how you get back out, so space
-      // never has to do double duty as an exit.
+      // space means what the game means, start walking and then hop, and esc is the way out so space never doubles as an exit
       if (this.walking) this.walker.jump()
       else this.toggleWalk()
       return
@@ -1526,11 +1414,9 @@ export class Editor {
       e.preventDefault()
       return
     }
-    // the asset step's own keys: scale, nudge, delete, stop placing. Everything
-    // else falls through, so a tool key still pulls the workflow to its home step.
+    // the asset step's own keys: scale, nudge, delete, stop placing; everything else falls through so a tool key still pulls the workflow to its home step
     if (this.assetMode) {
-      // copy, paste, duplicate. Checked before the tool letters, or ctrl+c
-      // would swap to the cut brush on its way past.
+      // copy, paste and duplicate, checked before the tool letters or ctrl+c would swap to the cut brush on its way past
       if (e.ctrlKey || e.metaKey) {
         if (k === 'c') {
           e.preventDefault()
@@ -1548,8 +1434,7 @@ export class Editor {
           return
         }
         if (k === 'p' || k === 't') {
-          // the browser owns both of these by default (print, new tab), and
-          // both have to be taken off it before the panel sees them
+          // the browser owns print and new tab by default, and both have to be taken off it before the panel sees them
           e.preventDefault()
           const ids = this.selIds()
           const req = k === 'p' ? this.bitifyReq : this.trimReq
@@ -1608,8 +1493,7 @@ export class Editor {
         return
       }
     }
-    // a browser shortcut never changes a tool on its way past; ctrl+z still
-    // reaches the undo below, so both undo keys work
+    // a browser shortcut never changes a tool on its way past, and ctrl+z still reaches the undo below so both undo keys work
     if ((e.ctrlKey || e.metaKey) && k !== 'z') return
     const p = PAL.find((q) => q.key === e.key)
     if (p) {
@@ -1695,9 +1579,7 @@ export class Editor {
     this.plates = null
     this.touched()
   }
-  /* which occluder the baseline field and the delete button are about. The last
-   * one drawn until somebody picks another, which is what the tool already did
-   * and is right the moment after you draw one. */
+  /* which occluder the baseline field and the delete button are about: the last one drawn until somebody picks another */
   selectedOcc(): Occluder | undefined {
     return this.doc.occs.find((o) => o.id === this.occSel) || this.doc.occs[this.doc.occs.length - 1]
   }
@@ -1706,9 +1588,7 @@ export class Editor {
     this.dirty = true
     this.emit()
   }
-  /* An occluder deleted properly: the id comes out of the list AND its pixels
-   * come out of the plane, or the plane keeps painting a shape nothing has a
-   * baseline for and the export ships it. One undo step for both. */
+  /* an occluder deleted properly: the id leaves the list and its pixels leave the plane, or the plane keeps painting a shape nothing has a baseline for and the export ships it, in one undo step */
   deleteOcc(id: number) {
     const i = this.doc.occs.findIndex((o) => o.id === id)
     if (i < 0) return
@@ -1741,9 +1621,7 @@ export class Editor {
     this.touched()
   }
 
-  /* THE OUTLINE, KEPT ON THE WAY OUT. An author traces one shape for the level,
-   * the same shape again for the cut and a third time for the occluder, because
-   * closePoly rasterized and cleared and nothing ever stored the points. */
+  /* the outline is kept on the way out, because closePoly rasterized and cleared and nothing stored the points, so one shape was traced again for the cut and a third time for the occluder */
   private keepStencil(pts: [number, number][]) {
     if (pts.length < 3) return
     this.doc.stencils.unshift({ id: this.doc.stencilNext++, pts: pts.map(([x, y]) => [x, y] as [number, number]) })
@@ -1797,9 +1675,7 @@ export class Editor {
     if (!this.regionLabels || !this.doc.inB(x, y)) return -1
     return this.regionLabels[this.doc.idx(x, y)]
   }
-  // assign one region to one level value. Cut pixels and original
-  // transparency never take a level: the sea is not ground. One snapshot, so
-  // one undo takes the whole region back.
+  // assign one region to one level value: cut pixels and original transparency never take a level because the sea is not ground, and one snapshot takes the whole region back
   applyRegion(id: number, v: number): number {
     const L = this.regionLabels
     if (!L || !this.pix) return 0
@@ -1820,8 +1696,7 @@ export class Editor {
     this.touched()
     return n
   }
-  // the hovered region, baked once per hover change: a faint fill and a
-  // marching-ants edge in alternating black and white, readable on any art
+  // the hovered region, baked once per hover change: a faint fill and a marching-ants edge in alternating black and white, readable on any art
   private bakeRegionHL() {
     if (this.hoverRegion < 0 || !this.regionLabels) {
       this.regionHL = null
@@ -1887,8 +1762,7 @@ export class Editor {
     this.dirty = true
     cb(null)
   }
-  // is there art under this point once the cut is applied? A generate-here
-  // click only counts where the map actually is.
+  // is there art under this point once the cut is applied, since a generate-here click only counts where the map actually is
   opaqueAt(x: number, y: number): boolean {
     if (!this.pix || !this.doc.inB(x, y)) return false
     const i = this.doc.idx(x, y)
@@ -1943,8 +1817,7 @@ export class Editor {
     this.emit()
   }
   private assetDown(e: PointerEvent, x: number, y: number) {
-    // the crop rectangle owns the pointer while it is up: left drags the box,
-    // right backs out without touching anything
+    // the crop rectangle owns the pointer while it is up: left drags the box, right backs out without touching anything
     if (this.cropSt) {
       if (e.button === 2) {
         this.cancelCrop()
@@ -1992,8 +1865,7 @@ export class Editor {
       return
     }
     const [fx, fy] = this.toNativeF(e)
-    // a group frame's corner grips come before anything under them: they sit
-    // out at the bounds where a stray placement might also be
+    // a group frame's corner grips come before anything under them, because they sit out at the bounds where a stray placement might also be
     const gb = this.groupBox()
     if (gb) {
       const r = 5 / Math.max(1, this.z)
@@ -2007,8 +1879,7 @@ export class Editor {
             dy: 0,
             sx0: 1,
             sy0: 1,
-            // how far the grabbed corner is from the far corner: the group
-            // scales by how that distance changes
+            // how far the grabbed corner is from the far corner: the group scales by how that distance changes
             d0: Math.max(Math.hypot(fx - (gb.cx - (h.x - gb.cx)), fy - (gb.cy - (h.y - gb.cy))), 1e-3),
             u0: 1,
             rot0: 0,
@@ -2031,9 +1902,7 @@ export class Editor {
         const h = this.hitHandle(a, fx, fy)
         if (h) {
           const [ux, uy] = this.rotFrame(a, fx, fy)
-          // the turn is measured about the DRAWN feet, which is the pixel the
-          // sprite pivots on: measuring it about the anchor of something that
-          // has wandered off would swing the box round a point on empty ground
+          // the turn is measured about the drawn feet, the pixel the sprite pivots on, because measuring it about the anchor of something that has wandered off swings the box round a point on empty ground
           const [ax, ay] = this.assetOrigin(a)
           const d: NonNullable<typeof this.dragAsset> = {
             id: a.id,
@@ -2064,8 +1933,7 @@ export class Editor {
     if (hit) {
       const cur = this.selIds()
       if (extend) {
-        // shift on something already picked drops it back out, which is how
-        // you fix a band that swept up one thing too many
+        // shift on something already picked drops it back out, which is how you fix a band that swept up one thing too many
         if (cur.includes(hit.id)) {
           const left = cur.filter((i) => i !== hit.id)
           this.setSel(left)
@@ -2075,9 +1943,7 @@ export class Editor {
         this.setSel([hit.id, ...cur])
         this.say(`${cur.length + 1} picked`)
       } else if (!cur.includes(hit.id)) {
-        // a plain click on something outside the selection starts fresh; a
-        // plain click on something INSIDE it keeps the set, so dragging a
-        // group by one of its members moves the group
+        // a plain click outside the selection starts fresh and a plain click inside it keeps the set, so dragging a group by one of its members moves the group
         this.selAsset = hit.id
       } else {
         this._selAsset = hit.id
@@ -2100,17 +1966,14 @@ export class Editor {
       }
       this.capture(e)
     } else {
-      // empty painting: start the band. The selection is not cleared yet. A
-      // click that turns out to be a click and not a drag clears it on the way
-      // up, so a band that starts over nothing does not flash the panel empty.
+      // empty painting starts the band without clearing the selection yet: a click that turns out not to be a drag clears it on the way up, so a band starting over nothing does not flash the panel empty
       this.bandSt = { a: [fx, fy], b: [fx, fy], base: extend ? this.selIds() : [], add: extend }
       this.capture(e)
     }
     this.dirty = true
     this.emit()
   }
-  /* everything the band touches. Slide editors select on TOUCH rather than on
-   * full containment, so a sweep that clips a palm's fronds takes the palm. */
+  /* everything the band touches, selecting on touch rather than on full containment, so a sweep that clips a palm's fronds takes the palm */
   private bandHits(): string[] {
     const b = this.bandSt
     if (!b) return []
@@ -2160,9 +2023,7 @@ export class Editor {
     } else {
       a.src = it.src
     }
-    // a set of VIEWS rides onto the placement whole. Without this the placement
-    // knew only the one view its src pointed at, so it could not face where it
-    // walked and could not even be looked up by name.
+    // a set of views rides onto the placement whole, because with only the one view its src pointed at a placement could not face where it walked or be looked up by name
     if (it.dirs && Object.keys(it.dirs).length) a.dirs = { ...it.dirs }
     this.doc.assets.push(a)
     this.selAsset = a.id
@@ -2182,9 +2043,7 @@ export class Editor {
     const L = this.liveAt.get(a.id)
     return [a.x + (L ? L.dx : 0), a.y + (L ? L.dy : 0)]
   }
-  /* live=false asks for the placement's own geometry with wherever its behaviour
-   * has walked to left out: what a crop or an align works on is the thing, not
-   * the moment. */
+  /* live=false asks for the placement's own geometry with wherever its behaviour has walked to left out, because a crop or an align works on the thing and not on the moment */
   private assetPt(a: PlacedAsset, lx: number, ly: number, live = true): Pt {
     const L = live ? this.liveAt.get(a.id) : undefined
     const px = lx * a.sx * (a.fx ? -1 : 1)
@@ -2194,8 +2053,7 @@ export class Editor {
     const s = Math.sin(rot)
     return [a.x + (L ? L.dx : 0) + px * c - py * s, a.y + (L ? L.dy : 0) + px * s + py * c]
   }
-  // painting point into the asset's rotated (but unscaled) frame around the
-  // drawn feet, so the pointer is measured against the sprite it is over
+  // painting point into the asset's rotated but unscaled frame around the drawn feet, so the pointer is measured against the sprite it is over
   private rotFrame(a: PlacedAsset, x: number, y: number): Pt {
     const L = this.liveAt.get(a.id)
     const dx = x - (a.x + (L ? L.dx : 0))
@@ -2224,9 +2082,7 @@ export class Editor {
     const list = this.assetsSorted()
     for (let i = list.length - 1; i >= 0; i--) {
       const a = list[i]
-      // a pass that has faded right out is not on screen, and the draw skipped
-      // it: a click goes through to whatever is behind, which is what the eye
-      // expects of something it cannot see
+      // a pass that has faded right out is not drawn, so a click goes through to whatever is behind it, which is what the eye expects of something it cannot see
       const L = this.liveAt.get(a.id)
       if (L && L.alpha <= 0.01) continue
       const { w, h } = this.assetNat(a)
@@ -2235,8 +2091,7 @@ export class Editor {
     }
     return null
   }
-  // which transform handle of the selected asset sits under the pointer.
-  // Screen-space tolerance, so a handle is as grabbable at 1x as at 8x.
+  // which transform handle of the selected asset sits under the pointer, with screen-space tolerance so a handle is as grabbable at 1x as at 8x
   private hitHandle(
     a: PlacedAsset,
     x: number,
@@ -2292,8 +2147,7 @@ export class Editor {
     this.touched()
     this.say(`removed ${assetLabel(a)} · z undoes`)
   }
-  /* everything picked, in ONE undo step: forty deletes that each snapshot would
-   * take forty presses of z to walk back */
+  /* everything picked in one undo step, because forty deletes that each snapshot would take forty presses of z to walk back */
   deleteSelected() {
     const ids = new Set(this.selIds())
     if (!ids.size) return
@@ -2313,9 +2167,7 @@ export class Editor {
     let y0 = Infinity
     let x1 = -Infinity
     let y1 = -Infinity
-    /* Where a behaviour has walked to is deliberately left out: aligning a crowd
-     * off the pixel each figure happened to be standing on this frame would drag
-     * their anchors to wherever the clock had them. */
+    /* where a behaviour has walked to is deliberately left out, or aligning a crowd would drag every anchor to wherever the clock had it this frame */
     for (const [px, py] of this.assetCorners(a, false)) {
       x0 = Math.min(x0, px)
       y0 = Math.min(y0, py)
@@ -2332,9 +2184,7 @@ export class Editor {
   private bodyR(a: PlacedAsset) {
     return bodyRadius(this.bodyW(a))
   }
-  /* the ink width of one loaded picture, read once and kept against that very
-   * Image. An in-place edit builds a new Image for the rewritten png, so it is
-   * measured again without anything having to remember to invalidate this. */
+  /* the ink width of one loaded picture, read once and kept against that very Image, so an in-place edit that builds a new Image is measured again with nothing having to invalidate this */
   private inkCache = new Map<HTMLImageElement, number>()
   private inkOf(img: HTMLImageElement) {
     const hit = this.inkCache.get(img)
@@ -2348,8 +2198,7 @@ export class Editor {
       g.drawImage(img, 0, 0)
       out = inkWidth(g.getImageData(0, 0, w, h).data, w, h)
     } catch {
-      // a picture that cannot be read back keeps its canvas width, which is
-      // what this measured by before it measured anything better
+      // a picture that cannot be read back keeps its canvas width
     }
     this.inkCache.set(img, out)
     return out
@@ -2428,17 +2277,7 @@ export class Editor {
     this.say(`spaced ${picked.length} evenly`)
   }
   /* Stacking order. The game y-sorts, so what this really moves is the feet: to put something in front you stand it lower down the map. Saying that plainly beats a "bring to front" that silently does nothing once the bundle is exported. */
-  /* IN FRONT OF, OR BEHIND, WHAT IT OVERLAPS. The map is drawn in depth order and depth is
-   * where a thing stands, so the old version of this moved the placement down the map to put
-   * it in front: correct on screen and wrong about the world, because a barrel does not slide
-   * two feet south to sit over a puddle. It nudges the sort key instead, which leaves x and y
-   * exactly where the author put them.
-   *
-   * The step is measured against what this actually COVERS rather than against the whole map,
-   * so one press clears the thing in the way and not every thing on the island. With nothing
-   * overlapping it there is nothing to be in front of, and it says so rather than quietly
-   * writing a number that changes no pixels.
-   */
+  /* in front of or behind what it overlaps, by nudging the sort key and never by moving the placement down the map, since a barrel does not slide south to sit over a puddle; the step is measured against what it covers, so one press clears the thing in the way */
   order(dir: 'front' | 'back') {
     const picked = this.selAssets()
     if (!picked.length) {
@@ -2450,9 +2289,7 @@ export class Editor {
       this.say('nothing else on the map')
       return
     }
-    /* the drawn boxes, live movement left out: a wanderer's depth has to be decided about the
-     * thing itself and not about wherever it happened to have walked to when the button was
-     * pressed, or the same two presses would order it differently each time. */
+    /* the drawn boxes with live movement left out, or a wanderer's depth would be decided by wherever it had walked to when the button was pressed and the same two presses would order it differently each time */
     const box = (a: PlacedAsset) => {
       const c = this.assetCorners(a, false)
       const xs = c.map((p) => p[0])
@@ -2485,8 +2322,7 @@ export class Editor {
         : `behind ${over.length} thing${over.length > 1 ? 's' : ''} it covers · it has not moved`,
     )
   }
-  /* BACK TO SORTING BY WHERE IT STANDS, which is the only state a map has ever been published
-   * in and so the one an author must be able to get back to without guessing at a number. */
+  /* back to sorting by where it stands, the only state a map has ever been published in, so an author can get back to it without guessing at a number */
   orderReset() {
     const picked = this.selAssets()
     if (!picked.length) {
@@ -2567,21 +2403,14 @@ export class Editor {
     this.doc.snap()
     for (const a of list) {
       if (item.kind === 'animated') {
-        /* the kind moves with the frames. Leaving it static keeps the renderer
-         * reading `src`, so the thing stands still on a list of frames it now
-         * carries, which is the half-converted state that reads as "it animated
-         * and then stopped". */
+        /* the kind moves with the frames, or the renderer keeps reading `src` and the thing stands still on a list of frames it now carries, half converted */
         a.kind = 'animated'
         a.frames = item.frames ? item.frames.slice() : []
         a.fps = item.fps || 8
-        // the still it was placed as no longer exists, and a src beside frames
-        // is a second answer to which pixels this is
+        // the still it was placed as no longer exists, and a src beside frames is a second answer to which pixels this is
         if (a.src) delete a.src
       } else {
-        /* AND THE KIND MOVES BACK WITH IT. This set src alone, so a placement that had been
-         * animated stayed kind animated on a frames list whose folder was gone: the renderer
-         * reads frames for an animated placement and never looks at src, so it drew nothing at
-         * all. The mirror of the bug the branch above carries a comment about. */
+        /* the kind moves back with it: setting src alone left a placement kind animated on a frames list whose folder was gone, and the renderer reads frames for an animated placement and never looks at src, so it drew nothing at all */
         a.kind = 'static'
         a.src = item.src
         if (a.frames) delete a.frames
@@ -2590,9 +2419,7 @@ export class Editor {
     this.touched()
     return list.length
   }
-  // ---- the sparkle accept flow ------------------------------------------
-  // a group the sparkle run landed stays ghosted until a human rules on it:
-  // the check keeps it, the x takes the whole group off the island
+  // the sparkle accept flow: a group the run landed stays ghosted until a human rules on it, the check keeping it and the x taking the whole group off the island
   markGroupProposed(group: string) {
     this.proposedGroups.add(group)
     this.dirty = true
@@ -2639,8 +2466,7 @@ export class Editor {
         : `${assetLabel(a)} · scale ${a.sx.toFixed(2)}${a.sy !== a.sx ? '×' + a.sy.toFixed(2) : ''}`,
     )
   }
-  // mirror the picked placements about their own feet anchors; the game renders
-  // the same flip as negative sprite scale
+  // mirror the picked placements about their own feet anchors; the game renders the same flip as negative sprite scale
   flipSelected(axis: 'x' | 'y') {
     const picked = this.selAssets()
     if (!picked.length) {
@@ -2661,17 +2487,14 @@ export class Editor {
         : `${assetLabel(a)} · flip ${axis === 'x' ? 'h' : 'v'} ${on ? 'on' : 'off'}`,
     )
   }
-  // copies of everything picked, and the copies become the selection so a
-  // duplicate can be dragged straight off the originals. offset drops them
-  // beside; ctrl+d asks for them in place, right on top.
+  // copies of everything picked, and the copies become the selection so a duplicate can be dragged straight off the originals; offset drops them beside, ctrl+d asks for them in place
   /* Move a placement, and take its roaming box with it. life.bounds is absolute painting pixels, so anything that moves a placement without shifting them leaves the box behind: the thing walks back to where it was first placed, and a duplicate inherits the original's box, which is a row of walkers pacing one square. Everything that moves a placement goes through here. */
   private moveTo(a: PlacedAsset, nx: number, ny: number) {
     const x = clamp(Math.round(nx), 0, this.doc.W - 1)
     const y = clamp(Math.round(ny), 0, this.doc.H - 1)
     const b = a.life && a.life.bounds
     if (b) {
-      // clamped so a box dragged off the edge keeps its size rather than
-      // collapsing against the border
+      // clamped so a box dragged off the edge keeps its size rather than collapsing against the border
       b.x = clamp(Math.round(b.x + (x - a.x)), 0, Math.max(0, this.doc.W - b.w))
       b.y = clamp(Math.round(b.y + (y - a.y)), 0, Math.max(0, this.doc.H - b.h))
       /* THE BOX MOVED, SO THE NUMBER THAT DESCRIBES IT IS ABOUT SOMEWHERE ELSE. walkPct is the 35% law's input, measured when the box is drawn. Carried verbatim through a drag or a duplicate it describes ground the box no longer covers: 63.2% stored against 20.3% real leaves a figure fenced to a box with almost no floor in it, holding still for a whole leg. It reads on screen as a walking sprite randomly getting stuck, and it is random because it resolves per leg. */
@@ -2697,9 +2520,7 @@ export class Editor {
         frames: a.frames ? a.frames.slice() : undefined,
         x: a.x,
         y: a.y,
-        // the copy gets its own movement, or the pair moves as one thing. The
-        // bounds are cloned rather than shared, because two placements pointing
-        // at one box means dragging either drags both their roaming areas.
+        // the copy gets its own movement, or the pair moves as one thing; the bounds are cloned rather than shared because two placements pointing at one box means dragging either drags both roaming areas
         ...(a.life
           ? {
               life: {
@@ -2709,8 +2530,7 @@ export class Editor {
             }
           : {}),
       }
-      // through moveTo, so the copy's box comes with it instead of being left
-      // on top of the original's and pacing a square it does not stand in
+      // through moveTo, so the copy's box comes with it instead of being left on top of the original's and pacing a square it does not stand in
       if (offset) this.moveTo(b, a.x + 12, a.y + 6)
       this.doc.assets.push(b)
       made.push(b.id)
@@ -2765,8 +2585,7 @@ export class Editor {
         frames: c.frames ? c.frames.slice() : undefined,
         x: c.x,
         y: c.y,
-        // cloned, not shared: two placements pointing at one box means dragging
-        // either drags both their roaming areas
+        // cloned, not shared: two placements pointing at one box means dragging either drags both their roaming areas
         ...(c.life
           ? {
               life: {
@@ -2776,8 +2595,7 @@ export class Editor {
             }
           : {}),
       }
-      // the box travels with the paste, so a walker dropped on the far quay
-      // roams there rather than pacing where it was copied from
+      // the box travels with the paste, so a walker dropped on the far quay roams there rather than pacing where it was copied from
       this.moveTo(b, tx + (c.x - x0), ty + (c.y - y0))
       this.doc.assets.push(b)
       this.hiddenGroups.delete(b.group)
@@ -2788,9 +2606,7 @@ export class Editor {
     this.say(made.length > 1 ? `pasted ${made.length} · z undoes` : `pasted ${assetLabel(clipboard[0])} · z undoes`)
     return true
   }
-  // ---- typed edits -------------------------------------------------------
-  // One call is one undo step, so a number typed into the inspector walks back
-  // exactly like a drag. Every field lands in the same clamps the gestures use.
+  // typed edits: one call is one undo step so a number typed into the inspector walks back exactly like a drag, and every field lands in the same clamps the gestures use
   /* THE BODY, EDITED. One field at a time, each clamped wide enough for a room at character scale and narrow enough that a typo cannot make a map unwalkable. Every one changes what the game does, so each is one undo step and marks the map dirty. */
   setWalk(patch: Partial<WalkCfg>) {
     const w = this.doc.walk
@@ -2812,10 +2628,8 @@ export class Editor {
     return true
   }
 
-  /* WHAT THIS MAP IS, as opposed to what is drawn on it. Every field here
-   * either had no home at all or had one that died before the bundle. */
-  /* null on `paint` clears it, which undefined cannot mean: undefined is "this
-   * patch does not mention it", the same split updateEvent makes. */
+  /* what this map is, as opposed to what is drawn on it; every field here either had no home at all or had one that died before the bundle */
+  /* null on `paint` clears it, which undefined cannot mean, because undefined is this patch not mentioning it, the same split updateEvent makes */
   setProps(patch: Omit<Partial<MapProps>, 'paint'> & { paint?: [number, number, number, number] | null }) {
     const p = this.doc.props
     const next: MapProps = { ...p }
@@ -2853,9 +2667,7 @@ export class Editor {
     return this.setProps({ meta })
   }
 
-  /* A name no other placement on this map has taken. Same suffix walk the
-   * library and the anchors already use, so three copies of one thing read the
-   * way three anchors named the same way already read. */
+  /* a name no other placement on this map has taken, by the same suffix walk the library and the anchors already use */
   freePlacementName(want: string, exceptId = ''): string {
     const base = anchorName(want)
     const taken = new Set(this.doc.assets.filter((a) => a.id !== exceptId && a.name).map((a) => a.name as string))
@@ -2895,9 +2707,7 @@ export class Editor {
     return { ok: true, name: free, why: free !== clean ? `taken · saved as ${free}` : undefined }
   }
 
-  /* Move every binding from one placement key to another. Used by naming and by
-   * clearing a name, so an anchor never quietly stops pointing at the thing an
-   * author can see it is on. */
+  /* move every binding from one placement key to another, used by naming and by clearing a name, so an anchor never quietly stops pointing at the thing an author can see it is on */
   private repointBindings(from: string, to: string) {
     if (from === to) return
     for (const e of this.doc.events) if (e.placement === from) e.placement = to
@@ -2928,8 +2738,7 @@ export class Editor {
     const same = (Object.keys(next) as (keyof AssetPatch)[]).every((k) => a[k] === next[k])
     if (same) return false
     this.doc.snap()
-    // x and y go through moveTo so a typed coordinate carries the roaming box
-    // the same way a drag does. Everything else is a plain field.
+    // x and y go through moveTo so a typed coordinate carries the roaming box the same way a drag does, and everything else is a plain field
     const { x: nx, y: ny, ...rest } = next
     Object.assign(a, rest)
     if (nx !== undefined || ny !== undefined) this.moveTo(a, nx ?? a.x, ny ?? a.y)
@@ -2938,8 +2747,7 @@ export class Editor {
     this.touched()
     return true
   }
-  // point a placement at another library item, keeping it selected. The caller
-  // owns where it lands: a crop passes the anchor that keeps the pixels still.
+  // point a placement at another library item, keeping it selected; the caller owns where it lands, and a crop passes the anchor that keeps the pixels still
   /* MOVE A SET OF PLACEMENTS AS ONE UNDO STEP. Going through editAsset snapshotted once per placement, so nineteen trees meant nineteen entries and z put ONE tree back and left the other eighteen where the crop had moved them: measured 18 of 19 still displaced after a single press. One snapshot before anything moves, the same shape as addPlacements. */
   moveAll(at: Map<string, { x: number; y: number } | null>): number {
     const hits = [...at].filter(([id, p]) => p && this.doc.assets.some((q) => q.id === id))
@@ -2973,8 +2781,7 @@ export class Editor {
     }
     if (item.dirs && Object.keys(item.dirs).length) a.dirs = { ...item.dirs }
     else delete a.dirs
-    // through moveTo like every other move: a crop that shifts the anchor moves
-    // the figure on screen, so its roaming box shifts with it
+    // through moveTo like every other move, so a crop that shifts the anchor moves the figure on screen and its roaming box shifts with it
     if (at) this.moveTo(a, at.x, at.y)
     this.touched()
     return true
@@ -3040,14 +2847,12 @@ export class Editor {
   private liveLife(a: PlacedAsset): Life | null {
     const l = a.life
     if (!l) return null
-    // paused, the preview draws every placement at home wearing its first
-    // picture, so the fence it shows is the placement's own one
+    // paused, the preview draws every placement at home wearing its first picture, so the fence it shows is the placement's own one
     if (!l.states || l.states.length < 2 || !this.lifePlay) return l
     const t = this.lifeNow() + (l.phase || 0)
     return l.states[liveState(l.states, t).k].move || null
   }
-  /* re-roll one placement's movement without asking for a new behaviour: same
-   * kind, same numbers, different life */
+  /* re-roll one placement's movement without asking for a new behaviour: same kind, same numbers, different life */
   shuffleLife(id: string): boolean {
     const a = this.doc.assets.find((q) => q.id === id)
     if (!a || !a.life) return false
@@ -3058,9 +2863,7 @@ export class Editor {
     this.say('reshuffled')
     return true
   }
-  /* Give a placement a way of moving, or take it away. One undo step, and the
-   * preview clock restarts so a fresh behaviour is judged from its beginning
-   * rather than from wherever the page happened to be. */
+  /* give a placement a way of moving or take it away, in one undo step, with the preview clock restarted so a fresh behaviour is judged from its beginning */
   setLife(id: string, life: Life | null, looks?: AssetLook[]) {
     const a = this.doc.assets.find((q) => q.id === id)
     if (!a) return false
@@ -3130,8 +2933,7 @@ export class Editor {
       /* the same pictures for the whole set, each its own copy, under the one snapshot above. Whatever they were switching to before goes, for the reason setLife drops it: a crowd re-lifed with a plain wander keeping its old looks would export pictures no art index can reach. */
       if (looks && looks.length) a.looks = looks.map((l) => ({ ...l }))
       else delete a.looks
-      // the crowd's faces get their names the same way one placement's do, so a
-      // sequence made on twelve figures at once is addressable on all twelve
+      // the crowd's faces get their names the same way one placement's do, so a sequence made on twelve figures at once is addressable on all twelve
       this.nameLooks(a)
     }
     this.restartLife()
@@ -3142,9 +2944,7 @@ export class Editor {
   private lifeNow(): number {
     return this.lifeHold !== null ? this.lifeHold : performance.now() / 1000 - this.lifeT0
   }
-  /* the clock back to the beginning, so a fresh behaviour is judged from its
-   * start rather than from wherever the page happened to be. Any hold goes with
-   * it, or releasing that hold would put the old clock back over the restart. */
+  /* the clock back to the beginning so a fresh behaviour is judged from its start, and any hold goes with it or releasing that hold would put the old clock back over the restart */
   private restartLife() {
     this.lifeT0 = performance.now() / 1000
     this.lifeHold = null
@@ -3161,8 +2961,7 @@ export class Editor {
         : []
     return ids.some((id) => this.doc.assets.some((a) => a.id === id && !!a.life))
   }
-  /* pause the preview: a thing that will not hold still is hard to place, and
-   * hard to judge the LOOK of */
+  /* pause the preview, because a thing that will not hold still is hard to place and hard to judge the look of */
   toggleLifePlay() {
     this.lifePlay = !this.lifePlay
     this.restartLife()
@@ -3206,8 +3005,7 @@ export class Editor {
     if (L && inY) return 'w'
     if (R && inY) return 'e'
     if (px > x0 && px < x1 && py > y0 && py < y1) return 'move'
-    // outside it entirely: nothing moves, rather than the box jumping to meet
-    // a press that was probably meant for something else
+    // outside it entirely: nothing moves, rather than the box jumping to meet a press that was probably meant for something else
     return ''
   }
 
@@ -3224,8 +3022,7 @@ export class Editor {
     const by1 = Math.max(...c4.map((q) => q[1]))
     const dx = p[0] - f.px
     const dy = p[1] - f.py
-    // a pixel of the picture, in painting pixels, as the smallest box worth
-    // keeping. Below this a crop returns nothing anybody can see.
+    // a pixel of the picture, in painting pixels, as the smallest box worth keeping, since below this a crop returns nothing anybody can see
     const min = Math.max(1, (bx1 - bx0) / Math.max(1, this.assetNat(a).w))
     let { x0, y0, x1, y1 } = f
     if (c.grip === 'move') {
@@ -3270,9 +3067,7 @@ export class Editor {
       this.say('click an asset first')
       return false
     }
-    // the whole picture, in painting pixels, as the box to start from. Its own
-    // corners rather than the drawn bounding box, so a turned or flipped
-    // placement opens square on its art instead of on the box around it.
+    // the whole picture in painting pixels as the box to start from, its own corners rather than the drawn bounding box, so a turned or flipped placement opens square on its art
     const c4 = this.assetCorners(a)
     const xs = c4.map((q) => q[0])
     const ys = c4.map((q) => q[1])
@@ -3289,9 +3084,7 @@ export class Editor {
     this.dragAsset = null
     // an armed generate or effect click would eat the drag before it started
     this.cancelPick()
-    // the button that started this keeps focus otherwise, and then enter
-    // re-presses it (which by now reads "cancel crop") instead of taking the
-    // rectangle: the crop looked broken because it cancelled itself
+    // the button that started this keeps focus otherwise, and enter then re-presses it, by now reading cancel crop, so the crop cancelled itself and looked broken
     const act = typeof document !== 'undefined' ? (document.activeElement as HTMLElement | null) : null
     if (act && typeof act.blur === 'function') act.blur()
     this.dirty = true
@@ -3311,8 +3104,7 @@ export class Editor {
   commitCrop() {
     const c = this.cropSt
     if (!c) return
-    // an area box belongs to the painting, so it needs none of the placement
-    // transform maths below: the drag is already in painting pixels
+    // an area box belongs to the painting, so it needs none of the placement transform maths below: the drag is already in painting pixels
     if (!c.id) {
       if (!c.a || !c.b) {
         this.say('drag a box first, or esc to skip it')
@@ -3358,8 +3150,7 @@ export class Editor {
       ly0 = Math.min(ly0, ly)
       ly1 = Math.max(ly1, ly)
     }
-    // local space has the feet anchor at the origin: x in [-w/2, w/2], y in
-    // [-h, 0]. The png's own pixels are that shifted back to its corner.
+    // local space has the feet anchor at the origin, x in [-w/2, w/2] and y in [-h, 0], and the png's own pixels are that shifted back to its corner
     const ix0 = clamp(Math.round(lx0 + w / 2), 0, w)
     const ix1 = clamp(Math.round(lx1 + w / 2), 0, w)
     const iy0 = clamp(Math.round(ly0 + h), 0, h)
@@ -3386,16 +3177,12 @@ export class Editor {
     this.emit()
     c.cb({ x: ix0, y: iy0, w: rw, h: rh })
   }
-  // where the feet anchor has to move so a crop does not jump: the new png's
-  // bottom-centre, expressed in the OLD png's local space, put back through
-  // the placement's transform
+  // where the feet anchor has to move so a crop does not jump: the new png's bottom-centre, expressed in the old png's local space, put back through the placement's transform
   cropAnchor(id: string, r: { x: number; y: number; w: number; h: number }): { x: number; y: number } | null {
     const a = this.doc.assets.find((q) => q.id === id)
     if (!a) return null
     const { w, h } = this.assetNat(a)
-    // the placement's own frame, not the drawn one: this answer BECOMES the
-    // anchor, so folding in how far a behaviour has wandered would bake the
-    // wander into it and shift the thing for good
+    // the placement's own frame, not the drawn one, because this answer becomes the anchor and folding in how far a behaviour has wandered would bake the wander in and shift the thing for good
     const [px, py] = this.assetPt(a, r.x + r.w / 2 - w / 2, r.y + r.h - h, false)
     return { x: Math.round(px), y: Math.round(py) }
   }
@@ -3432,8 +3219,7 @@ export class Editor {
     this.touched()
     return valid.length
   }
-  // the image cache: urls load once, a finished load repaints, a failure
-  // falls back to the placeholder box so a placement can never be invisible
+  // the image cache: urls load once, a finished load repaints, a failure falls back to the placeholder box so a placement can never be invisible
   private assetImg(url: string): HTMLImageElement | null {
     if (!url) return null
     let e = this.assetCache.get(url)
@@ -3458,8 +3244,7 @@ export class Editor {
   private assetFrame(a: PlacedAsset, now: number, facing?: string, art = 0, moving = true): HTMLImageElement | null {
     const L = lookOf(a, art)
     const gait = moving ? now : 0
-    // a thing with views faces where it is walking; the nearest view it
-    // actually has wins, so a four-view import still works
+    // a thing with views faces where it is walking, and the nearest view it actually has wins so a four-view import still works
     if (facing && L.dirs) {
       const set = L.dirs[facing] || L.dirs[NEAREST_DIR[facing] || 'south'] || L.dirs.south
       if (set && set.length) {
@@ -3483,8 +3268,7 @@ export class Editor {
     return L.src ? this.assetImg(L.src) : null
   }
 
-  // the workflow steps own the view: entering a step announces its default
-  // view instead of leaving a toggle behind that could hide a result
+  // the workflow steps own the view: entering a step announces its default view instead of leaving a toggle behind that could hide a result
   setView(v: { cutPreview?: boolean; mask?: boolean }) {
     if (v.cutPreview !== undefined) this.showCutPreview = v.cutPreview
     if (v.mask !== undefined) this.showMask = v.mask
@@ -3500,8 +3284,7 @@ export class Editor {
     this.touched()
     this.say(`cut ${n}px of sea · correct it`)
   }
-  // one landmass rule: every 4-way component of uncut opaque pixels except
-  // the largest joins the cut. One snapshot, one undo.
+  // one landmass rule: every 4-way component of uncut opaque pixels except the largest joins the cut, in one snapshot and one undo
   despeckle() {
     if (!this.pix || !this.painting) return
     this.doc.snap()
@@ -3515,9 +3298,7 @@ export class Editor {
     this.touched()
     this.say(`cut ${r.px}px in ${r.specks} specks`)
   }
-  // one dilation ring per press: the anti-aliased coast fringe is a single
-  // pixel of blended tone, so each press eats exactly one ring and one undo
-  // gives exactly one ring back.
+  // one dilation ring per press, because the anti-aliased coast fringe is a single pixel of blended tone, so each press eats one ring and one undo gives one ring back
   shaveEdge() {
     if (!this.pix || !this.painting) return
     this.doc.snap()
@@ -3548,9 +3329,7 @@ export class Editor {
     }
     return changed
   }
-  // the walker never starts inside a wall: mask edits can move blocked ground under a
-  // stale spawn, so the start point spirals out to the nearest standable pixel, by
-  // the same validated-spawn law the game's scene applies on load
+  // the walker never starts inside a wall: mask edits can move blocked ground under a stale spawn, so the start point spirals out to the nearest standable pixel, by the same validated-spawn law the game applies on load
   private groundNear(p: [number, number]): [number, number] {
     if (canStand(this.doc, this.cfg, p[0], p[1])) return p
     for (let r = 4; r <= 400; r += 4)
@@ -3574,8 +3353,7 @@ export class Editor {
     if (this.walking) this.doc.spawn = [Math.round(this.walker.x), Math.round(this.walker.y)]
     else if (this.cursor) this.doc.spawn = [this.cursor[0], this.cursor[1]]
     this.dirty = true
-    // the autosave, or a refresh eats the spawn: setting it is usually the
-    // LAST act before an export, so nothing after it would ever save
+    // the autosave, or a refresh eats the spawn, because setting it is usually the last act before an export and nothing after it would ever save
     this.touched()
     this.say(`spawn ${this.doc.spawn[0]}, ${this.doc.spawn[1]}`)
   }
@@ -3604,9 +3382,7 @@ export class Editor {
   anchorLive(ev: MapEvent): boolean {
     return this.eventsEditable || (this.eventsVisible && ev.id === this.anchorSel)
   }
-  /* WHICH ANCHOR THE PANEL HAS OPEN, so the overlay can draw that one brighter.
-   * The same shape as pathSel and framingSel and for the same reason: which row
-   * is open is React's business, which mark is drawn loud is this file's. */
+  /* which anchor the panel has open, so the overlay can draw that one brighter; the same shape as pathSel and framingSel, because which row is open is React's business and which mark is drawn loud is this file's */
   anchorSel = 0
   selectAnchor(id: number) {
     if (this.anchorSel === id) return
@@ -3615,9 +3391,7 @@ export class Editor {
     this.emit()
   }
 
-  /* May this screen paint at all? The workflow sets it per step, so cut and
-   * levels paint and load, test and export cannot. Default true, so a caller
-   * that opens the editor for one purpose and never sets it can still paint. */
+  /* may this screen paint at all: the workflow sets it per step so cut and levels paint while load, test and export cannot, and the default is true so a caller that never sets it can still paint */
   paintable = true
   setPaintable(on: boolean) {
     if (this.paintable === on) return
@@ -3628,9 +3402,7 @@ export class Editor {
 
   /* the door being dragged right now, and where inside its ring it was held */
   private dragEvent: { id: number; dx: number; dy: number } | null = null
-  /* the corner of a drawn area being dragged, by the anchor it belongs to and
-   * its index in that anchor's points. An index rather than the point itself,
-   * because the array is rewritten by updateEvent on every move */
+  /* the corner of a drawn area being dragged, by the anchor it belongs to and its index in that anchor's points, an index rather than the point itself because the array is rewritten by updateEvent on every move */
   private dragVert: { id: number; i: number; dx: number; dy: number } | null = null
   private dragRing: { id: number; dx: number; dy: number } | null = null
 
@@ -3647,9 +3419,7 @@ export class Editor {
   /* Is there anywhere inside this ring a player could actually stand? The same test the game applies, so the answer here is the answer there. One standable pixel is enough: the ring is a trigger, not a floor. */
   ringHasGround(cx: number, cy: number, r: number) {
     const rad = Math.max(1, Math.round(r))
-    /* HELD TO THE CANVAS, because the radius ceiling is 512 now and a ring that
-     * size is a million pixel tests run on every anchor drop. Nothing outside
-     * the painting can be stood on anyway, so the clamp costs no answers. */
+    /* held to the canvas, because the radius ceiling is 512 and a ring that size is a million pixel tests on every anchor drop, and nothing outside the painting can be stood on so the clamp costs no answers */
     const y0 = Math.max(0, cy - rad)
     const y1 = Math.min(this.doc.H - 1, cy + rad)
     const x0 = Math.max(0, cx - rad)
@@ -3661,9 +3431,7 @@ export class Editor {
       }
     return false
   }
-  /* A name nobody in this map has used. The suffix walk matches the one the
-   * library uses for a filename, so two anchors named the same way read the way
-   * two assets named the same way already do. */
+  /* a name nobody in this map has used, by the same suffix walk the library uses for a filename */
   freeAnchorName(want: string, exceptId = 0): string {
     const base = anchorName(want)
     const taken = new Set(this.doc.events.filter((e) => e.id !== exceptId).map((e) => e.name))
@@ -3717,9 +3485,7 @@ export class Editor {
     return { ok: true, name: free, why: free !== clean ? `taken · saved as ${free}` : undefined }
   }
 
-  /* One typed edit to one anchor. null clears a field that is allowed to be
-   * absent, which undefined cannot mean here: undefined is "this patch does not
-   * mention it" and both callers need to say the other thing. */
+  /* one typed edit to one anchor, where null clears a field that is allowed to be absent and undefined means this patch does not mention it, because both callers need to say the other thing */
   updateEvent(
     id: number,
     patch: Partial<Pick<MapAnchor, 'label' | 'to' | 'r' | 'toAnchor' | 'kind' | 'facing' | 'placement'>> & {
@@ -3732,9 +3498,7 @@ export class Editor {
   ) {
     const e = this.doc.events.find((q) => q.id === id)
     if (!e) return
-    /* HELD TO TWO BODIES OF ITS OWN ANCHOR, and pulled in rather than refused:
-     * the author clicked a pixel, so the nearest legal one is the answer they
-     * meant, and a press that appears to do nothing is worse. */
+    /* held to two bodies of its own anchor and pulled in rather than refused: the author clicked a pixel, so the nearest legal one is the answer they meant and a press that appears to do nothing is worse */
     if (patch.stand !== undefined) {
       if (patch.stand) {
         const at = clampStand(e.x, e.y, patch.stand, this.doc.walk.charH)
@@ -3754,8 +3518,7 @@ export class Editor {
       else delete e.ring
     }
     if (patch.poly !== undefined) {
-      // fewer than three points is a line, and a line has no inside, so it is
-      // refused here rather than stored and left to fire for nobody
+      // fewer than three points is a line and a line has no inside, so it is refused here rather than stored and left to fire for nobody
       if (patch.poly && patch.poly.length >= 3)
         e.poly = patch.poly.map(([x, y]) => [Math.round(x), Math.round(y)] as [number, number])
       else delete e.poly
@@ -3833,9 +3596,7 @@ export class Editor {
   finishRegionDraw() {
     const drawn = this.newPoly
     if (!drawn) return
-    /* Enter with nothing drawn yet leaves the gesture armed rather than closing
-     * it. The author has pressed draw and has not drawn: dropping them out of
-     * the mode would read as the key having done something wrong. */
+    /* enter with nothing drawn yet leaves the gesture armed rather than closing it, because dropping an author out of the mode they just asked for reads as the key having done something wrong */
     if (drawn.pts.length < 3) {
       this.say('nothing drawn yet · press and drag round the area')
       this.emit()
@@ -3946,9 +3707,7 @@ export class Editor {
     this.emit()
   }
 
-  /* Two points is the least that means anything, and it is migratePath's rule
-   * rather than a second one invented here: a one-point line has no direction,
-   * so nothing downstream could walk it or point a camera along it. */
+  /* two points is the least that means anything, and it is migratePath's rule rather than a second one invented here, because a one-point line has no direction for anything downstream to walk or aim a camera along */
   finishPath(): number {
     const pts = this.newPath
     if (!pts) return 0
@@ -3977,9 +3736,7 @@ export class Editor {
       closed: false,
       twoWay: false,
     })
-    // migratePath drops anything it cannot make a line of, which is the same
-    // gate a reopened save goes through, so nothing can enter the document
-    // here that would not survive being saved and read back
+    // migratePath drops anything it cannot make a line of, the same gate a reopened save goes through, so nothing enters the document here that would not survive being saved and read back
     if (!p) {
       this.say('those points are not a line · nothing saved')
       return 0
@@ -3992,9 +3749,7 @@ export class Editor {
     return id
   }
 
-  /* Renaming refuses rather than corrects, exactly as renameAnchor does and for
-   * the same reason: this string is what a member writes in python, and a name
-   * quietly changed under an author is worse than a name they have to fix. */
+  /* renaming refuses rather than corrects, exactly as renameAnchor does, because this string is what a member writes in python and a name quietly changed under an author is worse than a name they have to fix */
   renamePath(id: number, want: string): { ok: boolean; name?: string; why?: string } {
     const p = this.doc.paths.find((q) => q.id === id)
     if (!p) return { ok: false, why: 'gone' }
@@ -4008,9 +3763,7 @@ export class Editor {
     return { ok: true, name: free, why: free !== clean ? `taken · saved as ${free}` : undefined }
   }
 
-  /* One typed edit to one route. null clears a field that is allowed to be
-   * absent, which undefined cannot mean here: undefined is "this patch does not
-   * mention it", the same split updateEvent makes. */
+  /* one typed edit to one route, where null clears a field that is allowed to be absent and undefined means this patch does not mention it, the same split updateEvent makes */
   updatePath(
     id: number,
     patch: {
@@ -4099,9 +3852,7 @@ export class Editor {
     if (!p || !p.marks || !p.marks[i]) return
     const m = p.marks[i]
     if (patch.at !== undefined) m.at = clamp(Math.round(patch.at), 0, p.points.length - 1)
-    /* an empty label is REMOVED rather than stored as '', so displayName falls
-     * back to unpacking the identifier instead of printing nothing at all when
-     * an author clears the box */
+    /* an empty label is removed rather than stored as an empty string, so displayName falls back to unpacking the identifier instead of printing nothing when an author clears the box */
     if (patch.label !== undefined) {
       if (patch.label.trim()) m.label = patch.label
       else delete m.label
@@ -4133,9 +3884,7 @@ export class Editor {
     for (let i = 2; ; i++) if (!taken.has(`${base}_${i}`)) return `${base}_${i}`
   }
 
-  /* THE PAINTING PIXEL IN THE MIDDLE OF THE SCREEN, which is what a saved shot
-   * is a shot of. Answers the middle of the map when there is no canvas yet, so
-   * a scripted call never puts NaN into a framing. */
+  /* the painting pixel in the middle of the screen, which is what a saved shot is a shot of, answering the middle of the map when there is no canvas yet so a scripted call never puts NaN into a framing */
   viewCentre(): Pt {
     const c = this.canvas
     if (!c) return [Math.round(this.doc.W / 2), Math.round(this.doc.H / 2)]
@@ -4175,9 +3924,7 @@ export class Editor {
     zoom?: number
     overFit?: number
   }): number {
-    /* the anchor is cleaned BEFORE the point is decided, or a caller handing
-     * over an illegal name gets a shot with no anchor and no coordinates, and
-     * migrateFraming quite rightly refuses it. */
+    /* the anchor is cleaned before the point is decided, or a caller handing over an illegal name gets a shot with no anchor and no coordinates, which migrateFraming rightly refuses */
     const anchor = from.anchor && isAnchorName(from.anchor) ? from.anchor : ''
     this.doc.snap()
     const id = this.doc.framingNext
@@ -4237,8 +3984,7 @@ export class Editor {
         f.y = Math.round(at.y - f.dy)
       }
       f.anchor = want
-      // and hanging it back on an anchor drops the stale numbers, or an export
-      // would carry a point nobody can see next to the anchor that overrides it
+      // hanging it back on an anchor drops the stale numbers, or an export would carry a point nobody can see next to the anchor that overrides it
       if (want) {
         delete f.x
         delete f.y
@@ -4257,8 +4003,7 @@ export class Editor {
     }
     if (patch.entry !== undefined) {
       if (patch.entry) {
-        // at most one per map: a player arriving twice in one map is not a
-        // thing, so turning one on turns the rest off rather than refusing
+        // at most one per map, because a player arriving twice in one map is not a thing, so turning one on turns the rest off rather than refusing
         for (const q of this.doc.framings) delete q.entry
         f.entry = true
       } else delete f.entry
@@ -4330,9 +4075,7 @@ export class Editor {
     return id
   }
 
-  /* Renaming refuses rather than corrects, the same as renameAnchor, renamePath
-   * and renameFraming, and for the one reason all four share: this string is
-   * what a member writes in python. */
+  /* renaming refuses rather than corrects, the same as renameAnchor, renamePath and renameFraming, because this string is what a member writes in python */
   renameSet(id: number, want: string): { ok: boolean; name?: string; why?: string } {
     const s = this.doc.sets.find((q) => q.id === id)
     if (!s) return { ok: false, why: 'gone' }
@@ -4346,9 +4089,7 @@ export class Editor {
     return { ok: true, name: free, why: free !== clean ? `taken · saved as ${free}` : undefined }
   }
 
-  /* One typed edit to one set. Members go through migrateAnchorSet's own filter
-   * rather than a second copy of the rule here, so what a caller can put in is
-   * exactly what survives being saved and read back. */
+  /* one typed edit to one set, with members going through migrateAnchorSet's own filter rather than a second copy of the rule here, so what a caller can put in is exactly what survives being saved and read back */
   updateSet(id: number, patch: { members?: string[]; label?: string | null; meta?: Record<string, unknown> | null }) {
     const i = this.doc.sets.findIndex((q) => q.id === id)
     if (i < 0) return
@@ -4387,8 +4128,7 @@ export class Editor {
     const r = migrateRack({
       id,
       name: this.freeCollectionName(`rack_${id}`),
-      // the numbers start at one and follow the order they were handed over in,
-      // which is the order they will fill in
+      // the numbers start at one and follow the order they were handed over in, which is the order they will fill in
       slots: anchors.map((a, i) => ({ slot: i + 1, anchor: a })),
       slotNext: anchors.length + 1,
     } as MapRack)
@@ -4429,8 +4169,7 @@ export class Editor {
     const r = this.doc.racks.find((q) => q.id === id)
     const s = r?.slots.find((q) => q.slot === slot)
     if (!r || !s) return
-    // the anchor under a slot can be moved; the number over it never changes,
-    // because that number is what a save and a member's python are both holding
+    // the anchor under a slot can be moved and the number over it never changes, because that number is what a save and a member's python are both holding
     if (patch.anchor !== undefined && isAnchorName(patch.anchor)) s.anchor = patch.anchor
     if (patch.label !== undefined) {
       if (patch.label && patch.label.trim()) s.label = patch.label
@@ -4451,9 +4190,7 @@ export class Editor {
     this.say(`slot ${slot} is gone and its number is not handed out again`)
   }
 
-  /* REORDER, WHICH MOVES A ROW AND NOT ITS ADDRESS. The list order is the order
-   * things arrive in; the slot number is where they land. Dragging the fourth
-   * banner to the front means it is hung first and it is still banner 4. */
+  /* reorder moves a row and not its address: the list order is the order things arrive in and the slot number is where they land, so the fourth banner dragged to the front is hung first and is still banner 4 */
   moveRackSlot(id: number, slot: number, to: number) {
     const r = this.doc.racks.find((q) => q.id === id)
     if (!r) return
@@ -4506,8 +4243,7 @@ export class Editor {
     return out
   }
 
-  /* every placement an author has named, which is the only pool a variant member
-   * can be picked from: an unnamed placement has no address for the set to hold */
+  /* every placement an author has named, the only pool a variant member can be picked from, because an unnamed placement has no address for the set to hold */
   namedPlacements(): { name: string; label: string }[] {
     return this.doc.assets
       .filter((a) => isPlacementName(a.name))
@@ -4550,15 +4286,12 @@ export class Editor {
   addVariant(id: number, placement: string, name = ''): boolean {
     const v = this.doc.variants.find((q) => q.id === id)
     if (!v || !isPlacementName(placement)) return false
-    /* ONE PLACEMENT PER STATE, both ways round. Two states on one placement
-     * cannot be exclusive: setting either leaves the same sprite on screen and
-     * nothing downstream can say which state the set is in. */
+    /* one placement per state, both ways round: two states on one placement cannot be exclusive, since setting either leaves the same sprite on screen and nothing downstream can say which state the set is in */
     if (v.members.some((m) => m.placement === placement)) return false
     let want = anchorName(name || placement)
     if (v.members.some((m) => m.name === want)) for (let i = 2; v.members.some((m) => m.name === `${want}_${i}`); i++) want = `${want}_${i}`
     v.members.push({ name: want, placement })
-    // the first member showing by default, because a set built one row at a time
-    // with nothing selected reads as a set that does not work
+    // the first member shows by default, because a set built one row at a time with nothing selected reads as a set that does not work
     if (!v.initial) v.initial = want
     this.touched()
     return true
@@ -4573,8 +4306,7 @@ export class Editor {
     if (patch.name !== undefined) {
       const want = anchorName(patch.name)
       if (isAnchorName(want) && !v.members.some((q) => q !== m && q.name === want)) {
-        // the initial follows the rename, or an author renaming the state that
-        // was showing silently turns the whole set off
+        // the initial follows the rename, or an author renaming the state that was showing silently turns the whole set off
         if (v.initial === m.name) v.initial = want
         m.name = want
       }
@@ -4631,9 +4363,7 @@ export class Editor {
     this.say(clean ? `${name} shows when ${clean}` : `${name} always shows`)
   }
 
-  /* THE STAIRS THIS MAP HAS, on demand rather than every frame: it is three
-   * flood fills over the whole plane and the answer only changes when somebody
-   * paints a ramp. */
+  /* the stairs this map has, on demand rather than every frame, because it is three flood fills over the whole plane and the answer only changes when somebody paints a ramp */
   stairList(): StairRegion[] {
     return this.doc.stairRegions()
   }
@@ -4649,9 +4379,7 @@ export class Editor {
     return id
   }
 
-  /* WHAT A PLACEMENT BLOCKS, typed instead of measured. Four numbers or null
-   * to go back to the measurement, and null is what almost every placement
-   * wants. See PlacedAsset.foot for when a person needs the other thing. */
+  /* what a placement blocks, typed instead of measured: four numbers, or null to go back to the measurement, which is what almost every placement wants; see PlacedAsset.foot for the other case */
   setFoot(ids: string[], foot: [number, number, number, number] | null) {
     const want = new Set(ids)
     const picked = this.doc.assets.filter((a) => want.has(a.id))
@@ -4666,9 +4394,7 @@ export class Editor {
     return picked.length
   }
 
-  /* ONE GROUP ONTO EVERY PICKED PLACEMENT. The group select sat on the single
-   * inspector only, so a crowd of forty had to be regrouped forty times, which
-   * is why the hub's people are in one group nobody chose. */
+  /* one group onto every picked placement, because the group select sat on the single inspector only and a crowd of forty had to be regrouped forty times */
   setAssetGroup(ids: string[], group: string) {
     const want = new Set(ids)
     const picked = this.doc.assets.filter((a) => want.has(a.id))
@@ -4712,9 +4438,7 @@ export class Editor {
     return true
   }
 
-  /* THE CONDITION ON AN ANCHOR: a door barred until a cord is earned, a berth
-   * that does not exist until the ship is repaired. It goes through migrateEvent
-   * so the field and the meta bag it rides in cannot disagree. */
+  /* the condition on an anchor, a door barred until a cord is earned or a berth that does not exist until the ship is repaired, going through migrateEvent so the field and the meta bag it rides in cannot disagree */
   setAnchorWhen(id: number, when: string) {
     const e = this.doc.events.find((q) => q.id === id)
     if (!e) return
@@ -4777,8 +4501,7 @@ export class Editor {
       this.touched()
     })
   }
-  // the painting with the cut applied: cut pixels at alpha 0, art untouched.
-  // This is what the engine gets, and what the preview shows.
+  // the painting with the cut applied, cut pixels at alpha 0 and art untouched, which is what the engine gets and what the preview shows
   private buildCutApplied(): HTMLCanvasElement {
     const c = mkCanvas(this.doc.W, this.doc.H)
     const g = c.getContext('2d') as CanvasRenderingContext2D
@@ -4844,8 +4567,7 @@ export class Editor {
         w: this.doc.W,
         h: this.doc.H,
         /* THE PAINTING, AS OPPOSED TO THE CANVAS IT SITS IN, AND IT WAS NEITHER. This said doc.bw/bh/ox/oy, which is where the DROPPED FILE sits and knows nothing about the cut: the hub's manifest said 688x640 at 0,0 while the scene.png beside it is opaque only in x 7..675, y 194..570. The consumer hand-copied the real numbers into a fallback, and worse, 688*640 is past the pixel ceiling one generation can hold, so the composition built off it was thrown away whole. Measured off the bytes that ship, the same way the server measures them at publish. */
-        /* stated when an author has stated it, measured otherwise, which is
-         * every map so far. See MapProps.paint. */
+        /* stated when an author has stated it, measured otherwise, which is every map so far; see MapProps.paint */
         base: this.doc.props.paint
           ? { w: this.doc.props.paint[0], h: this.doc.props.paint[1], ox: this.doc.props.paint[2], oy: this.doc.props.paint[3] }
           : paintedBoxOf(scene),
@@ -4928,9 +4650,7 @@ export class Editor {
                 dx: f.dx,
                 dy: f.dy,
                 zoom: f.zoom,
-                // what the same shot is worth to the game, beside the editor's
-                // own view number, so nothing downstream has to guess which
-                // unit the field above is in
+                // what the same shot is worth to the game, beside the editor's own view number, so nothing downstream has to guess which unit the field above is in
                 gameZoom: shotZoom(f),
                 ...(f.entry ? { entry: true } : {}),
                 ...(f.meta && Object.keys(f.meta).length ? { meta: f.meta } : {}),
@@ -4989,9 +4709,7 @@ export class Editor {
     this.cutApplied = null
     /* A BOUND ANCHOR FOLLOWS THE THING IT IS BOUND TO, and this is the one hook every edit already runs through, so no gesture has to remember to drag the name along with the sprite. Cheap: almost no anchor carries a binding. */
     this.syncBoundAnchors()
-    // whether a walker can reach a standing placement is a question about the
-    // floor and about where the thing was put, and this is the one hook both a
-    // brush stroke and a drag already run through
+    // whether a walker can reach a standing placement is a question about the floor and about where the thing was put, and this is the one hook both a brush stroke and a drag already run through
     this.reachCache.clear()
     this.emit()
   }
@@ -5011,15 +4729,13 @@ export class Editor {
     }
     this.doc.snap()
     this.relayCanvas(dx, dy, nw, nh)
-    // pan compensates for the origin shift, so the art stays put on screen
-    // and the new margin appears on the grown side
+    // pan compensates for the origin shift, so the art stays put on screen and the new margin appears on the grown side
     this.ox -= dx * this.z
     this.oy -= dy * this.z
     this.touched()
     this.say(`grew ${side} by ${n}px · now ${nw}×${nh} · z undoes`)
   }
-  // the shared re-lay: document planes, painting, walker, then every derived
-  // canvas. Used by a grow press and by the autosave restore of a grown map.
+  // the shared re-lay of document planes, painting, walker and then every derived canvas, used by a grow press and by the autosave restore of a grown map
   private relayCanvas(dx: number, dy: number, nw: number, nh: number) {
     this.doc.grow(dx, dy, nw, nh)
     const c = mkCanvas(nw, nh)
@@ -5030,8 +4746,7 @@ export class Editor {
     this.walker.y += dy
     this.rebuildForSize()
   }
-  // undo, size-aware: a growth press snapshots the pre-grow document, so one
-  // z re-lays the painting from the base art at the restored size and offset
+  // undo is size aware: a growth press snapshots the pre-grow document, so one z re-lays the painting from the base art at the restored size and offset
   /* THE PANEL'S CHANCE TO UNDO WHAT THE DOCUMENT CANNOT. A crop is two changes, pixels on disk and anchors in the document, and z only knew about the second, so undoing one put every placement back around art that was still cropped and the map read as though it had slid, which cost nineteen trees once. The hook is asked first and told how deep the stack is, so it can tell its own edit apart from three moves after it. */
   beforeUndo: ((histLen: number) => void) | null = null
 
@@ -5058,9 +4773,7 @@ export class Editor {
     }
     return true
   }
-  // everything derived from the canvas size, rebuilt after a grow or its
-  // undo. The region labels drop to null; the app recomputes them off-thread
-  // the moment the status reports the new size.
+  // everything derived from the canvas size, rebuilt after a grow or its undo; the region labels drop to null and are recomputed off-thread once the status reports the new size
   private rebuildForSize() {
     const { W, H } = this.doc
     this.natMask = mkCanvas(W, H)
@@ -5084,9 +4797,7 @@ export class Editor {
     this.dirty = true
   }
 
-  // ---- local autosave, silent -------------------------------------------
-  // v3 saves under the size-free key and carries w/h and the base offset, so
-  // a grown map re-grows on reload; the old sized key still reads.
+  // local autosave, silent: v3 saves under the size-free key and carries w/h and the base offset so a grown map re-grows on reload, and the old sized key still reads
   private key() {
     return `mapvis:${this.sceneId}`
   }
@@ -5109,22 +4820,17 @@ export class Editor {
     try {
       localStorage.setItem(this.key(), s)
     } catch {
-      // a full quota is reported and not swallowed. One map is about two
-      // megabytes of utf-16 at 688x384 and a browser gives roughly five, so the
-      // third map in one browser stops saving, and silence loses the work.
+      // a full quota is reported and not swallowed: one map is about two megabytes of utf-16 at 688x384 and a browser gives roughly five, so the third map in one browser stops saving and silence loses the work
       this.say('this browser is full · saving to disk only')
     }
-    // the copy that survives a cleared browser or a different machine. The
-    // server answers with its own clock, and recording that here is what lets
-    // the next open tell which of the two copies is really the newer one.
+    // the copy that survives a cleared browser or a different machine, with the server's own clock recorded here so the next open can tell which of the two copies is really newer
     void saveDoc(this.sceneId, s)
       .then((r) => {
         localStorage.setItem(this.key() + ':at', String(r?.savedAt || Date.now()))
         this.diskWarned = false
       })
       .catch(() => {
-        // an unreachable platform means this browser is ahead of it, so stamp
-        // local time and let the comparison on the next open notice
+        // an unreachable platform means this browser is ahead of it, so stamp local time and let the comparison on the next open notice
         localStorage.setItem(this.key() + ':at', String(Date.now()))
         if (this.diskWarned) return
         this.diskWarned = true
@@ -5152,8 +4858,7 @@ export class Editor {
     }
   }
 
-  /* When this browser last saved. Kept beside the document rather than inside
-   * it, so the saved format is untouched and an older build still reads it. */
+  /* when this browser last saved, kept beside the document rather than inside it so the saved format is untouched and an older build still reads it */
   private localAt() {
     return Number(localStorage.getItem(this.key() + ':at') || 0)
   }
@@ -5195,8 +4900,7 @@ export class Editor {
     }
     const serverAt = Number(server?.savedAt || 0)
 
-    // a browser copy with no recorded time predates this and cannot be
-    // compared, so the platform is trusted over it
+    // a browser copy with no recorded time predates this and cannot be compared, so the platform is trusted over it
     if (server?.doc && (!localRaw || serverAt >= localAt) && this.applyDoc(server.doc)) {
       localStorage.setItem(this.key() + ':at', String(serverAt || Date.now()))
       this.say(localRaw && localAt && serverAt > localAt ? 'loaded a newer copy from the platform' : 'loaded from the platform')
@@ -5213,8 +4917,7 @@ export class Editor {
     return false
   }
 
-  // an exported bundle is the other place a mask lives, so reopening a scene
-  // that was exported under this id picks it back up
+  // an exported bundle is the other place a mask lives, so reopening a scene that was exported under this id picks it back up
   private async restoreFromDisk() {
     try {
       const s = await savedScene(this.sceneId)
@@ -5287,16 +4990,12 @@ export class Editor {
         }
         got = true
       }
-      // assets.json paths are bundle-relative (assets/foo.png); the bundle's
-      // own assets/ folder holds those exact pngs and /work serves it, so map
-      // them to /work/<id>/assets urls. Export resolves those back to files.
+      // assets.json paths are bundle-relative like assets/foo.png and /work serves the bundle's own assets/ folder, so they map to /work/<id>/assets urls and export resolves those back to files
       const listed = s.assets && Array.isArray(s.assets.assets) ? s.assets.assets : null
       if (listed && listed.length) {
         const out: PlacedAsset[] = []
         let next = 1
-        // anything with frames or views lives in a FOLDER inside assets/, so the
-        // folder segment has to survive the trip back. Keeping only the basename
-        // 404s the png and the placement falls back to the placeholder box.
+        // anything with frames or views lives in a folder inside assets/, so the folder segment has to survive the trip back or the png 404s and the placement falls back to the placeholder box
         const workURL = (p: unknown): string => {
           const rel = String(p || '')
             .split('?')[0]
@@ -5313,8 +5012,7 @@ export class Editor {
             const views: Record<string, string[]> = {}
             for (const [k, arr] of Object.entries(s.dirs)) {
               if (!Array.isArray(arr) || !arr.length) continue
-              // one path per heading from the old exporter, a whole walk cycle
-              // from a newer one; both are just the list that was written
+              // one path per heading from the old exporter, a whole walk cycle from a newer one, and both are just the list that was written
               const set = arr.map(workURL).filter(Boolean)
               if (set.length) views[k] = set
             }
@@ -5342,14 +5040,11 @@ export class Editor {
           const id = typeof d.id === 'string' && d.id ? d.id : 'a' + next
           const m = /^a(\d+)$/.exec(id)
           if (m) next = Math.max(next, Number(m[1]) + 1)
-          // the transform fields, falling back to the old uniform scale for a
-          // bundle exported before they existed
+          // the transform fields, falling back to the old uniform scale for a bundle exported before they existed
           const us = Number(d.scale) > 0 ? Number(d.scale) : 0.25
           const sx = Number(d.scaleX) > 0 ? Number(d.scaleX) : us
           const sy = Number(d.scaleY) > 0 ? Number(d.scaleY) : us
-          // look 0 is the entry itself, in the same shape and by the same rules
-          // as every extra look below it. Nothing resolved means nothing to
-          // draw, which is where a placement has always been dropped.
+          // look 0 is the entry itself, in the same shape and by the same rules as every extra look below it, and nothing resolved means nothing to draw, which is where a placement has always been dropped
           const look0 = readLook(d)
           if (!look0) continue
           const base: PlacedAsset = {
@@ -5366,14 +5061,10 @@ export class Editor {
             rot: isFinite(Number(d.rot)) ? Number(d.rot) : 0,
             fx: !!d.flipX,
             fy: !!d.flipY,
-            // the condition, back exactly as it shipped. It was resolved off the
-            // group on the way out, and the group rows come back above, so
-            // whenOf answers the same string on the next export.
+            // the condition, back exactly as it shipped: it was resolved off the group on the way out and the group rows come back above, so whenOf answers the same string on the next export
             ...(typeof d.when === 'string' && d.when.trim() ? { when: String(d.when).trim() } : {}),
           }
-          // how it MOVES comes back too, through the same guard every other
-          // caller uses. Dropping it was what silently deleted every behaviour
-          // on a reopen-and-re-export.
+          // how it moves comes back too, through the same guard every other caller uses, because dropping it silently deleted every behaviour on a reopen and re-export
           const life = cleanLife(d.life)
           if (life) base.life = life
           /* and the extra pictures a sequence switches to. A look that resolves to NOTHING KEEPS ITS SLOT, holding look 0: art is an index, so dropping one shifts every later look down and the placement draws the wrong picture rather than a missing one. The exporter and the game reader hold the slot the same way, so all three sides agree that a look that did not arrive shows the thing as it started. Dropping the list entirely would delete every look on a reopen-and-re-export. */
@@ -5432,8 +5123,7 @@ export class Editor {
     }
     go.putImageData(o, 0, 0)
 
-    // the cut layer: a magenta 1px checker, deliberately not a colour any
-    // painting uses, so a cut pixel can never be mistaken for art
+    // the cut layer is a magenta 1px checker, deliberately not a colour any painting uses, so a cut pixel can never be mistaken for art
     const gc = (this.natCut as HTMLCanvasElement).getContext('2d') as CanvasRenderingContext2D
     const cd = gc.createImageData(W, H)
     const cp = cd.data
@@ -5462,9 +5152,7 @@ export class Editor {
     this.dirtyMask = false
   }
 
-  // An occluder is a piece of the painting lifted back out of it and drawn
-  // over the character when his feet are north of its baseline. Baking it from
-  // the painting itself is what keeps it pixel-identical to the art.
+  // an occluder is a piece of the painting lifted back out of it and drawn over the character when his feet are north of its baseline, and baking it from the painting itself keeps it pixel-identical to the art
   private bakePlates() {
     const { W, H } = this.doc
     this.plates = this.doc.occs.map((o) => {
@@ -5491,35 +5179,27 @@ export class Editor {
       this.changed = false
       this.saveT = now
     }
-    // an animated placement keeps its own clock, and so does one that MOVES, so
-    // the frame loop must keep painting while either is on screen
+    // an animated placement keeps its own clock and so does one that moves, so the frame loop must keep painting while either is on screen
     if (
       this.assetMode &&
       this.doc.assets.some(
         (a) =>
           (a.kind === 'animated' ||
             (this.lifePlay && a.life) ||
-            // a view set whose heading holds more than one frame is a loop too,
-            // and it is kind 'static', so without this a breathing figure that
-            // never travels stopped the canvas from repainting at all
+            // a view set whose heading holds more than one frame is a loop too, and it is kind static, so without this a breathing figure that never travels stopped the canvas from repainting at all
             (a.dirs && Object.values(a.dirs).some((s) => s.length > 1))) &&
           !this.hiddenGroups.has(a.group),
       )
     )
       this.dirty = true
-    /* The editing hold, taken and let go in ONE place so no gesture has to
-     * remember to. Both edges repaint: taking it must show the sprite stopping,
-     * and letting it go must show it moving again. */
+    /* the editing hold is taken and let go in one place so no gesture has to remember to, and both edges repaint because taking it must show the sprite stopping and letting it go must show it moving again */
     const hold = this.assetMode && this.lifePlay && this.liveT >= 0 && this.gestureOnLife()
     if (hold && this.lifeHold === null) {
-      // stopped on the reading the drawn offsets came from, not on the wall
-      // clock a frame later, so lifeAt hands back the very numbers the pointer
-      // grabbed and a scale does not start with a jump
+      // stopped on the reading the drawn offsets came from, not on the wall clock a frame later, so lifeAt hands back the very numbers the pointer grabbed and a scale does not start with a jump
       this.lifeHold = this.liveT
       this.dirty = true
     } else if (!hold && this.lifeHold !== null) {
-      // wound back by the length of the gesture, so the behaviour carries on
-      // from where it stopped instead of jumping to where the wall clock got to
+      // wound back by the length of the gesture, so the behaviour carries on from where it stopped instead of jumping to where the wall clock got to
       this.lifeT0 = performance.now() / 1000 - this.lifeHold
       this.lifeHold = null
       this.dirty = true
@@ -5549,9 +5229,7 @@ export class Editor {
 
     g.save()
     g.translate(ox, oy)
-    /* the board the painting lies on. Drawn under everything, so the margin a
-     * grow added reads as bare board instead of as the stage showing through a
-     * hole in the map. The shadow is what stops the whole thing floating. */
+    /* the board the painting lies on, drawn under everything so the margin a grow added reads as bare board instead of the stage showing through a hole in the map, and the shadow is what stops it floating */
     g.save()
     g.shadowColor = 'rgba(0,0,0,0.55)'
     g.shadowBlur = 18
@@ -5560,8 +5238,7 @@ export class Editor {
     g.fillRect(0, 0, w, h)
     g.restore()
     if (this.showCutPreview) {
-      // exactly what the game will get: the painting with the cut applied,
-      // over a dark checkerboard where the engine's ocean will show through
+      // exactly what the game will get: the painting with the cut applied, over a dark checkerboard where the engine's ocean will show through
       const B = 8 * z
       g.fillStyle = '#101318'
       g.fillRect(0, 0, w, h)
@@ -5584,9 +5261,7 @@ export class Editor {
       if (this.tool === 'region' && this.regionHL && !this.walking) g.drawImage(this.regionHL, 0, 0, w, h)
     }
     if (this.assetMode) this.drawAssets(g, z)
-    /* the reference pass. Only when the step does NOT own the placements, so the assets step is never
-     * drawing them twice, and with no selection box, no handles and no group frame, because none of
-     * that can be acted on from here and an outline you cannot grab reads as a bug. */
+    /* the reference pass, only when the step does not own the placements so the assets step never draws them twice, and with no selection box, handles or group frame, because an outline you cannot grab reads as a bug */
     else if (this.assetGhost) this.drawAssets(g, z, true)
 
     if (this.grid && z >= 4) {
@@ -5648,8 +5323,7 @@ export class Editor {
           if (this.walker.y < p.baseline) g.drawImage(p.cv, 0, 0, w, h)
       }
     }
-    // one claim list per frame, emptied here rather than inside any one drawer,
-    // because the whole point of it is that the three drawers share it
+    // one claim list per frame, emptied here rather than inside any one drawer, because the whole point of it is that the three drawers share it
     this.plateRects.length = 0
     if (this.eventsVisible && this.doc.events.length) this.drawEvents(g, z)
     if (this.eventsVisible && this.doc.paths.length) this.drawPaths(g, z)
@@ -5703,8 +5377,7 @@ export class Editor {
       const by = oy + box.y0 * z
       const bw = (box.x1 - box.x0 + 1) * z
       const bh = (box.y1 - box.y0 + 1) * z
-      // within a pixel of the whole document is the same rectangle, and drawing
-      // it twice at two brightnesses reads as a rendering fault
+      // within a pixel of the whole document is the same rectangle, and drawing it twice at two brightnesses reads as a rendering fault
       const whole = bw >= w - z && bh >= h - z
       g.strokeStyle = whole ? 'rgba(230,233,238,0.22)' : 'rgba(230,233,238,0.26)'
       g.strokeRect(Math.round(bx) - 0.5, Math.round(by) - 0.5, Math.round(bw) + 1, Math.round(bh) + 1)
@@ -5712,9 +5385,7 @@ export class Editor {
     g.restore()
   }
 
-  /* The opaque bounds of the painting, scanned once. Null when the painting is
-   * empty or cannot be read back (a cross-origin image would taint the scratch
-   * canvas), and every caller treats null as "no opinion" rather than as zero. */
+  /* the opaque bounds of the painting, scanned once; null when the painting is empty or cannot be read back, since a cross-origin image taints the scratch canvas, and every caller treats null as no opinion rather than as zero */
   private paintExtent(): { x0: number; y0: number; x1: number; y1: number } | null {
     if (this.paintBox) return this.paintBox
     const src = this.painting
@@ -5736,9 +5407,7 @@ export class Editor {
     let y1 = -1
     for (let y = 0; y < H; y++)
       for (let x = 0; x < W; x++)
-        // 8 and not 0, because a coastline feathered by the generator leaves a
-        // ring of alpha-2 pixels that no player will ever see and that would
-        // otherwise put the rule back on the document edge
+        // 8 and not 0, because a coastline feathered by the generator leaves a ring of alpha-2 pixels that no player will ever see and that would otherwise put the rule back on the document edge
         if (d[(y * W + x) * 4 + 3] > 8) {
           if (x < x0) x0 = x
           if (x > x1) x1 = x
@@ -5755,11 +5424,7 @@ export class Editor {
     const now = performance.now() / 1000
     /* Everyone resolved first, then pushed apart, then drawn, the identical three passes the game runs: every position is a pure function of the clock, so the whole set is knowable at once. A placement that never moves was put on its spot on purpose, and keeping it out of the SET altogether also made it nothing to push off, so a walker went straight through it. It takes part now and its own answer is thrown away, so it pushes and never moves. */
     const t = this.lifeNow()
-    /* A REFERENCE HOLDS STILL. The repaint loop only runs itself for the step that owns the
-     * placements, so a faint pass is redrawn by whatever else dirties the canvas, which while painting
-     * is every stroke. Left animated, the walkers would jump to a new spot on each stroke and the
-     * floor would be traced against furniture that keeps moving. So nothing travels and nothing
-     * cycles: every placement is drawn where it was put, on its first frame. */
+    /* a reference holds still: the faint pass is redrawn by whatever else dirties the canvas, which while painting is every stroke, so animated walkers would jump each stroke and the floor be traced against moving furniture; each placement is drawn where it was put, on its first frame */
     const movers = faint ? [] : this.doc.assets.filter((a) => this.lifePlay && a.life && !this.hiddenGroups.has(a.group))
     const at = new Map<string, LifeAt>()
     /* the picker reads this very map, so the box you can click is the sprite you can see. Handed over before a pixel is drawn, because the outline, the handles and the group frame read it too, and rebuilt empty every frame so a paused preview leaves nothing behind for a click to trip over. */
@@ -5772,9 +5437,7 @@ export class Editor {
       const fixed = this.doc.assets
         .filter((a) => !a.life && !this.hiddenGroups.has(a.group) && this.moverCanTouch(a, free))
         .map((a) => ({ x: a.x, y: a.y, r: this.bodyR(a) }))
-      // the walk test's walker is one too, because a drawn character is. The hip
-      // probe is the body half-width the walk already measures him by, and the
-      // one number about the character map.json and MAPVIS both carry.
+      // the walk test's walker is one too, because a drawn character is; the hip probe is the body half-width the walk already measures him by, and the one number about the character that map.json and MAPVIS both carry
       if (this.walking) fixed.push({ x: this.walker.x, y: this.walker.y, r: Math.max(BODY_MIN, this.cfg.hip) })
       const pts = [
         ...movers.map((a, i) => ({
@@ -5795,15 +5458,11 @@ export class Editor {
       const push = floorPush(pts, separate(pts, this.cfg.yScale, 1), this.standsAt, fenced)
       movers.forEach((a, i) => at.set(a.id, { ...res[i], dx: res[i].dx + push[i].dx, dy: res[i].dy + push[i].dy }))
     }
-    /* EVERY ALPHA IN THE LOOP BELOW IS ABSOLUTE, so a globalAlpha set once round the call would be
-     * wiped by the first placement that fades or rides ghosted. The base is multiplied through
-     * instead, which is the only way a faint pass and a fading behaviour can both be honoured. */
+    /* every alpha in the loop below is absolute, because a globalAlpha set once round the call would be wiped by the first placement that fades or rides ghosted, so the base is multiplied through and a faint pass and a fading behaviour can both be honoured */
     const base = faint ? 0.38 : 1
     if (faint) g.globalAlpha = base
     for (const a of this.assetsSorted()) {
-      // a placement that MOVES is drawn where its behaviour says it is right
-      // now, off the same maths the game runs, so what is on screen here is
-      // what will be on screen there
+      // a placement that moves is drawn where its behaviour says it is right now, off the same maths the game runs, so what is on screen here is what will be on screen there
       const L = at.get(a.id) || null
       /* A walk cycle is a GAIT. Running it off the clock alone made a figure stood at the end of a leg march on the spot, so it freezes on its first frame while it waits, which is the standing pose the cycle was drawn from. */
       const img = this.assetFrame(a, faint ? 0 : now, L ? L.facing : undefined, L ? L.art : 0, faint ? false : !L || L.moving)
@@ -5841,9 +5500,7 @@ export class Editor {
       g.globalAlpha = 1
       return
     }
-    // One picked thing gets its full transform box. Many get a light outline
-    // each so you can see exactly what is in the set, plus one frame round the
-    // lot with the handles that scale it, the way a slide editor does it.
+    // one picked thing gets its full transform box, and many get a light outline each so the set is visible, plus one frame round the lot carrying the handles that scale it
     const picked = this.selAssets()
     if (picked.length === 1) {
       this.drawTransformBox(g, z, picked[0])
@@ -5865,8 +5522,7 @@ export class Editor {
       g.restore()
       this.drawGroupBox(g, z)
     }
-    // under the handles and over the map: it explains the picked thing, so it
-    // belongs with the selection chrome rather than with the art
+    // under the handles and over the map: it explains the picked thing, so it belongs with the selection chrome rather than with the art
     this.drawLifeBounds(g, z)
     if (this.bandSt) this.drawBand(g, z)
     if (this.cropSt) this.drawCrop(g, z)
@@ -5936,9 +5592,7 @@ export class Editor {
     g.fillRect(Math.round(ax * z) - 1, Math.round(ay * z) - 1, 3, 3)
   }
 
-  /* The box round everything picked, in painting pixels. Built from the drawn
-   * corners, so a rotated or flipped placement contributes the space it really
-   * occupies rather than its untransformed size. */
+  /* the box round everything picked, in painting pixels, built from the drawn corners so a rotated or flipped placement contributes the space it really occupies rather than its untransformed size */
   groupBox(): { x0: number; y0: number; x1: number; y1: number; cx: number; cy: number } | null {
     const picked = this.selAssets()
     if (picked.length < 2) return null
@@ -5986,8 +5640,7 @@ export class Editor {
   }
   /* The roaming box of whatever is picked, and the ground it may actually use. Neither was ever drawn, so the area a figure would pace was invisible and the only way to find out was to press play and watch. Faint on purpose: this is a thing being explained, not edited. The wash uses the same standsAt the preview and the game run, so the highlighted pixels are exactly the ones a leg can end on. */
   private drawLifeBounds(g: CanvasRenderingContext2D, z: number) {
-    // the box a sequence fences with is the LIVE state's, so what is drawn is
-    // the fence actually in force this second rather than the first state's
+    // the box a sequence fences with is the live state's, so what is drawn is the fence actually in force this second rather than the first state's
     const picked = this.selAssets()
       .map((a) => this.liveLife(a))
       .filter((l): l is Life => !!l && !!l.bounds)
@@ -6031,17 +5684,14 @@ export class Editor {
     g.restore()
   }
 
-  // The crop chrome: the placement's current bounds so the target is obvious,
-  // the dragged rectangle in the tool's accent, and everything outside it
-  // dimmed so what survives the trim reads at a glance.
+  // the crop chrome: the placement's current bounds so the target is obvious, the dragged rectangle in the tool's accent, and everything outside it dimmed so what survives the trim reads at a glance
   private drawCrop(g: CanvasRenderingContext2D, z: number) {
     const c = this.cropSt
     if (!c) return
     const a = c.id ? this.doc.assets.find((q) => q.id === c.id) : null
     if (c.id && !a) return
     g.save()
-    // an area box has no sprite to outline, so the dashed target is skipped and
-    // only the dragged rectangle shows
+    // an area box has no sprite to outline, so the dashed target is skipped and only the dragged rectangle shows
     if (a) {
       const c4 = this.assetCorners(a)
       g.strokeStyle = '#8f93f5aa'
@@ -6069,14 +5719,12 @@ export class Editor {
       g.lineWidth = crop ? 2 : 1.5
       g.strokeRect(x + 0.5, y + 0.5, w - 1, h - 1)
       if (crop) {
-        // a hairline inside the black, so the frame stays readable against the
-        // dark art this map is mostly made of
+        // a hairline inside the black, so the frame stays readable against the dark art this map is mostly made of
         g.strokeStyle = '#e8e8eeaa'
         g.lineWidth = 1
         g.strokeRect(x + 2.5, y + 2.5, w - 5, h - 5)
       }
-      /* Eight, not four. Four corners can only take a box in diagonally, and
-       * trimming one edge is most of what cropping actually is. */
+      /* eight grips, not four, because four corners can only take a box in diagonally and trimming one edge is most of what cropping actually is */
       const grips: [number, number][] = crop
         ? [
             [x, y],
@@ -6119,8 +5767,7 @@ export class Editor {
     let top = up ? my - clear - h : my + clear
     const hit = (t: number) =>
       this.plateRects.some(([rx, ry, rw, rh]) => mx - w / 2 < rx + rw && mx + w / 2 > rx && t < ry + rh && t + h > ry)
-    // ten steps is 180px, which is more room than any pile this tool has made,
-    // and stopping rather than looping keeps a bad frame cheap
+    // ten steps is 180px, which is more room than any pile this tool has made, and stopping rather than looping keeps a bad frame cheap
     for (let i = 0; i < 10 && hit(top); i++) top += up ? -(h + 3) : h + 3
     const x = mx - w / 2
     this.plateRects.push([x, top, w, h])
@@ -6149,15 +5796,11 @@ export class Editor {
     g.fillText(text, mx, top + h / 2 + 0.5)
   }
 
-  // The events, drawn in the tool's own chrome (accent iris over panel dark,
-  // never a colour the art uses): the activation ring at its real radius, a
-  // dot on the anchor, the name on a small plate above.
+  // the events in the tool's own chrome, accent iris over panel dark and never a colour the art uses: the activation ring at its real radius, a dot on the anchor, the name on a small plate above
   /* EVERYTHING AN ANCHOR SAYS ABOUT ITSELF IS ON THE MAP, and none of it waits for a form to be opened: the heading a body holds and which painted thing an anchor is tied to were readable only by opening a compass grid and a dropdown, so an author aiming a post at a table alternated between a picture and a panel to answer one question. THE SELECTED ONE IS LOUD AND THE REST ARE QUIET, because thirty anchors at full strength is a painting nobody can see. */
   private drawEvents(g: CanvasRenderingContext2D, z: number) {
     g.save()
-    /* THE SELECTED ONE IS DRAWN LAST, so its plate, its arrow and its tie sit
-     * over the quiet ones rather than under whichever anchor happens to come
-     * after it in the document. */
+    /* the selected one is drawn last, so its plate, its arrow and its tie sit over the quiet ones rather than under whichever anchor happens to come after it in the document */
     const order = [...this.doc.events].sort(
       (a, b) => Number(a.id === this.anchorSel) - Number(b.id === this.anchorSel),
     )
@@ -6170,8 +5813,7 @@ export class Editor {
       const py = spot.y * z
       /* THE INK COMES FROM THE KIND, off the ocean chart's own table. Every anchor was drawn in one iris here while /world drew a door in salmon and a spawn in blue, so the same mark changed colour between the tool that made it and the chart that places it. It also buys what a single hue could not: nine marks on the hub and you can see which are doors without reading nine plates. */
       const ink = inkFor(ANCHOR_INK, ev.kind)
-      /* THE TWO STRENGTHS, and they are one number each rather than two colour
-       * tables, so a kind's hue never changes with the selection. */
+      /* the two strengths, one number each rather than two colour tables, so a kind's hue never changes with the selection */
       const line = sel ? 2.5 : 1.25
       const wash = sel ? 0.26 : 0.13
       const quiet = sel ? 1 : 0.85
@@ -6266,8 +5908,7 @@ export class Editor {
         g.lineWidth = line
         g.globalAlpha = quiet
       }
-      /* THE ANCHOR'S OWN PIXEL, cased for the reason the zone is: three pixels of
-       * a mid hue on pixel art of that hue is nothing. */
+      /* the anchor's own pixel, cased for the reason the zone is: three pixels of a mid hue on pixel art of that hue is nothing */
       g.globalAlpha = 1
       g.fillStyle = CASE_INK
       g.fillRect(Math.round(px) - 2.5, Math.round(py) - 2.5, 6, 6)
@@ -6330,8 +5971,7 @@ export class Editor {
     g.save()
     g.globalAlpha = 1
     g.lineCap = 'round'
-    // cased first and then drawn over, the same two passes the zone outline
-    // takes, because a green hairline over a green awning is not a heading
+    // cased first and then drawn over, the same two passes the zone outline takes, because a green hairline over a green awning is not a heading
     for (const pass of [0, 1]) {
       g.strokeStyle = pass ? STAND_INK : CASE_INK
       g.fillStyle = pass ? STAND_INK : CASE_INK
@@ -6345,8 +5985,7 @@ export class Editor {
     g.restore()
   }
 
-  // a solid triangle sitting at x,y and pointing along ang. One helper because
-  // a two-way route wants the same head twice, once at each end
+  // a solid triangle sitting at x,y and pointing along ang; one helper because a two-way route wants the same head twice, once at each end
   private arrowHead(g: CanvasRenderingContext2D, x: number, y: number, ang: number, s: number) {
     g.beginPath()
     g.moveTo(x, y)
@@ -6392,9 +6031,7 @@ export class Editor {
       g.strokeStyle = col
       g.fillStyle = col
       for (const q of pts) g.fillRect(Math.round(q[0]) - 2, Math.round(q[1]) - 2, 4, 4)
-      /* the head sits on the last leg, and on the leg BACK to the first point
-       * when the route closes, because a loop's direction lives in that leg and
-       * a head on a leg that is not walked points the wrong way round. */
+      /* the head sits on the last leg, and on the leg back to the first point when the route closes, because a loop's direction lives in that leg and a head on a leg that is not walked points the wrong way round */
       const end = p.closed ? pts[0] : pts[pts.length - 1]
       const before = p.closed ? pts[pts.length - 1] : pts[pts.length - 2]
       this.arrowHead(g, end[0], end[1], Math.atan2(end[1] - before[1], end[0] - before[0]), sel ? 9 : 7)
@@ -6406,9 +6043,7 @@ export class Editor {
           Math.atan2(pts[0][1] - pts[1][1], pts[0][0] - pts[1][0]),
           sel ? 9 : 7,
         )
-      // a marked waypoint wears a ring and its name, because a mark is a thing
-      // an author tunes against the line and reading it out of a table means
-      // counting waypoints on screen by eye
+      // a marked waypoint wears a ring and its name, because a mark is tuned against the line and reading it out of a table means counting waypoints on screen by eye
       for (const m of p.marks || []) {
         const q = pts[m.at]
         if (!q) continue
@@ -6417,8 +6052,7 @@ export class Editor {
         g.beginPath()
         g.arc(q[0], q[1], 5.5, 0, Math.PI * 2)
         g.stroke()
-        // a mark's caption hangs BELOW its ring, so it does not fight the route
-        // name sitting above the head of the same line
+        // a mark's caption hangs below its ring, so it does not fight the route name sitting above the head of the same line
         this.plate(g, displayName(m).text, q[0], q[1] + 5.5, col, false)
       }
       // the name at the head, where the eye already is after following the line
@@ -6468,8 +6102,7 @@ export class Editor {
       g.moveTo(px + Math.cos(ang) * 8, py + Math.sin(ang) * 8)
       g.lineTo(px + Math.cos(ang) * 13, py + Math.sin(ang) * 13)
       g.stroke()
-      // the arrival shot wears a filled pip, since one of them being the way a
-      // player comes in is the one thing about a list of shots you read first
+      // the arrival shot wears a filled pip, since which shot a player comes in by is the first thing read off a list of shots
       if (f.entry) {
         g.fillStyle = col
         g.beginPath()
@@ -6501,8 +6134,7 @@ export class Editor {
       g.beginPath()
       g.ellipse((W.x + 1) * z, (W.y - 2) * z, 15 * ts * z, 5.5 * ts * z, 0, 0, 6.284)
       g.fill()
-      // the hop lifts the DRAWING only: the shadow stays on the ground he is
-      // still standing on, which is what sells it as a jump rather than a float
+      // the hop lifts the drawing only, and the shadow stays on the ground he is still standing on, which is what sells it as a jump rather than a float
       g.drawImage(
         fr,
         Math.round(px - (fw * stretch) / 2),
@@ -6510,8 +6142,7 @@ export class Editor {
         fw * stretch,
         fh * stretch,
       )
-      // the YOU tag, the game's styling at screen scale: 11px monospace in
-      // pale teal over a dark stroke, floating above his head on a soft bob
+      // the player tag in the game's styling at screen scale: 11px monospace in pale teal over a dark stroke, floating above his head on a soft bob
       const ty =
         (W.y - this.cfg.charH * 0.7 - 3) * z -
         rise * ts * z +
@@ -6560,8 +6191,7 @@ export function loadImage(src: string): Promise<HTMLImageElement> {
 }
 
 /* ---- The walk-test sprite: the same 48 walk frames the game loads, with the reading side's anchor convention, each frame alpha-scanned and cropped to its drawn feet so bottom-anchoring puts the feet exactly on the collision pixel. Any load failure leaves the capsule in place, so the walk test never goes blind over a missing PNG. */
-/* when a heading has no view, the next best one it might have. An object drawn
- * four ways still faces roughly right instead of falling back to south. */
+/* when a heading has no view, the next best one it might have, so an object drawn four ways still faces roughly right instead of falling back to south */
 const NEAREST_DIR: Record<string, string> = {
   'south-east': 'east',
   'north-east': 'east',
@@ -6582,9 +6212,7 @@ interface ThorRig {
 let thorRig: ThorRig | null = null
 let thorState: 'idle' | 'loading' | 'ready' | 'failed' = 'idle'
 
-// crop to rows 0..feet (the canvas padding under the feet is what floats a
-// character above the mask; the padding above the head stays, it is trimmed
-// out of the scale by using top)
+// crop to rows 0 to feet, because the canvas padding under the feet is what floats a character above the mask, while the padding above the head stays and is trimmed out of the scale by using top
 function trimToFeet(img: HTMLImageElement): { cv: HTMLCanvasElement; top: number; feet: number } | null {
   const w = img.naturalWidth
   const h = img.naturalHeight

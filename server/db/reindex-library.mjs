@@ -22,8 +22,7 @@ for (const m of maps) {
   const lib = path.join(workDir, 'library')
   if (!fs.existsSync(lib)) continue
 
-  // what the database believes before the pass, so the report says what CHANGES
-  // rather than just what exists
+  // what the database believes before the pass, so the report says what changes rather than just what exists
   const before = new Map((await libraryOf(m.slug)).map((it) => [it.name, it]))
 
   // one entry per item: a still is <name>.png, everything else is a folder
@@ -38,8 +37,7 @@ for (const m of maps) {
     checked++
     const was = before.get(name)
     const folder = path.join(lib, name)
-    // a folder holding a direction set that the row does not know about is the
-    // exact defect this pass repairs, so name it in the dry run
+    // a folder holding a direction set the row does not know about is the exact defect this pass repairs, so name it in the dry run
     const looksDirectional =
       fs.existsSync(path.join(folder, 'dirs.json')) && !(was && was.dirs && Object.keys(was.dirs).length)
     const srcMissing = was && was.src && !was.frames && !fs.existsSync(path.join(lib, `${name}.png`))

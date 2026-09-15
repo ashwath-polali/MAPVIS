@@ -19,8 +19,7 @@ const m = await one('select id, assets, doc_sha, updated_at from maps where slug
 if (!m) throw new Error(`no map ${slug} in the database`)
 console.log(`row ${m.id}\n  ${m.assets.length} placements, ${m.assets.filter((a) => a.life).length} with a behaviour, updated ${new Date(m.updated_at).toISOString()}`)
 
-/* the row as it stands, on disk, before anything is written. The rescue putDoc
- * now files is for the next time; this is the one for this run. */
+/* the row as it stands on disk before anything is written, because the rescue putDoc now files is for the next time and this is the one for this run */
 const kept = path.join(WORK, slug, 'versions', `restore-life-${new Date().toISOString().replace(/[:.]/g, '-')}.json`)
 fs.mkdirSync(path.dirname(kept), { recursive: true })
 fs.writeFileSync(kept, JSON.stringify({ slug, mapId: m.id, updatedAt: m.updated_at, docSha: m.doc_sha, assets: m.assets }, null, 1))
@@ -42,9 +41,7 @@ const next = m.assets.map((a) => {
   return out
 })
 
-/* NOTHING BUT THOSE TWO MAY MOVE. The whole value of grafting by id rather than
- * restoring the export wholesale is that the co-pilot's edits since the publish
- * stay; if anything else differs the graft is wrong and this refuses. */
+/* nothing but life and name may move: grafting by id rather than restoring the export wholesale is what keeps edits made since the publish, so if anything else differs the graft is wrong and this refuses */
 let drift = 0
 for (let i = 0; i < next.length; i++)
   for (const k of new Set([...Object.keys(m.assets[i]), ...Object.keys(next[i])])) {

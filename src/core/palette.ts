@@ -1,8 +1,6 @@
 /* Palette lock: every pixel walks toward the nearest colour the painting uses. Matched in Oklab with lightness weighted heavy, so a dark pixel can only land dark; snapping on hue alone flattens a sprite into a sticker. Alpha is copied byte for byte. Pure. */
 
-// what both functions read and matchToPalette hands back. A browser ImageData
-// already has this shape, so a caller can pass one straight in; the answer is a
-// plain object, because a canvas is the caller's business, not this file's.
+// what both functions read and what matchToPalette hands back, shaped like a browser ImageData so a caller can pass one straight in, and a plain object because a canvas is the caller's business
 export interface RGBAImage {
   data: Uint8ClampedArray
   width: number
@@ -124,11 +122,7 @@ export function sampleMapPalette(img: RGBAImage, want = 14): string[] {
 // perceptual lightness, so the ends of the ramp are the ends an eye sees
 const lum = (c: RGB) => oklab(c[0], c[1], c[2]).L
 
-// ---- the lock -------------------------------------------------------------
-
-// how much harder a lightness miss counts than a hue miss when the nearest
-// entry is chosen. At 2.5 a mid-tone can never grab a highlight's pixel, which
-// is what keeps a sprite shaded instead of stickered.
+// the lock: a lightness miss counts 2.5 times harder than a hue miss when the nearest entry is chosen, so a mid-tone can never grab a highlight's pixel and a sprite stays shaded instead of stickered
 const WEIGHT_L = 2.5
 
 // under this, a pixel is the transparent surround and is left exactly alone

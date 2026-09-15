@@ -1,10 +1,6 @@
-/* The chrome and the voyage. site.css holds the system; this holds the pages
- * built out of it. */
+/* the chrome and the voyage: site.css holds the system, this holds the pages built out of it */
 
-/* ---- the compass, which is the nav --------------------------------------
- * Fixed, small, and the needle IS the scroll indicator. That replaces a
- * progress bar with something that belongs to the subject.
- */
+/* the compass, which is the nav: fixed, small, and the needle is the scroll indicator, which replaces a progress bar with something that belongs to the subject */
 .compass {
   position: fixed;
   inset: 0 0 auto 0;
@@ -78,8 +74,7 @@
   overflow: hidden;
   isolation: isolate;
 }
-/* the sea: two very slow radial lights rather than a linear gradient, so there
-   is no straight edge anywhere and it reads as water instead of as CSS */
+/* the sea: two very slow radial lights rather than a linear gradient, so there is no straight edge anywhere and it reads as water instead of as CSS */
 .hero-sea {
   position: absolute;
   inset: -20%;
@@ -111,8 +106,7 @@
     radial-gradient(1px 1px at 90% 44%, #cfe0f0 40%, transparent 41%);
 }
 
-/* the chart laid on the water and turned slightly, because a sheet on a desk is
-   never square to the edge */
+/* the chart laid on the water and turned slightly, because a sheet on a desk is never square to the edge */
 .hero-chart {
   position: absolute;
   z-index: -1;
@@ -272,8 +266,7 @@
   margin: 0 0 26px;
 }
 
-/* the realm plate: brass frame, notched corners, layers that move apart under
-   the pointer */
+/* the realm plate: brass frame, notched corners, layers that move apart under the pointer */
 .realm {
   margin: 0;
 }

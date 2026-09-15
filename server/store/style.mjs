@@ -1,54 +1,27 @@
-// The house style, and the scaffold each kind of map stands on.
-//
-// This is the file to edit when the hand changes. Everything below is words: no
-// network, no database, no image. What comes out is the prompt a map is drawn
-// from, which is why the checks can prove it without buying a generation.
-//
-// Two axes, and they are independent on purpose.
-//
-//   THE STYLE says whose hand drew it. A card carries the craft sentence, the
-//   part of a prompt that is about projection, cluster size, outline, light and
-//   saturation and never about the subject. One card per account, plus the one
-//   house card that is granted rather than owned.
-//
-//   THE KIND says what the engine needs the picture to be. An island has to
-//   have a transparent coast or the engine cannot draw its own ocean under it.
-//   That is structural, so it applies whether or not a card does.
-//
-// A person typing "island" gets an island, not THE island. The subject is
-// theirs; the scaffold and the craft are the parts they did not have to say.
+// the house style and the scaffolds, words only so a check can prove a prompt without spending a generation; style is whose hand drew it, kind is what the engine needs, and the two are independent
 
 import { readFileSync } from 'node:fs'
 
-/* MEASURED, AND THE REASON THE CRAFT SENTENCE EXISTS AT ALL: a style image
- * transfers palette, outline, detail and shading, and it cannot transfer the
- * angle. /v2/generate-image-v2 has no view parameter. So the projection is said
- * in words on every prompt, and the reference painting is passed with its own
- * colour switched off so a new map is drawn by the same hand in its own hues. */
+/* measured: a style image transfers palette, outline, detail and shading but never the angle, and /v2/generate-image-v2 has no view parameter, so the projection is said in words on every prompt and the reference is passed with its colour switched off */
 export const STYLE_OPTIONS = { color_palette: false, outline: true, detail: true, shading: true }
 
-/* the pixel ceiling one generation can hold, and both canvas sides even. An odd
- * side is a 422 raised after the router has already spent its time choosing. */
+/* the pixel ceiling one generation can hold, and both canvas sides must be even because an odd side is a 422 raised after the router has already spent its time choosing */
 export const AREA_CEILING = 265000
 export const even = (n) => (n % 2 ? n + 1 : n)
 
 // ---- the kinds -------------------------------------------------------------
 
-/* WHAT THE ENGINE NEEDS, PER CLASS. Nothing here describes a subject: no nouns
- * a person would have typed themselves, and no palette. Adding a noun here is
- * how every island starts coming back the same island. */
+/* what the engine needs per class, no subject nouns and no palette: adding a noun here is how every island starts coming back the same island */
 export const SCAFFOLDS = {
   island: {
     title: 'island',
     canvas: { w: 688, h: 384 },
-    /* the coast is transparent because the engine draws the moving ocean under
-     * it; painting water into the picture puts a dead sea beside a live one */
+    /* the coast is transparent because the engine draws the moving ocean under it, and painting water into the picture puts a dead sea beside a live one */
     structure:
       'one whole landmass seen from above, filling the frame, surrounded by fully transparent empty space with no water painted in, ' +
       'a clear walkable shoreline all the way round, one small dock or jetty meeting the edge of the land, ' +
       'open flat ground in at least one place with nothing standing on it',
-    /* said out loud because the shallows are the one piece of water that belongs
-     * IN the painting: the engine's ocean cannot know where the sand ends */
+    /* said out loud because the shallows are the one piece of water that belongs in the painting: the engine's ocean cannot know where the sand ends */
     extra: 'a narrow band of shallow water hugging the shore, inside the land and not beyond it',
   },
   room: {
@@ -71,8 +44,7 @@ export const SCAFFOLDS = {
 
 export const KINDS = Object.keys(SCAFFOLDS)
 
-/* the kind a person typed, taken from their own words. Explicit beats guessed,
- * and an unrecognised word is not a kind rather than being forced into one. */
+/* the kind a person typed, taken from their own words: explicit beats guessed, and an unrecognised word is not a kind rather than being forced into one */
 export function kindOf(text, explicit) {
   const want = String(explicit || '').toLowerCase().trim()
   if (SCAFFOLDS[want]) return want
@@ -84,16 +56,13 @@ export function kindOf(text, explicit) {
 
 // ---- the cards -------------------------------------------------------------
 
-/* THE HOUSE CARD. Read off the hub's own painting and then written down, so it
- * does not depend on that map still existing or on a planner being reachable.
- * It is one account's card and is offered to another only by a grant. */
+/* the house card, read off the hub's own painting and written down so it does not depend on that map still existing or on a planner being reachable; it is one account's card and is offered to another only by a grant */
 export const HOUSE_KEY = 'adventure-game'
 
 export const HOUSE_CARD = {
   key: HOUSE_KEY,
   title: 'Adventure Game',
-  /* said on the constant and not only where it is handed out, or the one card
-   * that is granted rather than owned stops declaring itself halfway down */
+  /* said on the constant and not only where it is handed out, or the one card that is granted rather than owned stops declaring itself halfway down */
   house: true,
   craft: {
     scale: 'chunky isometric pixel art, moderate-coarse pixel clusters, forms blocky and readable at a glance, no sub-pixel detail',
@@ -105,9 +74,7 @@ export const HOUSE_CARD = {
   },
 }
 
-/* a card from an account's own published map: the same five fields, read off
- * that painting by the planner and stored. `ref` is the map whose picture is
- * passed as the style image. */
+/* a card from an account's own published map: the same five fields read off that painting by the planner and stored, with `ref` the map whose picture is passed as the style image */
 export function cardFrom(row) {
   if (!row) return null
   const craft = row.craft && typeof row.craft === 'object' ? row.craft : {}
@@ -127,8 +94,7 @@ export function cardFrom(row) {
   }
 }
 
-/* the card read off a map's own style.json, for an account naming one of its
- * published maps as its hand. The file is the same shape readStyleCard writes. */
+/* the card read off a map's own style.json, for an account naming one of its published maps as its hand, in the same shape readStyleCard writes */
 export function cardFromStyleFile(file, { key, title, ref }) {
   try {
     const o = JSON.parse(readFileSync(file, 'utf8'))
@@ -147,11 +113,7 @@ const tidy = (s) =>
     .trim()
     .replace(/[,.\s]+$/, '')
 
-/* THE WHOLE OF IT, AND THE ORDER MATTERS. The subject first, because a
- * generator weights the opening words hardest and the subject is the only part
- * the person actually typed. Then what the engine needs of this class. Then the
- * hand. A craft sentence in front of the subject draws the style and forgets the
- * thing. */
+/* order matters: subject first because a generator weights the opening words hardest and the subject is the only part a person typed, then the class, then the hand, because a craft sentence in front of the subject draws the style and forgets the thing */
 export function mapPrompt({ subject, kind, card, max = 1400 }) {
   const sub = tidy(subject)
   if (!sub) return { prompt: '', kind: '', card: null, parts: [] }
@@ -163,9 +125,7 @@ export function mapPrompt({ subject, kind, card, max = 1400 }) {
     scaffold ? { name: 'structure', text: scaffold.structure } : null,
     scaffold && scaffold.extra ? { name: 'extra', text: scaffold.extra } : null,
     card && card.craft && card.craft.clause ? { name: 'craft', text: card.craft.clause } : null,
-    /* last, because it is the one instruction a generator drops first and the
-     * bundle is unusable without it: a painted border is a coast the cut cannot
-     * find and a wall the engine draws its ocean over. */
+    /* last, because it is the instruction a generator drops first and the bundle is unusable without it: a painted border is a coast the cut cannot find and a wall the engine draws its ocean over */
     { name: 'edge', text: 'pixel art, no border, no frame, no text, no user interface' },
   ].filter(Boolean)
 
@@ -178,8 +138,7 @@ export function mapPrompt({ subject, kind, card, max = 1400 }) {
   }
 }
 
-/* what a map carries about the hand that drew it, for map.json. A reader can
- * then say which hand it was without holding an account. */
+/* what a map carries about the hand that drew it, for map.json, so a reader can say which hand it was without holding an account */
 export function styleStamp(card, kind) {
   if (!card) return kind ? { kind } : null
   return {
@@ -191,9 +150,7 @@ export function styleStamp(card, kind) {
   }
 }
 
-/* a canvas that fits the ceiling with both sides even, keeping the shape asked
- * for. Returned rather than refused, because a refusal here lands after the
- * person has already typed the subject. */
+/* a canvas that fits the ceiling with both sides even, keeping the shape asked for; returned rather than refused because a refusal here lands after the subject is already typed */
 export function fitCanvas({ w, h }) {
   let W = Math.max(64, Math.round(Number(w) || 688))
   let H = Math.max(64, Math.round(Number(h) || 384))
@@ -207,60 +164,33 @@ export function fitCanvas({ w, h }) {
 
 // ---- the cover -------------------------------------------------------------
 
-/* WHAT A TRANSITION SCREEN IS, and it is not a map. A map is painted to be walked on and its
- * scaffolds say so: transparent surrounds, a readable floor, a shoreline the cut can find. A cover
- * is painted to be LOOKED at for two seconds while the next map loads, so none of that applies and
- * putting it in SCAFFOLDS would also let kindOf guess it off the word "cover" in somebody's subject.
- *
- * The one hard rule is that it carries no words. The game draws the place's name itself, on its own
- * drawn plaque with a kicker over it (src/game/stage/covers.ts), so lettering in the picture lands
- * under lettering on top of it. */
+/* a cover is looked at for two seconds while the next map loads, so no map scaffold applies, and it stays out of SCAFFOLDS so kindOf cannot guess it off the word cover. it carries no words because the game draws the name on its own plaque (src/game/stage/covers.ts) */
 export const COVER_SCAFFOLD = {
   title: 'cover',
-  /* the widest frame under the ceiling with both sides even: 688 x 384 is 264,192 against 265,000,
-   * and it is the shape the game shows a cover in. The four covers the game already ships are
-   * 400x224, the same 1.79 to 1. */
+  /* the widest frame under the ceiling with both sides even: 688 x 384 is 264,192 against 265,000, and it is the shape the game shows a cover in; the four covers the game ships are 400x224, the same 1.79 to 1 */
   canvas: { w: 688, h: 384 },
-  /* READ OFF THE FOUR COVERS THE GAME ALREADY SHIPS, not invented: loading-port, loading-islands,
-   * loading-maw and loading-voyage in the game's public/art/ui. Every one of them looks ACROSS a
-   * place toward a horizon from about eye level, with a foreground, a subject in the middle and
-   * distance behind it. None of them is seen from above. */
+  /* read off the four covers the game ships, loading-port, loading-islands, loading-maw and loading-voyage in the game's public/art/ui: every one looks across a place toward a horizon from about eye level, with a foreground, a subject in the middle and distance behind, and none is seen from above */
   structure:
     'one wide scenic view looking across the place named above toward a distant horizon, from eye level or a little above, ' +
     'filling the frame corner to corner with no transparent space and nothing cut off at the edges, ' +
     'a dark detailed foreground at the bottom edge, the subject standing clear in the middle distance, ' +
     'open sky across the upper third',
-  /* AND THE LIGHT, which is what makes those four read as a held breath rather than a screenshot: in
-   * every one the source is IN the picture, low and warm, with the foreground dropped into shadow
-   * against it. */
+  /* the light is what makes those four read as a held breath rather than a screenshot: in every one the source is in the picture, low and warm, with the foreground dropped into shadow against it */
   light:
     'one strong light source inside the frame, low and warm, with a bright core and long reflections, ' +
     'the foreground dropped into deep shadow so the middle distance reads brightly against it',
-  /* rich and not muted, which is the one place a cover parts company with a map: a map is painted
-   * flat and desaturated so placements read on top of it, and nothing is ever placed on a cover */
+  /* rich and not muted, the one place a cover parts company with a map: a map is painted flat and desaturated so placements read on top of it, and nothing is ever placed on a cover */
   colour: 'rich saturated colour, strong contrast between the warm lit side and the cool shadowed side, deep clean darks',
-  /* said twice over and last, because it is the instruction a generator drops first and a cover with
-   * a title painted into it cannot be used at all */
+  /* said twice over and last, because it is the instruction a generator drops first and a cover with a title painted into it cannot be used at all */
   extra:
     'no text, no title, no lettering, no words, no numbers, no logo, no signage, no banner and nothing written anywhere in the picture',
 }
 
-/* THE WHOLE PROMPT FOR A COVER, built here and never in the browser, for the same reason mapPrompt is:
- * a client that assembles the prompt is a client that can ask for a hand it was never granted. Same
- * shape as mapPrompt so the two can be read side by side, and the subject leads because it is the one
- * part a person typed. */
+/* the whole prompt for a cover, built here and never in the browser, because a client that assembles the prompt can ask for a hand it was never granted; same shape as mapPrompt, and the subject leads because it is the part a person typed */
 export function coverPrompt({ subject, card, max = 1400 }) {
   const sub = tidy(subject)
   if (!sub) return { prompt: '', card: null, parts: [], canvas: COVER_SCAFFOLD.canvas }
-  /* THE CARD'S CLAUSE IS NOT USED HERE, and that is the whole difference between a cover and a map.
-   * A style card is read off a MAP, so its clause names an isometric projection and a desaturated
-   * muted palette: correct for something a character walks on and placements sit on top of, and
-   * exactly wrong for a picture that is looked at for two seconds. Held against the four covers the
-   * game already ships, a clause like that contradicts every one of them twice over.
-   *
-   * What survives is the hand that does carry across: the outline discipline, which is what makes
-   * two pictures look drawn by the same person. The projection, the light and the saturation come
-   * from the scaffold, because those three are what make a transition screen one. */
+  /* the card's clause is not used here: read off a map, it names an isometric projection and a muted palette, which contradicts every one of the four shipped covers. only the outline discipline carries across, and the projection, light and saturation come from the scaffold */
   const hand = card && card.craft && card.craft.outline ? card.craft.outline : ''
   const parts = [
     { name: 'subject', text: sub },
@@ -268,8 +198,7 @@ export function coverPrompt({ subject, card, max = 1400 }) {
     { name: 'light', text: COVER_SCAFFOLD.light },
     { name: 'colour', text: COVER_SCAFFOLD.colour },
     hand ? { name: 'hand', text: hand } : null,
-    /* last, and it repeats the no-words rule the scaffold already made, because the game writes the
-     * title over this picture and a painted one underneath it reads as a mistake nobody can fix */
+    /* last, and it repeats the no-words rule the scaffold already made, because the game writes the title over this picture and a painted one underneath cannot be fixed */
     { name: 'edge', text: COVER_SCAFFOLD.extra + ', no border, no frame, no user interface' },
   ].filter(Boolean)
   return {
@@ -280,6 +209,5 @@ export function coverPrompt({ subject, card, max = 1400 }) {
   }
 }
 
-/* the code name an extra cover is called by, the same rule an anchor name follows, because python
- * addresses both and one namespace shape across the tool is worth more than the freedom of two */
+/* the code name an extra cover is called by, the same rule an anchor name follows, because python addresses both and one namespace shape across the tool beats the freedom of two */
 export const isCoverName = (s) => /^[a-z][a-z0-9_]{0,47}$/.test(String(s || ''))

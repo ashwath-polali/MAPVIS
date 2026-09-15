@@ -1,13 +1,8 @@
-// Whether text on a colour can be read.
-//
-// Every panel this tool generates has words on it somewhere, and the one defect
-// that survives a look at a thumbnail is a label that vanishes into its own
-// background at a smaller size.
+// whether text on a colour can be read, because every panel this tool generates has words on it and the one defect that survives a look at a thumbnail is a label that vanishes into its own background at a smaller size
 
 import { luminance } from './srgb.js'
 
-/* WCAG 2, which is the ratio everything is specified against even though it is
- * known to be wrong about dark backgrounds. Ranges 1 to 21. */
+/* WCAG 2, the ratio everything is specified against even though it is known to be wrong about dark backgrounds, ranges 1 to 21 */
 export function contrastRatio(a, b) {
   const l1 = luminance(a)
   const l2 = luminance(b)
@@ -19,15 +14,12 @@ export function contrastRatio(a, b) {
 export const passesAA = (fg, bg, large = false) => contrastRatio(fg, bg) >= (large ? 3 : 4.5)
 export const passesAAA = (fg, bg, large = false) => contrastRatio(fg, bg) >= (large ? 4.5 : 7)
 
-/* black or white, whichever can be read on this. The obvious version compares
- * luminance to 0.5 and gets mid-tones wrong; comparing the two ratios is one
- * more line and always right. */
+/* black or white, whichever can be read on this: the obvious version compares luminance to 0.5 and gets mid-tones wrong, comparing the two ratios is one more line and always right */
 export function readableInk(bg) {
   return contrastRatio([0, 0, 0], bg) >= contrastRatio([255, 255, 255], bg) ? [0, 0, 0] : [255, 255, 255]
 }
 
-/* the smallest lightness change that clears a ratio, found by bisection rather
- * than guessed at, so a generated panel can be nudged instead of rejected */
+/* the smallest lightness change that clears a ratio, found by bisection rather than guessed at, so a generated panel can be nudged instead of rejected */
 export function liftToContrast(fg, bg, target = 4.5, steps = 20) {
   if (contrastRatio(fg, bg) >= target) return fg.slice()
   const goal = readableInk(bg)
@@ -50,8 +42,7 @@ export function liftToContrast(fg, bg, target = 4.5, steps = 20) {
   ]
 }
 
-/* the worst pair in a palette, which is the number worth reporting rather than
- * an average nobody can act on */
+/* the worst pair in a palette, which is the number worth reporting rather than an average nobody can act on */
 export function worstPair(palette) {
   let worst = Infinity
   let pair = null

@@ -1,10 +1,4 @@
-// The whole tool with no database and no bucket, which is how a fresh clone runs before anything is configured.
-
-//   node server/db/verify-local.mjs
-
-// It writes only to a temporary directory and talks to nothing. What it proves: the editor's document survives a round
-// trip through the file store, the read api refuses instead of crashing when there is no platform behind it, the
-// credential limiter stands in front of sign-in, and the solo-mode bypass is off in every shape but a local one.
+// the whole tool with no database and no bucket, the way a fresh clone runs before anything is configured: node server/db/verify-local.mjs writes only to a temporary directory and talks to nothing
 import http from 'node:http'
 import fs from 'node:fs'
 import os from 'node:os'
@@ -14,9 +8,7 @@ import { fileURLToPath } from 'node:url'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..')
 
-// Set before api.mjs is imported, because env() caches on first read and merges
-// .env underneath. A blank value here beats a filled-in line in that file, which
-// is the whole reason this can run on a machine that does have a database.
+// set before api.mjs is imported, because env() caches on first read and merges .env underneath, so a blank value here beats a filled-in line in that file and this can run on a machine that does have a database
 const SANDBOX = fs.mkdtempSync(path.join(os.tmpdir(), 'mapvis-local-'))
 for (const k of [
   'DATABASE_URL',
@@ -31,10 +23,7 @@ for (const k of [
 ])
   process.env[k] = ''
 process.env.MAPVIS_STORAGE = 'work'
-/* an owner is named so the house-hand checks below mean the same thing on a
- * fresh clone as they do on a configured one. With nobody named the permission
- * deliberately opens up, because that is one person on one laptop and there are
- * no other accounts to keep it from; the case worth checking is the other one. */
+/* an owner is named so the house-hand checks mean the same on a fresh clone as on a configured one, because with nobody named the permission deliberately opens up, one person on one laptop with no other accounts to keep it from */
 process.env.HOUSE_STYLE_OWNER = 'owner@example.invalid'
 process.env.MAPVIS_WORK = SANDBOX
 
@@ -84,9 +73,7 @@ try {
     ? ok('/api/me answers nobody instead of failing on the missing database')
     : no(`/api/me answered ${me.status} ${JSON.stringify(me.json)}`)
 
-  // ---- a map survives a round trip through disk ----------------------------
-  // The document is the one file a person cannot redraw, so a lossy save is the
-  // worst bug this tool can have. Compared as a string and not as an object.
+  // a map survives a round trip through disk: the document is the one file a person cannot redraw, so a lossy save is the worst bug this tool can have, and it is compared as a string and not as an object
   const doc = JSON.stringify({
     v: 3,
     walk: { charH: 18, feet: 2, hip: 5, step: 1, tol: 10, slide: 1 },
@@ -102,9 +89,7 @@ try {
     : no('the document changed across a save and a load')
   got.json?.from === 'disk' ? ok('and says it came from disk') : no(`it says it came from ${got.json?.from}`)
 
-  // ---- the read api refuses rather than breaking ---------------------------
-  // A game asks for a map this machine has never published. The answer has to be
-  // an answer: a 500 here reads as an outage to whatever is polling.
+  // the read api refuses rather than breaking: a game asking for a map this machine has never published still has to get an answer, because a 500 here reads as an outage to whatever is polling
   const listed = await call('/api/v1/maps')
   listed.status === 503 && /no database/.test(listed.json?.error || '')
     ? ok('/api/v1/maps says in a sentence that nothing is published here yet')
@@ -114,9 +99,7 @@ try {
     ? ok(`an unpublished map answers ${missing.status} and not a crash`)
     : no(`an unknown map answered ${missing.status}`)
 
-  // ---- the fence in front of sign-in --------------------------------------
-  // Refused on the burst, not on the first press: a person signing in once must
-  // never meet this, and a machine guessing passwords must.
+  // the fence in front of sign-in, refused on the burst and not on the first press: signing in once must never meet this, and a machine guessing passwords must
   const burst = Number(process.env.AUTH_RATE_BURST || 30)
   let refusedAt = 0
   for (let i = 1; i <= burst + 6 && !refusedAt; i++) {
@@ -137,9 +120,7 @@ try {
     ? ok('while ordinary reads keep working through it')
     : no(`/api/me got caught in the credential bucket (${reading.status})`)
 
-  // ---- the auth bypass ----------------------------------------------------
-  // soloMode() is read once per process, so each case is its own process. The
-  // point is that four of these five answer null.
+  // the auth bypass: soloMode() is read once per process, so each case is its own process, and four of these five answer null
   const ASK = "const m = await import('./server/store/auth.mjs'); console.log(JSON.stringify(m.soloMode()))"
   const solo = (extra) => {
     const out = execFileSync(process.execPath, ['--input-type=module', '-e', ASK], {
@@ -168,21 +149,10 @@ try {
     ? ok('and refused for any request that did not come from the loopback address')
     : no('the loopback fence is gone from currentUser')
 
-  // ---- undoing an edit, all eight steps of it -----------------------------
-  // .prev keeps up to eight earlier copies of an item, named <name>.png then
-  // <name>-2.png upward. The route finds them with a pattern built out of a
-  // string, and a lone backslash inside quotes is dropped: '\d' written there
-  // is the letter d. The pattern matched <name>-ddd and never <name>-2, so an
-  // undo reached the newest copy and no further, with seven good versions
-  // sitting beside it and no way to say so.
-  //
-  // The line is lifted out of the route and exercised rather than read, because
-  // reading is what missed it.
+  // undoing an edit, all eight steps: .prev keeps eight copies named <name>.png then <name>-2.png upward, and a lone backslash in a quoted string is dropped, so '\d' there is the letter d, the pattern matched <name>-ddd and never <name>-2, and undo reached only the newest copy
   {
     const route = fs.readFileSync(path.join(ROOT, 'server/api.mjs'), 'utf8')
-    /* the shared reader, not the line that used to sit inside the revert route: the undo and the
-     * animation switch both have to agree which kept copy is the newest, so the pattern is written
-     * once and named, and this exercises the one they both call. */
+    /* the shared reader, not the line that used to sit inside the revert route: undo and the animation switch have to agree which kept copy is the newest, so the pattern is written once and named, and this exercises the one they both call */
     const line = route.split(/\r?\n/).find((l) => l.includes('const numberedCopy = (name) =>'))
     if (!line) no('nothing builds a pattern for the copies kept beside an item any more')
     else {
@@ -199,12 +169,7 @@ try {
     }
   }
 
-  // ---- how long an answer may be kept ------------------------------------
-  // A url carrying a version names one set of bytes for ever. Left with no
-  // header a host fills one in, and its default turns every versioned file into
-  // a conditional request on every open, which is the round trip the version in
-  // the url exists to avoid. Checked here because it is a property of the url
-  // shape, so it holds with no database behind it and no map published.
+  // how long an answer may be kept: a url carrying a version names one set of bytes for ever, and left with no header a host fills one in whose default turns every versioned file into a conditional request on every open, the round trip the version in the url exists to avoid
   {
     const cc = async (path) => (await call(path)).cache
     const IMM = 'public, max-age=31536000, immutable'
@@ -225,8 +190,7 @@ try {
       ? ok('and a manifest pinned to a version is immutable like the files under it')
       : no(`a pinned manifest answered ${JSON.stringify(await cc('/api/v1/maps/hub?v=3'))}`)
 
-    /* the listing is every map and their newest versions, so it is the one
-     * answer that must not be held: a map published a moment ago has to appear */
+    /* the listing is every map and their newest versions, so it is the one answer that must not be held: a map published a moment ago has to appear */
     ;(await cc('/api/v1/maps')) === null
       ? ok('and the listing of every map is never held, since a new publish has to show in it')
       : no(`the listing answered ${JSON.stringify(await cc('/api/v1/maps'))}`)
@@ -236,15 +200,7 @@ try {
       : no(`an unhashed ui piece answered ${JSON.stringify(await cc('/api/v1/ui/band/image'))}`)
   }
 
-  // ---- whose hand a stranger may draw with -------------------------------
-  // The house style is the one thing on this platform that is not public. A
-  // signed-out visitor must be offered none of it, must be refused when they
-  // name it anyway, and must still be able to draw under Other.
-  //
-  // This is checked because it has already failed once: the owner is read from
-  // the environment, and reading it with process.env instead of env() finds
-  // nothing, which the permission treats as "nothing configured" and opens to
-  // everybody. An empty string is the dangerous value here.
+  // whose hand a stranger may draw with: the house style is the only thing on this platform that is not public, and reading the owner with process.env instead of env() finds an empty string, which the permission treats as nothing configured and opens it to everybody
   {
     const offered = await call('/api/styles')
     const keys = (offered.json?.cards || []).map((c) => c.key)
@@ -270,10 +226,7 @@ try {
       : no('a stranger cannot draw at all')
   }
 
-  // ---- what a client cannot raise ----------------------------------------
-  // Every ceiling that stands between a loop and a bill is read from the
-  // environment. A request that could widen one would be a request that could
-  // spend somebody else's money, so each is checked where it is declared.
+  // what a client cannot raise: every ceiling standing between a loop and a bill is read from the environment, so a request that could widen one could spend somebody else's money, and each is checked where it is declared
   const ceilings = [
     ['the monthly bucket read limit', 'server/store/platform.mjs', /R2_MONTHLY_READ_LIMIT/],
     ['the monthly bucket write limit', 'server/store/platform.mjs', /R2_MONTHLY_WRITE_LIMIT/],

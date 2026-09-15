@@ -29,8 +29,7 @@ export async function refreshSession() {
     const j = await r.json()
     set({ user: j.user || null, spend: j.spend || [], loading: false })
   } catch {
-    // an unreachable server is signed out, not an error page. The tool still
-    // works without an account and always will.
+    // an unreachable server means signed out, not an error page, because the tool still works without an account and always will
     set({ user: null, spend: [], loading: false })
   }
 }

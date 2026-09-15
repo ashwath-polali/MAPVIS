@@ -1,4 +1,4 @@
-// export is a save: version N's bytes live at publish/<slug>/vN/ forever and are never rewritten, so a session already running cannot break and a cdn can cache them for good
+// export is a save: version N's bytes live at publish/<slug>/vN/ forever and are never rewritten, so a client already reading them cannot break and a cdn can cache them for good
 import crypto from 'node:crypto'
 import { q, one, many, tx } from '../db/pool.mjs'
 import { store, keys } from './blobs.mjs'
@@ -6,8 +6,7 @@ import { packAtlas, atlasify } from './atlas.mjs'
 import { gateMap } from './gate.mjs'
 import { decodePNG } from '../sheet.mjs'
 
-// the same three words as MAP_CLASSES in src/core/mask.ts and the check on
-// maps.class in 008. Kept here because the browser's copy is typescript.
+// the same three words as MAP_CLASSES in src/core/mask.ts and the check on maps.class in 008, kept here because the browser's copy is typescript
 export const MAP_CLASSES = ['island', 'room', 'hall']
 
 const sha = (b) => crypto.createHash('sha256').update(b).digest('hex')
@@ -46,9 +45,7 @@ const GAME_OPENING_PULL = 1.18
 
 const shotZoom = (f) => {
   const rel = isFinite(Number(f?.overFit)) && Number(f.overFit) > 0 ? Number(f.overFit) : 0
-  // a shot armed before overFit existed has no canvas behind it any more, so it
-  // becomes the map's opening view. That is a camera somebody can look at and
-  // re-arm; the raw notch is a nose filling the screen with nothing saying why.
+  // a shot armed before overFit existed has no canvas behind it any more, so it becomes the map's opening view: a camera somebody can look at and re-arm, where the raw notch is a nose filling the screen with nothing saying why
   if (!rel) return 1
   return Math.round((rel / GAME_OPENING_PULL) * 1000) / 1000
 }
@@ -97,9 +94,7 @@ const shotsOntoMeta = (framings, anchor, meta) => {
   for (const f of mine) set[f.name] = one(f)
   /* a default is always written, because look_at asks for a shot with no name and an unnamed miss falls back to the same slot */
   const def = mine.find((f) => f.entry) || mine.reduce((a, b) => ((a.id ?? 0) <= (b.id ?? 0) ? a : b))
-  /* MERGED, NEVER SWAPPED IN. quarry_gate on the real hub already carries docId
-   * and derived, and the game writes `derived` itself when it has to invent a
-   * name, so replacing the bag would take both out. */
+  /* merged, never swapped in: quarry_gate on the real hub already carries docId and derived, and the game writes derived itself when it has to invent a name, so replacing the bag would take both out */
   return { ...(had || {}), framings: set, framing: { ...one(def), name: def.name } }
 }
 
@@ -108,8 +103,7 @@ const variantsOntoMeta = (variants, anchor, meta) => {
   const all = Array.isArray(variants) ? variants : []
   const mine = all.filter((v) => v && v.anchor === anchor)
   const had = meta && typeof meta === 'object' && Object.keys(meta).length ? meta : null
-  // the same clearing the shots do, for the same reason: a projection that
-  // cannot remove its own key ships a set nothing in the document still holds
+  // the same clearing the shots do, for the same reason: a projection that cannot remove its own key ships a set nothing in the document still holds
   if (!mine.length) return without(had, 'variants')
   const set = {}
   for (const v of mine)
@@ -117,9 +111,7 @@ const variantsOntoMeta = (variants, anchor, meta) => {
       initial: typeof v.initial === 'string' ? v.initial : '',
       members: (Array.isArray(v.members) ? v.members : []).map((m) => ({ name: m.name, placement: m.placement })),
     }
-  /* MERGED, NEVER SWAPPED IN, exactly as the shots are. An anchor already
-   * carries docId, derived, and now `when`, and replacing the bag would take all
-   * three out. */
+  /* merged, never swapped in, exactly as the shots are: an anchor already carries docId, derived and now `when`, and replacing the bag would take all three out */
   return { ...(had || {}), variants: set }
 }
 
@@ -127,14 +119,10 @@ const variantsOntoMeta = (variants, anchor, meta) => {
 const FOOT_ALPHA = 40 // the repo-wide alpha threshold, same as Walk.tsx's trimToFeet
 const FOOT_BAND = 4 // how deep the ground contact band is, in painting pixels
 
-/* the frame the placement rests on: whatever a reader would draw for it while it
- * is standing still. The export already resolves a direction set's resting view
- * into src, so this order matches what the walk page puts on screen. */
+/* the frame the placement rests on, whatever a reader would draw for it standing still; the export already resolves a direction set's resting view into src, so this order matches the walk page */
 const restFrame = (a) => a.src || a.frames?.[0] || Object.values(a.dirs || {})[0]?.[0] || null
 
-/* files is keyed by the path inside assets/ and the two callers disagree about
- * whether the folder is on it, exactly as the atlas packer found. Strip and try
- * both rather than trust either. */
+/* files is keyed by the path inside assets/ and the two callers disagree about whether the folder is on it, as the atlas packer found, so strip and try both rather than trust either */
 function frameBytes(files, url) {
   if (!url) return null
   const rel = String(url)
@@ -159,12 +147,10 @@ function measureFoot(img, a, yScale) {
   }
   // a frame with nothing drawn in it is nothing to walk into
   if (top < 0) return [0, 0, 0, 0]
-  /* a quarter of the object's height at most, so a thing shorter than the band
-   * is not read as being all base, and never less than one row */
+  /* a quarter of the object's height at most, so a thing shorter than the band is not read as being all base, and never less than one row */
   const drawnH = (feet - top + 1) * sy
   const rows = Math.max(1, Math.round(Math.min(FOOT_BAND, drawnH * 0.25) / sy))
-  /* flipY draws the sprite upside down, so the rows that end up against the
-   * ground are the ones at the TOP of the source */
+  /* flipY draws the sprite upside down, so the rows that end up against the ground are the ones at the top of the source */
   const upside = !!a.flipY
   const lo = upside ? top : Math.max(top, feet - rows + 1)
   const hi = upside ? Math.min(feet, top + rows - 1) : feet
@@ -179,8 +165,7 @@ function measureFoot(img, a, yScale) {
   if (x1 < x0) return [0, 0, 0, 0]
   let rx = ((x1 - x0 + 1) / 2) * sx
   let ry = Math.max(((hi - lo + 1) / 2) * sy, rx * yScale)
-  // the frame is drawn centred on the anchor in x, so an off-centre base carries
-  // an offset, and a mirrored frame carries it the other way
+  // the frame is drawn centred on the anchor in x, so an off-centre base carries an offset, and a mirrored frame carries it the other way
   let ox = ((x0 + x1 + 1) / 2 - w / 2) * sx
   if (a.flipX) ox = -ox
   /* a rotated frame is covered by the axis-aligned box around the turned ellipse, because a second geometry nobody can check costs more than the slack */
@@ -192,8 +177,7 @@ function measureFoot(img, a, yScale) {
     rx = nx
     ry = ny
   }
-  // the transparent rows under the drawn feet are canvas, not object, and they
-  // are what would otherwise float the whole footprint below the ground
+  // the transparent rows under the drawn feet are canvas, not object, and they are what would otherwise float the whole footprint below the ground
   const lift = (upside ? top : h - 1 - feet) * sy
   const r2 = (v) => Math.round(v * 100) / 100
   return [r2(ox), r2(-lift - ry), r2(rx), r2(ry)]
@@ -272,8 +256,7 @@ async function writesThisMonth() {
 }
 
 export async function publishBundle(slug, { mapJson, assetsJson, images, files }) {
-  /* A PUBLISH THAT TAKES MINUTES HAS TO SAY WHERE IT IS. It writes hundreds of
-   * objects, and silence until it finishes is indistinguishable from hanging. */
+  /* a publish that takes minutes has to say where it is: it writes hundreds of objects, and silence until it finishes is indistinguishable from hanging */
   const t0 = Date.now()
   const step = (what) => console.log(`[publish] ${slug}: ${what} · ${((Date.now() - t0) / 1000).toFixed(1)}s`)
   const m = await one('select id from maps where slug = $1', [slug])
@@ -312,9 +295,7 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
      left join style_cards c on c.id = m.style_card_id where m.id = $1`,
     [m.id],
   )
-  /* MEASURED BEFORE THE BUNDLE IS ASSEMBLED, and never fatal: a scene this
-   * decoder cannot read is a reason to fall back to the columns, not a reason to
-   * refuse a publish that is otherwise fine. */
+  /* measured before the bundle is assembled and never fatal: a scene this decoder cannot read is a reason to fall back to the columns, not a reason to refuse a publish that is otherwise fine */
   const stated = props?.paint_set ? { w: props.paint_w, h: props.paint_h, ox: props.paint_ox, oy: props.paint_oy } : null
   let paint = null
   try {
@@ -338,18 +319,14 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
     speed: Number(props?.speed ?? 34),
     yScale: Number(props?.yscale ?? 0.72),
     /* measured off the scene.png about to be written and not asked of base_*, which overstates the hub by 75 percent and puts its centre 62 pixels out */
-    /* stated beats measured beats the dropped file's box. paint_set says a person
-     * typed the four numbers, which is the case the scan is wrong in. */
+    /* stated beats measured beats the dropped file's box, because paint_set says a person typed the four numbers, which is the case the scan is wrong in */
     base: stated || paint || {
       w: props?.base_w ?? mapJson?.w ?? 0,
       h: props?.base_h ?? mapJson?.h ?? 0,
       ox: props?.base_ox ?? 0,
       oy: props?.base_oy ?? 0,
     },
-    /* WHICH HAND DREW IT, carried in the bundle so a reader can say so without an
-     * account. A member's island made on their own account in the house hand has
-     * to be recognisable as the same hand as everything else, and the only place
-     * that fact can survive leaving the platform is here. */
+    /* which hand drew it, carried in the bundle so a reader can say so without an account: an island made on a separate account in the house hand has to be recognisable as the same hand as everything else, and this is the only place that fact survives leaving the platform */
     ...(props?.style_key || props?.style_kind
       ? {
           style: {
@@ -394,9 +371,7 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
             dx: f.dx ?? 0,
             dy: f.dy ?? 0,
             zoom: Number(f.zoom ?? 1),
-            // what the same shot is worth to the game, beside the editor's own
-            // view number, so nothing downstream has to work out which unit the
-            // field above is in
+            // what the same shot is worth to the game, beside the editor's own view number, so nothing downstream has to work out which unit the field above is in
             gameZoom: shotZoom(f),
             ...(f.entry ? { entry: true } : {}),
             ...(f.meta && Object.keys(f.meta).length ? { meta: f.meta } : {}),
@@ -470,9 +445,7 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
       ...(a.placement_id ? { placement: a.placement_id } : {}),
       ...(a.facing ? { facing: a.facing } : {}),
       ...(a.label ? { label: a.label } : {}),
-      /* the bag, with every shot hung on this name folded in. See shotsOntoMeta
-       * below: the game reads a camera off the anchor and has never had a reader
-       * for the framings array above. */
+      /* the bag, with every shot hung on this name folded in: the game reads a camera off the anchor and has never had a reader for the framings array above */
       ...(() => {
         const meta = variantsOntoMeta(props?.variants, a.name, shotsOntoMeta(props?.framings, a.name, a.meta))
         return meta ? { meta } : {}
@@ -543,9 +516,7 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
     for (const r of map.racks || []) {
       const gone = missing(r.slots.map((s) => s.anchor))
       if (gone.length) {
-        // the slot NUMBER is named beside the anchor, because that is the address
-        // the author is holding: "slot 3 is empty" is actionable, "the rack is
-        // broken" is not
+        // the slot number is named beside the anchor, because that is the address the author is holding: slot 3 is empty is actionable, the rack is broken is not
         const where = r.slots.filter((s) => gone.includes(s.anchor)).map((s) => `slot ${s.slot} · ${s.anchor}`)
         problems.push(
           `the rack "${r.name}" has ${where.length === 1 ? 'a slot' : 'slots'} on ${where.length === 1 ? 'an anchor' : 'anchors'} ` +
@@ -559,8 +530,7 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
       `${slug} was not published, and nothing was written. ${problems.length} problem${problems.length === 1 ? '' : 's'}:\n` +
         problems.map((p) => '  · ' + p).join('\n'),
     )
-  // a warning is a fact the author should have, not a reason to refuse: a door
-  // to a room nobody has painted yet is a deliberate shape
+  // a warning is a fact the author should have, not a reason to refuse: a door to a room nobody has painted yet is a deliberate shape
   for (const w of warnings) console.warn(`[publish] ${slug}: ${w}`)
   step('gate passed')
 
@@ -572,8 +542,7 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
   let packed = null
   if (files.size) {
     /* the index is keyed the way assets.json asks, normalised rather than prefixed, because either mismatch makes every frame miss and fall back to a loose file while reporting success */
-    // the same normalisation `all` was built with above, so the index and the
-    // objects can no longer be keyed differently from one another
+    // the same normalisation `all` was built with above, so the index and the objects can no longer be keyed differently from one another
     packed = packAtlas(new Map([...files].map(([k, v]) => [inAssets(k), v])))
     if (packed) {
       all.set('atlas.png', packed.png)
@@ -585,13 +554,11 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
   for (const [name, buf] of Object.entries(images)) if (buf) all.set(name, buf)
   all.set('map.json', Buffer.from(JSON.stringify(map, null, 2)))
   /* measured here rather than in the export route, so all three publishers get footprints without knowing they exist */
-  // off the map that is shipping, which is the row, so a footprint is squashed
-  // by the same number the bundle tells the game to squash distance by
+  // off the map that is shipping, which is the row, so a footprint is squashed by the same number the bundle tells the game to squash distance by
   const placed = footprints(assetsJson.assets || [], files, map.yScale > 0 ? map.yScale : 0.72)
   const feet = placed.filter((a) => a && a.foot).length
   const solid = placed.filter((a) => a && a.foot && a.foot[2] > 0).length
-  // kept, because the cost measured at the bottom has to read the array that
-  // actually shipped rather than the one it was built from
+  // kept, because the cost measured at the bottom has to read the array that actually shipped rather than the one it was built from
   const atlased = packed ? atlasify(placed, packed.index) : null
   all.set(
     'assets.json',
@@ -628,8 +595,7 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
             if (attempt < 2) await new Promise((r) => setTimeout(r, 150 * (attempt + 1)))
           }
         }
-        // rethrown rather than counted, so a publish that lost an object cannot
-        // reach the insert below
+        // rethrown rather than counted, so a publish that lost an object cannot reach the insert below
         if (err) throw err
         wrote[i] = { bytes: buf.length, sha256: sha(buf) }
       }
@@ -659,9 +625,7 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
      values ($1, $2, $3, $4::jsonb, $5, (select owner_id from maps where id = $1))`,
     [m.id, version, prefix, JSON.stringify(manifest), bytes],
   )
-  // publishing IS working on a map, so the dashboard should say so. Without
-  // this the home page kept leading with whichever map happened to be saved
-  // last, while the one just re-exported sat further down the grid.
+  // publishing is working on a map, so the dashboard says so: without this the home page leads with whichever map happened to be saved last while the one just re-exported sits further down the grid
   await q('update maps set updated_at = now() where id = $1', [m.id])
   /* the painted extent lands in its own columns and never over base_*, which getDoc round-trips and which re-grows a map on reload */
   // never over a stated extent: paint_set means a person corrected the scan
@@ -701,9 +665,7 @@ export async function publishBundle(slug, { mapJson, assetsJson, images, files }
   }
 }
 
-// What the game asks for. Version defaults to the newest, which is what
-// "re-exporting updates that map in the game" means in practice, but a build
-// can pin one and never be surprised.
+// what the game asks for; version defaults to the newest, so re-exporting updates that map in the game, and a build can pin one instead and never be surprised
 export async function publishedMap(slug, version) {
   const row = await one(
     version

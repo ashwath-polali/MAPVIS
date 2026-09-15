@@ -1,8 +1,4 @@
-// Two dimensional vector arithmetic, on plain arrays.
-//
-// Plain [x, y] rather than a class, because every one of these crosses a wire as
-// JSON at some point and a class arrives on the other side as an object with no
-// methods. Nothing here allocates more than it has to.
+// two dimensional vector arithmetic on plain [x, y] arrays rather than a class, because every one of these crosses a wire as JSON and a class arrives on the other side as an object with no methods
 
 export const add = (a, b) => [a[0] + b[0], a[1] + b[1]]
 export const sub = (a, b) => [a[0] - b[0], a[1] - b[1]]
@@ -33,8 +29,7 @@ export function angle(a, b) {
   return Math.atan2(b[1] - a[1], b[0] - a[0])
 }
 
-/* the nearest point on a segment, clamped to its ends. The building block of
- * every "how far is this from that path" question. */
+/* the nearest point on a segment, clamped to its ends, the building block of every how far is this from that path question */
 export function closestOnSegment(p, a, b) {
   const ab = sub(b, a)
   const l = len2(ab)
@@ -48,8 +43,7 @@ export function distToSegment(p, a, b) {
   return dist(p, closestOnSegment(p, a, b))
 }
 
-/* which side of the line a to b the point is on: positive is left with y down,
- * which is the convention every raster in this library uses */
+/* which side of the line a to b the point is on: positive is left with y down, the convention every raster in this library uses */
 export const side = (p, a, b) => cross(sub(b, a), sub(p, a))
 
 export function segmentsIntersect(a, b, c, d) {

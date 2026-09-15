@@ -6,9 +6,7 @@ import { getDoc, putDoc, getMapBySlug, createMap, ensureUser } from './maps.mjs'
 import { env, need } from '../db/env.mjs'
 import { request } from './ctx.mjs'
 
-// Is the platform on at all? With no database configured the tool falls back to
-// work/ and behaves exactly as it did before, which is the degraded-not-broken
-// rule applied to the backend itself.
+// is the platform on at all: with no database configured the tool falls back to work/ and behaves exactly as it did before, degraded rather than broken
 export const platformOn = () => {
   const E = env()
   return E.MAPVIS_STORAGE !== 'work' && !!(E.DATABASE_POOLED_URL || E.DATABASE_URL)
@@ -17,9 +15,7 @@ export const platformOn = () => {
 // disk fallback stays on so a database blip cannot lose an author's work, and MAPVIS_NO_DISK=1 takes it away so a gate can prove the map really lives off this laptop
 export const diskAllowed = () => env().MAPVIS_NO_DISK !== '1'
 
-// slug -> map id. Cached because it is asked on every png request and a map's
-// id never changes. Negative answers are cached briefly too, so a request for a
-// map that does not exist does not hit the database on every frame.
+// slug to map id, cached because every png request asks for it and a map's id never changes, and a miss is cached briefly so a map that does not exist does not hit the database every frame
 const ids = new Map()
 const MISS_MS = 5000
 
@@ -62,8 +58,7 @@ export async function saveDocument(slug, docString) {
     throw e
   }
   const r = await putDoc(id, docString)
-  // the row's own updated_at, so the browser records exactly what the server
-  // thinks the time is rather than what the browser's clock thinks
+  // the row's own updated_at, so the browser records what the server thinks the time is rather than what its own clock thinks
   const t = await one('select updated_at from maps where id = $1', [id])
   return { bytes: docString.length, savedAt: t ? +new Date(t.updated_at) : Date.now(), ...r }
 }
@@ -90,9 +85,7 @@ export async function loadDocument(slug) {
   return { doc, savedAt: t ? +new Date(t.updated_at) : 0 }
 }
 
-// ---- the library -----------------------------------------------------------
-
-// one select where the filesystem version cost 71 probes per listing on the hub, and the returned shape is unchanged because App.tsx reads it directly
+// the library: one select where the filesystem version cost 71 probes per listing on the hub, and the returned shape is unchanged because App.tsx reads it directly
 export async function libraryOf(slug) {
   const id = await mapIdFor(slug)
   if (!id) return []
@@ -108,20 +101,7 @@ export async function libraryOf(slug) {
   )
   const base = `/work/${slug}/library`
   return rows.map((r) => {
-    /* A SET OF HEADINGS IS STATIC WITH DIRS, and every other reader in this tool already says so:
-     * libraryItems off the disk, readLook in the editor, and the routes' own answers. Only this
-     * column disagreed, because a view set writes <heading>-<i>.png and never 0.png, so frame_count
-     * is 0 while the kind came out 'animated'.
-     *
-     * What that cost: the client places by kind, and for 'animated' it copies `frames` and never
-     * touches `src`. frame_count 0 means there are no frames to copy, so the placement landed with
-     * an empty frame list and nothing else: no ghost under the cursor, a 24 by 24 handle box round a
-     * 36 by 48 figure, no library row resolvable from it so the whole inspector vanished, and on
-     * export no resting heading so every such figure shipped facing south. Measured on the live
-     * database: 27 of 27 view sets are stored this way.
-     *
-     * Healed here rather than migrated, so rows written by the old code come back right on the next
-     * read and nothing has to be republished. upsertItem writes it correctly from now on. */
+    /* a set of headings is static with dirs: a view set writes <heading>-<i>.png and never 0.png, so frame_count 0 with kind 'animated' made the client copy frames and never src, leaving an empty placement, a 24 by 24 handle round a 36 by 48 figure and an export facing south; healed on read, 27 of 27 rows */
     const kind = r.dirs && !(r.frame_count > 1) ? 'static' : r.kind
     const it = { name: r.name, kind, w: r.w, h: r.h }
     if (r.fps) it.fps = r.fps
@@ -138,8 +118,7 @@ export async function libraryOf(slug) {
       const facing = it.dirs && (it.dirs.south || it.dirs[Object.keys(it.dirs)[0]])
       it.src = facing?.length ? facing[0] : `${base}/${r.name}.png`
     }
-    // the same shape statesOf() returned off disk, because App.tsx picks a face
-    // by name and draws it at the size it reports
+    // the same shape statesOf() returned off disk, because App.tsx picks a face by name and draws it at the size it reports
     const st = Array.isArray(r.states) ? r.states : []
     if (st.length) it.states = st
     if (r.origin && (r.origin.objectId || r.origin.characterId)) it.canState = true
@@ -216,8 +195,7 @@ export async function noteBucketUsage() {
          updated_at = now()`,
       [monthKey(), d.a, d.b],
     )
-    // the cached total is now wrong by exactly this much, so correct it rather
-    // than waiting out the minute
+    // the cached total is now wrong by exactly this much, so correct it rather than waiting out the minute
     if (budgetMemo.row) {
       budgetMemo.row.a += d.a
       budgetMemo.row.b += d.b
@@ -229,9 +207,7 @@ export async function noteBucketUsage() {
   }
 }
 
-// ---- serving a png ---------------------------------------------------------
-
-// /work/<slug>/<anything> maps to maps/<id>/<anything>, so the slug is swapped for the id and the rest of the path is kept
+// serving a png: /work/<slug>/<anything> maps to maps/<id>/<anything>, so the slug is swapped for the id and the rest of the path is kept
 export async function blobKeyForWorkPath(rel) {
   const parts = String(rel).split('/').filter(Boolean).map(decodeURIComponent)
   if (parts.length < 2) return null
@@ -256,8 +232,7 @@ async function knownTag(key) {
   }
 }
 
-// Registered once. The sha is written beside the bytes rather than derived
-// later, because a tag that is recomputed on read is a tag that costs a read.
+// registered once, and the sha is written beside the bytes rather than derived later because a tag recomputed on read costs a read
 let hooked = false
 function hookBlobWrites() {
   if (hooked) return
@@ -314,8 +289,7 @@ export async function serveFromStore(res, rel, req) {
        on conflict (key) do update set sha = excluded.sha, bytes = excluded.bytes, updated_at = now()`,
       [key, etag.slice(1, -1), buf.length],
     ).catch(() => {
-      /* the bytes are already in hand; failing to remember them is not a
-       * reason to fail the response */
+      /* the bytes are already in hand, so failing to remember them is not a reason to fail the response */
     })
   }
 
@@ -382,16 +356,12 @@ export async function hydrateMap(slug, dir) {
       }
     }),
   )
-  // said out loud rather than swallowed: a file that did not arrive is a frame
-  // that will be missing from the bundle, and the export must not look clean
+  // said out loud rather than swallowed: a file that did not arrive is a frame missing from the bundle, and the export must not look clean
   if (failed.length) console.error(`[hydrate] ${slug}: ${failed.length} object(s) could not be read, e.g. ${failed[0]}`)
   return { pulled, bytes, skipped, failed: failed.length }
 }
 
-// ---- writing a png ---------------------------------------------------------
-
-// Every generation path in api.mjs ends by putting bytes somewhere. These are
-// the two calls that replaces, so no route needs to know about keys.
+// writing a png: every generation path in api.mjs ends by putting bytes somewhere, and these two calls own the keys so no route has to know them
 export async function putLibraryStill(slug, name, buf, meta = {}) {
   const id = await mapIdFor(slug, { create: true })
   await store().put(keys.libStill(id, name), buf, 'image/png')
@@ -434,9 +404,7 @@ async function upsertItem(mapId, name, kind, o) {
   )
 }
 
-// ---- pushing a just-written item into the store -----------------------------
-
-// disk stays the scratch area the generation routes run in, and this pushes what landed to the store before the request ends, so an ephemeral disk still works
+// pushing a just-written item into the store: disk stays the scratch area the generation routes run in, and what landed there is pushed before the request ends so an ephemeral disk still works
 export async function pushItem(slug, name, workDir) {
   if (!platformOn()) return null
   const fs = await import('node:fs')
@@ -453,17 +421,7 @@ export async function pushItem(slug, name, workDir) {
     return { w: b.readUInt32BE(16), h: b.readUInt32BE(20) }
   }
 
-  /* THE FOLDER WINS OVER THE LOOSE PNG WHEN BOTH ARE THERE, and both are there
-   * for the length of one swap. Turning a still into an animation writes the
-   * frame folder, pushes, and only then deletes the png, so that the original
-   * is still standing if the write dies halfway. Reading the png first during
-   * that window records the row as a still with no frames, the png is deleted a
-   * moment later, and the library is left calling an animated thing a still
-   * that points at bytes nobody has. Nothing is animated again until the map is
-   * reconciled by hand.
-   *
-   * A frame folder and a png of the same name is never a resting state, so the
-   * folder is the newer of the two and the one to believe. */
+  /* the folder wins over the loose png when both are there, which lasts the length of one swap: a still turned animated writes the frame folder, pushes, then deletes the png, so believing the png rows a frameless still pointing at bytes nobody has, fixable only by hand */
   const folderFirst = fs.existsSync(path.join(lib, name))
 
   // a still
@@ -471,17 +429,11 @@ export async function pushItem(slug, name, workDir) {
   if (!folderFirst && fs.existsSync(still)) {
     const buf = fs.readFileSync(still)
     await s.put(keys.libStill(id, name), buf, 'image/png')
-    /* AND THE FRAMES IT USED TO BE ARE GONE FROM THE STORE, after the still is safely up. Taking the
-     * animation off a thing left them there: hydrateMap pulls a map's whole library back down onto
-     * an empty work/, so the folder reappeared beside the png, folderFirst read true again, and the
-     * thing was animated once more on the very next request. On a host, where work/ is always empty
-     * and so a hydrate always runs, removing an animation did not stick at all. The store has to
-     * hold the shape the disk holds and no other. */
+    /* and the frames it used to be are gone from the store, after the still is safely up: hydrateMap pulls a map's whole library onto an empty work/, so leftover frames reappeared beside the png and the thing animated itself again on the next request */
     await s.delPrefix(keys.libPrefix(id, name))
     const { w, h } = size(still)
     await upsertItem(id, name, 'static', { w, h, frame_count: 0, prefix: keys.libPrefix(id, name), origin: originOf(fs, path, workDir, name) })
-    /* AND ITS FACES, which this branch used to return before ever reaching. An object is a loose png,
-     * so every second face ever drawn for one was skipped here and stored nowhere at all. */
+    /* and its faces, which this branch used to return before ever reaching: an object is a loose png, so every second face ever drawn for one was stored nowhere at all */
     const faces = await pushStates(slug, name, workDir)
     return { name, kind: 'static', faces }
   }
@@ -492,11 +444,7 @@ export async function pushItem(slug, name, workDir) {
   // frames, and any per-heading folders beside them
   const meta = readJson(fs, path.join(folder, 'dirs.json'))
   const effect = readJson(fs, path.join(folder, 'effect.json'))
-  /* EVERY KEY THIS PUSH WRITES, so that whatever is left under the item's prefix afterwards can be
-   * recognised as belonging to a shape it no longer has and removed. Counting is not enough: a
-   * heading set, a frame list and a written effect put files in three different shapes, and an
-   * eight-frame motion replaced by a four-frame one leaves frames four to seven sitting there for
-   * the next hydrate to pull down and the disk reader to count. */
+  /* every key this push writes, so whatever is left under the item's prefix afterwards can be recognised as the old shape and removed; counting is not enough because headings, frames and effects put files in three different shapes and a four frame motion leaves frames four to seven behind */
   const wrote = new Set()
   const put = async (key, buf, ct) => {
     wrote.add(key)
@@ -541,8 +489,7 @@ export async function pushItem(slug, name, workDir) {
     if (meta?.dirs && typeof meta.dirs === 'object') {
       for (const [heading, list] of Object.entries(meta.dirs)) {
         const out = []
-        // the entries are /work/<slug>/library/<name>/<file> urls; only the
-        // last segment is ours to trust, since the slug in them can be stale
+        // the entries are /work/<slug>/library/<name>/<file> urls, and only the last segment is ours to trust because the slug in them can be stale
         for (const u of Array.isArray(list) ? list : []) await take(heading, String(u).split('/').pop(), out)
         if (out.length) dirs[heading] = out
       }
@@ -550,8 +497,7 @@ export async function pushItem(slug, name, workDir) {
       for (const heading of HEADINGS) {
         const out = []
         for (let i = 0; fs.existsSync(path.join(folder, `${heading}-${i}.png`)); i++) await take(heading, `${heading}-${i}.png`, out)
-        // a standing view set is one bare <heading>.png with no cycle beside
-        // it, and a sprite that has both keeps the cycle rather than the pose
+        // a standing view set is one bare <heading>.png with no cycle beside it, and a sprite that has both keeps the cycle rather than the pose
         if (!out.length) await take(heading, `${heading}.png`, out)
         if (out.length) dirs[heading] = out
       }
@@ -562,25 +508,18 @@ export async function pushItem(slug, name, workDir) {
   if (meta) await put(`maps/${id}/library/${name}/dirs.json`, Buffer.from(JSON.stringify(meta)), 'application/json')
   if (effect) await put(`maps/${id}/library/${name}/effect.json`, Buffer.from(JSON.stringify(effect)), 'application/json')
 
-  /* NOW THE STORE HOLDS THIS SHAPE AND NOTHING ELSE. Two things go: the loose png, if this item used
-   * to be a still and has just been animated, and anything still under the folder that this push did
-   * not write, which is the tail of a longer motion or the flat headings of a set that has become a
-   * frame list. Both only ever come back to bite on a host, where hydrateMap pulls the whole library
-   * down onto an empty work/ and the disk readers believe what they find there. Done last, so
-   * nothing is removed until what replaces it is up. */
+  /* now the store holds this shape and nothing else: the loose png of a still just animated, and anything under the folder this push did not write, both of which only bite on a host where hydrateMap refills an empty work/; done last so nothing goes until what replaces it is up */
   await s.del(keys.libStill(id, name)).catch(() => {
     /* nothing there to remove, which is the ordinary case */
   })
   try {
     for (const o of await s.list(keys.libPrefix(id, name))) if (!wrote.has(o.key)) await s.del(o.key)
   } catch (e) {
-    /* the bytes that matter are all up; a sweep that could not run leaves the store holding more
-     * than it should rather than less, and import-work.mjs reconciles a whole map */
+    /* the bytes that matter are all up, and a sweep that could not run leaves the store holding more than it should rather than less, with import-work.mjs there to reconcile a whole map */
     console.error(`[library] could not clear what ${name} used to be:`, e.message)
   }
 
-  /* a set of headings is STATIC with dirs, never animated: see the note in libraryOf about what
-   * calling it animated did to every placement made after a reload */
+  /* a set of headings is static with dirs, never animated: see the note in libraryOf for what calling it animated did to every placement made after a reload */
   await upsertItem(id, name, n > 1 ? 'animated' : 'static', {
     w,
     h,
@@ -607,21 +546,16 @@ export async function copyLibraryItem(fromSlug, name, toSlug, as) {
   const to = await freeName(toSlug, as || name)
 
   const s = store()
-  // the still, the flat frames, the per-heading folders: everything under the
-  // item's own prefix keeps the relative tail it had, because
-  // blobKeyForWorkPath translates a /work/ url to a key by position
+  // the still, the flat frames and the per-heading folders all keep the relative tail they had, because blobKeyForWorkPath translates a /work/ url to a key by position
   const held = [...(await s.list(keys.libPrefix(fromId, name))), ...(await s.list(keys.libStill(fromId, name)))]
   const lib = `maps/${fromId}/library/`
   for (const o of held) {
-    // sliced off a prefix that is known exactly rather than matched, because the
-    // item's own name is the only part that changes and everything after it is
-    // the path the loader already knows how to read
+    // the prefix is sliced off by known length rather than matched, because the item's own name is the only part that changes and everything after it is the path the loader already reads
     const tail = String(o.key).slice(lib.length + name.length)
     await s.copy(o.key, `maps/${toId}/library/${to}${tail}`)
   }
 
-  // dirs holds blob keys, so it moves with them or the row points at the map it
-  // was copied out of
+  // dirs holds blob keys, so it moves with them or the row points at the map it was copied out of
   const dirs = src.dirs
     ? JSON.parse(JSON.stringify(src.dirs).split(`maps/${fromId}/library/${name}/`).join(`maps/${toId}/library/${to}/`))
     : null
@@ -644,8 +578,7 @@ export async function copyLibraryItem(fromSlug, name, toSlug, as) {
       const tail = String(o.key).slice(keys.statePrefix(fromId, name, f.face).length)
       await s.copy(o.key, keys.statePrefix(toId, to, f.face) + tail)
     }
-    // a face's dirs and src are /work/ urls rather than keys, so both the slug
-    // and the item name in them have to move
+    // a face's dirs and src are /work/ urls rather than keys, so both the slug and the item name in them have to move
     const swap = (v) =>
       v == null
         ? null
@@ -694,12 +627,7 @@ export async function pushStates(slug, item, workDir) {
   }
 
   if (fs.existsSync(dir)) {
-    /* A LOOSE <face>.png IS A FACE TOO, and skipping it is why no face has ever been stored. The
-     * object branch of asset-state writes exactly that shape, so walking only directories made every
-     * second face drawn for an object invisible here: no blob, no row, while the toast said it was
-     * ready and a life round naming it silently drew picture 0. Read off the live database:
-     * library_states holds no rows at all, and never has. Filed as face/0.png, the same shape a
-     * headingless face already takes, so one reader serves both. */
+    /* a loose <face>.png is a face too, and skipping it is why library_states holds no rows at all: the object branch of asset-state writes exactly that shape, so every second face drawn for an object was stored nowhere while the toast said ready; filed as face/0.png so one reader serves both */
     for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
       if (ent.isFile() && /\.png$/i.test(ent.name)) {
         const face = ent.name.replace(/\.png$/i, '')
@@ -825,8 +753,7 @@ export async function snapshotVersion(slug, name) {
     [item.id, seq, prefix, JSON.stringify({ files: live.length })],
   )
 
-  // the same rollover PREV_MAX gave the folder: oldest goes first, so an edit
-  // can never roll its own original away
+  // the same rollover PREV_MAX gave the folder: oldest goes first, so an edit can never roll its own original away
   const old = await many(
     'select id, blob_prefix from library_versions where item_id = $1 order by seq desc offset $2',
     [item.id, PREV_MAX],
@@ -838,8 +765,7 @@ export async function snapshotVersion(slug, name) {
   return { seq, files: live.length, id: row.id }
 }
 
-// How far back this item can be put. The editor asks so the undo affordance can
-// say something true instead of guessing.
+// how far back this item can be put, asked by the editor so the undo affordance can say something true instead of guessing
 export const versionsOf = async (slug, name) => {
   if (!platformOn()) return []
   const id = await mapIdFor(slug)
@@ -852,10 +778,8 @@ export const versionsOf = async (slug, name) => {
   )
 }
 
-/* Put the newest kept version back, for a machine whose .prev folder holds
- * nothing because the edit happened somewhere else. */
-/* ONE ITEM'S BYTES BACK ONTO DISK, so the row can be derived from them rather than hand-patched.
- * hydrateMap pulls a whole map, which is hundreds of files for the sake of one. */
+/* put the newest kept version back, for a machine whose .prev folder holds nothing because the edit happened somewhere else */
+/* one item's bytes back onto disk, so the row can be derived from them rather than hand-patched, where hydrateMap would pull hundreds of files for the sake of one */
 export async function hydrateItem(slug, name, workDir) {
   if (!platformOn()) return 0
   const fs = await import('node:fs')
@@ -865,8 +789,7 @@ export async function hydrateItem(slug, name, workDir) {
   const s = store()
   const lib = path.join(workDir, 'library')
   fs.mkdirSync(lib, { recursive: true })
-  /* both shapes of the same name, and the loose png LAST, so a name that is a folder now does not
-   * end up with a stale flat png beside it */
+  /* both shapes of the same name, and the loose png last, so a name that is a folder now does not end up with a stale flat png beside it */
   fs.rmSync(path.join(lib, name), { recursive: true, force: true })
   fs.rmSync(path.join(lib, name + '.png'), { force: true })
   let n = 0
@@ -920,18 +843,14 @@ export async function dropItem(slug, name) {
   const s = store()
   await s.delPrefix(keys.libPrefix(id, name))
   await s.del(keys.libStill(id, name)).catch(() => {})
-  /* AND THE FACES IT WORE. The row's library_states cascade away with it, but the blobs did not, so
-   * asking for a troll again handed back the free name, hydrateMap pulled the dead troll's face
-   * pixels back down, and the next push rowed them onto the new one. An author got a face they never
-   * paid for, of a different object. */
+  /* and the faces it wore: library_states cascades away with the row but the blobs did not, so a freed name handed the next item the dead one's face pixels on the next hydrate and push */
   await s.delPrefix(`maps/${id}/states/${name}/`).catch(() => {
     /* nothing there, which is every item that never wore a second face */
   })
   await one('delete from library_items where map_id = $1 and name = $2 returning id', [id, name])
 }
 
-// A name nobody has used in this map yet, matching the -2, -3 suffix the
-// filesystem version got from probing for a free filename.
+// a name nobody has used in this map yet, matching the -2, -3 suffix the filesystem version got from probing for a free filename
 export async function freeName(slug, want) {
   const id = await mapIdFor(slug, { create: true })
   const taken = new Set((await many('select name from library_items where map_id = $1', [id])).map((r) => r.name))
@@ -941,9 +860,7 @@ export async function freeName(slug, want) {
 
 // ---- covers ----------------------------------------------------------------
 
-/* THE TRANSITION SCREEN A MAP IS ENTERED THROUGH. One per map with no name, which is the map's own,
- * plus any number of extras a code name addresses. Kept beside the masks in the store, so a cover
- * survives the laptop that drew it the way a painting does. */
+/* the transition screen a map is entered through: one per map with no name, which is the map's own, plus any number of extras a code name addresses, kept beside the masks so a cover survives the laptop that drew it */
 export async function saveCover(slug, buf, name = '') {
   const id = await mapIdFor(slug, { create: true })
   if (!id) {
@@ -968,8 +885,7 @@ export async function readCover(slug, name = '') {
   }
 }
 
-/* what a map has: whether it owns a default, and the code names of its extras. Read off the store
- * rather than a column, because the bytes are the record and a column could disagree with them. */
+/* what a map has: whether it owns a default and the code names of its extras, read off the store rather than a column because the bytes are the record and a column could disagree */
 export async function coversOf(slug) {
   if (!platformOn()) return { cover: false, covers: [] }
   const id = await mapIdFor(slug)
@@ -1006,11 +922,7 @@ export async function dropCover(slug, name = '') {
     })
 }
 
-/* WHAT EACH COVER WAS ASKED FOR AND WHOSE HAND DREW IT. The picture alone cannot say either, and
- * both are wanted later: the sentence answers "what did I type to get that", and the hand is the
- * only way a member's island can be shown to be the same hand as everything else once the file has
- * left the platform. One small document per map rather than a column, because the pictures are the
- * record and this rides beside them. */
+/* what each cover was asked for and which hand drew it, neither of which the picture can say: the sentence answers what was typed to get it, and the hand is the only way to show an island was drawn by the same hand as everything else once the file has left the platform */
 export async function readCoverNotes(slug) {
   if (!platformOn()) return null
   const id = await mapIdFor(slug)

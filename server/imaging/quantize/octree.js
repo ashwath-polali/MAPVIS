@@ -1,8 +1,4 @@
-// Octree quantisation.
-//
-// Median cut has to hold every distinct colour in memory before it can split
-// anything. An octree folds as it reads, so it takes one pass and a bounded
-// amount of memory, which is what a batch of forty sprites wants.
+// octree quantisation: median cut has to hold every distinct colour in memory before it can split anything, while an octree folds as it reads, so it takes one pass and bounded memory, which is what a batch of forty sprites wants
 
 const MAX_DEPTH = 8
 
@@ -18,8 +14,7 @@ class OctNode {
   }
 }
 
-/* the index at a depth is one bit from each channel, most significant first, so
- * walking down the tree narrows the colour a bit at a time */
+/* the index at a depth is one bit from each channel, most significant first, so walking down the tree narrows the colour a bit at a time */
 const indexAt = (r, g, b, depth) => {
   const shift = 7 - depth
   return (((r >> shift) & 1) << 2) | (((g >> shift) & 1) << 1) | ((b >> shift) & 1)
@@ -55,8 +50,7 @@ export class Octree {
     this._add(node.children[i], r, g, b)
   }
 
-  /* fold the deepest inner node back into a leaf, deepest first, because those
-   * are the splits describing the smallest colour differences */
+  /* fold the deepest inner node back into a leaf, deepest first, because those are the splits describing the smallest colour differences */
   reduce() {
     for (let d = MAX_DEPTH - 1; d >= 0; d--) {
       const level = this.levels[d]

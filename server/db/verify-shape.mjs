@@ -1,16 +1,4 @@
-// What the library records when an item changes shape, against the real database and bucket.
-
-//   node server/db/verify-shape.mjs
-
-// An item here is one of three things: a loose png, a folder of numbered frames, or a folder of
-// per-heading view sets. Animating a still turns the first into the second, and for the length of
-// that swap BOTH exist on disk, because the png is only deleted once the folder is whole so that a
-// crash leaves the original standing.
-//
-// Reading the png during that window is what broke animation: the row went down as a still with no
-// frames, not one frame blob was uploaded, the png was deleted a moment later, and every placement
-// of it pointed at bytes nobody had. This walks that exact window on the real disk and asks the
-// database what it ended up believing.
+// what the library records when an item changes shape, against the real database and bucket: mid-animate the png and the frame folder both exist, and reading the png in that window recorded a still with no frames and left every placement pointing at bytes nobody had
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -76,10 +64,7 @@ try {
     it && !it.frames ? ok('and carries no frames') : no('a still carried frames')
   }
 
-  // ---- the window: the frames are written, the png is not deleted yet ------
-  // This is the exact state the animate route leaves behind between writing the
-  // folder and removing the original, and it is the state that used to be read
-  // as a still with nothing in it.
+  // the window: the frames are written and the png is not deleted yet, which is what the animate route leaves behind and what used to be read as a still with nothing in it
   fs.mkdirSync(path.join(lib, NAME), { recursive: true })
   for (let i = 0; i < 4; i++) fs.writeFileSync(path.join(lib, NAME, i + '.png'), png(48, 48))
   const bothThere = fs.existsSync(path.join(lib, NAME + '.png')) && fs.existsSync(path.join(lib, NAME))
@@ -97,9 +82,7 @@ try {
     it && it.w === 48 ? ok('and the size of the frames rather than of the old png') : no(`the size is ${it && it.w}, expected 48`)
   }
 
-  // ---- the frames really are in the bucket ---------------------------------
-  // The row being right is half of it. The early return also meant not one frame
-  // was ever uploaded, so every url 404d on a host where work/ is empty.
+  // the frames really are in the bucket: the early return also meant not one frame was uploaded, so every url 404d where work/ is empty
   {
     const id = await mapIdFor(SLUG)
     const s = store()

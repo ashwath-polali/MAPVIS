@@ -18,14 +18,10 @@ import {
 } from '../core/world'
 import './world.css'
 
-/* The shape the server keeps, field for field. cleanPlace is the authority and
- * this mirrors it rather than adding to it: a field invented here would be
- * dropped on the way in and would read as a control that does nothing. */
+/* the shape the server keeps, field for field: cleanPlace is the authority, and a field invented here is dropped on the way in and reads as a control that does nothing */
 type Place = {
   name: string
-  /* the roster id, which is NOT the address above. The game looks a slot up by
-   * this and counts a visit under it, and it is kebab-case where a name is a
-   * python identifier, so the two can never be one field. */
+  /* the roster id, not the address above: the game looks a slot up by this and counts a visit under it, and it is kebab-case where a name is a python identifier, so the two can never be one field */
   place?: string
   map: string
   title: string
@@ -34,27 +30,19 @@ type Place = {
   w: number
   h: number
   state: string
-  /* two radii, and they were one. `discover` is how close the hull comes before
-   * this island is found; `release` is how far out its bundle stays decoded,
-   * which is what gets trimmed first on a 4 GB machine. */
+  /* two radii, not one: `discover` is how close the hull comes before this island is found, and `release` is how far out its bundle stays decoded, which is what gets trimmed first on a 4 GB machine */
   discover: number
   release: number
   meta?: Record<string, unknown>
 }
 type Region = { name: string; kind: string; rect: [number, number, number, number]; label?: string }
 /* every point on the water is one flat list, and belonging to an island is the island FIELD, not nesting. */
-/* `home` is the slot a run with no vessel record starts in and the one a
- * graduate is handed back to. One name for the whole ocean, and the game had it
- * as a constant because nothing here could say it. */
+/* `home` is the slot a run with no vessel record starts in and the one a graduate is handed back to, one name for the whole ocean, and it was a constant in the game because nothing here could say it */
 /* the version this page read, sent back so the server refuses a stale overwrite that once won with a 200. */
 type Doc = { w: number; h: number; places: Place[]; regions: Region[]; marks?: WorldMark[]; home?: string; updatedAt?: number }
 
-/* What the registry hands back for one map. The x,y on an anchor is in that
- * map's OWN pixel raster, the same raster scene.png is published at, which is
- * what makes it drawable on this chart at all. */
-/* THE AREA FIELDS ARE PART OF IT, because a region is not a circle. `shape` is
- * the mode the author chose, lifted off the anchor's meta bag by the registry,
- * and `rect` is two opposite corners the way the game reads them. */
+/* what the registry hands back for one map: an anchor's x,y is in that map's own pixel raster, the same raster scene.png is published at, which is what makes it drawable on this chart */
+/* the area fields are part of it because a region is not a circle: `shape` is the mode the author chose, lifted off the anchor's meta bag by the registry, and `rect` is two opposite corners the way the game reads them */
 type Anchor = {
   name: string
   kind: string
@@ -70,12 +58,9 @@ type Anchor = {
 type MapRow = { slug: string; w: number; h: number; version: number | null; anchors?: Anchor[] }
 
 type Sel = { kind: 'place' | 'region' | 'mark'; i: number } | null
-/* WHICH CORNER OF A FOOTPRINT IS IN THE HAND. There was only ever one, and the
- * note under gripsOf says what changed. */
+/* which corner of a footprint is in the hand, and the note under gripsOf says what changed */
 type Corner = 'nw' | 'ne' | 'sw' | 'se'
-/* the shape a corner asks the pointer to wear. Two glyphs for four corners,
- * because a north west and a south east corner are pulled along the same
- * diagonal and the cursor is a picture of that diagonal. */
+/* the shape a corner asks the pointer to wear, two glyphs for four corners because north west and south east are pulled along the same diagonal and the cursor is a picture of that diagonal */
 const CURSOR: Record<Corner, string> = { nw: 'nwse-resize', ne: 'nesw-resize', sw: 'nesw-resize', se: 'nwse-resize' }
 type Hit = { kind: 'place' | 'size' | 'region' | 'mark' | 'runin'; i: number; corner?: Corner } | null
 type Band = { x0: number; y0: number; x1: number; y1: number } | null
@@ -105,8 +90,7 @@ const SEA_4 = '#a8cbe6' /* --sea-4, the brightest */
 /* the graticule is the sea drawn lighter, and the majors came down from 0.17, louder than the art. */
 const CHART_SEA_MINOR = 'rgba(122,164,204,0.045)'
 const CHART_SEA_MAJOR = 'rgba(122,164,204,0.105)'
-/* what a word on the water sits on. --void at the alpha that survives a lit
- * volcano underneath it, measured against the hub's own painting. */
+/* what a word on the water sits on: --void at the alpha that survives a lit volcano underneath it, measured against the hub's own painting */
 const PLATE = 'rgba(7,11,17,0.84)'
 
 /* one ink per state as a ramp of the sea, and the names come from the server so a new one falls back. */
@@ -114,9 +98,7 @@ const STATE_INK: Record<string, string> = {
   rumour: SEA_1,
   misty: SEA_2,
   discovered: SEA_3,
-  // the one state the world owns rather than the student, and it is an EVENT:
-  // an island coming up out of the water with an effect hung on it, so it is
-  // the brightest step of the sea rather than a red from nowhere
+  // the one state the world owns rather than the student, and it is an event, an island coming up out of the water with an effect hung on it, so it is the brightest step of the sea rather than a red from nowhere
   rising: SEA_4,
   available: CHART_LIVE,
   active: CHART_TOOL,
@@ -145,12 +127,10 @@ const LABEL_MAX = 17
 const LABEL_DROP = 30
 /* handles drop below this: at the zoom floor three plates each wider than the island piled onto it. */
 const GRIP_DROP = 44
-// a fifth of the drawn width, fenced. A fifth is not arithmetic, it is what
-// puts a five letter name across about the width of the island it names.
+// a fifth of the drawn width, fenced: a fifth is not arithmetic, it is what puts a five letter name across about the width of the island it names
 const nameAt = (rw: number) => Math.round(clamp(rw * 0.2, LABEL_MIN, LABEL_MAX))
 
-// as far out as fitting the whole ocean, and as far in as one painted pixel
-// filling a fat screen pixel. Anything past that is not more information.
+// as far out as the whole ocean and as far in as one painted pixel filling a fat screen pixel, since anything past that is not more information
 const MAX_S = 48
 const SNAP = 11
 
@@ -159,17 +139,14 @@ const STOPS = [0.125, 0.25, 0.5, 0.75, 1, 1.5, 2, 3, 4, 6, 8, 12, 16, 24, 32, 48
 
 /* one chart unit is one painting pixel: born at 96 against a 688 painting, the live berth landed inland. */
 const ISLAND_DEFAULT = 512
-/* and the fences either side of it. Both were reachable with the handle: the
- * old resize collapsed the footprint to a single unit on the first frame of a
- * grab, and nothing at all stopped it swallowing a quarter of the chart. */
+/* the fences either side of the footprint, both reachable with the handle: resize once collapsed it to a single unit on the first frame of a grab, and nothing stopped it swallowing a quarter of the chart */
 const ISLAND_MIN = 16
 const ISLAND_MAX = 1024
 
 /* gain of 1 so the grip is under the cursor: at 0.5 a 300 px drag left the corner 242 px behind. */
 const RESIZE_GAIN = 1
 const RESIZE_FINE = 0.2
-// the grab radius of the corner handle, and half the square it is drawn as, so
-// the hot spot and the picture of it cannot drift apart
+// the grab radius of the corner handle, and half the square it is drawn as, so the hot spot and the picture of it cannot drift apart
 const GRIP = 9
 
 const NUDGE_FAR = 8
@@ -243,8 +220,7 @@ const skinOf = (key: string, img: HTMLImageElement): Skin => {
       if (x1 >= 0) out = { x0: x0 / w, y0: y0 / h, x1: (x1 + 1) / w, y1: (y1 + 1) / h }
     }
   } catch {
-    // a picture served from another origin taints the canvas and getImageData
-    // throws. The whole raster is then the honest answer rather than a guess.
+    // a picture served from another origin taints the canvas and getImageData throws, so the whole raster is the honest answer rather than a guess
   }
   skins.set(key, out)
   return out
@@ -253,16 +229,13 @@ const skinOf = (key: string, img: HTMLImageElement): Skin => {
 /* the drawing and the hit test read one geometry: a private rectangle sat 103 px off at 17x. */
 type Art = Map<string, HTMLImageElement>
 
-// the published picture this place draws with, or '' when there is no map or
-// nothing has been published for it yet
+// the published picture this place draws with, or '' when there is no map or nothing has been published for it yet
 const artKey = (p: Place, reg: Map<string, MapRow>) => {
   const m = p.map ? reg.get(p.map) : undefined
   return m && m.version ? `${p.map}@${m.version}` : ''
 }
 
-// where the paint sits inside the raster. The whole raster is the honest
-// answer while the picture is still loading, which is also what an empty slot
-// gets, because a position holding no bundle has no coast to draw round.
+// where the paint sits inside the raster: the whole raster is the honest answer while the picture loads, and what an empty slot gets, because a position holding no bundle has no coast to draw round
 const skinAt = (p: Place, reg: Map<string, MapRow>, art: Art): Skin => {
   const key = artKey(p, reg)
   const img = key ? art.get(key) : undefined
@@ -270,9 +243,7 @@ const skinAt = (p: Place, reg: Map<string, MapRow>, art: Art): Skin => {
   return skinOf(key, img)
 }
 
-/* THE FOOTPRINT ON SCREEN, floored at three pixels. The floor is not cosmetic:
- * out at full extent an island is a couple of pixels across and a handle
- * smaller than its own outline is a handle nobody can land on. */
+/* the footprint on screen, floored at three pixels: out at full extent an island is a couple of pixels across and a handle smaller than its own outline is one nobody can land on */
 const boxOf = (p: Place, fit: Fit) => ({
   px: fit.ox + p.x * fit.s,
   py: fit.oy + p.y * fit.s,
@@ -350,9 +321,7 @@ const FACE_GRID = [
 const FACE_ARROW = '↖↑↗←·→↙↓↘'
 
 /* radOf answers east, south and north and sends everything else west, so the four come from the server. */
-/* every point on the compass, read off the same table the ghost hull is drawn from so the picker and
- * the drawing can never disagree about what a heading is. It was four while the game turned a
- * diagonal into west without saying so. */
+/* every point on the compass, read off the same table the ghost hull is drawn from so the picker and the drawing cannot disagree about a heading: at four, a diagonal turned into west without saying so */
 const BERTH_FACINGS = Object.keys(HEADINGS)
 
 /* anchors map through the registry's w/h, not the png's size, so a stale publish stretches the picture. */
@@ -364,9 +333,7 @@ const anchorAt = (p: Place, m: MapRow, a: Anchor) => ({
 /* every point that says it belongs to this island, asked in six places, since a berth is a field now. */
 const boundTo = (doc: Doc, name: string) => (doc.marks || []).filter((m) => m.island === name)
 
-/* AND THE ONE THE GAME MEANS, which is the same rule berthOf keeps on the
- * server: the first berth-kind point bound to the island. The two have to agree
- * or the chart draws a leader to one dock and the ship sails to another. */
+/* the berth the game means, the same rule berthOf keeps on the server: the first berth-kind point bound to the island, and the two have to agree or the chart draws a leader to one dock while the ship sails to another */
 const berthOf = (doc: Doc, name: string) => (doc.marks || []).find((m) => m.island === name && m.kind === 'berth') || null
 
 /* ---- the chart ----------------------------------------------------------- */
@@ -393,8 +360,7 @@ function paint(c: CanvasRenderingContext2D, size: { w: number; h: number }, sc: 
   const X = (x: number) => fit.ox + x * fit.s
   const Y = (y: number) => fit.oy + y * fit.s
 
-  // a label sitting on a painting was unreadable, so every word on this chart
-  // gets a dark rim first and the fill second
+  // a label sitting on a painting was unreadable, so every word on this chart gets a dark rim first and the fill second
   const say = (t: string, x: number, y: number, fill: string) => {
     c.lineJoin = 'round'
     c.lineWidth = 3
@@ -420,9 +386,7 @@ function paint(c: CanvasRenderingContext2D, size: { w: number; h: number }, sc: 
     laid.push(box)
     c.fillStyle = PLATE
     c.beginPath()
-    // 4, which is --r and what the editor's own plate() rounds a caption to. It
-    // was 2 here, so the same door's name was a slightly sharper pill on the
-    // chart than in the tool that made it, for no reason but two authors.
+    // 4, which is --r and what the editor's own plate() rounds a caption to: at 2 the same door's name was a sharper pill on the chart than in the tool that made it
     c.roundRect(box.x, box.y, box.w, box.h, 4)
     c.fill()
     if (opt?.rim) {
@@ -477,8 +441,7 @@ function paint(c: CanvasRenderingContext2D, size: { w: number; h: number }, sc: 
     c.fillText(String(y), Math.max(lft + 3, 3), ly)
   }
 
-  // sea regions sit under everything, because they are what the water IS and
-  // an island is a thing on top of it
+  // sea regions sit under everything, because they are what the water is and an island is a thing on top of it
   for (const r of doc.regions) {
     const [x0, y0, x1, y1] = r.rect
     const rx = X(Math.min(x0, x1))
@@ -494,8 +457,7 @@ function paint(c: CanvasRenderingContext2D, size: { w: number; h: number }, sc: 
     c.strokeStyle = tint
     c.strokeRect(rx + 0.5, ry + 0.5, rw, rh)
     c.setLineDash([])
-    // the words a person reads, then the kind. A stretch of water carries the
-    // same name/label split an island does and this printed the identifier.
+    // the words a person reads, then the kind: a stretch of water carries the same name/label split an island does, and this once printed the identifier
     c.font = LABEL(11)
     plate(`${displayName(r, 'unnamed water').text} · ${r.kind}`, rx + 6, ry + 15, CHART_INK, { rim: tint })
   }
@@ -520,9 +482,7 @@ function paint(c: CanvasRenderingContext2D, size: { w: number; h: number }, sc: 
         c.fillRect(px, py, rw, rh)
         c.globalAlpha = 1
       }
-      // nearest neighbour on the way up, because it is pixel art and smoothing
-      // it turns a jetty into a smudge. Smoothing on the way down, because a
-      // 688 wide painting sampled into 14 screen pixels with nearest is noise.
+      // nearest neighbour on the way up because smoothing pixel art turns a jetty into a smudge, and smoothing on the way down because a 688 wide painting sampled into 14 screen pixels with nearest is noise
       c.imageSmoothingEnabled = rw < img.naturalWidth
       c.drawImage(img, px, py, rw, rh)
       c.imageSmoothingEnabled = true
@@ -621,9 +581,7 @@ function paint(c: CanvasRenderingContext2D, size: { w: number; h: number }, sc: 
         /* on a plate above the mark and centred, where the editor hangs it, and it gives way to a plate. */
         if (named || hot) {
           c.font = LABEL(nameAt(rw))
-          // rimmed in the mark's own ink whether it is hot or not, which is
-          // what the editor draws. A rim only on hover meant a door was a
-          // bordered pill in one tool and a bare one in the other.
+          // rimmed in the mark's own ink hot or not, which is what the editor draws: a rim only on hover made a door a bordered pill in one tool and a bare one in the other
           plate(displayName(a).text, ax, ay - 8, hot ? CHART_ARMED : ink, { rim: hot ? CHART_ARMED : ink, keep: hot, mid: true })
         }
       }
@@ -649,8 +607,7 @@ function paint(c: CanvasRenderingContext2D, size: { w: number; h: number }, sc: 
       /* the tether says what it measures and in what, and is dropped where it is shorter than its plate. */
       if (on && rw >= GRIP_DROP) {
         c.font = TINY
-        // two thirds of the way out rather than halfway, because halfway on a
-        // short tether is on top of the island the tether starts at
+        // two thirds of the way out rather than halfway, because halfway on a short tether is on top of the island the tether starts at
         plate(
           `${Math.round(Math.hypot(k.x - p.x, k.y - p.y))} u out`,
           px + (X(k.x) - px) * 0.66,
@@ -668,13 +625,11 @@ function paint(c: CanvasRenderingContext2D, size: { w: number; h: number }, sc: 
     if (rw >= LABEL_DROP || lit) {
       const fs = nameAt(rw)
       c.font = LABEL(fs)
-      // the state, as a chip, once the footprint stopped being a slab of state
-      // ink you could read it off. Only where a painting took that job away.
+      // the state as a chip, drawn only where a painting took away the slab of state ink you could otherwise read it off
       const chip = drawn ? fs : 0
       const above = seen.py - 7 > 22
       const ly = above ? seen.py - 7 : seen.py + seen.rh + fs + 4
-      // above first, then below, then give up. A name in the wrong place is
-      // recoverable by moving the chart; two names on top of each other is not.
+      // above first, then below, then give up: a name in the wrong place is recoverable by moving the chart, two names on top of each other is not
       const put =
         plate(title, seen.px + chip, ly, on ? CHART_ARMED : CHART_INK, { rim: on ? CHART_ARMED : undefined, keep: on }) ||
         plate(title, seen.px + chip, seen.py + seen.rh + fs + 4, on ? CHART_ARMED : CHART_INK)
@@ -698,8 +653,7 @@ function paint(c: CanvasRenderingContext2D, size: { w: number; h: number }, sc: 
     }
     const foot = hands.find((h) => h.corner === 'se')
     if (foot) {
-      // beside the south east one, which is where a size readout has always
-      // sat and the corner least likely to have the rail behind it
+      // beside the south east one, which is where a size readout has always sat and the corner least likely to have the rail behind it
       const { gx, gy } = foot
       /* the size plate carries its unit, and flips sides when a drag toward the rail would hide it. */
       c.font = TINY
@@ -711,9 +665,7 @@ function paint(c: CanvasRenderingContext2D, size: { w: number; h: number }, sc: 
   }
 
   for (let i = 0; i < doc.places.length; i++) shot(i)
-  // the second pass always runs. Only the map's OWN anchors answer to the marks
-  // toggle, inside rig: a button labelled "marks" that also took away the berth
-  // and the island's name is a button nobody would press twice.
+  // the second pass always runs, and only the map's own anchors answer to the marks toggle inside rig, because a marks button that also took away the berth and the island's name is one nobody would press twice
   for (let i = 0; i < doc.places.length; i++) rig(i)
 
   /* one ring, one coral, drawn in screen pixels: in world units it is a grain out and a plate zoomed in. */
@@ -723,17 +675,14 @@ function paint(c: CanvasRenderingContext2D, size: { w: number; h: number }, sc: 
     const my = Y(k.y)
     const on = sel?.kind === 'mark' && sel.i === i
     const lit = on || (hover?.kind === 'mark' && hover.i === i)
-    // coral, and gold only while it is the thing in your hand: the same rule the
-    // anchors on a painting follow two hundred lines up
+    // coral, and gold only while it is the thing in your hand: the same rule the anchors on a painting follow two hundred lines up
     const tint = on ? CHART_ARMED : lit ? CHART_BERTH_LIT : CHART_BERTH
     /* the arrival radius is drawn only while this berth is talked about, not always over open water. */
     /* the run-in is hollow and the berth solid, since the hull passes one and stops at the other. */
     if (k.approach) {
       const ax = X(k.approach.x)
       const ay = Y(k.approach.y)
-      // hover and nothing else, and it holds through a drag: move() returns
-      // early while something is in the hand, so the last hit stays the last hit
-      // and the run-in keeps the gold it was grabbed with
+      // hover and nothing else, and it holds through a drag: move() returns early while something is in the hand, so the last hit stays the last hit and the run-in keeps the gold it was grabbed with
       const hotA = hover?.kind === 'runin' && hover.i === i
       const aTint = hotA ? CHART_ARMED : lit ? CHART_BERTH_LIT : CHART_BERTH
       c.beginPath()
@@ -773,27 +722,19 @@ function paint(c: CanvasRenderingContext2D, size: { w: number; h: number }, sc: 
       c.setLineDash([])
       c.globalAlpha = 1
     }
-    /* THE SHIP AS SHE WOULD LIE, at the real size and the real heading, while
-     * this berth is the one in hand. The compass word alone cannot answer the
-     * question an author is actually asking, which is whether a hull this long
-     * fits here pointing that way: a berth reading "north" beside a jetty is
-     * either right or absurd and the word looks identical either way. Drawn
-     * under the mark and the spur so neither is hidden by it. */
+    /* the ship as she would lie, at the real size and heading while this berth is in hand, because the compass word alone cannot say whether a hull this long fits here pointing that way, and drawn under the mark and the spur so neither is hidden */
     if (k.kind === 'berth' && lit) {
-      /* the angle the author set, not the nearest of eight: the ghost is the whole reason a dial is
-       * worth having, so drawing it snapped would make the control a lie */
+      /* the angle the author set, not the nearest of eight: the ghost is the whole reason a dial is worth having, so drawing it snapped would make the control a lie */
       const head = vecOfMark(k)
       if (head) {
         const L = (HULL.length * fit.s) / 2
         const B = (HULL.beam * fit.s) / 2
         c.save()
         c.translate(mx, my)
-        // atan2 of the heading itself, so the bow is drawn where the word points
-        // rather than where a table of eight rotations says it should be
+        // atan2 of the heading itself, so the bow is drawn where the word points rather than where a table of eight rotations says it should be
         c.rotate(Math.atan2(head[1], head[0]))
         c.beginPath()
-        // bow forward, square stern: a pointed oval reads as a leaf and gives no
-        // sense of which end is which, which is the whole thing being set here
+        // bow forward, square stern: a pointed oval reads as a leaf and gives no sense of which end is which, which is the whole thing being set here
         c.moveTo(L, 0)
         c.quadraticCurveTo(L * 0.35, -B, -L * 0.55, -B)
         c.lineTo(-L, -B * 0.72)
@@ -808,8 +749,7 @@ function paint(c: CanvasRenderingContext2D, size: { w: number; h: number }, sc: 
         c.lineWidth = 1.4
         c.strokeStyle = tint
         c.stroke()
-        // the centre line, because a hull with no keel drawn reads as a blob at
-        // the sizes this chart is usually looked at
+        // the centre line, because a hull with no keel drawn reads as a blob at the sizes this chart is usually looked at
         c.globalAlpha = on ? 0.5 : 0.3
         c.beginPath()
         c.moveTo(L * 0.85, 0)
@@ -820,9 +760,7 @@ function paint(c: CanvasRenderingContext2D, size: { w: number; h: number }, sc: 
         c.restore()
       }
     }
-    /* THE HEADING HELD HERE, as a spur off the ring. It was drawn only for a
-     * place's own berth, so a free point could carry a facing, save it, hand it
-     * to a reader and show nothing at all for it. */
+    /* the heading held here, as a spur off the ring: it was drawn only for a place's own berth, so a free point could carry a facing, save it, hand it to a reader and show nothing for it */
     const face = k.facing || ''
     const dx = face.includes('east') ? 1 : face.includes('west') ? -1 : 0
     const dy = face.includes('south') ? 1 : face.includes('north') ? -1 : 0
@@ -847,9 +785,7 @@ function paint(c: CanvasRenderingContext2D, size: { w: number; h: number }, sc: 
     c.lineWidth = on ? 2 : 1.4
     c.strokeStyle = tint
     c.stroke()
-    // a filled centre on the one that is bound to an island, which is the only
-    // difference between two berths that a person needs on the chart: this one
-    // is somebody's dock, that one is a corner in open water
+    // a filled centre on the one bound to an island, the only difference between two berths a person needs on the chart: this one is somebody's dock, that one is a corner in open water
     if (k.island) {
       c.beginPath()
       c.arc(mx, my, 2.2, 0, Math.PI * 2)
@@ -951,9 +887,7 @@ export default function World() {
   const [sel, setSel] = useState<Sel>(null)
   const [tool, setTool] = useState<Tool>('move')
   const [hover, setHover] = useState<Hit>(null)
-  /* WHAT IS ACTUALLY IN THE HAND, as state and not as the ref the drag lives
-   * in. The ref cannot make the cursor change, because writing a ref does not
-   * render, so the shape was frozen for the whole of a press. */
+  /* what is actually in the hand, as state and not the ref the drag lives in: writing a ref does not render, so the cursor shape stayed frozen for the whole of a press */
   const [hand, setHand] = useState<'' | 'pan' | 'place' | 'mark' | 'runin' | Corner>('')
   const [band, setBand] = useState<Band>(null)
   /* the tool's line rides off the pointer: at top centre it was 500 px from the button and the water. */
@@ -994,19 +928,14 @@ export default function World() {
   } | null>(null)
   const pan = useRef<{ mx: number; my: number; ox: number; oy: number; far: number } | null>(null)
   const bandFrom = useRef<{ x: number; y: number } | null>(null)
-  // the documents to go back to, newest last. Held in a ref because nothing
-  // renders from the stack itself, only from how deep it is.
+  // the documents to go back to, newest last, held in a ref because nothing renders from the stack itself, only from how deep it is
   const past = useRef<Doc[]>([])
   const live = useRef<Doc | null>(null)
   live.current = doc
   const nudged = useRef(0)
-  // the row the server last agreed to. Undo compares against this rather than
-  // leaving the dirty flag stuck up, and it is set from what came BACK from a
-  // save so it is the server's copy and not a hopeful one.
+  // the row the server last agreed to: undo compares against this rather than leaving the dirty flag stuck up, and it is set from what came back from a save so it is the server's copy, not a hopeful one
   const saved = useRef('')
-  // the inspector's own scroller, so a fresh selection starts at the name.
-  // Not called `side`, which is the footprint clamp this file already has and
-  // which the resize handle calls four lines into a drag.
+  // the inspector's own scroller, so a fresh selection starts at the name, and not called `side`, which is the footprint clamp this file already has and the resize handle calls four lines into a drag
   const panel = useRef<HTMLElement>(null)
 
   /* one request answers the water and the ownership, and a 401 is signed out rather than an error. */
@@ -1037,8 +966,7 @@ export default function World() {
         setStates(j.states || [])
         setKinds(j.seaKinds || [])
         setMarkKinds(j.markKinds || [])
-        // a deploy older than 022 sends neither, and the game's ocean is what it
-        // served then, so that is what the missing answer means
+        // a deploy older than 022 sends neither, and the game's ocean is what it served then, so that is what the missing answer means
         setGame(j.game !== false)
         setReadUrl(j.readUrl || '/api/v1/world')
         setMine(true)
@@ -1055,8 +983,7 @@ export default function World() {
 
   /* asked with=anchors, the one request carrying the door graph; empty stays offered for a rumour. */
   useEffect(() => {
-    /* mine=1: the open form of this is the game's door registry, and dressing the picker out of it
-       offered a new author every published map on the platform, anchors and all */
+    /* mine=1: the open form of this is the game's door registry, and dressing the picker out of it offered a new author every published map on the platform, anchors and all */
     fetch('/api/v1/maps?with=anchors&mine=1')
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
       .then((j: { maps?: MapRow[] }) => setReg(new Map((j.maps || []).map((m) => [m.slug, m]))))
@@ -1111,16 +1038,12 @@ export default function World() {
     return () => ro.disconnect()
   }, [ready])
 
-  // the label face is a webfont, so the first paint can land before it arrives
-  // and every name on the chart is drawn in the fallback until you touch
-  // something. One redraw when the fonts settle costs nothing.
+  // the label face is a webfont, so a first paint can land before it arrives and every name on the chart is drawn in the fallback until you touch something, and one redraw when the fonts settle costs nothing
   useEffect(() => {
     document.fonts?.ready.then(() => setInk((n) => n + 1)).catch(() => {})
   }, [])
 
-  /* The whole ocean on the stage, which is where the chart starts and what the
-   * fit button goes back to. Held as the FLOOR of the zoom as well, because
-   * further out than the whole ocean is a chart of nothing. */
+  /* the whole ocean on the stage, where the chart starts and what the fit button goes back to, and the floor of the zoom as well, because further out than the whole ocean is a chart of nothing */
   const dw = doc?.w
   const dh = doc?.h
   const base: Fit = useMemo(() => (dw && dh ? fitOf({ w: dw, h: dh, places: [], regions: [] }, size) : { s: 1, ox: 0, oy: 0 }), [dw, dh, size])
@@ -1211,9 +1134,7 @@ export default function World() {
     [base, zoomAt],
   )
 
-  /* A NATIVE LISTENER, because React binds wheel passively at the root and
-   * preventDefault inside an onWheel prop does nothing. Without the
-   * preventDefault the page scrolls behind the chart while you zoom. */
+  /* a native listener, because React binds wheel passively at the root and preventDefault inside an onWheel prop does nothing, and without it the page scrolls behind the chart while you zoom */
   useEffect(() => {
     const el = cv.current
     if (!el) return
@@ -1262,12 +1183,10 @@ export default function World() {
   const spot = doc && sel?.kind === 'mark' ? (doc.marks || [])[sel.i] : null
   const sheet = place && place.map ? reg.get(place.map) : undefined
 
-  // fill the stage with the selected island and everything tied to it, which is
-  // the one move that gets you from the whole ocean to a jetty
+  // fill the stage with the selected island and everything tied to it, which is the one move that gets you from the whole ocean to a jetty
   const frame = useCallback(() => {
     if (!size.w) return
-    // a mark has no footprint, so what is framed round it is its own reach: the
-    // radius that decides a hull has arrived, with room either side of it
+    // a mark has no footprint, so what is framed round it is its own reach: the radius that decides a hull has arrived, with room either side of it
     if (spot) {
       const r = Math.max(24, (spot.r || 40) * 3)
       const s = clamp(Math.min((size.w - PAD * 3) / (r * 2), (size.h - PAD * 3) / (r * 2)), base.s, MAX_S)
@@ -1278,8 +1197,7 @@ export default function World() {
     let y0 = place.y
     let x1 = place.x + place.w
     let y1 = place.y + place.h
-    // and everything tied to it, which is what turns "frame this island" into
-    // "show me this island and the dock somebody has to reach"
+    // and everything tied to it, which turns framing this island into showing this island and the dock somebody has to reach
     for (const m of boundTo(doc, place.name)) {
       x0 = Math.min(x0, m.x)
       y0 = Math.min(y0, m.y)
@@ -1300,9 +1218,7 @@ export default function World() {
     return displayName(m?.anchors?.find((a) => a.name === mark) || mark).text
   }, [aim, doc, reg])
 
-  /* the screen point the ± buttons pull toward: the selected island if there is
-   * one, otherwise the middle of everything placed, and only the bare middle of
-   * the stage when the water is genuinely empty */
+  /* the screen point the plus and minus buttons pull toward: the selected island if there is one, otherwise the middle of everything placed, and only the bare middle of the stage when the water is genuinely empty */
   const holdPt = useMemo<[number, number]>(() => {
     const t = place
       ? { x: place.x + place.w / 2, y: place.y + place.h / 2 }
@@ -1368,8 +1284,7 @@ export default function World() {
           const next = { ...m, ...patch }
           const dx = (patch.x ?? m.x) - m.x
           const dy = (patch.y ?? m.y) - m.y
-          // `approach` in the patch is the run-in being set or cleared on
-          // purpose, and shifting what was just typed would fight the author
+          // `approach` in the patch is the run-in being set or cleared on purpose, and shifting what was just typed would fight the author
           if (m.approach && !('approach' in patch) && (dx || dy))
             next.approach = { x: m.approach.x + dx, y: m.approach.y + dy }
           return next
@@ -1397,12 +1312,9 @@ export default function World() {
         kind: 'berth',
         x: sea(x, d.w),
         y: sea(y, d.h),
-        // a label from the start, so a berth never reaches a player as `berth_1`.
-        // Every point carries one, not just the islands.
+        // a label from the start, so a berth never reaches a player as `berth_1`, and every point carries one, not just the islands
         label: displayName({ name }).text,
-        // how close counts as arrived, because a hull moves in floats and an
-        // exact-pixel test on one never fires. The order of size a dock sits at
-        // off a jetty.
+        // how close counts as arrived, because a hull moves in floats and an exact-pixel test never fires, and this is the order of size a dock sits at off a jetty
         r: 40,
         ...(to ? { island: to.island } : {}),
         ...(to?.at ? { at: to.at } : {}),
@@ -1451,9 +1363,7 @@ export default function World() {
     setDirty(true)
   }, [])
 
-  /* THE SAME READING OF THE PICTURE THE CHART DRAWS WITH, handed to every hit
-   * test. skinOf caches by slug and version, so this is a map lookup and not
-   * an alpha scan per pointer move. */
+  /* the same reading of the picture the chart draws with, handed to every hit test: skinOf caches by slug and version, so this is a map lookup and not an alpha scan per pointer move */
   const skin = useCallback((p: Place) => skinAt(p, reg, art.current), [reg])
 
   const at = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -1490,8 +1400,7 @@ export default function World() {
       /* the press still works uncaptured */
     }
 
-    // the middle button pans whatever tool is up, the way it does in every
-    // other canvas anybody has used
+    // the middle button pans whatever tool is up, the way it does in every other canvas anybody has used
     if (e.button === 1) {
       pan.current = { mx, my, ox: fit.ox, oy: fit.oy, far: 0 }
       setHand('pan')
@@ -1500,8 +1409,7 @@ export default function World() {
 
     if (tool === 'place') {
       const name = freeName('island', doc.places.map((p) => p.name))
-      // one size, every time, and the painting bends the short side later.
-      // Born 64x64 it depended on nothing and looked like nothing.
+      // one size every time, and the painting bends the short side later: born 64x64 it depended on nothing and looked like nothing
       const born = bornAs()
       const made: Place = {
         name,
@@ -1511,12 +1419,9 @@ export default function World() {
         x: sea(w.x - born.w / 2, doc.w),
         y: sea(w.y - born.h / 2, doc.h),
         ...born,
-        // a slot with no map behind it is a rumour and nothing else reads
-        // honestly, which is what checkWorld warns about
+        // a slot with no map behind it is a rumour and nothing else reads honestly, which is what checkWorld warns about
         state: 'rumour',
-        /* 160 was a guess and it is wrong by an order of magnitude against what
-         * is actually authored: the hub is discovered at 520 and held at 1400.
-         * Born at those, so a new island reads the way the real ones do. */
+        /* 160 was a guess, wrong by an order of magnitude against what is actually authored: the hub is discovered at 520 and held at 1400, so a new island is born at those and reads the way the real ones do */
         discover: 520,
         release: 1400,
       }
@@ -1580,8 +1485,7 @@ export default function World() {
     const p = doc.places[hit.i]
     /* a resize keeps its own start pair: the move's dx is from the origin and collapsed the footprint. */
     drag.current = { kind: hit.kind, i: hit.i, dx: w.x - p.x, dy: w.y - p.y, mx, my, p, m0: doc.marks || [], corner: hit.corner }
-    // the cursor keeps the diagonal it was given, so the shape does not swap to
-    // a generic move the moment the hand closes on a corner
+    // the cursor keeps the diagonal it was given, so the shape does not swap to a generic move the moment the hand closes on a corner
     setHand(hit.kind === 'size' ? hit.corner || 'se' : hit.kind)
     remember()
   }
@@ -1598,8 +1502,7 @@ export default function World() {
     const pn = pan.current
     if (pn) {
       pn.far = Math.max(pn.far, Math.hypot(mx - pn.mx, my - pn.my))
-      // straight to the view and to where the view is going, both. Easing the
-      // hand that is holding the chart is lag, not smoothness.
+      // straight to the view and to where the view is going, both, because easing the hand that is holding the chart is lag and not smoothness
       const to = { s: fit.s, ox: pn.ox + (mx - pn.mx), oy: pn.oy + (my - pn.my) }
       want.current = to
       put(to)
@@ -1614,9 +1517,7 @@ export default function World() {
       /* the corner is part of the same hit, or moving between two grips keeps the first and lies. */
       const h = under(doc, fit, sel, mx, my, skin)
       setHover((v) => (v?.kind === h?.kind && v?.i === h?.i && v?.corner === h?.corner ? v : h))
-      // and the anchor a berth would land on, lit while you decide. It answers
-      // for the whole chart now rather than for the one island you had selected,
-      // which is what a free-standing point needs it to do.
+      // the anchor a berth would land on, lit while you decide, and it answers for the whole chart rather than for the one island selected, which is what a free-standing point needs
       const p = tool === 'berth' ? aimed(mx, my) : null
       setAim(p ? `${p.p.name}/${p.a.name}` : '')
       return
@@ -1625,8 +1526,7 @@ export default function World() {
     const y = sea(w.y - d.dy, doc.h)
     if (d.kind === 'place') shift(d.i, x, y)
     else if (d.kind === 'mark') editMark(d.i, { x, y })
-    // and the run-in on its own, which is the one drag that moves a point
-    // without moving what it hangs off
+    // and the run-in on its own, which is the one drag that moves a point without moving what it hangs off
     else if (d.kind === 'runin') editMark(d.i, { approach: { x: Math.round(x), y: Math.round(y) } })
     else {
       /* divide the travel by the DRAWN width, not the footprint, which overshoots by the margin. */
@@ -1639,16 +1539,13 @@ export default function World() {
       const corner = d.corner || 'se'
       const east = eastOf(corner)
       const south = southOf(corner)
-      // never zero, or a picture whose paint is a hairline would divide a whole
-      // drag by nothing and throw the footprint to its fence
+      // never zero, or a picture whose paint is a hairline would divide a whole drag by nothing and throw the footprint to its fence
       const kx = Math.max(1e-3, (sk.x1 - sk.x0) * fit.s)
       const ky = Math.max(1e-3, (sk.y1 - sk.y0) * fit.s)
-      // a west or north handle grows the island as the hand travels the other
-      // way, so the reading is signed by which edges the corner owns
+      // a west or north handle grows the island as the hand travels the other way, so the reading is signed by which edges the corner owns
       const hx = (mx - d.mx) * gain * (east ? 1 : -1)
       const hy = (my - d.my) * gain * (south ? 1 : -1)
-      // the handle honours the same lock the inspector does, so dragging a
-      // footprint cannot quietly squash the painting inside it
+      // the handle honours the same lock the inspector does, so dragging a footprint cannot quietly squash the painting inside it
       const held = lock && m && m.w > 0 && m.h > 0
       let nw: number
       let nh: number
@@ -1672,25 +1569,20 @@ export default function World() {
       const nx = Math.round(pinX + (p0.x - pinX) * fx)
       const ny = Math.round(pinY + (p0.y - pinY) * fy)
       if (nw !== now.w || nh !== now.h || nx !== now.x || ny !== now.y) {
-        /* THE ISLAND AND ITS BERTHS IN ONE setDoc, the same argument shift()
-         * makes: two writes would put a frame on screen with the coast scaled
-         * and the dock still on the old jetty, for every frame of the drag. */
+        /* the island and its berths in one setDoc, the same argument shift() makes: two writes would put a frame on screen with the coast scaled and the dock still on the old jetty, for every frame of the drag */
         setDoc((cur) =>
           cur
             ? {
                 ...cur,
                 places: cur.places.map((q, k) => (k === d.i ? { ...q, w: nw, h: nh, x: nx, y: ny } : q)),
-                // off the grab snapshot and not off `cur`, or every frame scales
-                // what the frame before it already scaled
+                // off the grab snapshot and not off `cur`, or every frame scales what the frame before it already scaled
                 marks: (d.m0 || []).map((mk) =>
                   mk.island === p0.name
                     ? {
                         ...mk,
                         x: Math.round(pinX + (mk.x - pinX) * fx),
                         y: Math.round(pinY + (mk.y - pinY) * fy),
-                        // the run-in takes the same scale as the dock it belongs
-                        // to, for the same reason: it is aimed at the picture,
-                        // and the picture is what just changed size
+                        // the run-in takes the same scale as the dock it belongs to, for the same reason: it is aimed at the picture, and the picture is what just changed size
                         ...(mk.approach
                           ? {
                               approach: {
@@ -1714,23 +1606,20 @@ export default function World() {
     setHand('')
     const pn = pan.current
     if (pn) {
-      // a press that went nowhere is a click on open water, which clears the
-      // selection the way it always did
+      // a press that went nowhere is a click on open water, which clears the selection the way it always did
       if (pn.far < 4) setSel(null)
       pan.current = null
       return
     }
     if (bandFrom.current && band && doc) {
-      // held inside the chart, because a drag that ran off the edge names water
-      // that is not on the ocean and nothing would ever sail through it
+      // held inside the chart, because a drag that ran off the edge names water that is not on the ocean and nothing would ever sail through it
       const rect: [number, number, number, number] = [
         sea(Math.min(band.x0, band.x1), doc.w),
         sea(Math.min(band.y0, band.y1), doc.h),
         sea(Math.max(band.x0, band.x1), doc.w),
         sea(Math.max(band.y0, band.y1), doc.h),
       ]
-      // a region dragged out by accident, one pixel across, is a click and not
-      // a region, and it would sit on the chart as an invisible thing to hit
+      // a region dragged out by accident, one pixel across, is a click and not a region, and it would sit on the chart as an invisible thing to hit
       if (rect[2] - rect[0] > 8 && rect[3] - rect[1] > 8) {
         const made: Region = { name: freeName('sea', doc.regions.map((r) => r.name)), kind: kinds[0] || 'sailable', rect }
         remember()
@@ -1763,9 +1652,7 @@ export default function World() {
   /* the whole document goes and the answer replaces the screen; an illegal name is caught here first. */
   const save = async () => {
     if (!doc || busy) return
-    // marks are in this check now, and by their own rule. isMarkName is the
-    // server's regex restated, and cleanMark drops a row that fails it exactly
-    // the way cleanPlace does, so a bad waypoint would vanish without a word.
+    // marks are checked by their own rule: isMarkName restates the server's regex, and cleanMark drops a row that fails it the way cleanPlace does, so a bad waypoint would vanish without a word
     const illegal = [...doc.places, ...doc.regions].filter((p) => !isAnchorName(p.name)).map((p) => p.name || '(no name)')
     illegal.push(...(doc.marks || []).filter((m) => !isMarkName(m.name)).map((m) => m.name || '(no name)'))
     if (illegal.length) {
@@ -1847,13 +1734,10 @@ export default function World() {
     }
     window.addEventListener('keydown', key)
     return () => window.removeEventListener('keydown', key)
-    // no dependency list, because save() closes over the document and a list
-    // that misses one field is a ctrl+s that posts what the page held a minute
-    // ago. Rebinding one listener per render costs nothing here.
+    // no dependency list, because save() closes over the document and a list that misses one field is a ctrl+s posting what the page held a minute ago, and rebinding one listener per render costs nothing
   })
 
-  // there is no autosave here on purpose, so the only thing standing between a
-  // half hour of placing and a closed tab is this
+  // there is no autosave here on purpose, so the only thing standing between a half hour of placing and a closed tab is this
   useEffect(() => {
     if (!dirty) return
     const ask = (e: BeforeUnloadEvent) => e.preventDefault()
@@ -1942,9 +1826,7 @@ export default function World() {
           <button className={'world-tool' + (tool === 'sea' ? ' on' : '')} onClick={() => setTool('sea')} title="drag out a stretch of water and name it">
             water
           </button>
-          {/* ONE BUTTON FOR EVERY POINT ON THE WATER, and there were three ways
-              to make one: this, "set berth" and "set approach", the last two
-              welded to whichever island happened to be selected. */}
+          {/* one button for every point on the water, where there were three ways to make one and two of them were welded to whichever island happened to be selected */}
           <button
             className={'world-tool' + (tool === 'berth' ? ' on' : '')}
             onClick={() => setTool('berth')}
@@ -2002,8 +1884,7 @@ export default function World() {
               +
             </button>
             {/* each framing names what it frames: fit showed 200 units of a 4096 unit ocean */}
-            {/* the framing button is named after the thing it frames, and on a
-                member's water that thing is not called the ocean */}
+            {/* the framing button is named after the thing it frames, and on a member's water that thing is not called the ocean */}
             <button className="world-zbtn wide" onClick={frameSea} title={`the whole ${doc.w} × ${doc.h} ${water}`}>
               {water}
             </button>
@@ -2042,9 +1923,7 @@ export default function World() {
           )}
           {!loading && !user && <p className="world-note">saving needs an account</p>}
 
-          {/* nothing selected is answered with the roster below, not with a
-              paragraph explaining what an island is to somebody already looking
-              at a chart of them. */}
+          {/* nothing selected is answered with the roster below, not with a paragraph explaining what an island is to somebody already looking at a chart of them */}
           {place && sel?.kind === 'place' ? (
             <Inspector
               p={place}
@@ -2093,9 +1972,7 @@ export default function World() {
               places={doc.places}
               /* the anchors of whatever island this berth belongs to, not of the panel you are in */
               sheet={spot.island ? reg.get(doc.places.find((p) => p.name === spot.island)?.map || '') : undefined}
-              /* the same rule composition() uses to pick the one berth a slot
-                 gets, asked here so the panel can say a run-in on any other
-                 point is a field nothing reads */
+              /* the same rule composition() uses to pick the one berth a slot gets, asked here so the panel can say a run-in on any other point is a field nothing reads */
               heeded={!!spot.island && berthOf(doc, spot.island) === spot}
               sure={sure}
               onSure={setSure}
@@ -2126,9 +2003,7 @@ export default function World() {
                     <span className="world-lab">
                       {what} · {n}
                     </span>
-                    {/* on every group and not just the first, because each group
-                        is read on its own and an unlabelled monospace column is
-                        how this one came to mean two things. */}
+                    {/* on every group and not just the first, because each group is read on its own and an unlabelled monospace column is how this one came to mean two things */}
                     <span className="world-lab">code name</span>
                   </div>
                   {what === 'islands' &&
@@ -2185,8 +2060,7 @@ export default function World() {
             })}
           </div>
 
-          {/* the shared empty state, for the water that genuinely has nothing on
-              it. Anything else is answered by the summary above. */}
+          {/* the shared empty state, for water that genuinely has nothing on it, since anything else is answered by the summary above */}
           {!sel && !doc.places.length && !doc.regions.length && !(doc.marks || []).length && (
             <div className="nothing">
               <p className="nothing-say">nothing is on this {water} yet</p>
@@ -2234,8 +2108,7 @@ export default function World() {
           />
           <span className="dim">u</span>
         </label>
-        {/* the same standing line the editor's footer ends with: what the two
-            gestures are, said once, quietly, instead of a caption on the water */}
+        {/* the same standing line the editor's footer ends with: what the two gestures are, said once, quietly, instead of a caption on the water */}
         <span className="world-read dim">scroll zooms · drag the water pans</span>
       </footer>
     </div>
@@ -2245,8 +2118,7 @@ export default function World() {
 /* the read url is the point of the block, and absolute, because it is pasted into another program. */
 function Whose({ doc, game, readUrl }: { doc: Doc; game: boolean; readUrl: string }) {
   const [copied, setCopied] = useState(false)
-  // window is read at click time and not at render, so nothing here assumes a
-  // dom during a server render this app does not have yet but might
+  // window is read at click time and not at render, so nothing here assumes a dom during a server render this app does not have yet but might
   const full = () => (typeof window === 'undefined' ? readUrl : window.location.origin + readUrl)
   const home = doc.home ? doc.places.find((p) => p.name === doc.home) : undefined
   return (
@@ -2268,9 +2140,7 @@ function Whose({ doc, game, readUrl }: { doc: Doc; game: boolean; readUrl: strin
             void navigator.clipboard
               ?.writeText(full())
               .then(() => setCopied(true))
-              // clipboard is refused outside a secure context and on a denied
-              // permission, and a button that lies about having copied is worse
-              // than one that says it could not
+              // clipboard is refused outside a secure context and on a denied permission, and a button that lies about having copied is worse than one that says it could not
               .catch(() => setCopied(false))
           }}
           title={full()}
@@ -2292,9 +2162,7 @@ function Whose({ doc, game, readUrl }: { doc: Doc; game: boolean; readUrl: strin
   )
 }
 
-/* HOW LONG AGO, IN WORDS, and deliberately coarse. A timestamp to the second on
- * a document one person edits is precision nobody reads; what is worth knowing
- * is whether the row changed under you while this tab was open. */
+/* how long ago, in words, and deliberately coarse: a timestamp to the second on a document one person edits is precision nobody reads, what is worth knowing is whether the row changed under you while this tab was open */
 function when(ms: number): string {
   const s = Math.max(0, Math.round((Date.now() - ms) / 1000))
   if (s < 90) return 'just now'
@@ -2330,16 +2198,13 @@ function Key({ doc }: { doc: Doc }) {
 
 /* exactly the warnings checkWorld raises and ALL of them: printing the first reported one of four. */
 function Todo({ doc }: { doc: Doc }) {
-  /* THE SAME QUESTIONS server/store/world.mjs ASKS AT THE SAVE, in the same
-   * order, so nothing here can promise a clean save the server then refuses. */
+  /* the same questions server/store/world.mjs asks at the save, in the same order, so nothing here can promise a clean save the server then refuses */
   const todo: string[] = []
   const noId = doc.places.filter((p) => p.map && !p.place).length
-  // through berthOf, which is the same rule the server warns on and the same
-  // one composition() sends, so this cannot promise a dock the game will not get
+  // through berthOf, which is the same rule the server warns on and the same one composition() sends, so this cannot promise a dock the game will not get
   const noBerth = doc.places.filter((p) => p.map && !berthOf(doc, p.name)).length
   const noMap = doc.places.filter((p) => !p.map).length
-  // a berth naming an island nobody has placed, which is the one thing the
-  // collapse made possible to get wrong and the server warns about by name
+  // a berth naming an island nobody has placed, which is the one thing the collapse made possible to get wrong and the server warns about by name
   const orphan = (doc.marks || []).filter((m) => m.island && !doc.places.some((p) => p.name === m.island)).length
   if (!doc.home && doc.places.length) todo.push('no island is marked as where a run starts')
   if (noId) todo.push(`${noId} ${noId === 1 ? 'island has' : 'islands have'} no place id, so the game cannot count a visit`)
@@ -2423,9 +2288,7 @@ function BerthPanel({
           />
         </label>
         {!legal && <p className="world-bad">lower case, digits, underscores</p>}
-        {/* the kinds the SERVER allows, since cleanMark quietly rewrites one it
-            does not know back to `berth`. A list kept here would drift out of
-            step with that and take the author's choice with it. */}
+        {/* the kinds the server allows, since cleanMark rewrites one it does not know back to `berth`, and a list kept here would drift out of step with that and take the author's choice with it */}
         <label className="world-f">
           <span>kind</span>
           <select className="world-in" value={m.kind} onChange={(e) => onEdit({ kind: e.target.value as MarkKind })}>
@@ -2475,8 +2338,7 @@ function BerthPanel({
             onChange={(e) => onEdit({ at: e.target.value || undefined })}
           >
             <option value="">the map&apos;s own spawn</option>
-            {/* the anchor's own words, not its identifier. mask.ts keeps label
-                separate from name for exactly this reason. */}
+            {/* the anchor's own words, not its identifier, which is why mask.ts keeps label separate from name */}
             {anchors.map((a) => (
               <option key={a.name} value={a.name}>
                 {displayName(a).text}
@@ -2492,8 +2354,7 @@ function BerthPanel({
           <Num label="x" v={m.x} on={(n) => onEdit({ x: n })} />
           <Num label="y" v={m.y} on={(n) => onEdit({ y: n })} />
         </div>
-        {/* how close counts as arrived, because a hull moves in floats and an
-            exact-pixel test on one never fires */}
+        {/* how close counts as arrived, because a hull moves in floats and an exact-pixel test on one never fires */}
         <label className="world-f">
           <span>arrived within</span>
           <input
@@ -2513,8 +2374,7 @@ function BerthPanel({
           on={(k) =>
             onEdit(
               m.kind === 'berth'
-                ? /* a compass press is a preset ON the dial, so the two controls can never disagree
-                     about where she is pointing */
+                ? /* a compass press is a preset on the dial, so the two controls can never disagree about where she is pointing */
                   k
                   ? { facing: k, bearing: bearingOfMark({ facing: k }) }
                   : { facing: undefined, bearing: undefined }
@@ -2522,11 +2382,7 @@ function BerthPanel({
             )
           }
         />
-        {/* THE DIAL, because a coastline does not run at a multiple of forty-five. The eight words
-            above are presets on it now rather than the whole vocabulary: a shore at 23 degrees could
-            not be lain along at all, and the ghost hull is drawn from this, so what is set is what is
-            seen. `facing` is kept at the nearest word beside it so everything that reads a word,
-            python included, still reads one. */}
+        {/* the dial, because a coastline does not run at a multiple of forty-five and a shore at 23 degrees could not be lain along at all: the eight words are presets on it, the ghost hull is drawn from this, and `facing` is kept at the nearest word so everything reading a word, python included, still reads one */}
         {m.kind === 'berth' && (
           <label className="world-dial">
             <span>
@@ -2545,8 +2401,7 @@ function BerthPanel({
             />
           </label>
         )}
-        {/* the ghost is the answer to this, so the note points at it rather than
-            describing a heading in words the chart is already showing */}
+        {/* the ghost is the answer to this, so the note points at it rather than describing a heading in words the chart is already showing */}
         {m.kind === 'berth' && (
           <p className="world-note">
             The hull is drawn to size on the chart at this heading. Turn her until she lies along the shore. A bow
@@ -2568,14 +2423,12 @@ function BerthPanel({
 function RunIn({ m, heeded, onEdit }: { m: WorldMark; heeded: boolean; onEdit: (patch: Partial<WorldMark>) => void }) {
   const a = m.approach
   const make = () => {
-    /* off the real heading rather than off the word, or a run-in born for a berth set to 23 degrees
-     * would be laid out for north-east and sit off the line she actually comes in on */
+    /* off the real heading rather than off the word, or a run-in born for a berth set to 23 degrees would be laid out for north-east and sit off the line she actually comes in on */
     const v = vecOfMark(m)
     let [dx, dy] = v || [0, -1]
     if (!dx && !dy) dy = -1
     const n = Math.hypot(dx, dy) || 1
-    // far enough out that the two marks are separate targets at the opening
-    // zoom, and outside the arrival radius so it is never inside "already there"
+    // far enough out that the two marks are separate targets at the opening zoom, and outside the arrival radius so it is never inside already there
     const far = Math.max(90, (m.r || 0) * 2.5)
     dx = Math.round((-dx / n) * far)
     dy = Math.round((-dy / n) * far)
@@ -2683,9 +2536,7 @@ function Inspector({
   const set = (patch: Partial<Place>) => onEdit(i, patch)
   const legal = isAnchorName(p.name)
   const slugs = [...reg.keys()]
-  // a map the listing does not carry is still shown, because it may be the
-  // island being painted this week and blanking it would rewrite the document
-  // behind somebody's back
+  // a map the listing does not carry is still shown, because it may be an island still being painted, and blanking it would rewrite the document behind somebody's back
   const options = p.map && !slugs.includes(p.map) ? [p.map, ...slugs] : slugs
   const shape = sheet && sheet.w > 0 && sheet.h > 0 ? sheet.w / sheet.h : 0
 
@@ -2827,8 +2678,7 @@ function Inspector({
           <Num label="w" v={p.w} min={ISLAND_MIN} on={setW} disabled={!!p.map} />
           <Num label="h" v={p.h} min={ISLAND_MIN} on={setH} disabled={!!p.map} />
         </div>
-        {/* the sentence this was, "hold the painting's shape · 688x640", said the
-            same thing three times. The size it is holding is the title. */}
+        {/* the size it is holding is the title, because the longer label said the same thing three times */}
         <label
           className="world-check"
           title={p.map ? 'a place holding a painting is that painting"s canvas, one unit to one pixel' : 'the painting decides the short side'}
@@ -2967,8 +2817,7 @@ function SeaPanel({
       </section>
       <section className="world-sec">
         <h3 className="world-lab">where it is</h3>
-        {/* two opposite corners, the order the mask's own rect settled on, so one
-            reader shape serves an anchor region and a sea region */}
+        {/* two opposite corners, the order the mask's own rect settled on, so one reader shape serves an anchor region and a sea region */}
         <div className="world-pair">
           <Num label="x0" v={r.rect[0]} on={(n) => set(0, n)} />
           <Num label="y0" v={r.rect[1]} on={(n) => set(1, n)} />

@@ -9,9 +9,7 @@ const s = store()
 console.log(`bucket: ${s.kind}${s.bucket ? ' ' + s.bucket : ''}`)
 console.log(WRITE ? 'writing, rows listed below will be deleted\n' : 'dry run, nothing will be deleted (pass --write)\n')
 
-// one listing of the whole publish tree, rather than one per row. A per-row
-// listing on thirteen rows is thirteen class A operations to learn what one
-// answers, and the tree is small enough to hold.
+// one listing of the whole publish tree rather than one per row, because thirteen rows would be thirteen class A operations to learn what one answers, and the tree is small enough to hold
 const objects = await s.list('publish/')
 const have = new Set(objects.map((o) => String(o.key || o)))
 console.log(`publish/ holds ${have.size} object(s)`)
@@ -77,8 +75,7 @@ if (!WRITE) {
   process.exit(0)
 }
 
-// deleted by primary key one at a time, so the statement can never widen to
-// something it was not shown above
+// deleted by primary key one at a time, so the statement can never widen to something it was not shown above
 let n = 0
 for (const r of dead) {
   await q('delete from publishes where id = $1', [r.id])

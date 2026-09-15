@@ -1,8 +1,4 @@
-// Erode, dilate, open, close and the outline that falls out of them.
-//
-// A hand-painted mask has ragged edges and single stray pixels. An open removes
-// the strays without moving the shape; a close fills the pinholes a brush leaves
-// where two strokes nearly met. Both are two passes of the same primitive.
+// erode, dilate, open, close and the outline that falls out of them: an open removes stray pixels without moving the shape, a close fills the pinholes a brush leaves where two strokes nearly met
 
 import { Plane } from './plane.js'
 
@@ -38,8 +34,7 @@ export function erode(plane, { shape = SQUARE, times = 1 } = {}) {
       for (let x = 0; x < cur.w; x++) {
         let min = 255
         for (const [dx, dy] of shape) {
-          // outside the plane counts as empty, so a shape touching the border
-          // erodes away from it, which is what an island wants
+          // outside the plane counts as empty, so a shape touching the border erodes away from it, which is what an island wants
           const v = cur.get(x + dx, y + dy)
           if (v < min) min = v
         }
@@ -54,8 +49,7 @@ export function erode(plane, { shape = SQUARE, times = 1 } = {}) {
 export const open = (plane, opts) => dilate(erode(plane, opts), opts)
 export const close = (plane, opts) => erode(dilate(plane, opts), opts)
 
-/* what dilate added, which is the one pixel ring around the shape. The outline
- * of a walkable area, drawn without tracing anything. */
+/* what dilate added, the one pixel ring around the shape, so a walkable outline needs no tracing */
 export function outline(plane, { shape = CROSS, inner = false } = {}) {
   const grown = inner ? plane : dilate(plane, { shape })
   const shrunk = inner ? erode(plane, { shape }) : plane
@@ -64,8 +58,7 @@ export function outline(plane, { shape = CROSS, inner = false } = {}) {
   return out
 }
 
-/* a pixel with fewer than two filled neighbours is a whisker, not a shape. Run
- * before an outline or the outline grows hairs. */
+/* a pixel with fewer than two filled neighbours is a whisker, so run this before an outline or the outline grows hairs */
 export function despeckle(plane, minNeighbours = 2) {
   const out = plane.clone()
   for (let y = 0; y < plane.h; y++) {

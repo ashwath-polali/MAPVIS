@@ -1,8 +1,7 @@
 /* Custom effects: when an ask fits none of the seven rules in effects.ts, the planner WRITES the renderer and it runs here, in a blob worker with the network, the page and every loader taken off it. api.t runs 0..1 and rnd(n) is stable per n, so a correct recipe loops by construction. */
 import { mkCanvas } from './mask'
 
-// one declared knob: a custom effect ships its own sliders rather than
-// borrowing the five fixed ones
+// one declared knob: a custom effect ships its own sliders rather than borrowing the five fixed ones
 export interface CustomControl {
   key: string
   label: string
@@ -19,8 +18,7 @@ export interface CustomSpec {
 
 export interface CustomReq {
   code: string
-  // every number the code can read as p.<key>: the canvas and cycle fields plus
-  // whatever the declared controls are called
+  // every number the code can read as p.<key>: the canvas and cycle fields plus whatever the declared controls are called
   params: Record<string, number>
   colors: string[]
   width: number
@@ -53,8 +51,7 @@ export const CUSTOM_MS = 3000
 // the first pass has to come in under this or the seam pass is skipped
 const SEAM_BUDGET = 700
 
-/* The worker, as source. It is one self-contained classic worker on purpose:
- * a blob cannot import anything, which is half the sandbox for free. */
+/* the worker, as source, one self-contained classic worker on purpose because a blob cannot import anything, which is half the sandbox for free */
 const SRC = `
 'use strict'
 var post = self.postMessage.bind(self)
@@ -327,9 +324,7 @@ function workerURL(): string {
   return blobURL
 }
 
-/* One render of a written recipe. Rejects on a timeout, a worker that will not
- * start, or a body that would not even build; a body that throws while drawing
- * resolves with the frames it managed and the message in errors. */
+/* one render of a written recipe: it rejects on a timeout, a worker that will not start, or a body that would not even build, while a body that throws while drawing resolves with the frames it managed and the message in errors */
 export function runCustom(req: CustomReq): Promise<CustomRun> {
   return new Promise<CustomRun>((resolve, reject) => {
     let w: Worker
@@ -385,8 +380,7 @@ export function runCustom(req: CustomReq): Promise<CustomRun> {
       end()
       reject(new Error(ev.message || 'that recipe did not run'))
     }
-    // the sprite's buffers are TRANSFERRED, not copied: a walker's source can
-    // be a few hundred KB and it is read-only on the far side
+    // the sprite's buffers are transferred, not copied, because a walker's source can be a few hundred KB and it is read-only on the far side
     const spr = req.sprite
     const msg: Record<string, unknown> = {
       code: req.code,

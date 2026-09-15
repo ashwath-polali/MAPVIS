@@ -2,11 +2,7 @@
 import crypto from 'node:crypto'
 import { need } from '../db/env.mjs'
 
-// ---- passwords -------------------------------------------------------------
-
-// scrypt with node's defaults raised: N=2^15 is about 100ms on this class of
-// machine, which is slow enough to make a stolen table expensive and fast
-// enough that a login does not feel broken.
+// passwords: scrypt with N=2^15, about 100ms on this class of machine, slow enough to make a stolen table expensive and fast enough that a login does not feel broken
 const N = 32768
 const R = 8
 const P = 1
@@ -21,8 +17,7 @@ export async function hashPassword(password) {
   if (typeof password !== 'string' || password.length < 8) throw new Error('password must be at least 8 characters')
   const salt = crypto.randomBytes(16)
   const key = await scrypt(password, salt)
-  // the parameters travel with the hash, so raising them later does not
-  // invalidate every existing password
+  // the parameters travel with the hash, so raising them later does not invalidate every existing password
   return `scrypt$${N}$${R}$${P}$${salt.toString('base64')}$${key.toString('base64')}`
 }
 
@@ -47,17 +42,11 @@ export async function verifyPassword(password, stored) {
   }
 }
 
-// ---- session and relay tokens ----------------------------------------------
-
-// only the hash is stored so a stolen database cannot be replayed, and sha256 not scrypt because 256 random bits have nothing to brute force
+// session and relay tokens: only the hash is stored so a stolen database cannot be replayed, and sha256 not scrypt because 256 random bits have nothing to brute force
 export const newToken = () => crypto.randomBytes(32).toString('base64url')
 export const hashToken = (t) => crypto.createHash('sha256').update(String(t)).digest('hex')
 
-// ---- the api-key vault -----------------------------------------------------
-
-// aes-256-gcm. The nonce is random per encryption and rides in front of the
-// ciphertext, the tag rides behind it, so one opaque buffer goes in the
-// bytea column and tampering fails loudly instead of decrypting to garbage.
+// the api-key vault: aes-256-gcm with a random nonce in front of the ciphertext and the tag behind it, one opaque buffer for the bytea column, so tampering fails loudly instead of decrypting to garbage
 const master = () => {
   const k = Buffer.from(need('KEY_VAULT_SECRET'), 'base64')
   if (k.length !== 32) throw new Error('KEY_VAULT_SECRET must be 32 bytes of base64')
@@ -78,11 +67,7 @@ export function openKey(sealed) {
   return Buffer.concat([d.update(b.subarray(12, b.length - 16)), d.final()]).toString('utf8')
 }
 
-// ---- names -----------------------------------------------------------------
-
-// An anchor name is what a member types in python, so it has to be a legal
-// identifier there. Used both to validate what an author typed and to derive a
-// starting point when migrating an old door that only ever had a label.
+// names: an anchor name is typed in python so it has to be a legal identifier there, used both to validate what an author typed and to derive a starting point for an old door that only had a label
 export function anchorName(s) {
   const n = String(s || '')
     .toLowerCase()
@@ -94,16 +79,10 @@ export function anchorName(s) {
   return n || 'anchor'
 }
 
-/* TYPE FIRST, the same rule and the same reason as isPlacementName below, which
- * learned it first. String(undefined) is "undefined" and passes the pattern, so
- * every unnamed FACE went out as one literally called `undefined`: twelve
- * placements on atc-1 alone, and on the game side that string resolves to a real
- * picture instead of refusing. */
+/* check the type first, the same rule as isPlacementName below: String(undefined) is "undefined" and passes the pattern, so every unnamed face went out named `undefined`, twelve placements on atc-1 alone, and the game resolves that string to a real picture instead of refusing */
 export const isAnchorName = (s) => typeof s === 'string' && /^[a-z][a-z0-9_]{0,47}$/.test(s)
 
 /* a placement name may not look like a machine id, because the game resolves names and ids together and `a55` would mean two objects on one map */
-/* TYPE FIRST, and that is not pedantry. String(undefined) is "undefined",
- * which passes the pattern, so an unnamed placement shipped as literally named
- * `undefined` and two of them collided on one map. Found by exporting one. */
+/* check the type first: String(undefined) is "undefined" and passes the pattern, so an unnamed placement shipped literally named `undefined` and two of them collided on one map */
 export const isPlacementName = (s) =>
   typeof s === 'string' && /^[a-z][a-z0-9_]{0,47}$/.test(s) && !/^a[0-9]+$/.test(s)

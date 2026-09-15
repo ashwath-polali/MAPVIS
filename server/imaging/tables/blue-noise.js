@@ -1,17 +1,4 @@
-// A 64 by 64 blue noise threshold texture, tiling.
-//
-// Blue noise has no low frequency content, so a threshold taken from it scatters
-// error evenly with no visible clumping and no repeating grid. That is what a
-// Bayer matrix cannot do: a Bayer dither always reads as a crosshatch, which on
-// a large flat sky is the most visible artefact in the picture.
-//
-// It cannot be computed cheaply. Producing this took a void-and-cluster pass
-// over every one of the 4096 cells twice, each step searching the whole
-// field for the tightest cluster and the largest void, so it lives here as data
-// rather than being rebuilt.
-//
-// Values are 0 to 255 and the texture wraps in both directions, so it can be
-// sampled with a modulo at any size.
+// a 64 by 64 tiling blue noise threshold texture, values 0 to 255, wrapping both ways so a modulo samples it at any size. no low frequency content means no clumping and none of the crosshatch Bayer shows on a flat sky, and void-and-cluster over 4096 cells twice is too slow to rebuild.
 
 export const BLUE_NOISE_SIZE = 64
 

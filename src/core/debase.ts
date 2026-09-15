@@ -58,9 +58,7 @@ export function findBase(data: Uint8ClampedArray, w: number, h: number): { cut: 
 
   let waist = widest
   for (let y = floor; y < wy; y++) waist = Math.min(waist, widthAt(y))
-  // a real pedestal is half again wider than what stands on it. Below that the
-  // shape is just a wide-bottomed object (a house, a crate, a boulder) and
-  // there is nothing here to take off
+  // a real pedestal is half again wider than what stands on it; below that the shape is just a wide-bottomed object and there is nothing here to take off
   if (waist < 3 || widest < waist * 1.45)
     return { cut: 0, note: 'no base found, it widens all the way down' }
 
@@ -75,15 +73,12 @@ export function findBase(data: Uint8ClampedArray, w: number, h: number): { cut: 
 
   const rows = bottom - cutRow
   if (rows < 3 || widthAt(cutRow) < 3) return { cut: 0, note: 'nothing to trim' }
-  // a pedestal is a small share of the object; more than this and the shape
-  // itself is wide-bottomed, so leave it alone
+  // a pedestal is a small share of the object, so past this share the shape itself is wide-bottomed and gets left alone
   if (rows > h * 0.42) return { cut: 0, note: 'that is the object, not a base' }
   return { cut: rows, note: `${rows}px of base under a ${widthAt(cutRow)}px stem` }
 }
 
-/* Erase the base rows rather than cropping them: the sprite keeps its size, so
- * a placement's feet anchor does not jump when this is applied to something
- * already on the map. */
+/* erase the base rows rather than cropping them, so the sprite keeps its size and a placement's feet anchor does not jump when this runs on something already on the map */
 export function debase(data: Uint8ClampedArray, w: number, h: number): DebaseResult {
   const found = findBase(data, w, h)
   if (!found.cut) return { data, width: w, height: h, cut: 0, note: found.note }

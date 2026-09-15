@@ -1,9 +1,4 @@
-// CIELAB and LCh.
-//
-// Lab is the space to ask "do these two look the same" in, because a fixed step
-// in it is roughly a fixed step to an eye. It is not the space to BLEND in: the
-// straight line between two Lab colours bends through grey, which is why a ramp
-// generated here comes out muddy in the middle and the one in oklab.js does not.
+// CIELAB and LCh, the space for asking whether two colours look the same, never the space to blend in, because the straight line between two Lab colours bends through grey and a ramp built here comes out muddy in the middle where the one in oklab.js does not
 
 import { rgbToXYZ, xyzToRGB, D65 } from './xyz.js'
 
@@ -30,9 +25,7 @@ export function labToXYZ(lab, white = D65) {
 export const rgbToLab = (rgb) => xyzToLab(rgbToXYZ(rgb))
 export const labToRGB = (lab) => xyzToRGB(labToXYZ(lab))
 
-/* the polar form, and the one an author actually thinks in: lightness, how
- * colourful, and which hue. Rotating h is how a palette gets shifted without
- * losing its own contrast. */
+/* the polar form an author actually thinks in, lightness, how colourful and which hue, and rotating h shifts a palette without losing its own contrast */
 export function labToLCh(lab) {
   const c = Math.sqrt(lab[1] * lab[1] + lab[2] * lab[2])
   let h = (Math.atan2(lab[2], lab[1]) * 180) / Math.PI
@@ -48,16 +41,13 @@ export function lchToLab(lch) {
 export const rgbToLCh = (rgb) => labToLCh(rgbToLab(rgb))
 export const lchToRGB = (lch) => labToRGB(lchToLab(lch))
 
-/* shortest way round the circle, because interpolating 350 to 10 the long way
- * takes a ramp through every hue there is */
+/* shortest way round the circle, because interpolating 350 to 10 the long way ramps through every hue there is */
 export function hueLerp(a, b, t) {
   let d = ((b - a + 540) % 360) - 180
   return (a + d * t + 360) % 360
 }
 
-/* chroma pulled in until the colour is one a screen can show, keeping L and h.
- * Clipping the rgb channels instead shifts the hue, which is how a ramp of one
- * colour arrives with a purple end. */
+/* chroma pulled in until the colour is one a screen can show, keeping L and h, because clipping the rgb channels instead shifts the hue and a ramp of one colour arrives with a purple end */
 export function clipToGamut(lch, steps = 24) {
   let lo = 0
   let hi = lch[1]

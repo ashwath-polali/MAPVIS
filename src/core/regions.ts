@@ -1,13 +1,11 @@
-/* The main-thread side of the region pass: hand the painting's pixels to the
- * worker, get one label per pixel back. Local, no network, no model. */
+/* the main-thread side of the region pass: pixels go to the worker and one label per pixel comes back, all local, no network and no model */
 
 export interface RegionResult {
   labels: Int32Array
   count: number
 }
 
-// tolerance 40 is the same fixed value the auto sea uses: one behaviour, one
-// law. minPx 24 absorbs anti-aliasing specks without eating real detail.
+// tolerance 40 is the same fixed value the auto sea uses so there is one behaviour, and minPx 24 absorbs anti-aliasing specks without eating real detail
 export function computeRegions(
   pix: Uint8ClampedArray,
   w: number,

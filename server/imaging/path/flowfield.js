@@ -1,8 +1,4 @@
-// One field, every source, every destination.
-//
-// A* answers one question per run. When many things are heading for the same
-// place, a single backwards pass from that place answers for all of them at
-// once, and every one of them then walks downhill with no search at all.
+// one field, every source, every destination: A* answers one question per run, while a single backwards pass from a shared goal answers for everything heading there and each one then walks downhill with no search at all
 
 import { IndexHeap } from './heap.js'
 
@@ -45,9 +41,7 @@ export function flowField(levels, w, h, goal, { tolerance = 10 } = {}) {
   return cost
 }
 
-/* the direction of steepest descent at every pixel, as a pair of signed bytes.
- * Cheaper to store and to read than a float vector, and a walk only ever needs
- * eight directions anyway. */
+/* the direction of steepest descent at every pixel as a pair of signed bytes, cheaper to store and read than a float vector, and a walk only ever needs eight directions */
 export function toDirections(cost, w, h) {
   const dirs = new Int8Array(w * h * 2)
   for (let y = 0; y < h; y++) {

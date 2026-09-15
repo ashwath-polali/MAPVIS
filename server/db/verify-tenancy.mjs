@@ -1,20 +1,4 @@
-// One account cannot see, open or steer another account's work.
-
-//   node server/db/verify-tenancy.mjs
-
-// Written after a real breach, reported 2026-09-13. A brand new account signed up under a different
-// address, found "the ocean" on its home page, opened it, and was looking at the game's own water:
-// the hub, the ATC island, every mark on them. The same session was offered the house hand, which is
-// one account's alone.
-//
-// Neither was a missing check. Both were checks that FAILED OPEN. `ownedBy` ended
-// `if (!owner) return true` and `mayUseHouse` the same, so a deployment with no OCEAN_OWNER set
-// handed the game's ocean and the house style to everybody who signed up. The database showed it
-// plainly: one world row, owned by the first account, and a second account created that morning had
-// never been given one of its own, which can only happen if it was handed row 1.
-//
-// So these run with the owner deliberately UNSET, because that is the state the breach happened in
-// and the state a fresh deployment is in.
+// one account cannot see, open or steer another account's work, and these checks run with the owner deliberately unset because that is what a fresh deployment is: ownedBy and mayUseHouse both ended `if (!owner) return true`, which handed the game's ocean and the house hand to every new account
 import http from 'node:http'
 
 let bad = 0
@@ -24,15 +8,11 @@ const no = (m) => {
   console.log(`  FAIL  ${m}`)
 }
 
-/* THE OWNER IS CLEARED BEFORE THE API LOADS. env() reads a merged object once, and what is being
- * checked is exactly what happens when nothing is configured. */
+/* the owner is cleared before the api loads, because env() reads a merged object once and what is checked is exactly what happens when nothing is configured */
 process.env.OCEAN_OWNER = ''
 process.env.HOUSE_STYLE_OWNER = ''
 process.env.BOOTSTRAP_EMAIL = ''
-/* AND SOLO MODE OFF. On a development laptop an unauthenticated request from the loopback address is
- * deliberately treated as one named account, which is a convenience with four fences round it and not
- * a fault. It is exactly wrong for these checks though: what is being asked here is how the tool
- * behaves where there ARE other people, and solo mode is the statement that there are not. */
+/* and solo mode off, because an unauthenticated loopback request is deliberately treated as one named account, which is wrong here where the question is how the tool behaves when there are other people */
 process.env.MAPVIS_NO_SOLO = '1'
 
 const { api } = await import('../api.mjs')
@@ -89,10 +69,7 @@ try {
   t2 = b.token || ''
   t1 && t2 ? ok('two accounts signed up') : no(`could not make two accounts (${a.status}, ${b.status})`)
 
-  // ---- THE OCEAN -----------------------------------------------------------
-  // The game's water is row 1. With nobody configured as its owner, neither of
-  // these two may be handed it: not knowing who owns a thing is not a reason to
-  // give it away.
+  // the ocean, which is row 1, and with nobody configured as its owner neither account may be handed it, because not knowing who owns a thing is not a reason to give it away
   {
     const w1 = await call('/api/world', as(t1))
     const w2 = await call('/api/world', as(t2))
@@ -104,8 +81,7 @@ try {
       ? ok('and with no owner configured, neither of them is told the game ocean is theirs')
       : no(`the game ocean was claimed by a stranger: ${JSON.stringify([m1.json, m2.json])}`)
 
-    /* the real test: what is IN it. The breach was reading back the hub and the ATC island, so this
-     * asks whether either account can see a place it did not put there. */
+    /* the real test is what is in it, so this asks whether either account can see a place it did not put there, which is how the hub and the ATC island leaked */
     const places1 = (w1.json?.places || []).map((p) => p.name)
     const places2 = (w2.json?.places || []).map((p) => p.name)
     places1.length === 0 && places2.length === 0
@@ -123,9 +99,7 @@ try {
       : no(`the two accounts share a world row, or were given the game's: ${JSON.stringify(rows.rows)}`)
   }
 
-  // ---- THE HOUSE HAND ------------------------------------------------------
-  // One account's style, granted by them. With nobody configured it belongs to
-  // nobody rather than to everybody.
+  // the house hand is one account's style, granted by them, and with nobody configured it belongs to nobody rather than to everybody
   {
     const s1 = await call('/api/styles', as(t1))
     const s2 = await call('/api/styles', as(t2))
@@ -136,11 +110,7 @@ try {
       : no(`the house hand was offered to a stranger: ${JSON.stringify([house1, house2])}`)
   }
 
-  // ---- THE MAP LIST --------------------------------------------------------
-  // The open form of this is the game's door registry and stays open: a door
-  // names a target by slug and the game signs in as nobody. What must not happen
-  // is the AUTHORING picker being dressed out of it, which is how a new account
-  // was offered the hub and the ATC island to place on its own chart.
+  // the map list, whose open form is the game's door registry and stays open because a door names a target by slug and the game signs in as nobody, while the authoring picker must never be dressed out of it
   {
     const mine1 = await call('/api/v1/maps?mine=1', as(t1))
     mine1.status === 200 && (mine1.json?.maps || []).length === 0
@@ -155,9 +125,7 @@ try {
     open.status === 200 ? ok("while the game's own registry stays open, which is what doors resolve against") : no(`the registry answered ${open.status}`)
   }
 
-  // ---- AND WRITES --------------------------------------------------------
-  // The door gate is the one that was already right, and it is checked here so
-  // that a later change to the read side cannot quietly take it with it.
+  // and writes, where the door gate is the one that was already right, checked here so a later change to the read side cannot quietly take it with it
   {
     const stolen = await call('/api/doc', { method: 'POST', body: { id: 'hub', doc: '{}' }, ...as(t2) })
     stolen.status === 403

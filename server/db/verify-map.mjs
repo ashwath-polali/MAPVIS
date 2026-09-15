@@ -22,8 +22,7 @@ console.log(`${slug}  ${map.id}  ${map.w}x${map.h}`)
 const original = JSON.parse(fs.readFileSync(path.join(WORK, slug, 'doc.json'), 'utf8'))
 const roundTripped = JSON.parse(await getDoc(map.id))
 
-// the three mask planes, byte for byte. This is the hand-drawn work and the one
-// thing in the whole system that cannot be regenerated.
+// the three mask planes, byte for byte, the hand-drawn work and the one thing in the whole system that cannot be regenerated
 const a = Buffer.from(original.m, 'base64')
 const b = Buffer.from(roundTripped.m, 'base64')
 if (a.length !== b.length) no(`planes length ${a.length} in, ${b.length} out`)
@@ -42,9 +41,7 @@ const norm = (v) =>
   JSON.stringify(v, (_, x) =>
     x && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.entries(x).sort()) : x,
   )
-/* saved and read back, rather than against the file, because the question is
- * whether the split into jsonb loses anything and the file cannot answer that
- * once anybody has authored a placement since it was written */
+/* saved and read back rather than compared against the file, because the question is whether the split into jsonb loses anything and the file cannot answer that once anybody has authored a placement */
 await putDoc(map.id, JSON.stringify(roundTripped))
 const again1 = JSON.parse(await getDoc(map.id))
 norm(roundTripped.assets) === norm(again1.assets)
@@ -53,23 +50,19 @@ norm(roundTripped.assets) === norm(again1.assets)
 norm(roundTripped.walk) === norm(again1.walk) && norm(roundTripped.props) === norm(again1.props)
   ? ok(`the walk contract and the map's properties survive it too`)
   : no(`walk or props changed: ${norm(again1.walk)} ${norm(again1.props)}`)
-// the start point and the placement counter, asked of the live document rather
-// than of the file, because both of them move whenever somebody authors
+// the start point and the placement counter, asked of the live document rather than of the file, because both move whenever somebody authors
 String(roundTripped.spawn) === String(again1.spawn)
   ? ok(`spawn ${roundTripped.spawn} survives the round trip`)
   : no(`spawn ${roundTripped.spawn} in, ${again1.spawn} out`)
 roundTripped.assetNext === again1.assetNext
   ? ok(`assetNext ${roundTripped.assetNext}`)
   : no(`assetNext ${roundTripped.assetNext} in, ${again1.assetNext} out`)
-// the routes and the shots, which are the newest authored lists and travel the
-// same jsonb path the placements do
+// the routes and the shots, the newest authored lists, which travel the same jsonb path the placements do
 norm(roundTripped.paths || []) === norm(again1.paths || []) && norm(roundTripped.framings || []) === norm(again1.framings || [])
   ? ok(`${(roundTripped.paths || []).length} route(s) and ${(roundTripped.framings || []).length} shot(s) survive it`)
   : no(`routes or shots changed: ${norm(again1.paths)} ${norm(again1.framings)}`)
 
-// anchors survive the trip through the table. A document written before anchors
-// existed says type:'door'; one written since says kind, and both have to come
-// back as the same set of named places.
+// anchors survive the trip through the table, and a document written before anchors existed says type:'door' while one written since says kind, so both have to come back as the same set of named places
 const isDoor = (e) => e.kind === 'door' || e.type === 'door'
 const doorsIn = (original.events || []).filter(isDoor)
 const doorsOut = (roundTripped.events || []).filter(isDoor)
@@ -92,14 +85,11 @@ const moved = await putDoc(map.id, JSON.stringify(again1))
 moved.wrote.some((w) => w.startsWith('doc')) && !moved.wrote.some((w) => w.startsWith('planes'))
   ? ok(`moving the spawn wrote only the row: ${moved.wrote.join(', ')}`)
   : no(`moving the spawn wrote: ${moved.wrote.join(', ') || 'nothing'}`)
-// and put it back, off the document this test has been moving rather than off
-// the file, so the map is left exactly as it was found
+// and put it back, off the document this test has been moving rather than off the file, so the map is left exactly as it was found
 again1.spawn = [again1.spawn[0] - 1, again1.spawn[1]]
 await putDoc(map.id, JSON.stringify(again1))
 
-// ---- a generated asset has to survive the trip too -------------------------
-
-// the listing is from the database now, so anything written to disk and not pushed vanishes from the library
+// a generated asset has to survive the trip too, and the listing comes from the database now, so anything written to disk and not pushed vanishes from the library
 {
   const { pushItem, libraryOf, dropItem } = await import('../store/platform.mjs')
   const { store, keys } = await import('../store/blobs.mjs')
@@ -121,9 +111,7 @@ await putDoc(map.id, JSON.stringify(again1))
     const back = await store().get(keys.libStill(map.id, name))
     Buffer.compare(back, png) === 0 ? ok('its bytes round-tripped through object storage') : no('its bytes came back different')
 
-    // an in-place edit keeps the replaced pixels, and putting them back must work
-    // on a machine that never saw the edit, which is more than .prev on one disk
-    // can do
+    // an in-place edit keeps the replaced pixels, and putting them back must work on a machine that never saw the edit, which is more than .prev on one disk can do
     const { snapshotVersion, restoreVersion, versionsOf } = await import('../store/platform.mjs')
     const snap = await snapshotVersion(slug, name)
     snap ? ok(`kept version ${snap.seq} of it (${snap.files} file)`) : no('nothing was kept')

@@ -1,9 +1,4 @@
-// Convex hull, and the smallest box that fits a shape at any angle.
-//
-// Andrew's monotone chain: sort once, then walk up and back. O(n log n) with the
-// sort and O(n) after it, and the only floating point comparison is a cross
-// product sign, so it does not fall apart on collinear input the way a
-// gift-wrapping implementation does.
+// convex hull and the smallest box that fits a shape at any angle, by Andrew's monotone chain: sort once then walk up and back, O(n log n) with the sort and O(n) after, and the only floating point comparison is a cross product sign, so collinear input does not break it the way gift-wrapping does
 
 import { cross, sub, dist } from './vec.js'
 
@@ -24,9 +19,7 @@ export function convexHull(points) {
   return half(pts).concat(half(pts.slice().reverse()))
 }
 
-/* rotating callipers. The smallest enclosing rectangle always has a side flush
- * with a hull edge, so there are only as many candidates as the hull has edges
- * and each can be measured directly. */
+/* rotating callipers: the smallest enclosing rectangle always has a side flush with a hull edge, so there are only as many candidates as the hull has edges and each can be measured directly */
 export function minimumAreaRect(points) {
   const hull = convexHull(points)
   if (hull.length < 3) return null
@@ -63,8 +56,7 @@ export function minimumAreaRect(points) {
   return best
 }
 
-/* the two points furthest apart, which is the longest span of the shape. Off
- * the hull, because the extreme pair is always on it. */
+/* the two points furthest apart, the longest span of the shape, taken off the hull because the extreme pair is always on it */
 export function diameter(points) {
   const hull = convexHull(points)
   let best = 0

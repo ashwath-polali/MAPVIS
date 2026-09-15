@@ -1,6 +1,4 @@
-/* THE TRANSITION SCREEN EDITOR. A strip of paintings to choose the map by, then one sentence and the
-   picture at the size it ships at. The tokens are the site's, and the card language is the
-   dashboard's, because a third card on a third page is how a product stops looking like one. */
+/* the transition screen editor: a strip of paintings to choose the map by, then one sentence and the picture at the size it ships at, on the site's tokens and the dashboard's card language so a third card on a third page still looks like one product */
 
 .cvr {
   display: grid;
@@ -132,8 +130,7 @@
   color: #e0894f;
 }
 
-/* the press carries its own price, because a generation is money and a button that does not say so
-   is a button somebody presses twice */
+/* the press carries its own price, because a generation is money and a button that does not say so is a button somebody presses twice */
 .cvr-go {
   display: flex;
   align-items: baseline;
@@ -176,8 +173,7 @@
   color: #e0894f;
   border-color: #3a2a22;
 }
-/* an armed press looks nothing like the press before it, because the whole point is that the second
-   one is not the same act as the first */
+/* an armed press looks nothing like the press before it, because the whole point is that the second one is not the same act as the first */
 .cvr-go.armed {
   border-color: var(--acc);
   color: var(--acc);
@@ -188,9 +184,7 @@
   border-color: #e0894f;
 }
 
-/* ---- whose hand draws it ---------------------------------------------------
-   Before the sentence, the way the map editor asks, because choosing it after the words are typed
-   reads as a filter on them and choosing it first reads as who is drawing. */
+/* whose hand draws it, asked before the sentence the way the map editor asks, because choosing it after the words are typed reads as a filter on them and choosing it first reads as who is drawing */
 .cvr-hands {
   display: flex;
   flex-wrap: wrap;
@@ -220,8 +214,7 @@
   opacity: 0.7;
 }
 
-/* the sentence this one was asked for, kept with the picture because a png cannot say what was typed
-   to get it and that is the first question anybody asks of one */
+/* the sentence this one was asked for, kept with the picture because a png cannot say what was typed to get it and that is the first question anybody asks of one */
 .cvr-note {
   margin: 0;
   grid-column: 1 / -1;
@@ -267,14 +260,11 @@
   gap: 18px;
   align-content: start;
   min-width: 0;
-  /* one width for the column, so an empty slot and a kept cover are the same size on the page: they
-     were 1030 and 820, which read as two different things rather than one before and after */
+  /* one width for the column, so an empty slot and a kept cover are the same size on the page: they were 1030 and 820, which read as two different things rather than one before and after */
   max-width: 900px;
 }
 
-/* ---- THE GAME'S OWN FRAME -------------------------------------------------
-   The whole reason a preview is worth anything: a cover is judged with the title
-   across it, because that is where the title lands. */
+/* the game's own frame: a cover is judged with the title across it, because that is where the title lands */
 .cvr-shot {
   margin: 0;
   display: grid;
@@ -283,8 +273,7 @@
 }
 .cvr-pic {
   position: relative;
-  /* the type scales with the frame rather than the window, so the title reads at the size it will
-     read at wherever the game is opened */
+  /* the type scales with the frame rather than the window, so the title reads at the size it will read at wherever the game is opened */
   container-type: inline-size;
   aspect-ratio: 688 / 384;
   overflow: hidden;
@@ -304,12 +293,7 @@
   background: radial-gradient(ellipse at 50% 45%, transparent 40%, rgba(0, 0, 0, 0.55) 100%);
   pointer-events: none;
 }
-/* A SCALE MODEL AND NOT A LIKENESS. Every number below is the game's own pixel size over a 1280 wide
-   window, divided by 1280 and said in cqw, so this is what a student sees rather than a sketch of it:
-   the block centred at 46 percent of the height, the plate at the full 700px width rather than
-   shrink-wrapped to the word, the 300px bar under it, the work word, then the fact. The game's
-   src/app/transitions.css is where these came from and is the file to re-read if it ever looks
-   wrong. It used to draw three pieces of the six and sat about 55px too high. */
+/* a scale model and not a likeness: every number below is the game's own pixel size over a 1280 wide window, divided by 1280 and said in cqw, with the block centred at 46 percent of the height and the plate at the full 700px width rather than shrink-wrapped to the word; src/app/transitions.css is where they came from */
 .cvr-text {
   position: absolute;
   left: 50%;
@@ -328,9 +312,7 @@
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
   margin-bottom: 0.63cqw;
 }
-/* the plate, drawn flat on purpose: the game dresses it in whichever kit piece is published and
-   guessing at that would preview something that may not ship. Its WIDTH is not a guess, and it
-   stretches the whole block, so a horizon it cuts in half shows up here. */
+/* the plate is drawn flat on purpose because the game dresses it in whichever kit piece is published and guessing would preview something that may not ship, but its width is not a guess: it stretches the whole block, so a horizon it cuts in half shows up here */
 .cvr-band {
   align-self: stretch;
   background: rgba(10, 12, 17, 0.74);
@@ -368,8 +350,7 @@
   color: rgba(255, 255, 255, 0.85);
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
 }
-/* the sentence a student reads while the map loads, on its own plate for the reason it is on one in
-   the game: cream type straight on a sunset sky measured at almost no contrast */
+/* the sentence read while the map loads, on its own plate for the reason it is on one in the game: cream type straight on a sunset sky measured at almost no contrast */
 .cvr-fact {
   margin: 1.72cqw 0 0;
   max-width: 44ch;
@@ -419,8 +400,7 @@
   align-items: end;
 }
 
-/* THE EXACT LINE A MEMBER TYPES, shown rather than described: a name reconstructed out of a sentence
-   is a name somebody gets wrong once. */
+/* the exact line to type, shown rather than described, because a name reconstructed out of a sentence is a name somebody gets wrong once */
 .cvr-code {
   display: block;
   padding: 8px 10px;
