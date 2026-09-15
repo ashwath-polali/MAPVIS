@@ -30,6 +30,8 @@ import {
   readCover,
   coversOf,
   dropCover,
+  readCoverNotes,
+  writeCoverNotes,
 } from './store/platform.mjs'
 import {
   listUi,
@@ -525,7 +527,17 @@ async function route(req, res, p, url) {
     } catch (e) {
       return send(res, e.name === 'NoOwner' ? 401 : 500, { error: String(e.message || e).slice(0, 160) })
     }
-    return send(res, 200, { ...(await coversOf(id)), kept: name || 'cover' })
+    // the sentence and the hand go down with the picture, because neither can be read back off a png and both are wanted once the file has left the platform
+    const notes = await coverNotes(id)
+    const note = {
+      subject: String(b.subject || '').slice(0, 400),
+      style: String(b.style || ''),
+      at: new Date().toISOString(),
+    }
+    if (name) notes.named[name] = note
+    else notes.cover = note
+    await putCoverNotes(id, notes)
+    return send(res, 200, { ...(await coversOf(id)), notes, kept: name || 'cover' })
   }
 
   if (p === '/api/cover-remove' && req.method === 'POST') {
@@ -540,7 +552,11 @@ async function route(req, res, p, url) {
       /* a file that is not there is the end state asked for */
     }
     await dropCover(id, name)
-    return send(res, 200, await coversOf(id))
+    const notes = await coverNotes(id)
+    if (name) delete notes.named[name]
+    else notes.cover = null
+    await putCoverNotes(id, notes)
+    return send(res, 200, { ...(await coversOf(id)), notes })
   }
 
   /* what this map has, asked by the cover step when it opens */
@@ -561,6 +577,7 @@ async function route(req, res, p, url) {
         out.covers = []
       }
     }
+    out.notes = await coverNotes(id)
     return send(res, 200, out)
   }
 
@@ -3067,6 +3084,10 @@ async function route(req, res, p, url) {
           extraNames.push(n)
         }
         extraNames = [...new Set(extraNames)].sort()
+        // the sentence each cover was asked for and the hand it was drawn with, shipped as its own file so map.json's shape does not change and nothing on the game side has to read it
+        const notes = await coverNotes(id)
+        const notesJson =
+          coverPng || extraNames.length ? Buffer.from(JSON.stringify(notes, null, 2)) : null
         /* SAID IN map.json AS WELL AS SHIPPED, because a reader should be able to ask whether this
          * map has a cover without fetching a png to find out. */
         const mapJson = {
@@ -3084,6 +3105,7 @@ async function route(req, res, p, url) {
             'cut.png': png('cut.png'),
             ...(coverPng ? { 'cover.png': coverPng } : {}),
             ...extras,
+            ...(notesJson ? { 'covers.json': notesJson } : {}),
           },
           files: writes,
         })
@@ -6839,6 +6861,30 @@ const safeId = (s) => {
 
 /* the second fence, on the routes that write: WORK + path.sep, so a sibling like work-old cannot pass */
 const insideWork = (abs) => path.resolve(abs).startsWith(WORK + path.sep)
+
+// what each cover was asked for and whose hand drew it, kept on disk and in the store the same way the pictures are, so a laptop with no platform behind it still ships the record
+const EMPTY_NOTES = { cover: null, named: {} }
+async function coverNotes(id) {
+  let disk = null
+  try {
+    disk = JSON.parse(fs.readFileSync(path.join(WORK, id, 'covers.json'), 'utf8'))
+  } catch {
+    /* no record on this machine, which is every map until one is kept here */
+  }
+  const held = platformOn() ? await readCoverNotes(id).catch(() => null) : null
+  const notes = held || disk || EMPTY_NOTES
+  return { cover: notes.cover || null, named: notes.named && typeof notes.named === 'object' ? notes.named : {} }
+}
+async function putCoverNotes(id, notes) {
+  try {
+    fs.mkdirSync(path.join(WORK, id), { recursive: true })
+    fs.writeFileSync(path.join(WORK, id, 'covers.json'), JSON.stringify(notes, null, 2))
+  } catch (e) {
+    console.error('[cover] could not write the record to disk:', e.message)
+  }
+  if (platformOn())
+    await writeCoverNotes(id, notes).catch((e) => console.error('[cover] could not write the record to the store:', e.message))
+}
 
 function send(res, code, obj) {
   const b = Buffer.from(JSON.stringify(obj))

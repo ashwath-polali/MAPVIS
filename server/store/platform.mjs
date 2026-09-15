@@ -1005,3 +1005,28 @@ export async function dropCover(slug, name = '') {
       /* removing one that is not there is the same end state */
     })
 }
+
+/* WHAT EACH COVER WAS ASKED FOR AND WHOSE HAND DREW IT. The picture alone cannot say either, and
+ * both are wanted later: the sentence answers "what did I type to get that", and the hand is the
+ * only way a member's island can be shown to be the same hand as everything else once the file has
+ * left the platform. One small document per map rather than a column, because the pictures are the
+ * record and this rides beside them. */
+export async function readCoverNotes(slug) {
+  if (!platformOn()) return null
+  const id = await mapIdFor(slug)
+  if (!id) return null
+  try {
+    const b = await store().get(keys.coverNotes(id))
+    return b && b.length ? JSON.parse(b.toString('utf8')) : null
+  } catch {
+    /* no cover has been kept on this map yet, which is nearly all of them */
+    return null
+  }
+}
+
+export async function writeCoverNotes(slug, notes) {
+  if (!platformOn()) return
+  const id = await mapIdFor(slug, { create: true })
+  if (!id) return
+  await store().put(keys.coverNotes(id), Buffer.from(JSON.stringify(notes, null, 2)), 'application/json')
+}

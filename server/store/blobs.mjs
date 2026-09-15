@@ -339,6 +339,8 @@ export const keys = {
   cover: (mapId) => `maps/${mapId}/cover.png`,
   coverNamed: (mapId, name) => `maps/${mapId}/covers/${name}.png`,
   coversPrefix: (mapId) => `maps/${mapId}/covers/`,
+  // what each cover was asked for and whose hand drew it, outside the covers/ prefix so listing the pictures never returns it
+  coverNotes: (mapId) => `maps/${mapId}/covers.json`,
   libStill: (mapId, name) => `maps/${mapId}/library/${name}.png`,
   libFrame: (mapId, name, i) => `maps/${mapId}/library/${name}/${i}.png`,
   libPrefix: (mapId, name) => `maps/${mapId}/library/${name}/`,
