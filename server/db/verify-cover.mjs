@@ -155,10 +155,21 @@ console.log('')
     ? ok('and map.json says so, so a reader can ask without fetching a png to find out')
     : no('map.json does not declare them')
 
+  // a deploy has no writable disk, so a bundle assembled from that folder alone would ship no cover on the one machine that matters
+  api.includes('const held = await coversOf(id)') && api.includes('coverPng = await readCover(id)')
+    ? ok('and the store answers for whatever the disk does not hold, so a cover kept on a deploy still ships')
+    : no('the export reads covers off the local disk only')
+
   /* a cover is only ever written on a press, and only a press that came back */
   api.includes("if (!typed) return send(res, 400, { error: 'say what the screen should show' })")
     ? ok('nothing is generated without words to generate from')
     : no('the cover route can spend on an empty ask')
+
+  // a check nothing runs is not a check, and this one is cheap enough to belong in the pass a fresh clone can run
+  const pkg = read('package.json')
+  pkg.includes('verify-cover.mjs') && read('.github/workflows/ci.yml').includes('verify:local')
+    ? ok('and this check runs on every push, rather than only when somebody remembers it')
+    : no('verify-cover is not in the pass the runner runs')
 }
 
 // ---- and the author sees the game's frame -----------------------------------
@@ -189,6 +200,10 @@ console.log('')
   !app.includes("{ id: 'cover'") && !app.includes('coverPanel')
     ? ok('and the map editor no longer carries a cover step, so there is one place to find it')
     : no('the cover is still a step of the map editor as well')
+  // one place to make one is not the same as no way to find it: the screen that lists what ships has to say whether a cover is among it
+  app.includes('<b>cover.png</b>') && app.includes('.coversOf(coverId)') && app.includes('href="/ui"')
+    ? ok('while the export step still says whether one ships, and links to where it is drawn')
+    : no('the map editor never mentions the screen it is entered through')
 
   /* the chooser, which is what the page was missing: it opened straight into the twenty-one game
    * pieces, so the only thing it could make was the one thing it showed */
