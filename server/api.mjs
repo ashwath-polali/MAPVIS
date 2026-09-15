@@ -173,26 +173,12 @@ const oceanOwner = () => {
     .trim()
     .toLowerCase()
 }
-/* WHO THE GAME'S OCEAN BELONGS TO, and an unset owner MUST NOT mean everybody.
- *
- * It did. `if (!owner) return true` handed row 1, the ocean the shipped game sails, to every account
- * that signed in: a stranger's brand new account opened the chart and read back the hub, the ATC
- * island and every mark on them, and any save they made would have written over it. Measured on the
- * live database on 2026-09-13: one world row, owned by the first account, and a second account made
- * that morning had never been given one of its own, which is only possible if this returned true for
- * them. The deployed site has no OCEAN_OWNER set, so the fallback was the whole gate.
- *
- * A missing setting is not permission. The only case where nobody being configured can honestly mean
- * "it is yours" is a single laptop with no database and therefore no accounts at all, and that is
- * exactly what platformOn answers. With a database, an unset owner now means nobody owns the game's
- * ocean and everyone authors their own, which fails towards keeping people apart. */
+/* a missing setting is not permission: `if (!owner) return true` handed row 1, the shipped game's ocean, to every signed in account because the deploy sets no OCEAN_OWNER, which now means nobody holds it and everyone authors their own */
 let saidUnowned = false
 const ownedBy = (user) => {
   const owner = oceanOwner()
   if (!owner) {
-    /* said once per process, because failing closed with nothing configured looks exactly like the
-     * owner being locked out of their own ocean, and the only difference is a setting nobody can see
-     * from the screen */
+    /* said once per process, because failing closed with nothing configured looks exactly like an account being locked out of its own ocean, and the only difference is a setting nobody can see from the screen */
     if (platformOn() && !saidUnowned) {
       saidUnowned = true
       console.error(
@@ -222,8 +208,7 @@ export function api(req, res, next) {
     return send(res, 429, { error: 'too many attempts · slow down' })
   }
   Promise.resolve(serve(req, res, p, url)).catch((e) => {
-    // a missing key is a condition, not a crash, and it has to say which one so
-    // the ui can put the right wall in front of the right button
+    // a missing key is a condition, not a crash, and it has to say which one so the ui can put the right wall in front of the right button
     if (e && (e.name === 'NoPixellab' || e.name === 'NoPlanner')) {
       return send(res, 402, { error: String(e.message || e), needs: e.needs || 'claude' })
     }
@@ -249,8 +234,7 @@ async function serve(req, res, p, url) {
       })
     }
   }
-  // the read api is public and spends nothing on a lookup, so it goes straight
-  // through once the budget above has been honoured
+  // the read api is public and spends nothing on a lookup, so it goes straight through once the budget above has been honoured
   if (p.startsWith('/api/v1/')) {
     try {
       return await route(req, res, p, url)
@@ -281,9 +265,7 @@ async function serve(req, res, p, url) {
 /* a token bucket per address, sized so a real map open never trips it: the hub asks for about 250 pngs at once and /work/ is served before any auth */
 const RATE = { perSec: Number(process.env.RATE_PER_SEC || 120), burst: Number(process.env.RATE_BURST || 600) }
 
-/* Whose address the buckets below are keyed on. x-forwarded-for is a header a
- * client can write, so trusting it unasked hands every attacker an unlimited
- * supply of fresh buckets. It is believed only behind a proxy that sets it. */
+/* whose address the buckets below are keyed on: x-forwarded-for is a header a client can write, so trusting it unasked hands every attacker an unlimited supply of fresh buckets, and it is believed only behind a proxy that sets it */
 const TRUST_PROXY =
   process.env.TRUST_PROXY === '1' || !!process.env.VERCEL || !!process.env.AWS_LAMBDA_FUNCTION_NAME
 const clientIp = (req) => {
@@ -291,8 +273,7 @@ const clientIp = (req) => {
   return fwd || req.socket?.remoteAddress || 'local'
 }
 
-/* One bucket implementation, two sizes. The map is bounded because the key is
- * attacker-controlled and an unbounded map is its own denial of service. */
+/* one bucket implementation, two sizes. the map is bounded because the key is attacker controlled and an unbounded map is its own denial of service */
 function take(buckets, who, rate) {
   const now = Date.now()
   let b = buckets.get(who)
@@ -311,10 +292,7 @@ function take(buckets, who, rate) {
 const buckets = new Map()
 const overRate = (req) => take(buckets, clientIp(req), RATE)
 
-/* Anything that takes a password, mints a credential or creates an account gets
- * a far tighter bucket than a page of pngs does. The per-account backoff in
- * auth.mjs slows guessing at one address; this slows spraying one password
- * across many, and it is the only thing standing in front of sign-up. */
+/* anything that takes a password, mints a credential or creates an account gets a far tighter bucket than a page of pngs does: the per-account backoff in auth.mjs slows guessing at one address, this slows spraying one password across many, and it is the only thing in front of sign-up */
 const CRED_RATE = {
   perSec: Number(process.env.AUTH_RATE_PER_MIN || 30) / 60,
   burst: Number(process.env.AUTH_RATE_BURST || 30),
@@ -333,9 +311,10 @@ const overCredRate = (req, p) =>
 
 async function route(req, res, p, url) {
   /* the post gate below is post-only and slugs are enumerable, so gets that name a map are checked here too; an ownerless map stays open on purpose */
+  // cover and covers are in the list because a transition screen and its code names are an account's own work: everything public is under /api/v1/, and these two never were
   const named = p.startsWith('/work/')
     ? p.slice('/work/'.length).split('/')[0]
-    : /^\/api\/(doc|library|scene|asks|keeps|style)\//.test(p)
+    : /^\/api\/(doc|library|scene|asks|keeps|style|cover|covers)\//.test(p)
       ? p.split('/')[3]
       : ''
   if (named) {
@@ -348,14 +327,11 @@ async function route(req, res, p, url) {
 
   if (p.startsWith('/work/')) return serveWork(res, p.slice('/work/'.length), req)
   if (p.startsWith('/api/v1/')) return readApi(req, res, p, url)
-  // deleting a map lives with auth rather than with the map routes, because it
-  // is the password that authorises it and not the ownership gate below
+  // deleting a map lives with auth rather than with the map routes, because it is the password that authorises it and not the ownership gate below
   if (p.startsWith('/api/auth/') || p === '/api/me' || p === '/api/my-maps' || p === '/api/maps/delete')
     return authApi(req, res, p, url)
   if (p.startsWith('/api/relay/')) return relayApi(req, res, p)
-  // organising, and only organising. Its own module and its own tables, before
-  // the ownership gate because a folder is a preference about the dashboard
-  // rather than a write to anybody's map.
+  // organising, and only organising: its own module and its own tables, before the ownership gate because a folder is a preference about the dashboard rather than a write to anybody's map
   if (p.startsWith('/api/folders') && (await foldersApi(req, res, p))) return
 
   /* ownership is checked once at the door: every write below takes a map id out of its own body, and anonymous still works until a map has an owner */
@@ -375,8 +351,7 @@ async function route(req, res, p, url) {
   }
   if (p === '/api/balance') return send(res, 200, await pixellab.balance())
 
-  /* WHICH HANDS THIS ACCOUNT MAY DRAW WITH, asked by the first step before the
-   * subject is typed. "Other" is not in the list: it is choosing none of them. */
+  /* which hands this account may draw with, asked by the first step before the subject is typed; other is not in the list because it is choosing none of them */
   if (p === '/api/styles') {
     const me = await currentUser(req).catch(() => null)
     const cards = await cardsFor(me)
@@ -390,8 +365,7 @@ async function route(req, res, p, url) {
     })
   }
 
-  /* an account's own hand, taken off one of its own maps. The craft is that
-   * map's style card, which is a reading it has already seen work. */
+  /* an account's own hand, taken off one of its own maps: the craft is that map's style card, a reading it has already seen work */
   if (p === '/api/styles/mine' && req.method === 'POST') {
     const me = await sessionUser(req)
     if (!me) return send(res, 401, { error: 'sign in first' })
@@ -415,8 +389,7 @@ async function route(req, res, p, url) {
     }
   }
 
-  /* the house hand handed to somebody else, and taken back. The owner alone,
-   * checked in the store rather than here. */
+  /* the house hand granted to another account and taken back, allowed only for the account that holds it, checked in the store rather than here */
   if (p === '/api/styles/grant' && req.method === 'POST') {
     const me = await sessionUser(req)
     if (!me) return send(res, 401, { error: 'sign in first' })
@@ -429,8 +402,7 @@ async function route(req, res, p, url) {
     }
   }
 
-  /* THE CHOICE, STORED ON THE MAP. Made on the first step and kept, so a
-   * republish and every asset afterwards are drawn by the same hand. */
+  /* the choice, stored on the map: made on the first step and kept, so a republish and every asset afterwards are drawn by the same hand */
   if (p === '/api/map-style' && req.method === 'POST') {
     const b = await body(req)
     const id = safeId(b.id)
@@ -444,10 +416,8 @@ async function route(req, res, p, url) {
     }
   }
 
-  /* the prompt a map would be drawn from, written but not sent. Free, and it is
-   * what the first step shows so a person can read the hand before buying it. */
-  /* WHAT A COVER WOULD BE ASKED FOR, free and spending nothing. The same shape as /api/map-prompt and
-   * for the same reason: the author sees the whole sentence before deciding to pay for it. */
+  /* the prompt a map would be drawn from, written but not sent. free, and it is what the first step shows so a person can read the hand before buying it */
+  /* what a cover would be asked for, free and spending nothing, the same shape as /api/map-prompt and for the same reason: the author sees the whole sentence before deciding to pay for it */
   if (p === '/api/cover-prompt' && req.method === 'POST') {
     const b = await body(req)
     const me = await currentUser(req).catch(() => null)
@@ -461,9 +431,7 @@ async function route(req, res, p, url) {
     })
   }
 
-  /* ONE GENERATION, and only on a press. The hand is put on here and never in the browser, the same
-   * rule /api/generate follows: a client that assembles the prompt is a client that can ask for a
-   * hand it was never granted. */
+  /* one generation, and only on a press. the hand is put on here and never in the browser, the same rule /api/generate follows: a client that assembles the prompt is a client that can ask for a hand it was never granted */
   if (p === '/api/cover-gen' && req.method === 'POST') {
     const b = await body(req)
     const typed = String(b.subject || '').trim()
@@ -472,9 +440,10 @@ async function route(req, res, p, url) {
     const card = await cardFor(me, String(b.style || ''))
     if (b.style && !card) return send(res, 403, { error: 'that hand is not one this account may draw with' })
     const built = coverPrompt({ subject: typed, card })
+    // the router tidies before it builds, so a subject of punctuation alone passes the check above and comes out empty here, and an empty prompt still costs a generation
+    if (!built.prompt) return send(res, 400, { error: 'say what the screen should show, in words' })
     const box = fitCanvas(built.canvas)
-    /* the reference painting with its colour switched off, exactly as a map is drawn, so a cover
-     * comes back in the same hand as the island it is a cover for */
+    /* the reference painting with its colour switched off, exactly as a map is drawn, so a cover comes back in the same hand as the island it is a cover for */
     let styleImage
     const refSlug = card && card.ref ? card.ref : String(b.styleRefMap || '')
     if (refSlug) {
@@ -500,9 +469,7 @@ async function route(req, res, p, url) {
     }
   }
 
-  /* KEEPING ONE. The bytes come from the browser because that is where the job was collected, the
-   * same road the painting itself takes at /api/save. No name is the map's own cover; a name is an
-   * extra that python calls by it. */
+  /* keeping one: the bytes come from the browser because that is where the job was collected, the same road the painting takes at /api/save. no name is the map's own cover, a name is an extra that python calls by it */
   if (p === '/api/cover-save' && req.method === 'POST') {
     const b = await body(req)
     const id = safeId(b.id)
@@ -513,8 +480,7 @@ async function route(req, res, p, url) {
     if (!raw64) return send(res, 400, { error: 'no picture' })
     const buf = Buffer.from(raw64, 'base64')
     if (!buf.length) return send(res, 400, { error: 'no picture' })
-    /* to disk as well, because the export reads the folder and a laptop with no platform still has
-     * to be able to ship a cover it drew */
+    /* to disk as well, because the export reads the folder and a laptop with no platform still has to be able to ship a cover it drew */
     try {
       const dir = path.join(WORK, id)
       fs.mkdirSync(name ? path.join(dir, 'covers') : dir, { recursive: true })
@@ -581,8 +547,7 @@ async function route(req, res, p, url) {
     return send(res, 200, out)
   }
 
-  /* the picture itself, for the card and the preview. Never cached, because it is replaced in place
-   * every time the author keeps a new one. */
+  /* the picture itself, for the card and the preview. never cached, because it is replaced in place every time a new one is kept */
   if (p.startsWith('/api/cover/') && req.method === 'GET') {
     const rest = decodeURIComponent(p.slice('/api/cover/'.length)).split('/')
     const id = safeId(rest[0])
@@ -624,9 +589,7 @@ async function route(req, res, p, url) {
     if (!typed) return send(res, 400, { error: 'no prompt' })
     const n = Math.max(1, Math.min(6, b.n || 4))
 
-    /* THE HAND IS PUT ON HERE AND NOT IN THE BROWSER. A client that assembles
-     * the prompt is a client that can be asked for a hand it was never granted,
-     * and the whole point of the house card is that it is not everybody's. */
+    /* the hand is put on here and not in the browser: a client that assembles the prompt is a client that can be asked for a hand it was never granted, and the point of the house card is that it is not everybody's */
     const me = await currentUser(req).catch(() => null)
     const card = await cardFor(me, String(b.style || ''))
     if (b.style && !card) return send(res, 403, { error: 'that hand is not one this account may draw with' })
@@ -636,17 +599,14 @@ async function route(req, res, p, url) {
     const w = box.w
     const h = box.h
 
-    /* the reference painting, with its colour switched off. A style image
-     * carries outline, detail and shading and cannot carry the angle, which is
-     * why the projection is in the words above and not left to the picture. */
+    /* the reference painting, with its colour switched off. a style image carries outline, detail and shading and cannot carry the angle, which is why the projection is in the words above and not left to the picture */
     let styleImage
     const refSlug = card && card.ref ? card.ref : String(b.styleRefMap || '')
     if (refSlug) {
       try {
         styleImage = await styleRef(refSlug)
       } catch (e) {
-        /* a reference that will not load is not a reason to refuse the map: the
-         * craft sentence carries the hand on its own and the person is told */
+        /* a reference that will not load is not a reason to refuse the map: the craft sentence carries the hand on its own and the person is told */
         console.error(`[style] ${refSlug}: ${String((e && e.message) || e)} · drawing from the words alone`)
       }
     }
@@ -666,8 +626,7 @@ async function route(req, res, p, url) {
       h,
       style: card ? card.key : null,
       kind: built.kind || '',
-      // the words that were actually sent, so the first step can show the hand
-      // rather than describe it
+      // the words that were actually sent, so the first step can show the hand rather than describe it
       prompt,
       styleOptions: styleOptions || null,
     })
@@ -718,11 +677,7 @@ async function route(req, res, p, url) {
     const ask = String(b.ask || '').trim()
     if (!ask) return send(res, 400, { error: 'no ask' })
     // the id rides along so the ask can be shaped by what he has kept on THIS
-    /* THE MAP'S OWN HAND WINS OVER THE ONE THE CLIENT SENT. A map drawn in the
-     * house hand has to have its bookshelf drawn by the same hand, and the
-     * clause for that is on the map rather than in the browser. The client's
-     * clause is the fallback for a map with no card, which is every map that
-     * takes its look from its own painting. */
+    /* the map's own hand wins over the one the client sent: a map drawn in the house hand has its bookshelf drawn by the same hand, and that clause lives on the map, not the browser. the client's clause is the fallback for a map with no card, which is every map taking its look from its own painting */
     const mapId = b.id ? safeId(b.id) : ''
     const drawn = mapId ? await mapCard(mapId).catch(() => null) : null
     const clause = drawn && drawn.card ? drawn.card.craft.clause : b.styleClause
@@ -755,13 +710,10 @@ async function route(req, res, p, url) {
     return send(res, 200, { card, cached: false })
   }
 
-  // The asset library is PER MAP: only what was generated for this scene id,
-  // in work/<id>/library. The shared folder in public/library is a starter set
-  // served by path and is deliberately not listed here.
+  // the asset library is per map: only what was generated for this scene id, in work/<id>/library. the shared folder in public/library is a starter set served by path and is deliberately not listed here
   if (p.startsWith('/api/library/')) {
     const id = safeId(decodeURIComponent(p.slice('/api/library/'.length)))
-    // one select against library_items, where the disk version walked the
-    // folder and opened a file descriptor per item to read a png header
+    // one select against library_items, where the disk version walked the folder and opened a file descriptor per item to read a png header
     if (platformOn()) {
       try {
         const items = await libraryOf(id)
@@ -866,16 +818,14 @@ async function route(req, res, p, url) {
     try {
       const plan = await planMake({
         ask,
-        // which of the two spending modes is open. A client that sends nothing
-        // is asking for a prop, which is what this route has always answered.
+        // which of the two spending modes is open. a client that sends nothing is asking for a prop, which is what this route has always answered
         what: b.what === 'sprite' ? 'sprite' : 'object',
         kind: b.kind === 'animated' ? 'animated' : 'static',
         id,
         mapFile,
         boxFile,
         box: boxFile ? box : null,
-        // the bytes the files above were written from, so a planner with no
-        // disk sees the same pictures the cli reads off it
+        // the bytes the files above were written from, so a planner with no disk sees the same pictures the cli reads off it
         images: [mapB64, ...(boxFile ? [boxB64] : [])],
         paths: [mapFile, ...(boxFile ? [boxFile] : [])],
         previous: String(b.previous || ''),
@@ -958,8 +908,7 @@ async function route(req, res, p, url) {
       ? mine.map((f) => String(f.name || '').trim()).filter(Boolean)
       : lib.map((it) => String(it.name || '').trim()).filter(Boolean)
     /* bounded by characters because the prompt is characters; what is cut is counted and named, instead of dropping whatever was last in the directory */
-    // a face is not in the client's library list and never will be, so the
-    // client's list only ever narrows the LIBRARY fallback
+    // a face is not in the client's library list and never will be, so the client's list only ever narrows the library fallback
     const pool = mine.length ? onDisk : sent.size ? onDisk.filter((n) => sent.has(fold(n))) : onDisk
     const names = []
     let namesLen = 0
@@ -1043,9 +992,7 @@ async function route(req, res, p, url) {
             `stone, then comes back is three facts, not one: it rolls for a while, it is a boulder ` +
             `for a while, it rolls again. Everything you already wrote above stays, because the ` +
             `first state uses it.`,
-          // the count comes off STATES_MAX so the words and the guard below can
-          // never drift apart. Asking for seven and keeping six drops a state
-          // without a word.
+          // the count comes off STATES_MAX so the words and the guard below can never drift apart: asking for seven and keeping six drops a state without a word
           `Each state is a length in seconds, optionally the name of a picture to draw, and ` +
             `optionally a behaviour of its own. Two to ${STATES_MAX} states, and a longer list is ` +
             `cut to ${STATES_MAX}. The list is a ROUND: after the last one it starts again at the ` +
@@ -1147,16 +1094,12 @@ async function route(req, res, p, url) {
         }
         st.art = i
       }
-      /* say what was thrown away. A picture that does not exist reads on
-       * screen as nothing happening, which looks exactly like the sequence
-       * not working at all, so the one line the person sees has to name it. */
+      /* say what was thrown away: a picture that does not exist reads on screen as nothing happening, which looks exactly like the sequence not working at all, so the one line the person sees has to name it */
       const gone = missing.length
         ? ` · nothing here is called ${missing.slice(0, 2).map((m) => `"${m}"`).join(' or ')}, so ` +
           `that state keeps the picture it has`
         : ''
-      /* and what was cut, for the same reason: a round one state short and a
-       * library three pictures short both read on screen as the tool ignoring
-       * the ask, unless the answer says so. */
+      /* and what was cut, for the same reason: a round one state short and a library three pictures short both read on screen as the tool ignoring the ask, unless the answer says so */
       const cutSt = overStates ? ` · a round holds ${STATES_MAX} states, so the last ${overStates} went` : ''
       const cutNm = namesCut
         ? ` · ${pool.length} pictures here, too many to list, so the last ${namesCut} could not be named`
@@ -1208,16 +1151,13 @@ async function route(req, res, p, url) {
     if (!plan) return send(res, 404, { error: 'that one has fewer than four directions' })
     const item = await writeRotations(id, plan)
     if (!item) return send(res, 502, { error: 'the directions did not save' })
-    // the same trim the generate route does. An account character carries the
-    // same ~40% animation headroom as a fresh one, and a figure imported before
-    // this landed measured 11 to 12 painting pixels of float in the game.
+    // the same trim the generate route does: an account character carries the same ~40% animation headroom as a fresh one, and a figure imported before this landed measured 11 to 12 painting pixels of float in the game
     const box = trimSet(plan.dir, item.dirs)
     if (box) {
       item.w = box.w
       item.h = box.h
     }
-    // trimSet rewrites every frame in place, so the store is only told about
-    // this set once the pixels have stopped changing
+    // trimSet rewrites every frame in place, so the store is only told about this set once the pixels have stopped changing
     await pushLibrary(id, item.name)
     return send(res, 200, { item })
   }
@@ -1228,21 +1168,18 @@ async function route(req, res, p, url) {
     const id = safeId(b.id)
     const description = String(b.description || '').replace(/\s+/g, ' ').trim().slice(0, PROMPT_MAX)
     if (!description) return send(res, 400, { error: 'no description' })
-    // nothing above this line costs anything, and nothing below it runs without
-    // the word: a stray post, a reload, a retry loop must not spend
+    // nothing above this line costs anything, and nothing below it runs without the word: a stray post, a reload, a retry loop must not spend
     if (b.confirm !== true) return send(res, 400, { error: 'this spends generations: send confirm true' })
 
     const mode = CHAR_MODES.includes(String(b.mode)) ? String(b.mode) : 'standard'
-    // pro and v3 come back eight ways whatever is asked for, and the motion is
-    // priced per direction, so the count has to be the real one
+    // pro and v3 come back eight ways whatever is asked for, and the motion is priced per direction, so the count has to be the real one
     const nDirections = mode === 'standard' && Number(b.nDirections) === 4 ? 4 : 8
     const view = CHAR_VIEWS.includes(String(b.view)) ? String(b.view) : OBJECT_VIEW
     /* mannequin and five four-legged bodies are all that exist; the router picks the nearest by body plan, so a robot is a mannequin that reads as a machine */
     const skeleton = SKELETONS.includes(String(b.skeleton)) ? String(b.skeleton) : legacySkeleton(b)
     if (!skeleton) return send(res, 400, { error: 'an animal needs a body: ' + QUADRUPEDS.join(', ') })
     const bodyType = skeleton === 'mannequin' ? 'humanoid' : 'quadruped'
-    // written motion is priced by pixel budget per direction, and at or under
-    // this it is one generation per direction, which is what the button said
+    // written motion is priced by pixel budget per direction, and at or under this it is one generation per direction, which is what the button said
     const size = Math.max(SPRITE_MIN, Math.min(SPRITE_MAX, Math.round(Number(b.size) || 48)))
     /* clamped again because this route is reachable without the router: an invented template id is a 422 after the body is paid for, and a garbled anim lands standing */
     const want = b.anim && typeof b.anim === 'object' ? b.anim : legacyAnim(b)
@@ -1276,9 +1213,7 @@ async function route(req, res, p, url) {
       })
       if (!cid) throw new Error('no character came back')
       let d = await raceStop(gate, pixellab.awaitCharacter(cid, { timeoutMs: CHAR_WAIT }))
-      // the motion is eight more generations. The minutes the body took are the
-      // one window in which they can still be saved, so this is where a change
-      // of mind is worth the most.
+      // the motion is eight more generations, and the minutes the body took are the one window in which they can still be saved, so this is where a change of mind is worth the most
       halt()
       let note = ''
       if (anim.how !== 'none') {
@@ -1316,8 +1251,7 @@ async function route(req, res, p, url) {
       await pushLibrary(id, item.name)
       return send(res, 200, { item, note })
     } catch (e) {
-      // a folder with three headings in it lists in the library looking like a
-      // character and is not one, so a run that died halfway leaves nothing
+      // a folder with three headings in it lists in the library looking like a character and is not one, so a run that died halfway leaves nothing
       if (folder) {
         try {
           fs.rmSync(folder, { recursive: true, force: true })
@@ -1332,9 +1266,7 @@ async function route(req, res, p, url) {
     }
   }
 
-  // End a planner that is still thinking, or a wait on pixellab, by the job id
-  // the client sent with it. Free, and idempotent: stopping something already
-  // finished is fine.
+  // end a planner that is still thinking, or a wait on pixellab, by the job id the client sent with it. free, and idempotent: stopping something already finished is fine
   if (p === '/api/stop' && req.method === 'POST') {
     const b = await body(req)
     return send(res, 200, { stopped: stopJob(String(b.job || '')) })
@@ -1345,13 +1277,11 @@ async function route(req, res, p, url) {
     const id = safeId(b.id)
     const prompt = String(b.prompt || '').trim()
     if (!prompt) return send(res, 400, { error: 'no prompt' })
-    // one job for the whole run of variants, so a stop between two of them ends
-    // the one in flight and the client's own loop stops asking for more
+    // one job for the whole run of variants, so a stop between two of them ends the one in flight and the client's own loop stops asking for more
     const job = String(b.job || '').slice(0, 64)
     const { gate, halt, done } = gateFor(job)
     try {
-      // a translation confirmed in the ui rides in as b.thing and wins; only a
-      // bare ask (older client, direct api use) translates here
+      // a translation confirmed in the ui rides in as b.thing and wins; only a bare ask, an older client or direct api use, translates here
       const t = b.thing
         ? { thing: String(b.thing).slice(0, PROMPT_MAX), motion: '', w: clampPx(b.tw), h: clampPx(b.th) }
         : await translateAsk(prompt, 'static', '', id, job)
@@ -1360,8 +1290,7 @@ async function route(req, res, p, url) {
       const w = even(b.w || t.w)
       const h = even(b.h || t.h)
       /* the cohesion crop is dead over 22 generations: handed a picture of somewhere, this endpoint continues it instead of drawing the subject. do not rebuild */
-      // the last free moment. Past this line the png is bought whatever happens
-      // next, so everything below still writes it to disk.
+      // the last free moment: past this line the png is bought whatever happens next, so everything below still writes it to disk
       halt()
 
       /* only /v2/map-objects has a view; generate-image-v2 has no camera at all, and a style image carries palette, outline, detail and shading, none of them the angle */
@@ -1401,8 +1330,7 @@ async function route(req, res, p, url) {
     const crop = stripDataURL(String(b.crop || ''))
     if (!crop) return send(res, 400, { error: 'no crop' })
     const cs = pngSizeBuf(Buffer.from(crop, 'base64'))
-    // the endpoint's own limits: 32px per side minimum, 192x192 of area with
-    // inpainting. The client sends up to 160 square, clamped to the canvas.
+    // the endpoint's own limits: 32px per side minimum, 192x192 of area with inpainting. the client sends up to 160 square, clamped to the canvas
     if (!(cs.w >= 32 && cs.h >= 32 && cs.w * cs.h <= 192 * 192))
       return send(res, 400, { error: `crop must be 32..192 per side, got ${cs.w}x${cs.h}` })
     const job = String(b.job || '').slice(0, 64)
@@ -1412,8 +1340,7 @@ async function route(req, res, p, url) {
       const t = b.thing
         ? { thing: String(b.thing).slice(0, 480), motion: String(b.tmotion || ''), w: clampPx(b.tw), h: clampPx(b.th) }
         : await translateAsk(prompt, b.kind === 'animated' ? 'animated' : 'static', '', id, job)
-      // the oval mask: the sprite's intended footprint as a share of the crop,
-      // held inside 0.15..0.8 so surrounding art always frames the object
+      // the oval mask: the sprite's intended footprint as a share of the crop, held inside 0.15..0.8 so surrounding art always frames the object
       const fraction = Math.max(0.15, Math.min(0.8, (t.w * t.h) / (cs.w * cs.h)))
       halt()
       const drawn = await raceStop(
@@ -1432,9 +1359,7 @@ async function route(req, res, p, url) {
       const b64 = drawn.b64
       // the cutout becomes the first frame; animate caps first_frame at 256 and the budget at w*h*8 <= 524288, and a 192-cap crop fits both
       if (b.kind === 'animated') {
-        // the second spend, and the one a stop is worth a whole generation at.
-        // The cutout above is already bought either way, so a stop before or
-        // during the animation files it standing rather than binning it.
+        // the second spend, and the one a stop is worth a whole generation at: the cutout above is already bought either way, so a stop before or during the animation files it standing rather than binning it
         const motion = String(b.tmotion || b.motion || '').trim() || t.motion || t.thing
         const frames = await stillOnStop(gate, () =>
           pixellab.animate({ base64: b64, action: motion, frameCount: 8, seed: seedOf(b) }),
@@ -1453,9 +1378,7 @@ async function route(req, res, p, url) {
         }
         const fsize = pngSize(path.join(fdir, '0.png'))
         noteAsk(id, aname, prompt, t.thing)
-        // two generations were paid for and only disk was told. On a host that
-        // disk is a tmp dir, so the frames were gone with the request. Same
-        // awaited push saveStatic makes on the still branch two lines down.
+        // two generations were paid for and only disk was told, and on a host that disk is a tmp dir, so the frames went with the request. same awaited push saveStatic makes on the still branch two lines down
         await pushLibrary(id, aname)
         return send(res, 200, {
           item: await libRow(id, aname, { name: aname, kind: 'animated', frames: rel, fps: 6, w: fsize.w, h: fsize.h }),
@@ -1534,20 +1457,16 @@ async function route(req, res, p, url) {
         noteOrigin(id, owner, { faces: { ...(o.faces || {}), [face]: made.objectId } })
       }
       noteAsk(id, `${owner} > ${face}`, ask, ask, 'state')
-      // the new face goes to the store before the response admits it exists,
-      // the same rule every other library write follows
+      // the new face goes to the store before the response admits it exists, the same rule every other library write follows
       await pushLibrary(id, owner)
       const item = platformOn()
         ? (await libraryOf(id)).find((x) => x.name === owner)
         : libraryItems(id).find((x) => x.name === owner)
-      // the price, said out loud, because nothing documents what a state edit
-      // costs and the button above it has to stop guessing
+      // the price, said out loud, because nothing documents what a state edit costs and the button above it has to stop guessing
       return send(res, 200, { item: item || null, face, usage })
     } catch (e) {
       const m = String((e && e.message) || e)
-      /* a state that was bought and could not be collected is findable only by
-       * the id it was bought under, so that id goes in the log rather than out
-       * with the error. */
+      /* a state that was bought and could not be collected is findable only by the id it was bought under, so that id goes in the log rather than out with the error */
       if (e && (e.characterId || e.objectId))
         console.error(`[state] ${owner}: ${m} · bought as ${e.characterId || e.objectId}`)
       return send(res, m === 'stopped' ? 499 : 502, { error: m.slice(0, 300) })
@@ -1571,8 +1490,7 @@ async function route(req, res, p, url) {
         : await translateAsk(prompt, 'animated', '', id, job)
       const motion = String(b.motion || '').trim() || t.motion || t.thing
       const seed = seedOf(b)
-      // the interpreter's canvas choice holds for animation too, capped so the
-      // 8 frames stay inside pixellab's one-generation pixel budget (w*h*8)
+      // the interpreter's canvas choice holds for animation too, capped so the 8 frames stay inside pixellab's one-generation pixel budget (w*h*8)
       const aw = Math.min(128, clampPx(t.w))
       const ah = Math.min(128, clampPx(t.h))
       halt()
@@ -1588,11 +1506,8 @@ async function route(req, res, p, url) {
         }),
       )
       const b64 = drawn.b64
-      // the base is bought. A stop between the two halves saves the second
-      // generation, and the first one still lands, as a still object.
-      /* EVERY PATH OUT OF HERE KEEPS THE CUTOUT. The object above is bought and paid for, and only a
-       * stop used to file it: any other failure of the animation half answered 502 with the bytes
-       * dropped on the floor, so pressing stop kept your money and a real failure did not. */
+      // the base is bought: a stop between the two halves saves the second generation, and the first one still lands, as a still object
+      /* every path out of here keeps the cutout: the object above is bought and paid for, and only the stopped path used to file it, so any other failure of the animation half answered 502 with the bytes dropped on the floor */
       let frames
       try {
         frames = await stillOnStop(gate, () => pixellab.animate({ base64: b64, action: motion, frameCount: 8, seed }))
@@ -1618,10 +1533,7 @@ async function route(req, res, p, url) {
         rel.push(`/work/${id}/library/${name}/${i}.png`)
       }
       const size = pngSize(path.join(fdir, '0.png'))
-      /* THE ID THAT MAKES A SECOND FACE POSSIBLE, on the path that SUCCEEDS. Only the stopped path
-       * recorded it, so a finished animated asset could never be given another face while a stopped
-       * one could, off the same generation and the same object. Filed under the name the item really
-       * got, which freeLibraryName may have numbered. */
+      /* the id that makes a second face possible, on the path that succeeds: only the stopped path recorded it, so a finished animated asset could never be given another face while a stopped one could. filed under the name the item really got, which freeLibraryName may have numbered */
       if (drawn.objectId) noteOrigin(id, name, { objectId: drawn.objectId })
       noteAsk(id, name, prompt, t.thing)
       // both spends are bought and WORK is a fresh tmp dir per request on a host, so telling disk alone lost the item with the instance
@@ -1644,11 +1556,7 @@ async function route(req, res, p, url) {
     const name = cleanName(b.name || '')
     const ask = String(b.ask || '').replace(/\s+/g, ' ').trim().slice(0, PROMPT_MAX)
     if (!b.name) return send(res, 400, { error: 'no item' })
-    /* A COLLECTION NEEDS NO WORDS. Asking for frames that are already drawn and paid for needs the
-     * rig and the headings, both of which are properties of the item, and nothing at all from the
-     * sentence that was typed the first time. Demanding the ask here meant the only way to reach
-     * money already spent was to remember the exact words, which is not a thing anybody does a day
-     * later. */
+    /* a collection needs no words: asking for frames already drawn and paid for needs the rig and the headings, both properties of the item, and nothing from the sentence typed the first time. demanding the ask meant the only way to reach money already spent was to remember the exact words */
     const collecting = b.recover === true || typeof b.recover === 'string'
     if (!ask && !collecting) return send(res, 400, { error: 'say what it should do' })
     /* the item may exist only in the store: readLibItem reads the disk, and on the host work/ is empty, so a listed sprite came back "not in the library" */
@@ -1662,22 +1570,17 @@ async function route(req, res, p, url) {
     if (!it) return send(res, 404, { error: 'not in the library' })
     const job = String(b.job || '').slice(0, 64)
 
-    /* The plan the client was shown wins over a fresh one. A router that
-     * changed its mind between the price and the press would make the price a
-     * lie, and the price is the whole of what the person is agreeing to. */
+    /* the plan the client was shown wins over a fresh one, because a router that changed its mind between the price and the press would make the price a lie, and the price is the whole of what the person is agreeing to */
     let plan
     try {
-      /* a collection goes straight at the rig rather than through the router: the router reads the
-       * painting and reasons about what the words mean, which costs seconds and an answer nobody is
-       * going to use, because what comes back is whatever was already drawn. */
+      /* a collection goes straight at the rig rather than through the router: the router reads the painting and reasons about what the words mean, which costs seconds and an answer nobody is going to use, because what comes back is whatever was already drawn */
       plan = collecting && it.shape === 'views' ? await collectPlan(it, b) : await animatePlan(it, ask, id, job, b)
     } catch (e) {
       const m = String((e && e.message) || e)
       return send(res, m === 'stopped' ? 499 : 502, { error: m.slice(0, 300) })
     }
     if (collecting && plan.path === 'blocked') return send(res, 409, { error: plan.why })
-    // nothing below this line runs without the word: a stray post, a reload or
-    // a retry loop must not spend
+    // nothing below this line runs without the word: a stray post, a reload or a retry loop must not spend
     if (b.confirm !== true) return send(res, 200, { plan })
     // both of these spend nothing, and confirming them still spends nothing
     if (plan.path === 'written') return send(res, 200, { plan, free: true, note: plan.note })
@@ -1690,9 +1593,7 @@ async function route(req, res, p, url) {
         /* frames a previous attempt paid for but could not read back: recovery is offered before the spend rather than as a repair after it */
         let byDir = null
         if (b.recover) {
-          /* a named group is one this client started and is waiting on; a bare true takes whatever
-           * motion is on the account, which is the only way back to frames bought by a press whose
-           * group name nobody wrote down */
+          /* a named group is one this client started and is waiting on; a bare true takes whatever motion is on the account, which is the only way back to frames bought by a press whose group name nobody wrote down */
           let want = typeof b.recover === 'string' ? b.recover : ''
           if (!want) {
             const held = await readPending(id, name)
@@ -1703,11 +1604,7 @@ async function route(req, res, p, url) {
           await clearPending(id, name)
           byDir = found.byDir
         } else {
-          /* COLLECT BEFORE SPENDING. A press that follows a run whose frames were paid for and never
-           * collected used to buy the whole fan-out again, which is what the give-up message in the
-           * client was telling people to do while promising the opposite. If something is still
-           * outstanding for this item, it is asked for first and costs nothing; only when there is
-           * nothing to collect does a generation get bought. */
+          /* collect before spending: a press following a run whose frames were paid for and never collected used to buy the whole fan-out again, so anything still outstanding for this item is asked for first and costs nothing, and only when there is nothing to collect does a generation get bought */
           const held = await readPending(id, name)
           if (held && held.group) {
             const got = await recoverCharacterMotion(plan, held.group).catch(() => null)
@@ -1722,9 +1619,7 @@ async function route(req, res, p, url) {
               byDir = await runCharacterMotion(plan, seed, gate, halt, (g) => notePending(id, name, g, plan))
             } catch (e) {
               if (!(e instanceof Pending)) throw e
-              /* the receipt is already written, by runCharacterMotion the moment the fan-out was
-               * bought, so a reload or a closed tab can collect this for nothing whether or not the
-               * wait ever got as far as answering pending */
+              /* the receipt is already written, by runCharacterMotion the moment the fan-out was bought, so a reload or a closed tab can collect this for nothing whether or not the wait ever got as far as answering pending */
               return send(res, 200, {
                 pending: true,
                 group: e.group,
@@ -1734,22 +1629,16 @@ async function route(req, res, p, url) {
             }
           }
         }
-        // past here every generation is bought and every frame is theirs, so
-        // the download runs to the end whatever a stop says. Stopping is not
-        // undoing.
+        // past here every generation is bought and every frame is theirs, so the download runs to the end whatever a stop says. stopping is not undoing
         const st = await stageViews(id, name, byDir, it.fps || 8)
         if (!st) throw new Error('the headings did not save')
-        /* THE RECEIPT IS TORN UP ONLY NOW, with the frames on the item. Left standing, a later press
-         * with different words would collect this motion and report it as the new one. */
+        /* the receipt is torn up only now, with the frames on the item: left standing, a later press with different words would collect this motion and report it as the new one */
         await clearPending(id, name)
         /* the character id is the only way back to the rig, so never write undefined over one that was there or the motion can never be replaced */
         const keepId = plan.characterId || (it.meta && it.meta.characterId) || ''
         await swapFolder(id, name, st.stage, { dirs: st.dirs, fps: st.fps, characterId: keepId }, { dropEffect: true })
         noteAsk(id, name, ask, plan.motion, 'motion')
-        /* SAY WHICH HEADINGS ACTUALLY MOVE. A heading whose job failed keeps its
-         * standing rotation, which is one frame, and the set still loads and
-         * still walks. Reporting that as an eight-way motion would leave the
-         * author to find the statue themselves, on the map, later. */
+        /* say which headings actually move: a heading whose job failed keeps its standing rotation, which is one frame, and the set still loads and still walks, so reporting that as an eight-way motion leaves the statue to be found on the map later */
         const stood = Object.entries(st.dirs)
           .filter(([, frames]) => !Array.isArray(frames) || frames.length < 2)
           .map(([k]) => k)
@@ -1787,28 +1676,17 @@ async function route(req, res, p, url) {
       const st = stageFrames(id, name, frames)
       /* a still becomes a frame folder under the same name, and the png goes only once the folder is whole, so a crash leaves the original standing */
       if (it.shape === 'still') await keepPrevFile(id, it.file, name + '.png')
-      /* THE RATE HAS TO BE WRITTEN DOWN. The answer below says 6 and nothing carried that 6 to the
-       * row, so after a reload the listing had no rate at all and the client's `it.fps || 8` made it
-       * 8: two copies of the same plume on one map ran a third apart and the bundle shipped whichever
-       * number happened to be in memory. Measured on the live database: 17 frame folders carry no
-       * rate. A sidecar with a rate and no headings is read as a rate by everything that reads it and
-       * as no heading set by everything that looks for one.
-       *
-       * dropEffect, because a recipe left beside pixellab's frames would be pushed as the thing that
-       * drew them. */
+      /* the rate has to be written down: the answer below says 6 and nothing carried it to the row, so a reload left `it.fps || 8` making it 8 and two copies of one plume ran a third apart, with 17 frame folders measured carrying none. dropEffect, or a stale recipe is pushed as what drew them */
       await swapFolder(id, name, st.stage, { fps: 6 }, { dropEffect: true })
       if (it.shape === 'still') fs.rmSync(it.file, { force: true })
       noteAsk(id, name, ask, plan.motion, 'motion')
-      // 6, because that is what libraryItems will say about this folder on the
-      // next read: a frame folder carries no rate of its own unless effect.json
-      // is beside it, and the one that was there did not draw these pixels
+      // 6, because that is what libraryItems will say about this folder on the next read: a frame folder carries no rate of its own unless effect.json is beside it, and the one that was there did not draw these pixels
       return send(res, 200, {
         item: await libRow(id, name, { name, kind: 'animated', frames: st.frames, fps: 6, w: st.w, h: st.h }),
         note: plan.note,
       })
     } catch (e) {
-      // the library was never touched: everything happens in .stage until there
-      // is nothing left that can fail
+      // the library was never touched: everything happens in .stage until there is nothing left that can fail
       fs.rmSync(path.join(stageDirOf(id), name), { recursive: true, force: true })
       const m = String((e && e.message) || e)
       return send(res, m === 'stopped' ? 499 : 502, { error: m.slice(0, 300) })
@@ -1817,9 +1695,7 @@ async function route(req, res, p, url) {
     }
   }
 
-  // What the author typed, back to them, newest first. The library keeps only a
-  // four-word slug of each ask, which cannot answer "what did I write to get
-  // that tree?".
+  // what the author typed, back to them, newest first: the library keeps only a four-word slug of each ask, which cannot answer what was written to get that tree
   if (p.startsWith('/api/asks/')) {
     return send(res, 200, { asks: readAsks(decodeURIComponent(p.slice('/api/asks/'.length))) })
   }
@@ -1833,9 +1709,7 @@ async function route(req, res, p, url) {
       .map((c) => String(c).trim())
       .filter((c) => /^#[0-9a-f]{6}$/i.test(c))
       .slice(0, 12)
-    // sprite says an existing library sprite has been put in the recipe's
-    // hands, which changes what can be written: it can move the thing the
-    // person already owns rather than draw a new one out of pixels
+    // sprite says an existing library sprite has been put in the recipe's hands, which changes what can be written: it can move the thing the person already owns rather than draw a new one out of pixels
     return send(res, 200, {
       plan: await effectPlan(ask, colors, b.id ? safeId(b.id) : '', String(b.job || ''), !!b.sprite),
     })
@@ -1847,15 +1721,13 @@ async function route(req, res, p, url) {
     const id = safeId(b.id)
     const frames = Array.isArray(b.frames) ? b.frames : []
     if (!frames.length) return send(res, 400, { error: 'no frames' })
-    // 8 headings of 8 frames is 64, so a cap of 64 sits exactly on the edge of
-    // refusing an ordinary walking sprite
+    // 8 headings of 8 frames is 64, so a cap of 64 sits exactly on the edge of refusing an ordinary walking sprite
     if (frames.length > 256) return send(res, 400, { error: 'too many frames' })
     const dir = libDirOf(id)
     fs.mkdirSync(dir, { recursive: true })
     const base = cleanName(b.name || 'effect')
     let name = base
-    // a still that is about to become a folder of frames, which is what happens
-    // when a recipe is written to MOVE a sprite that has never moved before
+    // a still that is about to become a folder of frames, which is what happens when a recipe is written to move a sprite that has never moved before
     let wasStill = ''
     if (b.overwrite) {
     /* the host's work/ is empty, so pull what the store holds before reading the disk; costs nothing on a laptop */
@@ -1882,9 +1754,7 @@ async function route(req, res, p, url) {
       rel.push(`/work/${id}/library/${name}/${i}.png`)
     }
     for (let i = frames.length; fs.existsSync(path.join(fdir, i + '.png')); i++) fs.unlinkSync(path.join(fdir, i + '.png'))
-    /* The png goes only once the folder is whole, and its bytes go to .prev
-     * first. Both halves matter: the item keeps ONE library row, and a crash in
-     * between leaves the original standing rather than nothing at all. */
+    /* the png goes only once the folder is whole, and its bytes go to .prev first: the item keeps one library row, and a crash in between leaves the original standing rather than nothing at all */
     if (wasStill) {
       await keepPrevFile(id, wasStill, name + '.png')
       fs.rmSync(wasStill, { force: true })
@@ -1894,35 +1764,30 @@ async function route(req, res, p, url) {
     const rec = {
       type: meta.type || '',
       params: meta.params || {},
-      // whose colours these are, so a reopened effect keeps its own ramp
-      // instead of falling back onto the map's the moment it is retuned
+      // whose colours these are, so a reopened effect keeps its own ramp instead of falling back onto the map's the moment it is retuned
       palette: meta.palette === 'own' ? 'own' : 'map',
       colors: meta.colors || [],
       fps,
       frames: frames.length,
     }
-    // a written effect keeps its recipe beside its frames, or the pencil would
-    // reopen a panel with nothing to render and no knobs to turn
+    // a written effect keeps its recipe beside its frames, or the pencil would reopen a panel with nothing to render and no knobs to turn
     if (rec.type === 'custom') {
       rec.code = cleanCode(meta.code)
       rec.controls = cleanControls(meta.controls)
     }
     fs.writeFileSync(path.join(fdir, 'effect.json'), JSON.stringify(rec, null, 2))
     const size = pngSize(path.join(fdir, '0.png'))
-    // effects record on KEEP, not on every attempt, or one round of tuning
-    // buries a week of asset asks under thirty near-identical lines
+    // effects record on keep, not on every attempt, or one round of tuning buries a week of asset asks under thirty near-identical lines
     if (b.ask && !b.overwrite) noteAsk(id, name, b.ask, rec.type === 'custom' ? 'written' : rec.type, 'effect')
     // a kept effect ending at disk was gone with the request on a host; pushItem carries effect.json across with the frames
     await pushLibrary(id, name)
-    /* the hand-set effect flag was the client's own workaround for this exact gap, and the listing
-     * carries it properly, so it stays here only as the floor */
+    /* the hand-set effect flag was the client's own workaround for this exact gap, and the listing carries it properly, so it stays here only as the floor */
     return send(res, 200, {
       item: await libRow(id, name, { name, kind: 'animated', effect: true, frames: rel, fps, w: size.w, h: size.h }),
     })
   }
 
-  // The rule, the numbers and the colours a saved effect was built from, so the
-  // tuning panel reopens on exactly what is on disk. Free, and read-only.
+  // the rule, the numbers and the colours a saved effect was built from, so the tuning panel reopens on exactly what is on disk. free, and read-only
   if (p === '/api/effect-read' && req.method === 'POST') {
     const b = await body(req)
     const id = safeId(b.id)
@@ -1951,8 +1816,7 @@ async function route(req, res, p, url) {
       fps: Number(meta.fps) > 0 ? Math.round(Number(meta.fps)) : 6,
       frames: Number(meta.frames) > 0 ? Math.round(Number(meta.frames)) : 0,
     }
-    // the recipe and its knobs, so a written effect reopens on exactly what
-    // drew it. Built-in effects have neither and go without.
+    // the recipe and its knobs, so a written effect reopens on exactly what drew it. built-in effects have neither and go without
     if (out.type === 'custom') {
       out.code = cleanCode(meta.code)
       out.controls = cleanControls(meta.controls)
@@ -2011,8 +1875,7 @@ async function route(req, res, p, url) {
       paths: [file, ...(hasMap ? [mapFile] : [])],
       ask,
       prompt: String(b.prompt || ''),
-      // read off the prompt that drew it, the same way the generator read it, so
-      // the reviewer is judging against the camera that was actually sent
+      // read off the prompt that drew it, the same way the generator read it, so the reviewer is judging against the camera that was actually sent
       view: b.what === 'sprite' ? '' : viewFor(String(b.prompt || '')),
       n: frames.length,
       what: b.what === 'sprite' ? 'sprite' : 'object',
@@ -2023,9 +1886,7 @@ async function route(req, res, p, url) {
     return send(res, 200, { strip: file, ...v })
   }
 
-  // What he KEPT on this map, one line each. It is written only on a keep,
-  // never on a discard, and the last five ride into the next ask so the tool's
-  // rewrites drift toward this map's taste instead of starting cold every time.
+  // what was kept on this map, one line each: written only on a keep, never on a discard, and the last five ride into the next ask so the rewrites drift toward this map's taste instead of starting cold
   if (p === '/api/keep-note' && req.method === 'POST') {
     const b = await body(req)
     const id = safeId(b.id)
@@ -2049,22 +1910,11 @@ async function route(req, res, p, url) {
     const name = cleanName(b.name || '')
     if (!name) return send(res, 400, { error: 'no name' })
     const prev = path.join(WORK, id, '.prev')
-    // this machine may never have seen the edit. The store keeps the same eight
-    // versions, so an undo is not something only one laptop can do.
+    // this machine may never have seen the edit. the store keeps the same eight versions, so an undo is not something only one laptop can do
     if (!fs.existsSync(prev) || !fs.readdirSync(prev).length) {
       const back = await restoreVersion(id, name).catch(() => null)
       if (!back) return send(res, 404, { error: 'nothing was kept for this one' })
-      /* THE ROW HAS TO BE REWRITTEN, because restoreVersion only moves bytes. Undoing across a shape
-       * change was therefore catastrophic: animating a still leaves the row saying animated with eight
-       * frames, and a restore to the still deleted those eight blobs and left the row pointing at
-       * them. The client takes this answer and writes those dead urls into every placement of the
-       * item, then autosaves. Every copy drew nothing, in the editor, in the export and in the game,
-       * and a reload could not help because the row itself was wrong.
-       *
-       * Pulling the restored bytes down and pushing them is the same path the rest of the tool uses,
-       * so the row is derived from what is really there rather than patched by hand. It also fixes the
-       * laptop symptom: the disk copy is replaced by what came back, so the next edit cannot push the
-       * pre-restore bytes straight back up. */
+      /* the row has to be rewritten, because restoreVersion only moves bytes: undoing across a shape change left the row saying animated with eight frames the restore had deleted, so every placement drew nothing. hydrate then push derives the row from what is really there */
       try {
         await hydrateItem(id, name, path.join(WORK, id))
         await pushItem(id, name, path.join(WORK, id))
@@ -2075,13 +1925,7 @@ async function route(req, res, p, url) {
       if (!restored) return send(res, 500, { error: 'it came back unreadable' })
       return send(res, 200, { item: restored, from: `version ${back.seq}` })
     }
-    /* <name>.png and <name> for the first copy, <name>-2.png upward after it.
-     * Built with a real escape and NOT out of a plain string: inside quotes a
-     * lone backslash is dropped, so the pattern read `<name>-d+` and matched the
-     * LETTER d. Every numbered copy in .prev was invisible to it, which left an
-     * undo able to reach the newest one and no further back, with seven good
-     * versions sitting beside it. cleanName leaves only a-z, 0-9 and dashes, so
-     * the name needs no escaping of its own. */
+    /* <name>.png and <name> first, <name>-2.png upward after it, built with a real escape and not a plain string: inside quotes a lone backslash is dropped, so the pattern read `<name>-d+` and matched the letter d, hiding every numbered copy in .prev from undo */
     const numbered = numberedCopy(name)
     const cands = fs
       .readdirSync(prev, { withFileTypes: true })
@@ -2116,8 +1960,7 @@ async function route(req, res, p, url) {
     } catch (e) {
       return send(res, 500, { error: String((e && e.message) || e).slice(0, 200) })
     }
-    // reverting rewrites the art, so the store has to be told or the library
-    // would keep serving the version that was just undone
+    // reverting rewrites the art, so the store has to be told or the library would keep serving the version that was just undone
     await pushLibrary(id, name)
     const item = platformOn()
       ? (await libraryOf(id)).find((x) => x.name === name)
@@ -2126,31 +1969,15 @@ async function route(req, res, p, url) {
     return send(res, 200, { item })
   }
 
-  /* AN ANIMATION COMES OFF A THING, AND COMES BACK. Animating used to be one way: the only road
-   * back was the generic undo, which steps back one version whatever that version happens to be,
-   * so an author who cropped after animating got the uncropped picture back instead of the still
-   * they asked for. This is the deliberate switch, and it spends nothing either way, because the
-   * frames are already bought and are kept rather than thrown away.
-   *
-   * Off, by shape:
-   *   frames  the folder goes to .prev whole and frame 0 becomes the loose png
-   *   views   every heading keeps its first picture, which is the standing rotation the figure
-   *           was drawn with before any motion was asked for, so it still faces where it walks
-   *   still   nothing to take off
-   * On: the newest FOLDER kept for this name, which is the last shape of it that moved.
-   */
+  /* an animation comes off a thing and comes back, spending nothing because the frames are already bought and kept. off, by shape: a frames folder goes to .prev whole and frame 0 becomes the loose png, views keep each heading's standing picture. on takes the newest folder kept */
   if (p === '/api/asset-animation' && req.method === 'POST') {
     const b = await body(req)
     const id = safeId(b.id)
-    /* THE RAW NAME IS WHAT DECIDES THIS, not the cleaned one: cleanName falls back to the word
-     * "asset" rather than to nothing, so a missing name reads as truthy and this would have gone
-     * looking for a library row called asset and flattened it if one existed. The animate route
-     * guards the same way for the same reason. */
+    /* the raw name decides this, not the cleaned one: cleanName falls back to the word asset rather than to nothing, so a missing name reads as truthy and this would have gone looking for a library row called asset and flattened it. the animate route guards the same way */
     if (!b.name) return send(res, 400, { error: 'no item' })
     const name = cleanName(b.name)
     const on = b.on === true
-    /* the host's work/ is empty, so what the store holds has to come down before the disk is read
-     * or a listed item is "not in the library" */
+    /* the host's work/ is empty, so what the store holds has to come down before the disk is read or a listed item is not in the library */
     try {
       await hydrateMap(id, path.join(WORK, id))
     } catch (e) {
@@ -2166,8 +1993,7 @@ async function route(req, res, p, url) {
         if (it.shape === 'still') return send(res, 409, { error: 'that one does not move' })
         if (!it.plays) return send(res, 409, { error: 'that one already stands still' })
         if (it.shape === 'views') {
-          /* the whole set goes to .prev before a single file is unlinked, so the walk cycles are
-           * recoverable even though what is left behind is a working set of headings */
+          /* the whole set goes to .prev before a single file is unlinked, so the walk cycles are recoverable even though what is left behind is a working set of headings */
           await keepPrevDir(id, it.folder, name)
           const held = {}
           for (const h of it.heads) {
@@ -2179,8 +2005,7 @@ async function route(req, res, p, url) {
               if (gone !== base) fs.rmSync(path.join(it.folder, gone), { force: true })
             }
           }
-          /* the character id is the way back to the rig, and a set with no rig can never be given
-           * another motion, so what the set knew about itself is carried rather than rebuilt */
+          /* the character id is the way back to the rig, and a set with no rig can never be given another motion, so what the set knew about itself is carried rather than rebuilt */
           const meta = { ...(it.meta && typeof it.meta === 'object' ? it.meta : {}), dirs: held, fps: it.fps || 8 }
           fs.writeFileSync(path.join(it.folder, 'dirs.json'), JSON.stringify(meta, null, 2))
         } else {
@@ -2188,8 +2013,7 @@ async function route(req, res, p, url) {
           if (!fs.existsSync(first)) return send(res, 409, { error: 'it has no first frame to keep' })
           const bytes = fs.readFileSync(first)
           await keepPrevDir(id, it.folder, name)
-          /* the png is written BEFORE the folder goes, so a crash between the two leaves both
-           * rather than neither, and readLibItem prefers the folder while both are there */
+          /* the png is written before the folder goes, so a crash between the two leaves both rather than neither, and readLibItem prefers the folder while both are there */
           fs.writeFileSync(path.join(dir, name + '.png'), bytes)
           fs.rmSync(it.folder, { recursive: true, force: true })
         }
@@ -2204,9 +2028,7 @@ async function route(req, res, p, url) {
         if (!folders.length) return send(res, 404, { error: 'no frames were ever kept for this one' })
         folders.sort((x, y) => prevRank(y) - prevRank(x))
         const from = path.join(prev, folders[0])
-        /* WHAT IS THERE NOW GOES TO .prev TOO, so the switch is a switch and not a one-way trip.
-         * A still goes as a file and a standing view set as a folder, which is why both helpers
-         * are here rather than one. */
+        /* what is there now goes to .prev too, so the switch is a switch and not a one-way trip: a still goes as a file and a standing view set as a folder, which is why both helpers are here rather than one */
         const to = path.join(dir, name)
         const png = path.join(dir, name + '.png')
         if (fs.existsSync(png)) await keepPrevFile(id, png, name + '.png')
@@ -2217,8 +2039,7 @@ async function route(req, res, p, url) {
           const sp = path.join(from, f)
           if (fs.statSync(sp).isFile()) fs.copyFileSync(sp, path.join(to, f))
         }
-        /* a folder that came back is not a file: a stale flat png beside it is a second answer to
-         * which pixels this is, and every reader would have to pick between them */
+        /* a folder that came back is not a file: a stale flat png beside it is a second answer to which pixels this is, and every reader would have to pick between them */
         fs.rmSync(png, { force: true })
         fs.rmSync(from, { recursive: true, force: true })
       }
@@ -2226,8 +2047,7 @@ async function route(req, res, p, url) {
       return send(res, 500, { error: String((e && e.message) || e).slice(0, 200) })
     }
 
-    /* the store has to be told, or the library keeps serving the shape that was just switched away
-     * from and every placement of it points at bytes nobody has */
+    /* the store has to be told, or the library keeps serving the shape that was just switched away from and every placement of it points at bytes nobody has */
     await pushLibrary(id, name)
     const item = platformOn()
       ? (await libraryOf(id)).find((x) => x.name === name)
@@ -2241,8 +2061,7 @@ async function route(req, res, p, url) {
     const id = safeId(b.id)
     const frames = Array.isArray(b.frames) ? b.frames : []
     if (!frames.length) return send(res, 400, { error: 'no pixels' })
-    // 8 headings of 8 frames is 64, so a cap of 64 sits exactly on the edge of
-    // refusing an ordinary walking sprite
+    // 8 headings of 8 frames is 64, so a cap of 64 sits exactly on the edge of refusing an ordinary walking sprite
     if (frames.length > 256) return send(res, 400, { error: 'too many frames' })
     const src = String(b.name || '').trim()
     if (!src) return send(res, 400, { error: 'no name' })
@@ -2264,22 +2083,17 @@ async function route(req, res, p, url) {
       name = base
       for (let i = 2; taken(name); i++) name = `${base}-${i}`
     } else {
-      // the same two helpers the animate and swap paths use, so an in-place
-      // edit cannot roll its own original away. See PREV_MAX.
+      // the same two helpers the animate and swap paths use, so an in-place edit cannot roll its own original away. see PREV_MAX
       const png = path.join(dir, name + '.png')
       if (fs.existsSync(png)) await keepPrevFile(id, png, name + '.png')
       else await keepPrevDir(id, path.join(dir, name), name)
     }
-    /* a set of VIEWS goes back under its own names, not as 0.png, 1.png.
-     * Without this an edit on eight-sided art wrote frame files beside the
-     * views it was supposed to replace and the item ended up as neither. */
+    /* a set of views goes back under its own names, not as 0.png, 1.png: without this an edit on eight-sided art wrote frame files beside the views it was supposed to replace and the item ended up as neither */
     /* dirKeys runs parallel to frames, so assuming one picture per heading turned dock-porter's east-0..east-7 into one east.png and stopped it walking */
     const dirKeys = Array.isArray(b.dirKeys) ? b.dirKeys.map((k) => cleanName(String(k))) : null
     if (dirKeys && dirKeys.length === frames.length) {
       const fdir = path.join(dir, name)
-      // what the set already knew about itself, kept rather than rebuilt: the
-      // rate it plays at and the character it was drawn from, which is what a
-      // second face is made from later
+      // what the set already knew about itself, kept rather than rebuilt: the rate it plays at and the character it was drawn from, which is what a second face is made from later
       let was = {}
       try {
         was = JSON.parse(fs.readFileSync(path.join(fdir, 'dirs.json'), 'utf8')) || {}
@@ -2329,8 +2143,7 @@ async function route(req, res, p, url) {
         fs.writeFileSync(path.join(fdir, i + '.png'), Buffer.from(stripDataURL(String(frames[i])), 'base64'))
         rel.push(`/work/${id}/library/${name}/${i}.png`)
       }
-      // a shorter take must not leave the tail of a longer one behind, or the
-      // folder plays a mix of two renders
+      // a shorter take must not leave the tail of a longer one behind, or the folder plays a mix of two renders
       for (let i = frames.length; fs.existsSync(path.join(fdir, i + '.png')); i++)
         fs.unlinkSync(path.join(fdir, i + '.png'))
       const fps = Number(b.fps) > 0 ? Math.round(Number(b.fps)) : 6
@@ -2349,9 +2162,7 @@ async function route(req, res, p, url) {
     })
   }
 
-  /* one item out of the library, held inside work/<id>/library; the delete is final and the ui clears
-     its placements separately. The faces it wore go with it: see stateDirOf below and dropItem, which
-     clears the blobs. Leaving the folder behind meant the next item to take that name inherited them. */
+  /* one item out of the library, held inside work/<id>/library: the delete is final and the ui clears its placements separately. the faces it wore go with it, see stateDirOf below and dropItem, because leaving the folder behind let the next item to take that name inherit them */
   if (p === '/api/library-remove' && req.method === 'POST') {
     const b = await body(req)
     if (!String(b.name || '').trim()) return send(res, 400, { error: 'no name' })
@@ -2361,13 +2172,8 @@ async function route(req, res, p, url) {
     const inside = (f) => f.startsWith(dir + path.sep)
     const png = path.resolve(dir, name + '.png')
     const fdir = path.resolve(dir, name)
-    // a delete has to land in both places or the item reappears on the next
-    // listing, which now comes from the database rather than the folder
-    /* THE FACES IT WORE GO WITH IT. dropItem clears the blobs and library_states cascades off the
-     * row, but this folder stayed, and freeLibraryName then handed the same name to the next thing
-     * asked for. On a laptop the disk reader bound the dead item's faces straight onto the new row, so
-     * an author got a face they never paid for, of a different object; on the host a hydrate pulled
-     * the orphaned pixels back and the next push rowed them in. */
+    // a delete has to land in both places or the item reappears on the next listing, which now comes from the database rather than the folder
+    /* the faces it wore go with it: dropItem clears the blobs and library_states cascades off the row, but this folder stayed and freeLibraryName handed the same name to the next thing asked for, so a disk read bound the dead item's faces onto the new row and a hydrate pulled the orphaned pixels back */
     const faces = path.resolve(stateDirOf(id, name))
     const dropFaces = () => {
       if (faces.startsWith(path.resolve(WORK, id) + path.sep)) fs.rmSync(faces, { recursive: true, force: true })
@@ -2398,16 +2204,11 @@ async function route(req, res, p, url) {
     return send(res, 404, { error: 'not in the library' })
   }
 
-  // reopening a map: whatever was exported under this id, as data urls. Always
-  // 200, so a map that was never exported does not put a 404 in the console.
+  // reopening a map: whatever was exported under this id, as data urls. always 200, so a map that was never exported does not put a 404 in the console
   if (p.startsWith('/api/scene/')) {
     const sceneId = safeId(decodeURIComponent(p.slice('/api/scene/'.length)))
     const dir = path.join(WORK, sceneId)
-    /* the host's work/ is empty, so pull what the store holds before reading the
-     * disk; costs nothing on a laptop. This is the LAST-RESORT restore an editor
-     * falls back to when the browser and the platform both hold no document, and
-     * it was the one route in this family that never got the call, so on the host
-     * it answered nulls for every map and the fallback could never fire. */
+    /* the host's work/ is empty, so pull what the store holds before reading the disk. this is the last-resort restore an editor falls back to when the browser and the platform both hold no document, and it was the one route here that never made the call, so the host answered nulls for every map */
     try {
       await hydrateMap(sceneId, dir)
     } catch (e) {
@@ -2418,8 +2219,7 @@ async function route(req, res, p, url) {
       const f = path.join(dir, n)
       return fs.existsSync(f) ? 'data:image/png;base64,' + fs.readFileSync(f).toString('base64') : null
     }
-    // the cut can exist before any mechanics do: a painting is cut and staged,
-    // then the levels are drawn later
+    // the cut can exist before any mechanics do: a painting is cut and staged, then the levels are drawn later
     out.cut = png('cut.png')
     const mapFile = path.join(dir, 'map.json')
     if (fs.existsSync(mapFile)) {
@@ -2565,26 +2365,18 @@ async function route(req, res, p, url) {
     /* claude writes the prompt with the type, the shelf and the shipped chrome in front of it; it is not a gate, and a bare ask says so on the answer */
     const shelf = await listUi(me.id)
 
-    /* THE ONE PLACE THE ASK IS ASSEMBLED, so a dry run and a real one cannot
-     * disagree about what would have been sent. A dry run built from a second
-     * copy of these fields proves nothing about the copy that spends. */
+    /* the one place the ask is assembled, so a dry run and a real one cannot disagree about what would have been sent: a dry run built from a second copy of these fields proves nothing about the copy that spends */
     const askFor = (plan, pieceName) => ({
       description: plan.description,
       width,
       height,
-      // the router's palette, unless an author named one by hand. It is a
-      // separate field on the endpoint rather than words in the description,
-      // so it is answered separately.
+      // the router's palette, unless an author named one by hand. it is a separate field on the endpoint rather than words in the description, so it is answered separately
       palette: b.palette || plan.palette || null,
-      // the type's own list and nothing else. An author override lived here and
-      // is gone: it is one of the two levers that decide whether a picture is
-      // usable, and work/.kit/panel.png is what a dropped one costs.
+      // the type's own list and nothing else. an author override lived here and is gone: it is one of the two levers that decide whether a picture is usable, and work/.kit/panel.png is what a dropped one costs
       elements,
       /* only pieces is a shape template: forwarding names or batch got every entry refused as "not a valid dictionary" with nothing the author could act on */
       pieces: Array.isArray(b.pieces) && b.pieces.length === 1 ? b.pieces : null,
-      // the same picture the router looked at. Two levers and they do
-      // different jobs: this one carries material and no layout, the words
-      // carry layout and cannot carry a palette.
+      // the same picture the router looked at. two levers doing different jobs: this one carries material and no layout, the words carry layout and cannot carry a palette
       styleImageBase64: style ? style.base64 : undefined,
       name: pieceName,
     })
@@ -2621,9 +2413,7 @@ async function route(req, res, p, url) {
     /* the row exists before the picture: the call takes a minute and a half and a spend that produced nothing has to be visible afterwards */
     let row
     try {
-      // title guarded at the route the way description already is: createUi's
-      // default parameter only fires on undefined, so a body carrying
-      // {"title": null} stored the literal four-character string "null"
+      // title guarded at the route the way description already is: createUi's default parameter only fires on undefined, so a body carrying `"title": null` stored the literal four-character string "null"
       row = await createUi({
         ownerId: me.id,
         name,
@@ -2659,9 +2449,7 @@ async function route(req, res, p, url) {
         routed: plan.routed,
         prompt: plan.description,
         note: plan.note,
-        // which levers actually went out, on every answer. A dropped element
-        // list is invisible in a returned picture until enough generations have
-        // been spent for the pattern to show.
+        // which levers actually went out, on every answer: a dropped element list is invisible in a returned picture until enough generations have been spent for the pattern to show
         ...levers,
         ...(plan.routed ? {} : { degraded: plan.degraded, why: plan.why }),
       })
@@ -2669,9 +2457,7 @@ async function route(req, res, p, url) {
       await failUi(me.id, row.name)
       return send(res, 502, {
         error: String(e.message || e).slice(0, 300),
-        // the same honesty on the failure path: a piece that never drew after
-        // a degraded prompt is a different problem from one that never drew
-        // after a written one
+        // the same honesty on the failure path: a piece that never drew after a degraded prompt is a different problem from one that never drew after a written one
         routed: plan.routed,
         ...(plan.routed ? {} : { degraded: plan.degraded, why: plan.why }),
       })
@@ -2686,8 +2472,7 @@ async function route(req, res, p, url) {
     try {
       return send(res, 200, await setUiRegions(me.id, String(b.name || ''), b.regions, b.slices))
     } catch (e) {
-      // refused where it is written, naming what is wrong, rather than found by
-      // a member whose number prints half off the panel
+      // refused where it is written, naming what is wrong, rather than found by a member whose number prints half off the panel
       return send(res, 400, { error: String(e.message || e), problems: e.problems || [] })
     }
   }
@@ -2722,8 +2507,7 @@ async function route(req, res, p, url) {
     const b = await body(req)
     const name = String(b.name || '')
     try {
-      // core chrome may only be removed by the account it belongs to, because
-      // deleting the dialogue box is the loudest way to override it
+      // core chrome may only be removed by the account it belongs to, because deleting the dialogue box is the loudest way to override it
       return send(res, (await removeUi(me.id, name, { core: await ownsOcean(req) })) ? 200 : 404, { removed: name })
     } catch (e) {
       return send(res, 403, { error: String(e.message || e) })
@@ -2737,8 +2521,7 @@ async function route(req, res, p, url) {
     const buf = await ownedUiImage(me.id, p.slice('/api/ui/'.length, -'/image'.length))
     if (!buf) return notFound(res)
     res.setHeader('Content-Type', 'image/png')
-    // never cached, unlike the published route: this is the picture being marked
-    // up, and a redraw under the same name has to show through immediately
+    // never cached, unlike the published route: this is the picture being marked up, and a redraw under the same name has to show through immediately
     res.setHeader('Cache-Control', 'no-store')
     return res.end(buf)
   }
@@ -2771,8 +2554,7 @@ async function route(req, res, p, url) {
   if (p === '/api/library-kit' && req.method === 'GET') {
     const me = await currentUser(req)
     if (!me) return send(res, 200, { kit: [] })
-    // the source slug travels with every row, because a picker showing eight
-    // barrels has to be able to say which map each one came off
+    // the source slug travels with every row, because a picker showing eight barrels has to be able to say which map each one came off
     const rows = await many(
       `select m.slug, l.name, l.kind, l.w, l.h, l.fps, l.frame_count, l.is_effect
        from library_items l join maps m on m.id = l.map_id
@@ -2823,13 +2605,10 @@ async function route(req, res, p, url) {
     const id = safeId(b.id)
     step(`${id}: body read, ${(JSON.stringify(b).length / 1024).toFixed(0)}kb`)
     const dir = path.join(WORK, id)
-    // this route rebuilds dir/assets with fs.rmSync, so the fence goes in front
-    // of the mkdir rather than anywhere later. See insideWork.
+    // this route rebuilds dir/assets with fs.rmSync, so the fence goes in front of the mkdir rather than anywhere later. see insideWork
     if (!insideWork(dir)) return send(res, 400, { error: 'bad id' })
     fs.mkdirSync(dir, { recursive: true })
-    /* Every source byte within reach of resolveAssetFile before anything tries
-     * to resolve one. On this machine that is a no-op; on a host it is what
-     * stops the export publishing an empty island. */
+    /* every source byte within reach of resolveAssetFile before anything tries to resolve one. on this machine that is a no-op, on a host it is what stops the export publishing an empty island */
     try {
       const h = await hydrateMap(id, dir)
       if (h.pulled) console.log(`[export] ${id}: pulled ${h.pulled} file(s), ${(h.bytes / 1024).toFixed(0)}kb, from object storage`)
@@ -2876,13 +2655,9 @@ async function route(req, res, p, url) {
     /* one appearance packed: views, frames or a bare src, and it runs for each extra look too, so no reader learns a second shape. null drops the entry */
     const packLook = (s) => {
       if (!s || typeof s !== 'object') return null
-      /* a placement with VIEWS: every rotation goes into the bundle under one
-       * folder, keyed by the heading it faces. The game picks by where the
-       * thing is walking, which is what stops a figure moon-walking. */
+      /* a placement with views: every rotation goes into the bundle under one folder, keyed by the heading it faces, and the game picks by where the thing is walking, which is what stops a figure moon-walking */
       if (s.dirs && typeof s.dirs === 'object' && Object.keys(s.dirs).length) {
-        // read into the same buffer map everything else uses: the folder is
-        // rebuilt further down, so anything written straight to disk here would
-        // be deleted by its own export
+        // read into the same buffer map everything else uses: the folder is rebuilt further down, so anything written straight to disk here would be deleted by its own export
         const outDirs = {}
         let metaFile = ''
         /* compound headings first: the game's endsWith scan matches 'south-west-0.png' against 'west-0.png' and 17 of the hub's 38 sets faced the wrong way */
@@ -2903,9 +2678,7 @@ async function route(req, res, p, url) {
           if (out.length) outDirs[k] = out
         }
         if (Object.keys(outDirs).length) {
-          // the rate those frames play at, off the item's own dirs.json the way
-          // an animated item carries its fps. A set of single views has nothing
-          // to cycle, so the number only ever matters to a walker.
+          // the rate those frames play at, off the item's own dirs.json the way an animated item carries its fps. a set of single views has nothing to cycle, so the number only ever matters to a walker
           let fps = Number(s.fps) > 0 ? Math.round(Number(s.fps)) : 8
           try {
             const meta = JSON.parse(fs.readFileSync(metaFile, 'utf8'))
@@ -2925,8 +2698,7 @@ async function route(req, res, p, url) {
           const restSet = (rest && outDirs[rest]) || outDirs.south || Object.values(outDirs)[0]
           return {
             dirs: outDirs,
-            // frame 0 of the resting view, so a reader that knows nothing about
-            // headings still gets the picture the author actually chose
+            // frame 0 of the resting view, so a reader that knows nothing about headings still gets the picture the author actually chose
             src: restSet[0],
             facing: rest || 'south',
             fps,
@@ -2971,9 +2743,7 @@ async function route(req, res, p, url) {
         badNumber.push(pid)
         continue
       }
-      // the transform contract: scaleX/scaleY/rot/flipX/flipY, with scale
-      // kept equal to scaleX so every older reader stays alive. An editor
-      // asset that predates the fields exports as the identity transform.
+      // the transform contract: scaleX/scaleY/rot/flipX/flipY, with scale kept equal to scaleX so every older reader stays alive, and an editor asset that predates the fields exports as the identity transform
       const scaleX = Number(a.sx) > 0 ? Number(a.sx) : scale
       const scaleY = Number(a.sy) > 0 ? Number(a.sy) : scale
       const rot = isFinite(Number(a.rot)) ? Number(a.rot) : 0
@@ -2990,8 +2760,7 @@ async function route(req, res, p, url) {
       }
       /* a look whose png has gone keeps its slot: art is an index, so dropping one shifted every later look down and both states drew something never asked for */
       const looks = []
-      // STATES_MAX extras, because a round is at most that many states and each
-      // of them can name one picture that is not look 0. See STATES_MAX.
+      // STATES_MAX extras, because a round is at most that many states and each of them can name one picture that is not look 0. see STATES_MAX
       for (const L of Array.isArray(a.looks) ? a.looks.slice(0, STATES_MAX) : []) looks.push(packLook(L) || look0)
       /* face names in one array indexed the way art is, never inside look0, whose spread would overwrite the placement's own name; an unnamed face holds its slot */
       const names = [
@@ -3010,9 +2779,7 @@ async function route(req, res, p, url) {
         ...look0,
         x,
         y,
-        /* WHICH OF TWO OVERLAPPING THINGS IS IN FRONT, and left out entirely when the author never
-         * touched it, which is nearly every placement and every map published so far. A reader
-         * that has never heard of it adds nothing to y and draws exactly what it drew before. */
+        /* which of two overlapping things is in front, left out entirely when the author never touched it, which is nearly every placement and every map published so far: a reader that has never heard of it adds nothing to y and draws exactly what it drew before */
         ...(Number.isFinite(Number(a.z)) && Number(a.z) !== 0 ? { z: Math.round(Number(a.z)) } : {}),
         ...tf,
         ...(looks.length ? { looks } : {}),
@@ -3021,8 +2788,7 @@ async function route(req, res, p, url) {
     }
     /* the same count out as in, or no bundle: counts taken after the drop meant a bundle missing 19 of 75 placements read exactly like one missing none */
     if (outAssets.length < placements.length) {
-      // enough ids to go and look at, not a wall of them: a big map could drop
-      // hundreds and the message has to stay readable
+      // enough ids to go and look at, not a wall of them: a big map could drop hundreds and the message has to stay readable
       const some = (list) => list.slice(0, 12).join(', ') + (list.length > 12 ? `, and ${list.length - 12} more` : '')
       const why = []
       if (noArt.length) why.push(`${noArt.length} whose art did not resolve, so it is not on this machine or in the store: ${some(noArt)}`)
@@ -3044,7 +2810,7 @@ async function route(req, res, p, url) {
     fs.writeFileSync(path.join(dir, 'assets.json'), JSON.stringify({ assets: outAssets }, null, 2))
     files.push(copied ? `assets.json (+${copied} png${copied > 1 ? 's' : ''})` : 'assets.json')
 
-    // the publish is an immutable version, so re-exporting cannot break a session already running, and map.json picks up anchors[] from the database on the way
+    // the publish is an immutable version, so re-exporting cannot break a run already open, and map.json picks up anchors[] from the database on the way
     step('assets folder rebuilt')
     let published = null
     if (platformOn()) {
@@ -3053,43 +2819,53 @@ async function route(req, res, p, url) {
           const f = path.join(dir, name)
           return fs.existsSync(f) ? fs.readFileSync(f) : null
         }
-        /* THE COVERS RIDE IN THE BUNDLE. A cover belongs to a map, so it ships with the map rather
-         * than being a thing the game holds a table of: every door into this island and every sail
-         * to it then shows the author's own screen with no python naming it. The default is
-         * cover.png; the extras keep their code names under covers/, which is the path
-         * enter(map, cover="<name>") resolves against. The vendor step copies whatever the manifest
-         * lists, nested paths included, so nothing on the game side has to learn these two names. */
+        /* the covers ride in the bundle: a cover belongs to its map, so it ships with the map rather than being a thing the game holds a table of. the default is cover.png and extras keep their code names under covers/, which is what enter(map, cover="<name>") resolves against */
         const coverDir = path.join(WORK, id, 'covers')
         const extras = {}
         let extraNames = []
-        try {
-          extraNames = fs
-            .readdirSync(coverDir)
-            .filter((n) => n.toLowerCase().endsWith('.png'))
-            .map((n) => n.slice(0, -4).toLowerCase())
-            .filter(isCoverName)
-          for (const n of extraNames) extras[`covers/${n}.png`] = fs.readFileSync(path.join(coverDir, n + '.png'))
-        } catch {
-          /* a map with no extra covers, which is nearly all of them */
+        let coverPng = null
+        const diskPng = (n) => {
+          try {
+            return fs.readFileSync(path.join(coverDir, n + '.png'))
+          } catch {
+            /* the store had it and this machine does not, which is every machine but the one it was drawn on */
+            return null
+          }
         }
-        let coverPng = png('cover.png')
-        // the store answers for whatever the disk does not hold, because a deploy has no writable disk and a cover kept there would otherwise never reach a bundle
-        const held = await coversOf(id).catch(() => ({ cover: false, covers: [] }))
-        if (!coverPng && held.cover) coverPng = await readCover(id).catch(() => null)
-        for (const n of held.covers) {
-          if (!isCoverName(n) || extras[`covers/${n}.png`]) continue
-          const buf = await readCover(id, n).catch(() => null)
-          if (!buf) continue
-          extras[`covers/${n}.png`] = buf
-          extraNames.push(n)
+        /* which covers exist is the store's answer and never the folder's: the folder is a local mirror, and a remove that failed to unlink leaves a picture the tool says is gone, so reading the folder first ships a deleted cover. the disk still supplies bytes, because a deploy has no writable disk */
+        const held = platformOn() ? await coversOf(id).catch(() => null) : null
+        if (held) {
+          if (held.cover) coverPng = (await readCover(id).catch(() => null)) || png('cover.png')
+          for (const n of held.covers.filter(isCoverName)) {
+            const buf = (await readCover(id, n).catch(() => null)) || diskPng(n)
+            if (!buf) continue
+            extras[`covers/${n}.png`] = buf
+            extraNames.push(n)
+          }
+        } else {
+          // no answer from the store, so the folder is the only record there is
+          coverPng = png('cover.png')
+          try {
+            for (const n of fs
+              .readdirSync(coverDir)
+              .filter((f) => f.toLowerCase().endsWith('.png'))
+              .map((f) => f.slice(0, -4).toLowerCase())
+              .filter(isCoverName)) {
+              const buf = diskPng(n)
+              if (!buf) continue
+              extras[`covers/${n}.png`] = buf
+              extraNames.push(n)
+            }
+          } catch {
+            /* a map with no extra covers, which is nearly all of them */
+          }
         }
         extraNames = [...new Set(extraNames)].sort()
         // the sentence each cover was asked for and the hand it was drawn with, shipped as its own file so map.json's shape does not change and nothing on the game side has to read it
         const notes = await coverNotes(id)
         const notesJson =
           coverPng || extraNames.length ? Buffer.from(JSON.stringify(notes, null, 2)) : null
-        /* SAID IN map.json AS WELL AS SHIPPED, because a reader should be able to ask whether this
-         * map has a cover without fetching a png to find out. */
+        /* said in map.json as well as shipped, because a reader should be able to ask whether this map has a cover without fetching a png to find out */
         const mapJson = {
           ...b.map,
           ...(coverPng ? { cover: true } : {}),
@@ -3131,9 +2907,7 @@ async function route(req, res, p, url) {
       fs.mkdirSync(dir, { recursive: true })
       fs.writeFileSync(path.join(dir, 'scene.png'), buf)
     }
-    /* AND INTO OBJECT STORAGE, which this never did. See savePainting: the
-     * painting was the only part of a map that stayed on whichever machine
-     * loaded it, so a map made here opened on the host with no art at all. */
+    /* and into object storage, which this never did: see savePainting, the painting was the only part of a map that stayed on whichever machine loaded it, so a map made here opened on the host with no art at all */
     let stored = false
     if (platformOn()) {
       try {
@@ -3148,9 +2922,7 @@ async function route(req, res, p, url) {
     return send(res, 200, { url: `/work/${id}/scene.png`, stored })
   }
 
-  // the cut-applied painting alone, staged before any mechanics exist:
-  // scene-cut.png is the deliverable, cut.png is the mask so reopening the
-  // scene picks the cut back up
+  // the cut-applied painting alone, staged before any mechanics exist: scene-cut.png is the deliverable, cut.png is the mask so reopening the scene picks the cut back up
   if (p === '/api/savecut' && req.method === 'POST') {
     const b = await body(req)
     if (!b.image) return send(res, 400, { error: 'no image' })
@@ -3181,8 +2953,7 @@ async function route(req, res, p, url) {
       } catch (e) {
         /* not signed in is an answer, not an outage: falling through would write a stranger's map into scratch, report success and lose it */
         if (e.name === 'NoOwner') return send(res, 401, { error: String(e.message) })
-        // never lose an author's work to a database being unreachable: fall
-        // through and put it on disk, and say so
+        // never lose an author's work to a database being unreachable: fall through and put it on disk, and say so
         console.error('[doc] platform save failed, writing to disk:', e.message)
       }
       if (!diskAllowed()) return send(res, 503, { error: 'platform save failed and disk is off' })
@@ -3191,8 +2962,7 @@ async function route(req, res, p, url) {
     const dir = path.join(WORK, id)
     if (!insideWork(dir)) return send(res, 400, { error: 'bad id' })
     fs.mkdirSync(dir, { recursive: true })
-    // written beside and renamed, because a write killed halfway through leaves
-    // a truncated doc that reads as valid until the moment it is needed
+    // written beside and renamed, because a write killed halfway through leaves a truncated doc that reads as valid until the moment it is needed
     const tmp = path.join(dir, 'doc.json.tmp')
     fs.writeFileSync(tmp, b.doc)
     fs.renameSync(tmp, path.join(dir, 'doc.json'))
@@ -3262,8 +3032,7 @@ async function relayApi(req, res, p) {
   const b = await body(req)
 
   if (p === '/api/relay/claim') {
-    // asking for work IS the heartbeat: a relay that is polling is by
-    // definition alive, so there is no second timer to forget to send
+    // asking for work is the heartbeat: a relay that is polling is by definition alive, so there is no second timer to forget to send
     const caps = Array.isArray(b.caps) && b.caps.length ? b.caps : ['claude']
     await q(
       `update relay_links set last_seen_at = now(), name = coalesce(nullif($2,''), name), capabilities = $3
@@ -3278,9 +3047,7 @@ async function relayApi(req, res, p) {
         console.error('[relay] could not take the lent pixellab key:', e.message)
       }
     }
-    /* One job, taken atomically. `for update skip locked` is what makes two
-     * machines on the same account safe: each grabs a different row instead of
-     * both running the same question and billing it twice. */
+    /* one job, taken atomically: `for update skip locked` is what makes two machines on the same account safe, each grabbing a different row instead of both running the same question and billing it twice */
     const job = await one(
       `update jobs set status = 'claimed', claimed_by = $1, heartbeat_at = now()
        where id = (
@@ -3340,13 +3107,12 @@ async function authApi(req, res, p, url) {
       setSessionCookie(res, token)
       return send(res, 200, { user })
     } catch (e) {
-      // deliberately one message for both "no such email" and "wrong password",
-      // so this cannot be used to find out who has an account here
+      // deliberately one message for both no such email and wrong password, so this cannot be used to find out who has an account here
       return send(res, 401, { error: String(e.message || e) })
     }
   }
 
-  /* the password is asked again because a session proves the browser was left open, not that the person meant this; every failure returns before a byte is touched */
+  /* the password is asked again because being signed in proves the browser was left open, not that the person meant this, and every failure returns before a byte is touched */
   if (p === '/api/maps/delete' && req.method === 'POST') {
     // sessionUser and NOT currentUser: solo mode must never authorise a delete
     const me = await sessionUser(req)
@@ -3366,9 +3132,7 @@ async function authApi(req, res, p, url) {
       return send(res, 401, { error: 'that password is not right' })
     }
 
-    // the bytes first, then the rows. If this dies halfway the map is still
-    // listed and can be asked to delete again, which is recoverable. Rows first
-    // would strand the blobs with nothing pointing at them.
+    // the bytes first, then the rows: if this dies halfway the map is still listed and can be asked to delete again, which is recoverable, where rows first would strand the blobs with nothing pointing at them
     const s = store()
     try {
       await s.delPrefix(`maps/${m.id}/`)
@@ -3402,8 +3166,7 @@ async function authApi(req, res, p, url) {
     return send(res, 200, { user, spend: await spendSince(user.id, 30) })
   }
 
-  /* Which service this account reaches how. The key itself never comes back
-   * out; the account only ever learns whether one is stored. */
+  /* which service this account reaches how. the key itself never comes back out, the account only ever learns whether one is stored */
   if (p === '/api/auth/provider' && req.method === 'POST') {
     const user = await currentUser(req)
     if (!user) return send(res, 401, { error: 'sign in first' })
@@ -3415,9 +3178,7 @@ async function authApi(req, res, p, url) {
     }
   }
 
-  /* Link a machine. The token is shown once and stored only as its hash, the
-   * same rule sessions follow, so losing it means making another rather than
-   * reading it back out of the database. */
+  /* link a machine: the token is shown once and stored only as its hash, the same rule sessions follow, so losing it means making another rather than reading it back out of the database */
   if (p === '/api/auth/relay-token' && req.method === 'POST') {
     const user = await currentUser(req)
     if (!user) return send(res, 401, { error: 'sign in first' })
@@ -3468,31 +3229,14 @@ async function readApi(req, res, p, url) {
   }
   if (req.method !== 'GET') return send(res, 405, { error: 'read only' })
 
-  /* HOW LONG AN ANSWER MAY BE KEPT, decided once here rather than at each route,
-   * because the rule is about the shape of the url and not about the handler.
-   *
-   * A url carrying a version or a content hash names one set of bytes for ever.
-   * Nothing behind it can change without the url changing too, so it is
-   * immutable and a browser that has it never asks again. With no header at all
-   * a host fills one in, and the default is max-age=0 must-revalidate, which
-   * turns every one of those into a conditional request: the bytes are not
-   * re-sent, but the round trip is paid on every file on every open.
-   *
-   * The manifest is the one document that has to move when a map is republished,
-   * so it gets a minute. Long enough that thirty people opening at once ask for
-   * it once between them, short enough that a republish is visible while the
-   * person who pressed it is still standing there. Asked for by version it is
-   * pinned, and a pinned version is immutable like everything else. */
+  /* how long an answer may be kept, decided once here because the rule is about the url shape: a url carrying a version or a content hash is immutable, and with no header a host fills in max-age=0 must-revalidate, paying a round trip on every file on every open. the manifest gets a minute */
   const IMMUTABLE = 'public, max-age=31536000, immutable'
   const pinned = url.searchParams.has('v')
   if (/^\/api\/v1\/maps\/[^/]+\/file\/\d+\//.test(p)) res.setHeader('Cache-Control', IMMUTABLE)
   else if (p.startsWith('/api/v1/ui/') && pinned) res.setHeader('Cache-Control', IMMUTABLE)
   else if (/^\/api\/v1\/maps\/[^/]+$/.test(p)) res.setHeader('Cache-Control', pinned ? IMMUTABLE : 'public, max-age=60')
 
-  /* Every route below reads published rows, and publishing needs a database. On
-   * a clone with none configured this answered a 500 carrying the connection
-   * error, which reads to a polling game as an outage rather than as a tool
-   * nobody has pointed at a database yet. */
+  /* every route below reads published rows, and publishing needs a database: on a clone with none configured this answered a 500 carrying the connection error, which reads to a polling game as an outage rather than as a tool nobody has pointed at a database yet */
   if (!platformOn())
     return send(res, 503, {
       error: 'this MAPVIS has no database configured, so nothing is published here yet',
@@ -3505,18 +3249,9 @@ async function readApi(req, res, p, url) {
     .map((s) => (s ? decodeURIComponent(s) : s))
   const [kind, slugRaw, sub] = parts
 
-  // every map anyone could ask for, which is the registry the game has never
-  // had. Doors name a target by slug and nothing has ever been able to answer
-  // whether that target exists.
+  // every map anyone could ask for, which is the registry the game has never had: doors name a target by slug and nothing has ever been able to answer whether that target exists
   if (kind === 'maps' && !slugRaw) {
-    /* ?mine=1 IS THE AUTHORING LIST AND IT IS SCOPED. The open form below is the game's registry: a
-     * door names a target by slug and the game, which signs in as nobody, has to be able to ask
-     * whether that slug exists. Those maps are already served publicly for it to load, so listing
-     * them is not the leak.
-     *
-     * The leak was the ocean page dressing its island picker out of that same open list, so a brand
-     * new account opened the chart and was offered the hub, the ATC island and every anchor on them.
-     * An author picks from their own maps. */
+    /* ?mine=1 is the authoring list and it is scoped: the open form below is the game's registry, because a door names a target by slug and the game signs in as nobody. those maps are already served publicly, so the leak was not listing them but the ocean page picking islands out of that list */
     const mineOnly = url.searchParams.get('mine') === '1'
     let owner = ''
     if (mineOnly) {
@@ -3579,8 +3314,7 @@ async function readApi(req, res, p, url) {
       label: m.label || '',
       /* which island it belongs to, or a reader can route there and has to fetch the whole composition to say what it arrived at */
       island: m.island || '',
-      // and where the hull puts somebody down once they are ashore, which is an
-      // anchor name inside that island rather than a point on the ocean
+      // and where the hull puts somebody down once they are ashore, which is an anchor name inside that island rather than a point on the ocean
       at: m.at || '',
       /* how close counts as arrived: a hull moves in floats, so an exact-pixel test never fires and dropping r made every island invent its own tolerance */
       r: m.r ?? 0,
@@ -3624,9 +3358,7 @@ async function readApi(req, res, p, url) {
   if (kind !== 'maps' || !slugRaw) return send(res, 404, { error: 'no such endpoint' })
   const slug = safeId(slugRaw)
 
-  /* The listing that makes a member's python fail at author time instead of
-   * silently doing nothing at runtime. Small enough to fetch on every keystroke
-   * in an editor, because it carries names and never geometry-heavy data. */
+  /* the listing that makes a member's python fail at author time instead of silently doing nothing at runtime, small enough to fetch on every keystroke because it carries names and never geometry-heavy data */
   if (sub === 'anchors') {
     const m = await one('select id from maps where slug = $1', [slug])
     if (!m) return send(res, 404, { error: `no map ${slug}` })
@@ -3642,8 +3374,7 @@ async function readApi(req, res, p, url) {
         ...(a.to_slug ? { to: a.to_slug } : {}),
         ...(a.to_anchor ? { toAnchor: a.to_anchor } : {}),
         ...(a.label ? { label: a.label } : {}),
-        // a name derived from an old door's label rather than typed by a human.
-        // Code written against one of these is code written against a guess.
+        // a name derived from an old door's label rather than typed by a human: code written against one of these is code written against a guess
         ...(a.meta?.derived ? { derived: true } : {}),
       })),
     })
@@ -3660,8 +3391,7 @@ async function readApi(req, res, p, url) {
     for (const r of Array.isArray(m.racks) ? m.racks : [])
       racks[r.name] = {
         ...(r.label ? { label: r.label } : {}),
-        // ordered as the author laid them out, which is the order things arrive
-        // in, while `slot` is the address that never moves
+        // ordered as the author laid them out, which is the order things arrive in, while `slot` is the address that never moves
         slots: (Array.isArray(r.slots) ? r.slots : []).map((s) => ({
           slot: Number(s.slot),
           anchor: s.anchor,
@@ -3680,8 +3410,7 @@ async function readApi(req, res, p, url) {
     /* a map that exists and a store that will not answer are different: 503 says come back, 404 says it is not here */
     let map
     try {
-      // a published file never changes, so the second read is a transaction
-      // spent to learn nothing
+      // a published file never changes, so the second read is a transaction spent to learn nothing
       const mk = pub.blob_prefix + 'map.json'
       map = JSON.parse((hotGet(mk) || hotPut(mk, await store().get(mk))).toString('utf8'))
     } catch (e) {
@@ -3693,8 +3422,7 @@ async function readApi(req, res, p, url) {
         published: pub.version,
       })
     }
-    // absolute urls, so the game can point at a hosted MAPVIS without knowing
-    // how any of this is laid out
+    // absolute urls, so the game can point at a hosted MAPVIS without knowing how any of this is laid out
     const base = `/api/v1/maps/${slug}/file/${pub.version}/`
     return send(res, 200, {
       slug,
@@ -3705,17 +3433,14 @@ async function readApi(req, res, p, url) {
     })
   }
 
-  // the bytes themselves. A version prefix never changes, so this is the one
-  // thing in MAPVIS that is safe to cache forever, and caching it forever is
-  // what keeps thirty machines at once off the free tier's read budget.
+  // the bytes themselves: a version prefix never changes, so this is the one thing safe to cache forever, and caching it forever is what keeps thirty machines at once off the free tier's read budget
   if (sub === 'file') {
     const version = Number(parts[3])
     if (!Number.isFinite(version)) return notFound(res)
     const pub = await publishedMap(slug, version)
     if (!pub) return notFound(res)
     const rel = parts.slice(4).join('/')
-    // only what the manifest lists, so this can never be talked into reading a
-    // key outside the version it was asked for
+    // only what the manifest lists, so this can never be talked into reading a key outside the version it was asked for
     if (!rel || !pub.manifest[rel]) return notFound(res)
     let buf
     try {
@@ -3741,8 +3466,7 @@ async function serveWork(res, rel, req) {
 
   if (onDisk) {
     const buf = fs.readFileSync(f)
-    // same revalidation the stored path gives, so a browser holding the current
-    // bytes gets a 304 instead of the file again
+    // same revalidation the stored path gives, so a browser holding the current bytes gets a 304 instead of the file again
     const etag = '"' + crypto.createHash('sha1').update(buf).digest('base64url') + '"'
     res.setHeader('Content-Type', MIME[path.extname(f).toLowerCase()] || 'application/octet-stream')
     res.setHeader('ETag', etag)
@@ -3795,8 +3519,7 @@ function pngSizeBuf(b) {
   }
 }
 
-// this map's own assets: every png in work/<id>/library is a static item,
-// every folder of 0.png..n.png is an animated one
+// this map's own assets: every png in work/<id>/library is a static item, every folder of 0.png..n.png is an animated one
 /* a face is stored the three ways a row is, because a walking character's state is eight headings or the troll faces south the moment it becomes a boulder */
 function statesOf(id, owner) {
   const dir = stateDirOf(id, owner)
@@ -3853,8 +3576,7 @@ function libraryItems(id) {
   const ents = fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))
   for (const ent of ents) {
     if (ent.isDirectory()) {
-      // a folder of ROTATIONS rather than a folder of frames: one view per
-      // direction, named for the heading it faces. dirs.json is what says so.
+      // a folder of rotations rather than a folder of frames: one view per direction, named for the heading it faces, and dirs.json is what says so
       const dj = path.join(dir, ent.name, 'dirs.json')
       if (fs.existsSync(dj)) {
         try {
@@ -3864,12 +3586,9 @@ function libraryItems(id) {
           if (first && first[0]) {
             const rel = String(first[0]).split('/').pop()
             const { w, h } = pngSize(path.join(dir, ent.name, rel))
-            // a walking character has frames inside each heading, so it needs a
-            // rate the same way an animated item does
+            // a walking character has frames inside each heading, so it needs a rate the same way an animated item does
             const fps = Number(meta.fps) > 0 ? Math.round(Number(meta.fps)) : 8
-            // a walker's character id was pinned into dirs.json by the motion
-            // lane long before origin.json existed, and it is the same handle
-            // a second face is made from, so it counts as an origin too
+            // a walker's character id was pinned into dirs.json by the motion lane long before origin.json existed, and it is the same handle a second face is made from, so it counts as an origin too
             const row = { name: ent.name, kind: 'static', dirs, fps, src: first[0], w, h }
             if (meta.characterId) row.canState = true
             items.push(row)
@@ -3911,9 +3630,7 @@ function libraryItems(id) {
   return items
 }
 
-// ---- what the account already owns --------------------------------------
-
-// seven calls for 700 objects is too many per keystroke, and the list only changes on a generation, so five minutes and a refresh flag
+// what the account already owns: seven calls for 700 objects is too many per keystroke, and the list only changes on a generation, so five minutes and a refresh flag
 const ACCT_TTL = 5 * 60 * 1000
 let acct = { at: 0, list: [] }
 
@@ -3924,8 +3641,7 @@ async function accountObjects(refresh) {
     .filter((o) => o && o.id && o.preview_url && String(o.status || 'completed') === 'completed')
     .map((o) => ({
       id: String(o.id),
-      // pixellab cuts its own names at 30 characters, so a nameless one falls
-      // back to the front of its prompt rather than showing an id
+      // pixellab cuts its own names at 30 characters, so a nameless one falls back to the front of its prompt rather than showing an id
       name: String(o.name || o.prompt || 'object').slice(0, 40),
       prompt: String(o.prompt || '').slice(0, 400),
       w: Number((o.size || {}).width) || 0,
@@ -3946,9 +3662,7 @@ async function accountCharacters(refresh) {
   return list
 }
 
-// where a listed object's png actually lives. A 1-direction object has every
-// rotation url null and the file under storage_urls.unknown; a 4 or 8
-// direction one has south. Anything under storage_urls will do as a last try.
+// where a listed object's png actually lives: a 1-direction object has every rotation url null and the file under storage_urls.unknown, a 4 or 8 direction one has south, and anything under storage_urls will do as a last try
 function objectImageURL(d) {
   const st = d && typeof d.storage_urls === 'object' && d.storage_urls ? d.storage_urls : {}
   const rot = d && typeof d.rotation_urls === 'object' && d.rotation_urls ? d.rotation_urls : {}
@@ -3957,9 +3671,7 @@ function objectImageURL(d) {
   return ''
 }
 
-// An asset url the editor holds (/work/<id>/library/x.png, a reopened
-// bundle's /work/<id>/assets/x.png, or a legacy /library/x.png) resolved to a
-// real file, held inside work/ or public/library so no url can walk out.
+// an asset url the editor holds (/work/<id>/library/x.png, a reopened bundle's /work/<id>/assets/x.png, or a legacy /library/x.png) resolved to a real file, held inside work/ or public/library so no url can walk out
 function resolveAssetFile(u, sceneDir) {
   const parts = String(u)
     .split('?')[0]
@@ -3995,9 +3707,7 @@ async function saveRotations(id, detail, wantName) {
   /* the database answers too: a disk-only suffix walk starts empty on a host, so every import took the base name and wrote over the row under it */
   const name = await freeLibraryName(id, base)
   const folder = path.join(dir, name)
-  // the folder is claimed the moment the name is picked, the way saveFrames has
-  // always claimed its own. Two of these running at once could otherwise both
-  // look, both find nothing, and both take it.
+  // the folder is claimed the moment the name is picked, the way saveFrames has always claimed its own, because two of these running at once could both look, both find nothing, and both take it
   fs.mkdirSync(folder, { recursive: true })
   return { name, dir: folder, urls: got.map((k) => [k, rot[k]]) }
 }
@@ -4009,9 +3719,7 @@ async function saveFrames(id, byDir, wantName, fps, characterId) {
   const dir = libDirOf(id)
   fs.mkdirSync(dir, { recursive: true })
   const base = cleanName(wantName || 'someone')
-  // disk for what is mid-request, the database for what exists at all. See the
-  // note on saveRotations: the disk-only walk overwrote a live library row on a
-  // host, and a character takes its objects down with it.
+  // disk for what is mid-request, the database for what exists at all. see the note on saveRotations: the disk-only walk overwrote a live library row on a host, and a character takes its objects down with it
   const name = await freeLibraryName(id, base)
   const plan = { name, dir: path.join(dir, name), urls: keys.map((k) => [k, byDir[k]]), frames: true, fps, characterId }
   fs.mkdirSync(plan.dir, { recursive: true })
@@ -4030,9 +3738,7 @@ async function writeRotations(id, plan) {
       const buf = await pixellab.fetchPNG(urls[i])
       const sk = pngSizeBuf(buf)
       if (!(sk.w > 0)) continue
-      // a still set keeps <heading>.png, the name the object import has always
-      // written. A walking one carries the frame index, which is the flat name
-      // the export's folder handling and the game already read.
+      // a still set keeps <heading>.png, the name the object import has always written, while a walking one carries the frame index, which is the flat name the export's folder handling and the game already read
       const fname = plan.frames ? `${k}-${i}.png` : `${k}.png`
       fs.writeFileSync(path.join(plan.dir, fname), buf)
       rel.push(`/work/${id}/library/${plan.name}/${fname}`)
@@ -4070,13 +3776,7 @@ async function ensureSidecars(id, name) {
   const isFolder = fs.existsSync(folder) && fs.statSync(folder).isDirectory()
   const dj = path.join(folder, 'dirs.json')
   const ej = path.join(folder, 'effect.json')
-  /* A STILL NEEDS THIS TOO, for the origin. It used to return here unless the item was a folder,
-   * which is exactly why a second face works on a sprite and is refused on an object: a character's
-   * rig id lives inside dirs.json, which IS a blob and comes back on a hydrate, while an object's
-   * drawing id lives only in work/<id>/origin.json, which is never a blob and never comes back. The
-   * listing reads the id out of the database and lights the becomes button with it, then the route
-   * reads the file, finds nothing, and answers that nothing on record drew this. Twelve rows on the
-   * live database are in that state. */
+  /* a still needs this too, for the origin: a rig id lives in dirs.json, a blob that comes back on a hydrate, while an object's drawing id lives only in work/<id>/origin.json, which is never a blob, so a second face worked on a sprite and was refused on an object. twelve rows are in that state */
   if (isFolder && fs.existsSync(dj) && fs.existsSync(ej) && originHas(id, name)) return
   let it = null
   try {
@@ -4086,9 +3786,7 @@ async function ensureSidecars(id, name) {
     return
   }
   if (!it) return
-  /* the row's own copy, written back where readOrigin will find it. noteOrigin merges over whatever
-   * is on disk, so without this a later face write flattens the drawing id away entirely: it merges
-   * {faces} over an empty file and pushItem upserts that over the column. */
+  /* the row's own copy, written back where readOrigin will find it: noteOrigin merges over whatever is on disk, so without this a later face write merges faces over an empty file and pushItem upserts that over the column, flattening the drawing id away */
   if (it.origin && typeof it.origin === 'object' && !originHas(id, name)) noteOrigin(id, name, it.origin)
   if (!isFolder) return
   if (!fs.existsSync(dj) && it.dirs) {
@@ -4115,8 +3813,7 @@ function readLibItem(id, name) {
     const heads = dirs ? Object.keys(dirs).filter((k) => Array.isArray(dirs[k]) && dirs[k].length) : []
     if (heads.length) {
       const fps = Number(meta.fps) > 0 ? Math.round(Number(meta.fps)) : 8
-      // a view set is kind static whether it moves or not, so the only test for
-      // "does this already play" is whether a heading holds more than one frame
+      // a view set is kind static whether it moves or not, so the only test for whether this already plays is whether a heading holds more than one frame
       return { id, name, shape: 'views', folder, dirs, heads, meta, fps, plays: dirs[heads[0]].length > 1 }
     }
     const frames = []
@@ -4131,8 +3828,7 @@ function readLibItem(id, name) {
   return null
 }
 
-// 4 to 16 and even, the bounds /v2/animate-character enforces. The single-image
-// animator is happy anywhere in that range too, so one clamp serves both.
+// 4 to 16 and even, the bounds /v2/animate-character enforces. the single-image animator is happy anywhere in that range too, so one clamp serves both
 const evenFrames = (v) => {
   const n = Math.max(4, Math.min(16, Math.round(Number(v) || 8)))
   return n % 2 ? n + 1 : n
@@ -4146,9 +3842,7 @@ const priceOf = (w, h, frames, budget) => Math.max(1, Math.ceil((w * h * frames)
 /* trimmed art has no margin, so a rod being cast comes back clipped at the frame edge; 40 percent is pixellab's own headroom, a 48px character on a 68px canvas */
 const ANIM_PAD = 0.4
 
-// the size the animator is actually handed, and whether it is worth padding.
-// Padding that pushes the take into a second generation is not worth the
-// headroom, so the price the button showed stays the price.
+// the size the animator is actually handed, and whether it is worth padding: padding that pushes the take into a second generation is not worth the headroom, so the price the button showed stays the price
 function padPlan(w, h, frames) {
   const pw = w + Math.round(w * ANIM_PAD) * 2
   const ph = h + Math.round(h * ANIM_PAD) * 2
@@ -4221,17 +3915,14 @@ async function animateAsk(it, ask, id, job) {
       note: String(o.note || '').replace(/\s+/g, ' ').trim().slice(0, 240),
     }
   } catch (e) {
-    // a stop is the person changing their mind and travels up; anything else is
-    // the planner, and the raw words are a good enough answer to route on
+    // a stop is the person changing their mind and travels up; anything else is the planner, and the raw words are a good enough answer to route on
     if (String((e && e.message) || e) === 'stopped') throw e
     return fb
   }
 }
 
 /* the motion words are asked once and only the price is re-derived on confirm, so neither the client nor the router can talk it up or down */
-/* WHAT A COLLECTION NEEDS AND NOTHING MORE: which rig drew this figure and which headings it owns.
- * Priced at nothing, because a collection cannot spend: it reads the account and takes frames that
- * were bought by a press that has already happened. */
+/* what a collection needs and nothing more: which rig drew this figure and which headings it owns. priced at nothing, because a collection cannot spend, it reads the account and takes frames bought by a press that has already happened */
 async function collectPlan(it, b) {
   const who = await characterFor(it, b.characterId)
   if (!who.id) return { name: it.name, shape: it.shape, path: 'blocked', price: 0, why: who.why }
@@ -4261,9 +3952,7 @@ async function animatePlan(it, ask, id, job, b) {
     : await animateAsk(it, ask, id, job)
   const base = { ...said, name: it.name, shape: it.shape }
 
-  // travel is free and neither generator can do it, so it is named and handed
-  // back rather than charged for. The client opens the effect box on this item
-  // instead, with its own sprite in the recipe's hands.
+  // travel is free and neither generator can do it, so it is named and handed back rather than charged for, and the client opens the effect box on this item instead, with its own sprite in the recipe's hands
   if (said.move)
     return {
       ...base,
@@ -4328,8 +4017,7 @@ async function characterFor(it, given) {
     h: (row.size && Number(row.size.height)) || 48,
   })
   if (pinned) {
-    // a character deleted on their side would 422 after the price had been
-    // shown, and finding that out here costs nothing
+    // a character deleted on their side would 422 after the price had been shown, and finding that out here costs nothing
     const row = list.find((c) => String(c.id) === pinned)
     if (row) return { ...sized(row), from: looksId(given) ? 'asked' : 'dirs' }
     return { why: 'the character this was drawn from is no longer on the account' }
@@ -4340,22 +4028,18 @@ async function characterFor(it, given) {
     return { why: 'nothing on record says which character on the account drew this, so its headings cannot be animated together' }
   const want = String(mine[0].prompt)
   let hits = list.filter((c) => String(c.name || '') === want)
-  // asks.json slices the description at 1200 characters and their side keeps it
-  // whole, so a long one only ever agrees at its start
+  // asks.json slices the description at 1200 characters and their side keeps it whole, so a long one only ever agrees at its start
   if (!hits.length) hits = list.filter((c) => String(c.name || '').startsWith(want) || want.startsWith(String(c.name || '')))
   if (!hits.length) return { why: 'no character on the account matches what this one was asked for' }
   if (hits.length === 1) return { ...sized(hits[0]), from: 'asks' }
-  /* Two takes of one description are two account rows with the same name, and
-   * the name alone cannot tell them apart. Both lists run newest first, so the
-   * nth folder made from these words is the nth row by age. */
+  /* two takes of one description are two account rows with the same name, and the name alone cannot tell them apart, but both lists run newest first, so the nth folder made from these words is the nth row by age */
   const same = asks.filter((a) => String(a.prompt) === want)
   const rank = same.findIndex((a) => cleanName(a.name || '') === it.name)
   const byAge = [...hits].sort((a, c) => String(c.created_at || '').localeCompare(String(a.created_at || '')))
   return { ...sized(byAge[rank > 0 ? Math.min(rank, byAge.length - 1) : 0]), from: 'asks' }
 }
 
-// the id, written down where the art lives, so the match above runs once. Free
-// and idempotent, and it happens on the price read, before anything is spent.
+// the id, written down where the art lives, so the match above runs once. free and idempotent, and it happens on the price read, before anything is spent
 function noteCharacterId(it, cid) {
   if (!it || it.shape !== 'views' || !cid || (it.meta && it.meta.characterId === cid)) return
   try {
@@ -4382,18 +4066,14 @@ async function runCharacterMotion(plan, seed, gate, halt, receipt) {
   let d = await raceStop(gate, pixellab.characterDetail(plan.characterId))
   const before = frameSet(d)
   const rot = d.rotation_urls && typeof d.rotation_urls === 'object' ? d.rotation_urls : {}
-  // only headings the character actually has: naming one it does not is a
-  // generation asked for and thrown away
+  // only headings the character actually has: naming one it does not is a generation asked for and thrown away
   /* usable and how many to animate are different questions: asking for three headings trips the four-rotation guard and fails the whole job */
   const has = Object.keys(rot).filter((k) => typeof rot[k] === 'string' && rot[k])
   if (has.length < 4) throw new Error('the character on the account has fewer than four headings, so nothing was asked for')
-  // only headings it actually has: naming one it does not is a generation asked
-  // for and thrown away
+  // only headings it actually has, because naming one it does not is a generation bought and thrown away
   const heads = plan.headings.filter((k) => has.includes(k))
   if (!heads.length) throw new Error('none of the headings asked for are on this character')
-  /* A name nothing else on it carries, so the frames that come back are
-   * unmistakably the ones just paid for. Reusing a name leaves two groups
-   * called the same thing and the reader takes whichever it meets first. */
+  /* a group name nothing else on it carries, so the frames that come back are unmistakably the ones just paid for; a reused name leaves two groups called the same thing and the reader takes whichever it meets first */
   const group = 'motion-' + Date.now().toString(36)
   halt()
   const h = await pixellab.animateCharacterAction({
@@ -4404,20 +4084,10 @@ async function runCharacterMotion(plan, seed, gate, halt, receipt) {
     name: group,
     seed,
   })
-  /* EVERY GENERATION IS BOUGHT FROM HERE. Whatever goes wrong below, the money
-   * is spent, so no path out of this function may end without first looking on
-   * the account for frames that are already there.
-   *
-   * AND THE RECEIPT IS WRITTEN HERE, not where the wait gives up. It used to be written only in the
-   * Pending catch, and Pending is thrown only on the host, so on a laptop nothing was ever recorded:
-   * a browser that hit its deadline, a closed tab, a crash or a dev server restarted under the author
-   * left eight bought generations with nothing naming them, and the next press bought eight more.
-   * That is the case this whole cluster exists for and it was still open. The line is between the
-   * money leaving and anything that can fail. */
+  /* every generation is bought from here, so no path out may skip looking for frames already on the account, and the receipt is written before anything that can fail: written only in the Pending catch it never ran off the host, and a closed tab left eight bought generations unnamed */
   if (receipt) await receipt(group)
   const failures = []
-  // the wait is told what was already there for the same reason: without it, a
-  // character that already moves reports finished on the first tick
+  // the wait is told what was already there for the same reason: without it a character that already moves reports finished on the first tick
   try {
     d = await raceStop(
       gate,
@@ -4428,17 +4098,11 @@ async function runCharacterMotion(plan, seed, gate, halt, receipt) {
       }),
     )
   } catch (e) {
-    // out of budget on the host is pending, not failure: the frames are paid
-    // for and will be there when the client asks again for this group
+    // out of budget on the host is pending, not failure: the frames are paid for and will be there when the client asks again for this group
     if (onHost() && /timed out/.test(String((e && e.message) || e))) throw new Pending(group)
     // a stop is the one case the person asked for and is left as it was
     if (String((e && e.message) || e) === 'stopped') throw e
-    /* anything else and the generations are still bought, so look before giving
-     * up. newGroupDirs and not recoverCharacterMotion: the latter refuses a
-     * named group unless EVERY wanted heading moved, which is exactly the shape
-     * of a run where one of eight failed. This reads the same detail the success
-     * path reads, takes only frames this job produced, fills the heading that
-     * failed with its standing rotation and refuses below four. */
+    /* anything else and the generations are still bought, so look before giving up: newGroupDirs, because recoverCharacterMotion refuses a named group unless every wanted heading moved, exactly how a run with one of eight failed looks. it takes only this job frames and refuses below four */
     const late = await pixellab.characterDetail(plan.characterId).catch(() => null)
     const salvaged = late && newGroupDirs(late, group, before, heads, rot)
     if (salvaged) {
@@ -4461,8 +4125,7 @@ async function runCharacterMotion(plan, seed, gate, halt, receipt) {
     const found = await recoverCharacterMotion(plan)
     if (found) return found.byDir
   }
-  // refusing here costs the generations and keeps the item. Guessing writes the
-  // PREVIOUS motion over it and calls the result the new one.
+  // refusing here costs the generations and keeps the item, because guessing writes the previous motion over it and calls that the new one
   if (!byDir) throw new Error('the frames that came back could not be told from the motion it already had, so nothing was replaced')
   return withStills(byDir, rot)
 }
@@ -4487,12 +4150,7 @@ async function recoverCharacterMotion(plan, group = '') {
   /* the group that was asked for, when one was: best would hand back a motion the character already had and leave the one just paid for unread */
   const named = (g) =>
     [g.display_name, g.animation_type, g.animation_name].some((n) => String(n || '').toLowerCase() === group.toLowerCase())
-  /* AND FALL BACK OFF THE NAME WHEN IT FINDS NOTHING, because the name is measured not to work: the
-   * note at runCharacterMotion's own fallback says the strict reading failed every time over eleven
-   * animations and the unnamed reading succeeded every time. pixellab does not always carry the
-   * display name back on the detail. Holding to the name means collecting nothing and charging again,
-   * which is the failure this whole path exists to stop, so the name is a preference and not a
-   * condition. What keeps that safe is the floor below: a group has to genuinely MOVE to be taken. */
+  /* fall back off the name when it finds nothing: the strict reading failed every time over eleven animations because pixellab does not always carry the display name back on the detail, so the name is a preference and the floor below, that a group has to genuinely move, is what keeps it safe */
   const byName = group ? groups.filter(named) : groups
   const pool = byName.length ? byName : groups
   let best = null
@@ -4508,19 +4166,7 @@ async function recoverCharacterMotion(plan, group = '') {
     if (Object.keys(byDir).length && (!best || hit > best.hit))
       best = { byDir: withStills(byDir, rot), hit, moves: Object.keys(byDir).length, name: g.display_name || g.animation_type }
   }
-  /* withStills makes a rotations-only group look like a complete eight, and recovering that wrote
-   * stills over the fishmonger's art and called it success, which is why this refuses rather than
-   * padding whatever it finds. But it used to refuse unless EVERY wanted heading moved, and that is
-   * too strict by exactly the shape a real run fails in: one of eight jobs fails, seven draw, and on
-   * the host this branch IS the normal collection path because a five minute fan-out cannot fit in a
-   * function's budget. So all eight paid generations were abandoned, forever, and the client polled
-   * for twenty minutes and was told nothing.
-   *
-   * It holds to a floor instead, the same idea the throwing path's newGroupDirs holds to: most of
-   * what was asked for has to genuinely MOVE, counted before a single still is filled in. That keeps
-   * the rotations-only trap shut, because such a group contributes no moving heading at all and
-   * never becomes `best`. The headings that did not draw keep their standing rotation and the route
-   * reports them by name, so a statue is said out loud rather than found on the map a week later. */
+  /* most of the wanted headings have to genuinely move, counted before any still is filled in: padding whatever it finds wrote stills over real art and called it success, and demanding all eight threw away seven paid generations whenever one job failed; the rest keep their rotation */
   const floor = Math.max(1, Math.ceil(wanted.size / 2))
   if (best && best.hit < floor) return null
   return best && best.moves ? best : null
@@ -4542,9 +4188,7 @@ function newGroupDirs(detail, group, before, heads, rot) {
     }
   /* nothing new anywhere means the motion never landed: falling through to the rotations would write statues over a walk cycle and call it a success */
   if (!Object.keys(byDir).length) return null
-  // a heading the motion missed keeps its still rotation rather than vanishing.
-  // It stands facing the right way while the others move, which is a smaller
-  // fault than a heading that is simply gone.
+  // a heading the motion missed keeps its still rotation rather than vanishing, because standing facing the right way while the others move is a smaller fault than a heading that is simply gone
   for (const k of heads) if (!byDir[k] && rot[k]) byDir[k] = [rot[k]]
   return Object.keys(byDir).length >= 4 ? byDir : null
 }
@@ -4565,8 +4209,7 @@ async function stageViews(id, name, byDir, fps) {
       const buf = await pixellab.fetchPNG(urls[i])
       const sz = pngSizeBuf(buf)
       if (!(sz.w > 0)) continue
-      // the same names writeRotations writes, so an item that gains frames per
-      // heading renames none of the files it already had
+      // the same names writeRotations writes, so an item that gains frames per heading renames none of the files it already had
       const f = `${k}-${i}.png`
       fs.writeFileSync(path.join(stage, f), buf)
       rel.push(`/work/${id}/library/${name}/${f}`)
@@ -4581,9 +4224,7 @@ async function stageViews(id, name, byDir, fps) {
     fs.rmSync(stage, { recursive: true, force: true })
     return null
   }
-  // the same one-box trim a generation gets. pixellab pads the canvas about 40%
-  // for the motion to swing through and that margin is what makes a figure
-  // float above the ground.
+  // the same one-box trim a generation gets, because pixellab pads the canvas about 40% for the motion to swing through and that margin is what makes a figure float above the ground
   const box = trimSet(stage, dirs)
   return { stage, dirs, fps, w: box ? box.w : w0, h: box ? box.h : h0 }
 }
@@ -4597,9 +4238,7 @@ function stageFrames(id, name, frames) {
     fs.writeFileSync(path.join(stage, i + '.png'), Buffer.from(frames[i], 'base64'))
     rel.push(`/work/${id}/library/${name}/${i}.png`)
   }
-  // the padding put on for the swing comes back off, against ONE box for the
-  // whole loop. A box per frame would move the sprite a pixel each frame and
-  // the thing would jitter where it stands.
+  // the padding put on for the swing comes back off, against one box for the whole loop, because a box per frame moves the sprite a pixel each frame and the thing jitters where it stands
   const box = trimSet(stage, { all: rel })
   const sz = box || pngSize(path.join(stage, '0.png'))
   return { stage, frames: rel, w: sz.w, h: sz.h }
@@ -4608,19 +4247,8 @@ function stageFrames(id, name, frames) {
 /* the first slot is written once and never again: rolling one slot forward left .prev holding a 1291-byte middle step instead of the 13073-byte original */
 const PREV_MAX = 8
 
-// the path to write this backup to: the plain name while it is free, then
-// -2, -3 and up. Answers null only if the folder itself cannot be made.
-/* THE COPIES .prev HOLDS FOR ONE NAME, and which of them is newest. prevPath writes the first
- * copy under the plain name and numbers every one after it, so these two are the only way to
- * read that back. Shared rather than copied because the undo and the animation switch have to
- * agree about which version is newest, and a pattern written out twice is a pattern that
- * drifts once.
- *
- * Built with a real escape and NOT out of a plain string: inside quotes a lone backslash is
- * dropped, so the pattern read `<name>-d+` and matched the LETTER d, which left the undo able
- * to reach the newest copy and no further back. cleanName leaves only a-z, 0-9 and dashes, so
- * the name itself needs no escaping.
- */
+// the path to write this backup to: the plain name while it is free, then -2, -3 and up, and null only if the folder itself cannot be made
+/* the copies .prev holds for one name and which is newest, shared so undo and the animation switch agree. built with a real escape, not a plain string: a dropped backslash left the pattern reading `<name>-d+`, matching the letter d, so undo reached no further back than the newest copy */
 const numberedCopy = (name) => new RegExp('^' + name + '-\\d+(\\.png)?$')
 const prevRank = (n) => {
   const m = n.match(/-(\d+)(\.png)?$/)
@@ -4683,13 +4311,7 @@ async function swapFolder(id, name, stage, meta, opts) {
   const folder = path.join(libDirOf(id), name)
   /* .prev is added to and never emptied first: clearing it before refilling means re-animating a figure twice deletes the original eight headings outright */
   await keepPrevDir(id, folder, name)
-  /* THE WRITTEN RECIPE GOES BEFORE THE PUSH AND AFTER THE BACKUP. Its callers deleted effect.json
-   * afterwards, but this function ends by pushing, and the push reads effect.json off the folder and
-   * writes is_effect true with the old rule and the old rate into the row. So re-animating an effect
-   * answered "animated, fps 6, no effect" and then came back after a reload as an effect again,
-   * carrying a recipe that did not draw those pixels: one press of save in that panel re-rendered the
-   * old rule over the generation just bought. The backup above still holds it, so the old effect is
-   * recoverable. */
+  /* the written recipe goes before the push and after the backup: the push reads effect.json and writes is_effect with the old rule and rate, so re-animating an effect came back after a reload as an effect again and one save re-rendered the old rule over the generation just bought */
   if (opts && opts.dropEffect) fs.rmSync(path.join(folder, 'effect.json'), { force: true })
   fs.mkdirSync(folder, { recursive: true })
   const keep = new Set()
@@ -4738,8 +4360,7 @@ function characterDirs(detail, want) {
 /* stopping is not undoing: what is asked for is paid for, so whatever landed is written and a stop buys the next generation, never the last one back */
 const STOPPED_STILL = 'stopped before the motion, so it lands still'
 
-// the second half of a two-spend route, or null if a stop landed. Anything
-// other than a stop is a real fault and travels up.
+// the second half of a two-spend route, or null if a stop landed, because anything other than a stop is a real fault and travels up
 async function stillOnStop(gate, start) {
   if (gate && gate.off) return null
   try {
@@ -4750,9 +4371,7 @@ async function stillOnStop(gate, start) {
   }
 }
 
-/* one png into this map's library under a name nothing else has taken. Written
- * once because three paths land here: the still answer of both object routes,
- * and the base of an animated one whose motion half never happened. */
+/* one png into this map's library under a name nothing else has taken, written once because three paths land here: the still answer of both object routes, and the base of an animated one whose motion half never happened */
 
 /* a name free in both places: on a host scratch starts empty every request, so a folder-only walk picked the base name and overwrote the stored item */
 async function freeLibraryName(id, base) {
@@ -4781,36 +4400,16 @@ async function saveStatic(id, b64, wantName, ask, prompt, objectId) {
   const size = pngSize(path.join(dir, file))
   const name = file.replace(/\.png$/i, '')
   noteAsk(id, name, ask, prompt)
-  // where these pixels came from, so this thing can be given another face
-  // later without anybody guessing which of 769 account rows drew it
+  // where these pixels came from, so this thing can be given another face later without anybody guessing which of 769 account rows drew it
   if (objectId) noteOrigin(id, name, { objectId })
-  // disk was the scratch pad; the store is the copy that survives this machine.
-  // Awaited rather than fired off, so the response never claims a thing exists
-  // before its bytes are durable.
+  // disk was the scratch pad and the store is the copy that survives this machine, awaited rather than fired off so the response never claims a thing exists before its bytes are durable
   await pushLibrary(id, name)
-  /* through the listing, so a just-generated object comes back with canState set and its becomes
-   * button live. It used to be greyed out for the whole session with a tooltip claiming nothing on
-   * record drew it, one line after the id that drew it was written down. */
+  /* through the listing, so a just-generated object comes back with canState set and its becomes button live rather than greyed out until a reload with a tooltip claiming nothing on record drew it */
   return libRow(id, name, { name, kind: 'static', src: `/work/${id}/library/${file}`, w: size.w, h: size.h })
 }
 
-// Every library write ends at one of four functions. This is what each of them
-// calls when it is done, and it is why generation still appears in a listing
-// that now comes from the database rather than from a directory walk.
-/* THE ROW AS EVERY OTHER READER SEES IT. A route that answers with an object it assembled itself
- * drops whatever it did not think to include, and that is not a cosmetic loss: the client fetches
- * the library exactly once a session and then swaps this answer into its state, so an omission is
- * gone until the page is reloaded.
- *
- * That is the whole of "it works after F5 and not before". A crop on a troll dropped `states`, so the
- * face list emptied and a life round naming "boulder" silently drew picture 0. It dropped `canState`,
- * so the one-generation becomes button went dead with a tooltip saying nothing on record drew this,
- * which was untrue. It dropped `effect`, so the pencil vanished from an effect that still had its
- * recipe on disk. Animating a character dropped both. Generating anything dropped canState.
- *
- * The listing is the authority on what a row is, so ask it rather than guessing. What the route built
- * is kept as a floor: if the listing cannot answer at all the route still says something, because
- * answering nothing after a spend is worse than answering thinly. */
+// every library write ends at one of four functions and each of them calls this when it is done, which is why a generation still appears in a listing that comes from the database rather than from a directory walk
+/* the row as every other reader sees it: the client fetches the library once per load, so a route that assembles its own object loses whatever it forgot until a reload. dropping `states` emptied the face list, `canState` killed the becomes button, `effect` hid the pencil */
 async function libRow(id, name, made) {
   try {
     const rows = platformOn() ? await libraryOf(id) : libraryItems(id)
@@ -4826,8 +4425,7 @@ async function pushLibrary(id, name) {
   try {
     await pushItem(id, name, path.join(WORK, safeId(id)))
   } catch (e) {
-    // the bytes are on disk and import-work.mjs reconciles a whole map, so a
-    // failure here is recoverable rather than lost work
+    // the bytes are on disk and import-work.mjs reconciles a whole map, so a failure here is recoverable rather than lost work
     console.error(`[library] could not push ${id}/${name} to the store:`, e.message)
   }
 }
@@ -4844,8 +4442,7 @@ function readOrigin(id) {
   }
 }
 
-/* whether the drawing id for this row is already on disk, so the seed above runs once rather than
- * on every request */
+/* whether the drawing id for this row is already on disk, so the seed above runs once rather than on every request */
 function originHas(id, name) {
   try {
     const o = readOrigin(id)[name]
@@ -4894,8 +4491,7 @@ function headingsOf(detail, n) {
   return got.length >= n ? got.slice(0, n) : n === 4 ? DIRS4 : DIRS8
 }
 
-// the alpha a pixel needs to count as drawn. The same floor the client's own
-// trim uses, src/core/debase.ts:29, so the two agree about where a sprite ends
+// the alpha a pixel needs to count as drawn, the same floor the client's trim uses at src/core/debase.ts:29, so the two agree about where a sprite ends
 const ALPHA_MIN = 20
 
 /* one box for the whole set, because a box per frame moves the feet and the walk bobs; the 40 percent pixellab margin is why an imported figure floats */
@@ -4928,8 +4524,7 @@ function trimSet(dir, dirs) {
   }
   if (x1 < x0 || y1 < y0) return null
   const first = imgs[0][1]
-  // frames of different sizes share no box, and a set already tight has nothing
-  // to take; either way it is left as it is
+  // frames of different sizes share no box, and a set already tight has nothing to take; either way it is left as it is
   if (imgs.some(([, im]) => im.w !== first.w || im.h !== first.h)) return null
   const w = x1 - x0 + 1
   const h = y1 - y0 + 1
@@ -4978,8 +4573,7 @@ const slugName = (s) =>
     .slice(0, 4)
     .join('-') || 'asset'
 
-// a caller-pinned library name: sanitized like slugName but not word-capped,
-// so a batch suffix like -3 survives
+// a caller-pinned library name: sanitized like slugName but not word-capped, so a batch suffix like -3 survives
 const cleanName = (s) =>
   String(s)
     .toLowerCase()
@@ -4987,28 +4581,22 @@ const cleanName = (s) =>
     .replace(/^-|-$/g, '')
     .slice(0, 48) || 'asset'
 
-// a caller-pinned seed; pixellab treats 0 as random, so only a positive
-// integer is passed through
+// a caller-pinned seed; pixellab treats 0 as random, so only a positive integer is passed through
 const seedOf = (b) => {
   const n = Math.floor(Number(b.seed))
   return isFinite(n) && n > 0 ? n : undefined
 }
 
-// the generator draws every noun it hears, so the ask becomes one drawable thing; the wider judging job was tried and killed, and a failure passes the ask through
-
-// at or above this the map's style clause is appended and the palette lock
-// opens strong; below it the ask goes out bare and the lock opens at zero
+// the generator draws every noun it hears, so the ask becomes one drawable thing and a failure passes the ask through; at or above this the map's style clause is appended and the palette lock opens strong, below it the ask goes out bare and the lock opens at zero
 const BELONGS_MIN = 0.5
 
-// the whole assembled prompt is what gets sent and what the button shows, so
-// the cap is the endpoint's own (2000 chars) with room to spare
+// the whole assembled prompt is what gets sent and what the button shows, so the cap is the endpoint's own 2000 chars with room to spare
 const PROMPT_MAX = 1200
 
 /* at 600 an 817-character ask naming a crab at character 735 reached the model with the word missing and planned one 0 times of 3; at 1200 it is 3 of 3 */
 const ASK_MAX = 1200
 
-// how much of an object plan's one printed line survives. See planMake, where
-// the measurement that moved it off 240 is written down.
+// how much of an object plan's one printed line survives; planMake carries the measurement that moved it off 240
 const NOTE_MAX = 400
 
 /* cleanLife owns the ceiling and this matches it: four numbers that disagree drop a seventh state on the way into the editor with nobody told */
@@ -5076,9 +4664,7 @@ const NO_WALK = new RegExp(
   'i',
 )
 
-// An empty ask is not evidence that it walks, so it does not get a walk. The
-// only caller that could send one is an old client posting straight at
-// character-gen, and written motion is the same price.
+// an empty ask is not evidence that it walks, so it gets no walk: the only caller that could send one is an old client posting straight at character-gen, and written motion is the same price
 const walksOnFeet = (ask) => {
   const s = String(ask || '').trim()
   return !!s && !NO_WALK.test(s)
@@ -5089,31 +4675,20 @@ const WALK_WORDS = /\b(walk|walks|walking|stride|strides|striding|step|steps|ste
 
 /* written motion defaults to south only in the live schema, so forgetting to name the headings comes back facing one way with seven budgets unspent */
 const DIRS8 = ['south', 'south-east', 'east', 'north-east', 'north', 'north-west', 'west', 'south-west']
-// the four a four-direction body has. Nothing in the ui asks for one, but the
-// route accepts nDirections 4 and a written motion still has to name them.
+// the four a four-direction body has: nothing in the ui asks for one, but the route accepts nDirections 4 and a written motion still has to name them
 const DIRS4 = ['south', 'east', 'north', 'west']
 
 /* a price, not a taste: written motion is one generation per direction at 96 and two above it, and a placement's sx/sy scales for free */
 const SPRITE_MIN = 32
 const SPRITE_MAX = 96
 
-// standard draws in two to five minutes and the motion is eight directions
-// behind it, so these are long on purpose. The stop button is the way out, not
-// a clock.
+// standard draws in two to five minutes with eight directions of motion behind it, so these waits are long on purpose and the stop button is the way out, not a clock
 const CHAR_WAIT = 600000
 const WALK_WAIT = 900000
 /* a serverless function is cut at 300s and an eight-way animation takes five to fifteen minutes, so waiting inside the request loses every generation it bought to a press that did nothing */
 const HOST_WAIT = 230000
 const onHost = () => !!(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME)
-/* WHAT WAS PAID FOR AND NOT YET COLLECTED, kept where a later request can find it. On the host a
- * fan-out cannot finish inside one function, so the route answers pending with the group name it
- * started, and until now that name lived only in the browser's poll loop: a reload, a closed tab or
- * a poll that ran out lost it, and the only way forward was to press again and buy all eight a
- * second time. Measured on the account before this was written: four eight-way runs in thirty-one
- * minutes, thirty-two generations, every job completed, not one collected.
- *
- * A blob and not a file, because work/ is empty on every request there, and not a column because
- * this is scratch that wants to disappear the moment it is used. */
+/* what was paid for and not yet collected, so a later request can find it: a host fan-out cannot finish in one function and the route answers pending with the group name, and while that name lived only in the browser poll loop, thirty-two generations completed and none were collected */
 const pendingKey = async (id, name) => {
   const mid = await mapIdFor(id)
   return mid ? `maps/${mid}/pending/${cleanName(name)}.json` : ''
@@ -5189,9 +4764,7 @@ function projectionless(s) {
 function objectPrompt({ subject, style, view }) {
   const one = (s) => String(s || '').replace(/\s+/g, ' ').trim()
   const sub = one(subject).replace(/[.,;:\s]+$/, '')
-  // the style can come back capitalised and full-stopped, because it was asked
-  // for as its own field. It is a tail in the joined sentence, so it joins as
-  // one rather than starting a second one.
+  // the style can come back capitalised and full-stopped because it was asked for as its own field, and it is a tail in the joined sentence, so it joins as one rather than starting a second one
   const sty = projectionless(one(style).replace(/^[.,;:\s]+/, '').replace(/[.\s]+$/, ''))
   const cam = CAMERA_WORDS[objectView(view)]
   const tail = sty ? `${cam}, ${sty.charAt(0).toLowerCase()}${sty.slice(1)}` : cam
@@ -5430,8 +5003,7 @@ async function planMake({ ask, what, kind, id, mapFile, boxFile, box, previous, 
     sprite ? SPRITE_ANSWER : OBJECT_ANSWER,
   )
   const raw = await runPlanner(lines.join('\n'), 240000, job, undefined, images, paths)
-  // a sprite still answers one finished prompt; an object answers the two
-  // halves and never the joined sentence, so the anchor moves with it
+  // a sprite still answers one finished prompt; an object answers the two halves and never the joined sentence, so the anchor moves with it
   const o = planJSON(raw, sprite ? 'prompt' : 'subject')
   if (!o || !(sprite ? o.prompt : o.subject)) throw new Error('the interpreter did not answer')
   const clean = (v, n) => String(v || '').replace(/\s+/g, ' ').trim().slice(0, n)
@@ -5446,14 +5018,11 @@ async function planMake({ ask, what, kind, id, mapFile, boxFile, box, previous, 
     w: clampPx(o.w),
     h: clampPx(o.h),
   }
-  // the decision, carried on the plan so the ui can print it. It is not how the
-  // camera reaches the generator: see viewFor.
+  // the decision, carried on the plan so the ui can print it, and not how the camera reaches the generator: see viewFor
   if (!sprite) plan.view = view
-  // the patch of painting this thing joins. A box the user drew by hand wins,
-  // because it is the same answer given with more certainty behind it.
+  // the patch of painting this thing joins, where a hand-drawn box wins because it is the same answer given with more certainty behind it
   if (!sprite) plan.where = box && box.x != null ? { ...box } : cleanBox(o.where)
-  // both halves go to the walk gate: the ask names the thing, the prompt is
-  // where a hovering, winged or legless one gets described at length
+  // both halves go to the walk gate: the ask names the thing, the prompt is where a hovering, winged or legless one gets described at length
   if (sprite) plan.sprite = spriteRoute(o.sprite, kind, plan.motion, `${ask} ${plan.prompt}`)
   /* held to three because each is a generation, and an edit with no words is dropped: a blank edit_description is a 422 charged after the queue */
   if (sprite) {
@@ -5670,9 +5239,7 @@ async function translateAsk(ask, kind, styleClause, id, job) {
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 160)
-  // no interpreter means no judgement either, so this falls back to matching the
-  // map. The DNA still goes on: a dead interpreter is not a reason to send a
-  // prompt that invents a plinth.
+  // no interpreter means no judgement either, so this falls back to matching the map and still sends the DNA, because a dead interpreter is not a reason to send a prompt that invents a plinth
   const fallback = {
     thing: housePrompt({ subject: ask, detail: '', palette: 'muted natural palette', clause, view: OBJECT_VIEW }),
     motion: '',
@@ -5717,9 +5284,7 @@ async function translateAsk(ask, kind, styleClause, id, job) {
         `grew or was built there (a palm, a fishing net, a wooden fence) is 1. An everyday object ` +
         `that could sit anywhere (a crate, a barrel) is 0.8. Something with its own identity that ` +
         `arrived from elsewhere (an alien artifact, a magic item, a neon sign) is 0.2.\n` +
-        // this path has no map in front of it, so it answers the camera from the
-        // thing's shape alone. That is a weaker read than planMake's and it is
-        // still the right question, and it is the same three words on the wire.
+        // this path has no map in front of it, so the camera is answered from the thing's shape alone: a weaker read than planMake's, still the right question, and the same three words on the wire
         `- view: the camera, one of ${OBJECT_VIEWS.join(' | ')}. If its top is a different ` +
         `surface from its sides (a roof, a deck, a lid) it is low top-down. If it has no top ` +
         `worth seeing and stands taller than its footprint is wide it is side. If it has no top ` +
@@ -5769,8 +5334,7 @@ const CHROME_DIR = path.join(ROOT, 'public', 'chrome')
 /* the reference is read off disk by type: missing is survivable and said out loud, so an author knows why the colours drifted */
 export function chromeStyle(type) {
   const file = chromeRef(type)
-  // the two types named so nobody generates them answer null rather than a
-  // fallback, and path.join on a null is a throw rather than a missing reference
+  // the two types named so nobody generates them answer null rather than a fallback, and path.join on a null is a throw rather than a missing reference
   if (!file) return null
   const full = path.join(CHROME_DIR, file)
   try {
@@ -5782,9 +5346,7 @@ export function chromeStyle(type) {
   }
 }
 
-/* The question, built and kept pure so it can be read without spending
- * anything. Every fact in it already existed in this process and none of it was
- * reaching the generator. */
+/* the question, built and kept pure so it can be read without spending anything; every fact in it already existed in this process and none of it was reaching the generator */
 export function chromePrompt({ ask, t, width, height, shelf, style }) {
   /* which generator is being written for, said first: the panel route scaffolds furniture whatever the words say, the image route draws only the words */
   const lines = [
@@ -5829,9 +5391,7 @@ export function chromePrompt({ ask, t, width, height, shelf, style }) {
     ``,
     ...typeBrief(t, { width, height, shelf }),
     ``,
-    /* The same shape the object router answers in, for the same reason. See the
-     * section comment above: the model never writes the joined sentence, so the
-     * nine-slice law cannot be dropped out of it. */
+    /* the same shape the object router answers in and for the same reason: the model never writes the joined sentence, so the nine-slice law cannot be dropped out of it */
     t && t.tier === 'sheet'
       ? `SHAPE. Answer as TWO FIELDS rather than as one finished sentence. subject: the grid and every ` +
         `mark on it, said one by one and named, how they are laid out in rows, what each one is made ` +
@@ -5911,9 +5471,7 @@ export function chromeFinal({ subject, style, t }) {
   return `${cut ? cut + '. ' : ''}${sty ? sty + ', ' : ''}${tail}`
 }
 
-// the endpoint's own ceiling on `description`, and there is no reason to sit
-// under it here: the whole point of this prompt is that it carries a rule the
-// model is not trusted to repeat
+// the endpoint's own ceiling on `description`, and no reason to sit under it here: the whole point of this prompt is that it carries a rule the model is not trusted to repeat
 const CHROME_PROMPT_MAX = 2000
 
 /* the long form in ui.mjs is what the model reads; the generator cannot follow reasoning, only instructions, so it gets this */
@@ -5963,9 +5521,7 @@ export async function chromePlan({ ask, t, width, height, shelf, style, job, thi
   }
 }
 
-/* A feature that is purely claude has nothing to fall through to, so it says so
- * instead of pretending. 402 rather than 401: the caller is who they say they
- * are, they simply cannot reach the thing this needs. */
+/* a feature only the planner can do has nothing to fall through to, so it says so rather than pretending: 402 and not 401, because the caller is who they say they are and simply cannot reach what this needs */
 function denyNoPlanner(res, what) {
   return send(res, 402, {
     error: `${what} needs claude · add a key in your account, or link a machine`,
@@ -6032,13 +5588,11 @@ const EFFECT_START = {
   swirl: { width: 64, height: 48, frames: 8, speed: 1, size: 1, count: 4, direction: 0, spread: 1, intensity: 1 },
 }
 
-// the same keyword list the client carries, so a server the client cannot
-// reach and a planner the server cannot reach give the same answer
+// the same keyword list the client carries, so a server the client cannot reach and a planner the server cannot reach give the same answer
 function guessEffectType(ask) {
   const s = String(ask).toLowerCase()
   if (/smoke|steam|vapou?r|bubble|plume|fume|mist|incense/.test(s)) return 'rise'
-  // swirl sits after rise so swirling smoke is still smoke, and before the rest
-  // because a vortex has no other word for itself
+  // swirl sits after rise so swirling smoke is still smoke, and before the rest because a vortex has no other word for itself
   if (/swirl|spiral|vortex|portal|whirl|twist|warp|gateway/.test(s)) return 'swirl'
   // twinkle goes before spray on purpose: a sparkle contains a spark
   if (/sparkle|glint|twinkle|shimmer|firefl|star|glitter/.test(s)) return 'twinkle'
@@ -6071,9 +5625,7 @@ function guessColors(ask) {
   return m ? COLOR_RAMPS[m[1].toLowerCase()].slice() : []
 }
 
-// the seven rules are a menu with a ceiling, so an ask that fits none of them gets a written renderer rather than the nearest rule
-
-// where a written recipe starts when the plan leaves a field out
+// the seven rules are a menu with a ceiling, so an ask that fits none of them gets a written renderer rather than the nearest rule, and these are where a written recipe starts when the plan leaves a field out
 const CUSTOM_START = { width: 64, height: 64, frames: 8, speed: 1, size: 1, count: 8, direction: 0, spread: 1, intensity: 1 }
 
 // names a declared knob cannot take, because the renderer already has them
@@ -6082,8 +5634,7 @@ const CONTROL_TAKEN = new Set([
   'direction', 'spread', 'intensity', 'seed', 'churn', 'custom',
 ])
 
-/* The knobs a recipe ships for itself, sane. Anything malformed is dropped
- * rather than repaired: a slider with no range is worse than one less slider. */
+/* the knobs a recipe ships for itself, kept sane: anything malformed is dropped rather than repaired, because a slider with no range is worse than one slider fewer */
 function cleanControls(v) {
   const out = []
   const seen = new Set()
@@ -6187,8 +5738,7 @@ const CUSTOM_SPRITE_DOC =
   `exactly where it was at t = 0. A circuit, a there-and-back, or a wrap off one edge and on at ` +
   `the other all close; a one-way walk does not.`
 
-// the two callers hand out the same contract, plus the sprite half when one was
-// given. A revision has to read the same document the first draft did.
+// both callers hand out the same contract, plus the sprite half when one was given, because a revision has to read the same document the first draft did
 const customApiDoc = (withSprite) => CUSTOM_BASE_DOC + (withSprite ? CUSTOM_SPRITE_DOC : '')
 
 function fallbackEffectPlan(ask) {
@@ -6215,8 +5765,7 @@ const EFFECT_RANGE = {
   intensity: [0.1, 2],
 }
 
-// only the numbers the renderer knows, each held inside its own range, with
-// the rule's own start filling in anything the model left out
+// only the numbers the renderer knows, each held inside its own range, with the rule's own start filling in anything the model left out
 function cleanEffectParams(raw, start) {
   const out = { ...start }
   const o = raw && typeof raw === 'object' ? raw : {}
@@ -6316,15 +5865,12 @@ async function effectPlan(ask, colors, id, job, sprite) {
     if (!o) return fb
     const type = String(o.type)
     if (type !== 'custom' && !EFFECT_TYPES.includes(type)) return fb
-    // a written recipe that will not pass the front door is no recipe: the
-    // closest built-in answers instead, which is the same fall-back a dead
-    // planner gets
+    // a written recipe that will not pass the front door is no recipe: the closest built-in answers instead, the same fall-back a dead planner gets
     const code = type === 'custom' ? cleanCode(o.code) : ''
     if (type === 'custom' && !code) return fb
     let palette = String(o.palette) === 'own' ? 'own' : 'map'
     let cols = palette === 'own' ? cleanHexes(o.colors) : []
-    // the colour the ask named wins over a plan that came back without one, so
-    // a purple portal is purple even when the planner forgets the field
+    // the colour the ask named wins over a plan that came back without one, so a purple portal is purple even when the planner forgets the field
     if (!cols.length) {
       const named = guessColors(ask)
       palette = named.length ? 'own' : 'map'
@@ -6334,8 +5880,7 @@ async function effectPlan(ask, colors, id, job, sprite) {
       const controls = cleanControls(o.controls)
       const params = cleanEffectParams(o.params, CUSTOM_START)
       const rawP = o.params && typeof o.params === 'object' ? o.params : {}
-      // a knob's number rides in params like every other; the control's own
-      // value stands in when the plan left it out
+      // a knob's number rides in params like every other, and the control's own value stands in when the plan left it out
       for (const c of controls) {
         const n = Number(rawP[c.key])
         params[c.key] = Math.max(c.min, Math.min(c.max, isFinite(n) ? n : c.value))
@@ -6357,17 +5902,13 @@ async function effectPlan(ask, colors, id, job, sprite) {
 // ---- the review loop ----------------------------------------------------
 /* rendering is free, so the tool looks at its own frames before anybody is asked; on an object the look is only a look and nothing here generates */
 
-// where the sheets go. Inside work/<id> so they are served and reachable, out
-// of the library so they are never listed as assets.
+// where the sheets go: inside work/<id> so they are served and reachable, outside the library so they are never listed as assets
 const reviewDirOf = (id) => path.join(WORK, id, '.review')
 
-// how many sheets of one kind stay on disk. They are a record of what was
-// looked at, not an archive.
+// how many sheets of one kind stay on disk, because they are a record of what was looked at and not an archive
 const SHEETS_KEPT = 20
 
-/* The frames as one strip on disk, and its absolute path. The path is the whole
- * point: handing the planner an absolute file to read is the pattern the style
- * card already proved. */
+/* the frames as one strip on disk and its absolute path, because handing the planner an absolute file to read is the pattern the style card already proved */
 function writeSheet(id, kind, buffers, label) {
   const dir = reviewDirOf(id)
   fs.mkdirSync(dir, { recursive: true })
@@ -6389,8 +5930,7 @@ function writeSheet(id, kind, buffers, label) {
 // one short line, however the planner phrased it
 const oneLine = (v, n = 160) => String(v || '').replace(/\s+/g, ' ').trim().slice(0, n)
 
-// what a look answers, sane. Anything that is not a clean revise reads as good,
-// because the loop's default has to be "stop", never "keep going".
+// what a look answers, kept sane: anything that is not a clean revise reads as good, because the loop's default has to be stop and never keep going
 function verdictOf(o) {
   return String(o && o.verdict) === 'revise' ? 'revise' : 'good'
 }
@@ -6441,9 +5981,7 @@ async function reviewWritten(file, ask, frames, code, controls, params, job, spr
   }
 }
 
-/* One of the seven rules, looked at. There is no code to rewrite here, so the
- * answer is better numbers instead, which is the same free improvement without
- * writing a renderer. */
+/* one of the seven rules, looked at: there is no code to rewrite here, so the answer comes back as better numbers instead, the same free improvement without writing a renderer */
 async function reviewRule(file, ask, frames, type, params, job, images = []) {
   const start = EFFECT_START[type] || EFFECT_START.rise
   const now = cleanEffectParams(params, start)
@@ -6495,9 +6033,7 @@ async function reviewObjects({ file, map, ask, prompt, view, n, what, size, job,
   const lines = [
     `Look at what a pixel-art generator just made and say whether it answers what was asked for.`,
     ``,
-    /* two files means the two-file wording, not the one-file wording. A planner
-     * handed two images without ONCE EACH re-reads them to check itself and
-     * burns the whole timeout: 300s against 16s with the wording in. */
+    /* two files means the two-file wording, because a planner handed two images without once each re-reads them to check itself and burns the whole timeout: 300s against 16s with the wording in */
     map
       ? `Read the two image files below ONCE EACH with the Read tool, then answer in your next ` +
         `message. Do not read them again to check yourself and do not open anything else.`
@@ -6598,9 +6134,7 @@ async function reviewObjects({ file, map, ask, prompt, view, n, what, size, job,
   )
   try {
     const raw = await runPlanner(lines.join('\n'), 120000, job, undefined, images, paths)
-    // anchored on best, because a model asked to look at a strip likes to warm
-    // up by saying what it is looking at, and that first little object parses
-    // fine while carrying none of the answer
+    // anchored on best, because a model asked to look at a strip likes to warm up by saying what it is looking at, and that first little object parses fine while carrying none of the answer
     const o = planJSON(raw, 'best')
     if (!o) return null
     const best = Math.max(1, Math.min(n, Math.round(Number(o.best)) || 1))
@@ -6618,8 +6152,7 @@ async function reviewObjects({ file, map, ask, prompt, view, n, what, size, job,
 /* only on a keep: a discard is a miss, and feeding misses back would teach the tool to repeat them. capped, so the twentieth pushes the first out */
 
 const KEEPS_MAX = 20
-// how many ride into an ask. Five is enough to show a pattern and short enough
-// that the ask in front of them still wins.
+// how many ride into an ask: five is enough to show a pattern and short enough that the ask in front of them still wins
 const KEEPS_FED = 5
 
 const keepsFileOf = (id) => path.join(WORK, id, 'keeps.json')
@@ -6643,8 +6176,7 @@ function addKeep(id, rec) {
   return out.length
 }
 
-// the last few keeps as a paragraph to hang on an ask, or nothing at all. kind
-// filters to the half that is relevant: an object ask learns from objects.
+// the last few keeps as a paragraph to hang on an ask, or nothing at all; kind filters to the half that is relevant, so an object ask learns from objects
 function keepsHint(id, kind) {
   if (!id) return ''
   const list = readKeeps(id)
@@ -6692,8 +6224,7 @@ function planJSON(raw, need) {
   return loose
 }
 
-/* every balanced JSON object in the text, in order, so the caller can pick the
- * one that actually carries the answer rather than the first one written */
+/* every balanced JSON object in the text, in order, so the caller can pick the one that actually carries the answer rather than the first one written */
 function allObjects(text) {
   const out = []
   for (let i = 0; i < text.length; i++) {
@@ -6725,9 +6256,7 @@ function allObjects(text) {
   return out
 }
 
-// the headless planner call: prompt over stdin, one model for everything.
-// Every route that thinks goes through here, so this constant is the whole
-// answer to "which model is MAPVIS using".
+// the headless planner call: prompt over stdin, one model for everything, and every route that thinks goes through here, so this constant is the whole answer to which model MAPVIS uses
 const PLANNER_MODEL = 'opus' // an alias the cli resolves, so it does not pin a dated model id
 /* every planner process by job, so a change of mind can end one; a killed job rejects the way a timeout does */
 const LIVE = new Map()
@@ -6735,12 +6264,10 @@ const LIVE = new Map()
 /* jobs waiting on pixellab: nothing to kill, but a stop between the character and its walk keeps the eight animation generations from being asked for */
 const WAITING = new Map()
 
-// a wait a stop can end. The second promise never resolves on its own, so the
-// only way out other than the work finishing is stopJob rejecting it.
+// a wait a stop can end: the second promise never resolves on its own, so the only way out other than the work finishing is stopJob rejecting it
 function raceStop(gate, work) {
   if (!gate) return work
-  // stopped while the call that started this was still in flight: nobody is
-  // waiting on it any more, so swallow whatever it comes back with
+  // stopped while the call that started this was still in flight: nobody is waiting on it any more, so swallow whatever it comes back with
   if (gate.off) {
     work.catch(() => {})
     return Promise.reject(new Error('stopped'))
@@ -6762,8 +6289,7 @@ function gateFor(job) {
     halt: () => {
       if (gate && gate.off) throw new Error('stopped')
     },
-    // only ours: a stop may already have cleared it and the next variant may
-    // already have registered its own under the same id
+    // only ours: a stop may already have cleared it and the next variant may already have registered its own under the same id
     done: () => {
       if (gate && WAITING.get(job) === gate) WAITING.delete(job)
     },
@@ -6802,12 +6328,10 @@ async function runPlanner(prompt, timeoutMs, job, user, images, paths) {
     prompt,
     timeoutMs,
     images,
-    // where the caller wrote those images, in the same order, so a relay can
-    // recreate them where the prompt says they are
+    // where the caller wrote those images, in the same order, so a relay can recreate them where the prompt says they are
     paths,
     jobKey: job || '',
-    // the stop button still has to reach a local process, so the registry that
-    // makes that possible is handed the child rather than owning the spawn
+    // the stop button still has to reach a local process, so the registry that makes that possible is handed the child rather than owning the spawn
     onProcess: (ps) => {
       if (job) LIVE.set(job, ps)
     },

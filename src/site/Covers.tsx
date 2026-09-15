@@ -1,10 +1,4 @@
-/* THE TRANSITION SCREEN EDITOR. Its own editor, linked to a map by picking one, because a cover
-   belongs to one map: the game chooses a cover by where the player is going, so one published inside
-   a map's bundle shows on every door and every sail into it with no python naming anything.
-
-   The author says what the screen SHOWS and never how it looks. The hand, the viewpoint, the light
-   and the colour are assembled on the server out of the cover scaffold and a style card, so there is
-   one sentence to type and not five fields to fill. */
+/* the transition screen editor: a cover belongs to one map, so one in that map's bundle shows on every door and sail into it with no python naming it, and the author says what the screen shows, never how it looks, because the hand, light and colour come from a style card on the server */
 import { useCallback, useEffect, useRef, useState } from 'react'
 import * as api from '../api'
 import { displayName } from '../core/naming'
@@ -12,19 +6,25 @@ import './covers.css'
 
 export type CoverMap = { slug: string; title?: string; published?: number | null; style?: string }
 
-/* the word the game says over every cover, spaced by hand there and copied here so what is judged is
-   the frame a student sees. src/app/transitions.tsx draws the real one. */
+/* the word the game says over every cover, spaced by hand there and copied here so what is judged is the frame the game draws; src/app/transitions.tsx draws the real one */
 const KICKER = 'E N T E R I N G'
 const IDENT = /^[a-z][a-z0-9_]{0,47}$/
-/* the two words the game already spends on the cover argument: an OCCASION rather than a name, so a
-   cover called either of them ships in the bundle and can never be shown. Refused where it is typed
-   rather than discovered when nothing appears. */
+/* the two words the game already spends on the cover argument as an occasion rather than a name, so a cover called either of them ships in the bundle and can never be shown, refused where it is typed rather than discovered when nothing appears */
 const RESERVED = new Set(['ceremony', 'passing'])
 // one of the sentences the game prints under the bar, so the preview is not judged with a hole where its longest line goes
 const SAMPLE_FACT = 'Bonney Lake offers 26 AP courses, and a retake is allowed on every one of them.'
 
-/* the working painting first because it is the live one, then the published bundle behind it: the
-   same pair and the same reason as the dashboard's cards */
+// the job this tab is already paying for, kept where a reload can find it and nowhere a second tab can
+const PENDING = 'mapvis:cover-job'
+const forget = () => {
+  try {
+    sessionStorage.removeItem(PENDING)
+  } catch {
+    /* nothing to forget where nothing was written */
+  }
+}
+
+/* the working painting first because it is the live one, then the published bundle behind it: the same pair and the same reason as the dashboard's cards */
 const shot = (m: CoverMap) => `/work/${m.slug}/scene.png`
 const fellBack = (m: CoverMap) => (e: { currentTarget: HTMLImageElement }) => {
   if (e.currentTarget.dataset.fell || !m.published) return
@@ -32,12 +32,7 @@ const fellBack = (m: CoverMap) => (e: { currentTarget: HTMLImageElement }) => {
   e.currentTarget.src = `/api/v1/maps/${encodeURIComponent(m.slug)}/file/${m.published}/scene.png`
 }
 
-/* THE PICTURE INSIDE THE FRAME THE GAME DRAWS ROUND IT, and it is a scale model rather than a
-   likeness. Every size in covers.css is the game's own number over a 1280 wide window divided by
-   1280 and said in cqw, so the stack sits where src/app/transitions.css puts it: the text block
-   centred at 46 percent of the height, the plate at the full 700px width rather than shrink-wrapped
-   to the word, the bar under it and the fact under that. A subject sitting dead centre, or a horizon
-   the plate cuts in half, is the one fault this preview exists to catch. */
+/* the picture inside the frame the game draws round it, a scale model rather than a likeness: every size in covers.css is the game's own number over a 1280 wide window divided by 1280 and said in cqw, so a subject dead centre or a horizon the plate cuts in half shows up here */
 function Shot({ src, title, caption }: { src: string; title: string; caption?: string }) {
   return (
     <figure className="cvr-shot">
@@ -61,9 +56,7 @@ function Shot({ src, title, caption }: { src: string; title: string; caption?: s
   )
 }
 
-/* what came back from one press, and WHICH MAP IT WAS PRESSED FOR. Held together because the two
-   drifted apart: a job takes minutes, the strip is one click, and a picture bought for the harbour
-   was written onto whichever island happened to be selected when it landed. */
+/* what came back from one press and which map it was pressed for, held together because the two drifted apart: a job takes minutes, the strip is one click, and a picture bought for the harbour was written onto whichever island happened to be selected when it landed */
 type Made = { src: string; slug: string; subject: string; style: string }
 
 export default function Covers({ maps }: { maps: CoverMap[] }) {
@@ -75,13 +68,9 @@ export default function Covers({ maps }: { maps: CoverMap[] }) {
   const [said, setSaid] = useState('')
   const [has, setHas] = useState<api.CoverState>({ cover: false, covers: [] })
   const [bust, setBust] = useState(0)
-  /* which maps already carry one, so the strip can say so on the thumbnails rather than making
-     somebody click ten of them to find out */
+  /* which maps already carry one, so the strip can say so on the thumbnails rather than making somebody click ten of them to find out */
   const [carry, setCarry] = useState<Record<string, boolean>>({})
-  /* THE HAND, WHICH NEVER USED TO REACH A PRESS. This editor sent no style key at all and the server
-     resolves a card from the key it is given, so every cover was bought with no card and no reference
-     painting: the one thing an author should not have to say was the one thing nobody said. The map's
-     own hand is the default, because a cover for an island should be drawn by whoever drew it. */
+  /* the hand, which never used to reach a press: this editor sent no style key at all and the server resolves a card from the key it is given, so every cover was bought with no card and no reference painting, and the map's own hand is the default */
   const [cards, setCards] = useState<api.StyleCard[]>([])
   const [fallback, setFallback] = useState('')
   const [styleKey, setStyleKey] = useState('')
@@ -139,10 +128,7 @@ export default function Covers({ maps }: { maps: CoverMap[] }) {
     }
   }, [maps, bust])
 
-  /* THE ANSWER FOR A MAP NOBODY IS LOOKING AT ANY MORE IS THROWN AWAY. Ten thumbnails ask what they
-     carry at the same time, so a reply for the map that was selected a moment ago can land after the
-     reply for the one selected now, and the panel then says "no cover yet" beside a thumbnail whose
-     own dot says there is one. The screen contradicting itself is worse than it being slow. */
+  /* an answer for a map nobody is looking at any more is thrown away: ten thumbnails ask what they carry at once, so a stale reply can land after the current one and the panel then says no cover yet beside a thumbnail whose own dot says there is one */
   useEffect(() => {
     let dead = false
     setSaid('')
@@ -171,6 +157,60 @@ export default function Covers({ maps }: { maps: CoverMap[] }) {
     setStyleKey(mapStyle || fallback || '')
   }, [mapStyle, fallback, touchedStyle])
 
+  /* WHAT WAS BOUGHT OUTLIVES THE TAB. A job takes minutes, the picture lived only in React state and
+     the job id only in a closure, so a reload or a stray navigation lost a generation that had
+     already been paid for. The id and what it was asked for are written down before the first poll
+     and cleared once it is kept, so coming back collects it instead of buying it twice. */
+  const pollJob = useCallback(async (jobId: string, forSlug: string, words: string, hand: string) => {
+    const started = Date.now()
+    let misses = 0
+    for (;;) {
+      /* one bad poll is not a lost generation: the job is still running and the money is already spent, so a network blink used to throw the picture away and invite a second press */
+      const s = await api.jobState(jobId).catch((e) => {
+        if (++misses > 8) throw e
+        return { state: 'running' as const, images: undefined, error: undefined }
+      })
+      if (s.state === 'done' && s.images && s.images[0]) {
+        setMade({ src: s.images[0], slug: forSlug, subject: words, style: hand })
+        return
+      }
+      if (s.state === 'failed') throw new Error(s.error || 'it did not come back')
+      if (Date.now() - started > 300000) throw new Error('it did not come back within five minutes')
+      await new Promise((res) => setTimeout(res, 2500))
+    }
+  }, [])
+
+  // on the way back in, before anything else, because the one thing worth rescuing is the thing that cost money
+  useEffect(() => {
+    let open = ''
+    try {
+      open = sessionStorage.getItem(PENDING) || ''
+    } catch {
+      /* private browsing has no session storage, and a rescue nobody can have is not a failure */
+    }
+    if (!open) return
+    let job
+    try {
+      job = JSON.parse(open) as { id: string; slug: string; subject: string; style: string }
+    } catch {
+      forget()
+      return
+    }
+    if (!job || !job.id) {
+      forget()
+      return
+    }
+    setBusy('drawing')
+    setSaid('collecting the cover this tab was already paying for')
+    pollJob(job.id, job.slug, job.subject, job.style || '')
+      .then(() => setSaid(''))
+      .catch((e) => {
+        forget()
+        setSaid(String(e instanceof Error ? e.message : e).slice(0, 160))
+      })
+      .finally(() => setBusy(''))
+  }, [pollJob])
+
   const draw = useCallback(async () => {
     const words = ask.trim()
     if (!words || !slug) return
@@ -184,29 +224,20 @@ export default function Covers({ maps }: { maps: CoverMap[] }) {
     setSaid('')
     try {
       const r = await api.coverGen(words, styleKey, forSlug)
-      const started = Date.now()
-      let misses = 0
-      for (;;) {
-        /* one bad poll is not a lost generation: the job is still running and the money is already
-           spent, so a network blink used to throw the picture away and invite a second press */
-        const s = await api.jobState(r.job.id).catch((e) => {
-          if (++misses > 8) throw e
-          return { state: 'running' as const, images: undefined, error: undefined }
-        })
-        if (s.state === 'done' && s.images && s.images[0]) {
-          setMade({ src: s.images[0], slug: forSlug, subject: words, style: styleKey })
-          break
-        }
-        if (s.state === 'failed') throw new Error(s.error || 'it did not come back')
-        if (Date.now() - started > 300000) throw new Error('it did not come back within five minutes')
-        await new Promise((res) => setTimeout(res, 2500))
+      // written down the moment the money is gone and not a poll later, because the gap is where a reload loses it
+      try {
+        sessionStorage.setItem(PENDING, JSON.stringify({ id: r.job.id, slug: forSlug, subject: words, style: styleKey }))
+      } catch {
+        /* no session storage, so a reload still loses it and nothing else does */
       }
+      await pollJob(r.job.id, forSlug, words, styleKey)
     } catch (e) {
+      forget()
       setSaid(String(e instanceof Error ? e.message : e).slice(0, 160))
     } finally {
       setBusy('')
     }
-  }, [ask, slug, styleKey, armed, arm, disarm])
+  }, [ask, slug, styleKey, armed, arm, disarm, pollJob])
 
   const keep = useCallback(async () => {
     if (!made) return
@@ -224,6 +255,8 @@ export default function Covers({ maps }: { maps: CoverMap[] }) {
       const r = await api.coverSave(made.slug, made.src, code || undefined, made.subject, made.style)
       if (made.slug === slug) setHas(r)
       setBust(Date.now())
+      // the bytes are on the map now, so the rescue has nothing left to rescue
+      forget()
       setMade(null)
       setName('')
       setSaid('')
@@ -269,8 +302,7 @@ export default function Covers({ maps }: { maps: CoverMap[] }) {
 
   return (
     <div className="cvr">
-      {/* THE MAP IS PICKED BY ITS PAINTING. It was a dropdown of slugs, which is the one control that
-          makes a visual tool feel like a form: you choose the island by looking at it. */}
+      {/* the map is picked by its painting and not a dropdown of slugs, which is the one control that makes a visual tool feel like a form */}
       <div className="cvr-strip" role="tablist" aria-label="which map">
         {maps.map((m) => (
           <button
@@ -380,7 +412,13 @@ export default function Covers({ maps }: { maps: CoverMap[] }) {
                   <button className="cvr-go" onClick={() => void keep()} disabled={!!busy}>
                     {busy === 'keeping' ? 'keeping…' : 'keep it'}
                   </button>
-                  <button className="cvr-x" onClick={() => setMade(null)}>
+                  <button
+                    className="cvr-x"
+                    onClick={() => {
+                      forget()
+                      setMade(null)
+                    }}
+                  >
                     discard
                   </button>
                 </div>
@@ -415,9 +453,7 @@ export default function Covers({ maps }: { maps: CoverMap[] }) {
               ))}
             </>
           ) : (
-            /* THE SHAPE OF WHAT IS MISSING, at the size it ships at, rather than two lines of text
-               floating in an empty column: an empty slot that shows its own dimensions says what the
-               press is going to make. */
+            /* the shape of what is missing, at the size it ships at: an empty slot that shows its own dimensions says what the press is going to make, where two lines of text in an empty column do not */
             <div className="cvr-empty">
               <div className="cvr-empty-frame">
                 <span>no cover yet</span>
