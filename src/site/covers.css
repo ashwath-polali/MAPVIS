@@ -176,6 +176,91 @@
   color: #e0894f;
   border-color: #3a2a22;
 }
+/* an armed press looks nothing like the press before it, because the whole point is that the second
+   one is not the same act as the first */
+.cvr-go.armed {
+  border-color: var(--acc);
+  color: var(--acc);
+  background: #121a22;
+}
+.cvr-x.armed {
+  color: #e0894f;
+  border-color: #e0894f;
+}
+
+/* ---- whose hand draws it ---------------------------------------------------
+   Before the sentence, the way the map editor asks, because choosing it after the words are typed
+   reads as a filter on them and choosing it first reads as who is drawing. */
+.cvr-hands {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.cvr-hand {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 6px 9px;
+  background: #10141a;
+  border: var(--hair) solid #1a2027;
+  color: var(--ink-3);
+  font: var(--fs-micro) var(--font-mono);
+  cursor: pointer;
+  transition: border-color 160ms ease, color 160ms ease;
+}
+.cvr-hand:hover {
+  color: var(--ink);
+}
+.cvr-hand.on {
+  border-color: var(--acc);
+  color: var(--acc);
+}
+.cvr-hand-tag {
+  font-size: 0.85em;
+  opacity: 0.7;
+}
+
+/* the sentence this one was asked for, kept with the picture because a png cannot say what was typed
+   to get it and that is the first question anybody asks of one */
+.cvr-note {
+  margin: 0;
+  grid-column: 1 / -1;
+  font: var(--fs-micro) var(--font-mono);
+  color: var(--ink-3);
+}
+
+/* what is about to be thrown away, on screen at the moment it is thrown away */
+.cvr-swap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border: var(--hair) solid #3a2a22;
+  background: #14100d;
+}
+.cvr-swap img {
+  width: 104px;
+  aspect-ratio: 688 / 384;
+  object-fit: cover;
+  image-rendering: pixelated;
+  display: block;
+}
+.cvr-swap span {
+  font: var(--fs-micro) var(--font-mono);
+  color: #e0894f;
+}
+
+/* a picture already drawn and not yet kept, so switching away from a map does not feel like losing it */
+.cvr-pend {
+  position: absolute;
+  left: 5px;
+  top: 5px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #e0894f;
+  box-shadow: 0 0 0 2px #06080b;
+}
 
 .cvr-view {
   display: grid;
@@ -219,40 +304,55 @@
   background: radial-gradient(ellipse at 50% 45%, transparent 40%, rgba(0, 0, 0, 0.55) 100%);
   pointer-events: none;
 }
+/* A SCALE MODEL AND NOT A LIKENESS. Every number below is the game's own pixel size over a 1280 wide
+   window, divided by 1280 and said in cqw, so this is what a student sees rather than a sketch of it:
+   the block centred at 46 percent of the height, the plate at the full 700px width rather than
+   shrink-wrapped to the word, the 300px bar under it, the work word, then the fact. The game's
+   src/app/transitions.css is where these came from and is the file to re-read if it ever looks
+   wrong. It used to draw three pieces of the six and sat about 55px too high. */
 .cvr-text {
   position: absolute;
-  inset: 0;
-  display: grid;
-  align-content: center;
-  justify-items: center;
-  gap: 3.5%;
+  left: 50%;
+  top: 46%;
+  transform: translate(-50%, -50%);
+  width: 54.7cqw;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   pointer-events: none;
 }
 .cvr-kicker {
-  font: clamp(6px, 1.6cqw, 12px) var(--font-mono);
-  letter-spacing: 0.09em;
+  font: 1.02cqw var(--font-mono);
+  letter-spacing: 0.47cqw;
   color: rgba(255, 255, 255, 0.85);
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
+  margin-bottom: 0.63cqw;
 }
-/* the plaque, drawn flat on purpose: the game dresses it in whichever skin is on, and guessing at
-   that skin would preview something that may not ship */
+/* the plate, drawn flat on purpose: the game dresses it in whichever kit piece is published and
+   guessing at that would preview something that may not ship. Its WIDTH is not a guess, and it
+   stretches the whole block, so a horizon it cuts in half shows up here. */
 .cvr-band {
+  align-self: stretch;
   background: rgba(10, 12, 17, 0.74);
   border: 1px solid rgba(255, 255, 255, 0.2);
-  padding: 2.6% 6%;
-  max-width: 78%;
+  padding: 0.6cqw 1cqw;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .cvr-title {
-  font: 600 clamp(11px, 3.6cqw, 30px) var(--font-display);
+  font: 600 2.81cqw var(--font-display);
   color: #fff;
-  letter-spacing: 0.015em;
+  letter-spacing: 0.23cqw;
   text-align: center;
   display: block;
 }
 .cvr-meter {
-  width: 38%;
-  height: 3px;
-  background: rgba(255, 255, 255, 0.16);
+  margin-top: 1.09cqw;
+  width: 23.4cqw;
+  height: 1.88cqw;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.55);
   overflow: hidden;
 }
 .cvr-meter > i {
@@ -260,6 +360,25 @@
   width: 62%;
   height: 100%;
   background: var(--acc);
+}
+.cvr-work {
+  margin-top: 0.47cqw;
+  font: 0.94cqw var(--font-mono);
+  letter-spacing: 0.16cqw;
+  color: rgba(255, 255, 255, 0.85);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
+}
+/* the sentence a student reads while the map loads, on its own plate for the reason it is on one in
+   the game: cream type straight on a sunset sky measured at almost no contrast */
+.cvr-fact {
+  margin: 1.72cqw 0 0;
+  max-width: 44ch;
+  padding: 0.7cqw 1.09cqw;
+  font: 400 1.02cqw/1.55 var(--font-ui, system-ui, sans-serif);
+  color: #f2ead6;
+  text-align: center;
+  background: rgba(14, 12, 10, 0.66);
+  border-radius: 3px;
 }
 .cvr-shot > figcaption {
   font: var(--fs-micro) var(--font-mono);

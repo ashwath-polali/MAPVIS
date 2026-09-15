@@ -79,8 +79,10 @@ type Vocab = {
   floor: number
 }
 
-/* version, because a thumbnail falls back to the published bundle when work/ holds no painting */
-type MapRow = { slug: string; title: string; version?: number | null }
+/* the fields /api/my-maps really sends. It is `published` and never `version`, so the thumbnail's
+   fallback to a published painting read undefined and could never fire, and `style` is the map's own
+   hand, which is the right default for the hand its cover is drawn with. */
+type MapRow = { slug: string; title: string; published?: number | null; style?: string }
 
 /* the shape a piece name has to read as, and the same one an anchor name does.
  * Deliberately a python identifier, so renaming a piece for a person cannot

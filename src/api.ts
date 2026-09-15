@@ -166,28 +166,34 @@ export const jobState = (id: string) =>
  * the map's own; an extra carries a code name that enter(map, cover="<name>") calls. */
 
 /* free, and the whole sentence the router would send, so nothing is paid for on a guess */
-export const coverPrompt = (subject: string, style?: string) =>
+export const coverPrompt = (subject: string, style?: string, id?: string) =>
   jpost<{ prompt: string; style: string; canvas: { w: number; h: number }; parts: string[] }>('/api/cover-prompt', {
     subject,
     style,
+    id,
   })
 
-/* ONE generation, and only on the press. The prompt is built on the server, never here. */
-export const coverGen = (subject: string, style?: string) =>
+/* ONE generation, and only on the press. The prompt is built on the server, never here. The map id
+ * rides along because the ownership gate reads one off every post: with none it resolved to the slug
+ * "untitled", so whoever owns the map of that name could draw and nobody else could. */
+export const coverGen = (subject: string, style?: string, id?: string) =>
   jpost<{ job: { id: string; seed: number }; w: number; h: number; prompt: string; style: string | null }>(
     '/api/cover-gen',
-    { subject, style },
+    { subject, style, id },
   )
 
+// what one cover was asked for and whose hand drew it, which a png cannot say for itself
+export type CoverNote = { subject: string; style: string; at: string }
+export type CoverNotes = { cover: CoverNote | null; named: Record<string, CoverNote> }
+export type CoverState = { cover: boolean; covers: string[]; notes?: CoverNotes }
+
 /* keep what came back. No name is the map's own cover; a name is an extra python can call. */
-export const coverSave = (id: string, image: string, name?: string) =>
-  jpost<{ cover: boolean; covers: string[]; kept: string }>('/api/cover-save', { id, image, name })
+export const coverSave = (id: string, image: string, name?: string, subject?: string, style?: string) =>
+  jpost<CoverState & { kept: string }>('/api/cover-save', { id, image, name, subject, style })
 
-export const coverRemove = (id: string, name?: string) =>
-  jpost<{ cover: boolean; covers: string[] }>('/api/cover-remove', { id, name })
+export const coverRemove = (id: string, name?: string) => jpost<CoverState>('/api/cover-remove', { id, name })
 
-export const coversOf = (id: string) =>
-  jget<{ cover: boolean; covers: string[] }>('/api/covers/' + encodeURIComponent(id))
+export const coversOf = (id: string) => jget<CoverState>('/api/covers/' + encodeURIComponent(id))
 
 /* the picture itself. The cache buster is the caller's, because a kept cover replaces the one before
  * it under the same url and the browser would go on drawing the old one. */
