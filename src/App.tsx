@@ -696,6 +696,8 @@ export default function App() {
   const [usd, setUsd] = useState('')
   const [toasts, setToasts] = useState<Toast[]>([])
   const [regionsBusy, setRegionsBusy] = useState(false)
+  // whether this map carries a transition screen, so the export step can say what ships instead of leaving the author to go and look
+  const [covers, setCovers] = useState<{ cover: boolean; covers: string[] }>({ cover: false, covers: [] })
   const [armed, arm, disarm] = useArm()
   const [lib, setLib] = useState<api.LibItem[] | null>(null)
   // the words the author typed, kept so "what did I write to get that tree"
@@ -1049,6 +1051,24 @@ export default function App() {
   useEffect(() => {
     edRef.current?.selectAnchor(doorEdit)
   }, [doorEdit])
+
+  // asked on the way into the last step, because a cover kept in another tab has to show here without a reload and this is the one screen that says what ships
+  const coverId = step === 'export' ? st?.sceneId || '' : ''
+  useEffect(() => {
+    if (!coverId) return
+    let stale = false
+    api
+      .coversOf(coverId)
+      .then((c) => {
+        if (!stale) setCovers(c)
+      })
+      .catch(() => {
+        if (!stale) setCovers({ cover: false, covers: [] })
+      })
+    return () => {
+      stale = true
+    }
+  }, [coverId])
 
   /* the canvas selection back into the form; zero is not synced, or closing would immediately reopen it. */
   useEffect(() => {
@@ -7327,6 +7347,16 @@ export default function App() {
             {assets.length
               ? `${assets.length} placed asset${assets.length > 1 ? 's' : ''} + pngs`
               : 'none placed'}
+          </li>
+          {/* the transition screen is drawn in its own editor and is still this map's, so the one screen that lists what ships has to say whether there is one */}
+          <li>
+            <b>cover.png</b>{' '}
+            {covers.cover
+              ? `the screen this map is entered through${covers.covers.length ? `, and ${covers.covers.length} named one${covers.covers.length > 1 ? 's' : ''}` : ''}`
+              : 'none drawn · the game falls back to its own'}{' '}
+            <a className="doorhint" href="/ui" title="draw a transition screen">
+              {covers.cover ? 'change it' : 'draw one'}
+            </a>
           </li>
         </ul>
       </div>
